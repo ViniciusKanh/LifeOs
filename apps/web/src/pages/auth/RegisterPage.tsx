@@ -27,7 +27,11 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-10 bg-paper text-[#1E2126] dark:bg-ink dark:text-[#EDEBE4]">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 bg-paper text-[#1E2126] dark:bg-ink dark:text-[#EDEBE4]">
+      <div className="flex items-center gap-2 mb-6">
+        <img src="/logo/icon-64.png" alt="LifeOS" className="w-8 h-8 rounded-md object-contain" />
+        <span className="text-sm tracking-wide text-slate">LifeOS</span>
+      </div>
       <form
         onSubmit={handleSubmit(onSubmit)}
         className="w-full max-w-sm rounded-2xl p-7 md:p-8 border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised space-y-4"

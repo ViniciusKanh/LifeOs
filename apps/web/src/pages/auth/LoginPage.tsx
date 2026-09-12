@@ -1,7 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate } from "react-router-dom";
-import { Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { loginFormSchema, type LoginFormValues } from "@/lib/validation";
 import { Button, Field } from "@/components/ui/primitives";
@@ -24,9 +23,7 @@ export function LoginPage() {
     <div className="min-h-screen flex flex-col md:flex-row bg-paper text-[#1E2126] dark:bg-ink dark:text-[#EDEBE4]">
       <div className="md:w-1/2 flex flex-col justify-center px-8 py-10 md:px-14">
         <div className="flex items-center gap-2 mb-10">
-          <div className="w-8 h-8 rounded-md flex items-center justify-center bg-signal">
-            <Sparkles size={16} className="text-ink" />
-          </div>
+          <img src="/logo/icon-64.png" alt="LifeOS" className="w-8 h-8 rounded-md object-contain" />
           <span className="text-sm tracking-wide text-slate">LifeOS</span>
         </div>
         <p className="font-display font-medium" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", lineHeight: 1.05 }}>

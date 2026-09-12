@@ -5,8 +5,31 @@ export interface CurrentUser {
   name: string;
   email: string;
   role: UserRole;
+  avatar_url: string | null;
   theme: "light" | "dark" | "system";
   onboarding_done: number;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AdminIntegration = "gemini" | "turso" | "smtp";
+
+export interface AdminSetting {
+  id: string;
+  integration: AdminIntegration;
+  key_name: string;
+  masked_preview: string;
+  is_active: number;
+  extra_config: string | null;
+  updated_at: string;
 }
 
 export type TaskPriority = "Baixa" | "Média" | "Alta";

@@ -5,6 +5,7 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
 import { encryptSecret, maskPreview } from "../services/cryptoService.js";
+import { hashPassword } from "../services/authService.js";
 
 export const adminRouter = Router();
 
@@ -17,6 +18,23 @@ const upsertSettingSchema = z.object({
   keyName: z.string().min(1).max(60),
   value: z.string().min(1).max(4000),
   extraConfig: z.record(z.unknown()).optional(),
+});
+
+const createUserSchema = z.object({
+  name: z.string().trim().min(2, "Nome muito curto").max(120),
+  email: z.string().trim().toLowerCase().email("E-mail inválido"),
+  password: z
+    .string()
+    .min(8, "A senha precisa ter pelo menos 8 caracteres")
+    .max(72)
+    .regex(/[a-z]/, "A senha precisa de uma letra minúscula")
+    .regex(/[A-Z]/, "A senha precisa de uma letra maiúscula")
+    .regex(/[0-9]/, "A senha precisa de um número"),
+  role: z.enum(["user", "admin"]).optional().default("user"),
+});
+
+const updateUserRoleSchema = z.object({
+  role: z.enum(["user", "admin"]),
 });
 
 async function logAudit(db: ReturnType<typeof getDb>, actorId: string, action: string, resource: string, req: any) {
@@ -103,4 +121,86 @@ adminRouter.get("/audit-logs", async (req, res) => {
      ORDER BY al.created_at DESC LIMIT 200`
   );
   return res.json(result.rows);
+});
+
+/* ============================ Usuários (admin) ============================ */
+
+/** GET /api/admin/users — nunca inclui password_hash */
+adminRouter.get("/users", async (_req, res) => {
+  const db = getDb();
+  const result = await db.execute(
+    `SELECT id, name, email, role, avatar_url, created_at, updated_at FROM users ORDER BY created_at ASC`
+  );
+  return res.json(result.rows);
+});
+
+/** POST /api/admin/users — admin cria uma conta diretamente (sem passar por /register) */
+adminRouter.post("/users", async (req, res) => {
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const { name, email, password, role } = parsed.data;
+  const db = getDb();
+
+  const existing = await db.execute({ sql: "SELECT id FROM users WHERE email = ?", args: [email] });
+  if (existing.rows.length > 0) {
+    return res.status(409).json({ error: "Já existe uma conta com este e-mail." });
+  }
+
+  const id = nanoid();
+  const passwordHash = await hashPassword(password);
+  await db.execute({
+    sql: `INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)`,
+    args: [id, name, email, passwordHash, role],
+  });
+  await db.execute({ sql: `INSERT INTO user_settings (user_id) VALUES (?)`, args: [id] });
+
+  await logAudit(db, req.user!.id, "admin_users.create", email, req);
+
+  const created = await db.execute({
+    sql: "SELECT id, name, email, role, avatar_url, created_at, updated_at FROM users WHERE id = ?",
+    args: [id],
+  });
+  return res.status(201).json(created.rows[0]);
+});
+
+/** PATCH /api/admin/users/:id/role */
+adminRouter.patch("/users/:id/role", async (req, res) => {
+  const parsed = updateUserRoleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Papel inválido." });
+  }
+  if (req.params.id === req.user!.id && parsed.data.role !== "admin") {
+    return res.status(400).json({ error: "Você não pode remover seu próprio acesso de administrador." });
+  }
+  const db = getDb();
+  const result = await db.execute({
+    sql: "UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [parsed.data.role, req.params.id],
+  });
+  if (result.rowsAffected === 0) {
+    return res.status(404).json({ error: "Usuário não encontrado." });
+  }
+  await logAudit(db, req.user!.id, "admin_users.update_role", req.params.id, req);
+
+  const updated = await db.execute({
+    sql: "SELECT id, name, email, role, avatar_url, created_at, updated_at FROM users WHERE id = ?",
+    args: [req.params.id],
+  });
+  return res.json(updated.rows[0]);
+});
+
+/** DELETE /api/admin/users/:id — nunca permite apagar a própria conta por aqui */
+adminRouter.delete("/users/:id", async (req, res) => {
+  if (req.params.id === req.user!.id) {
+    return res.status(400).json({ error: "Você não pode remover sua própria conta por aqui." });
+  }
+  const db = getDb();
+  const result = await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [req.params.id] });
+  if (result.rowsAffected === 0) {
+    return res.status(404).json({ error: "Usuário não encontrado." });
+  }
+  await logAudit(db, req.user!.id, "admin_users.delete", req.params.id, req);
+  return res.status(204).send();
 });

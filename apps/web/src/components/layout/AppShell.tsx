@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutGrid, Sun, ListChecks, Timer, BookOpen, GraduationCap, Menu, X, SunMedium, Moon, Sparkles } from "lucide-react";
+import { LayoutGrid, Sun, ListChecks, Timer, BookOpen, GraduationCap, Menu, X, SunMedium, Moon, User, Settings } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -15,17 +15,20 @@ const NAV = [
 
 export function AppShell() {
   const { isDark, setMode } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const moreItems = [
+    { to: "/educacao", label: "Educação" },
+    ...(isAdmin ? [{ to: "/configuracoes", label: "Configurações" }] : []),
+  ];
 
   return (
     <div className="w-full min-h-screen flex bg-paper text-[#1E2126] dark:bg-ink dark:text-[#EDEBE4]">
       {/* sidebar desktop/tablet */}
       <aside className="hidden md:flex md:flex-col shrink-0 md:w-[76px] lg:w-[224px] p-3 lg:p-4 border-r border-paper-border dark:border-ink-border">
         <div className="flex items-center gap-2 px-1 mb-8">
-          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-signal">
-            <Sparkles size={16} className="text-ink" />
-          </div>
+          <img src="/logo/icon-64.png" alt="LifeOS" className="w-8 h-8 rounded-md shrink-0 object-contain" />
           <span className="hidden lg:inline text-sm font-medium">LifeOS</span>
         </div>
 
@@ -46,6 +49,32 @@ export function AppShell() {
           ))}
         </nav>
 
+        <NavLink
+          to="/perfil"
+          className={({ isActive }) =>
+            `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+              isActive ? "font-semibold bg-black/5 dark:bg-white/10" : "text-slate font-medium"
+            }`
+          }
+        >
+          <User size={18} className="shrink-0" />
+          <span className="hidden lg:inline">Meu perfil</span>
+        </NavLink>
+
+        {isAdmin && (
+          <NavLink
+            to="/configuracoes"
+            className={({ isActive }) =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                isActive ? "font-semibold bg-black/5 dark:bg-white/10" : "text-slate font-medium"
+              }`
+            }
+          >
+            <Settings size={18} className="shrink-0" />
+            <span className="hidden lg:inline">Configurações</span>
+          </NavLink>
+        )}
+
         <button
           onClick={() => setMode(isDark ? "light" : "dark")}
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate"
@@ -63,9 +92,7 @@ export function AppShell() {
       <div className="flex-1 flex flex-col min-w-0">
         <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-paper-border dark:border-ink-border">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-signal">
-              <Sparkles size={14} className="text-ink" />
-            </div>
+            <img src="/logo/icon-64.png" alt="LifeOS" className="w-7 h-7 rounded-md object-contain" />
             <span className="text-sm font-medium">LifeOS</span>
           </div>
           <button onClick={() => setMode(isDark ? "light" : "dark")} className="text-slate">
@@ -112,13 +139,23 @@ export function AppShell() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <NavLink
-                  to="/educacao"
+                  to="/perfil"
                   onClick={() => setMoreOpen(false)}
                   className="rounded-xl px-3 py-4 text-xs text-center text-slate border border-paper-border dark:border-ink-border"
                 >
-                  Educação
+                  Meu perfil
                 </NavLink>
-                {["Projetos", "Saúde", "Hábitos", "Metas", "Analytics", "Calendário", "Insights", "Config."].map((m) => (
+                {moreItems.map(({ to, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    onClick={() => setMoreOpen(false)}
+                    className="rounded-xl px-3 py-4 text-xs text-center text-slate border border-paper-border dark:border-ink-border"
+                  >
+                    {label}
+                  </NavLink>
+                ))}
+                {["Projetos", "Saúde", "Hábitos", "Metas", "Analytics", "Calendário", "Insights"].map((m) => (
                   <div
                     key={m}
                     className="rounded-xl px-3 py-4 text-xs text-center text-slate border border-paper-border dark:border-ink-border"

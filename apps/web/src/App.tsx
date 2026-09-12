@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AppShell } from "@/components/layout/AppShell";
@@ -11,6 +12,8 @@ import { BibliotecaPage } from "@/pages/biblioteca/BibliotecaPage";
 import { LivroDetalhePage } from "@/pages/biblioteca/LivroDetalhePage";
 import { EducacaoPage } from "@/pages/educacao/EducacaoPage";
 import { FormacaoDetalhePage } from "@/pages/educacao/FormacaoDetalhePage";
+import { PerfilPage } from "@/pages/perfil/PerfilPage";
+import { ConfiguracoesPage } from "@/pages/admin/ConfiguracoesPage";
 import { EmptyState } from "@/components/ui/primitives";
 
 function ProtectedRoutes() {
@@ -23,6 +26,21 @@ function ProtectedRoutes() {
     return <Navigate to="/login" replace />;
   }
   return <AppShell />;
+}
+
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) {
+    return (
+      <EmptyState
+        title="Acesso restrito"
+        description="Apenas administradores podem acessar as configurações do LifeOS."
+        ctaLabel="Voltar ao início"
+        onCta={() => window.location.assign("/dashboard")}
+      />
+    );
+  }
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -50,6 +68,15 @@ export default function App() {
         <Route path="/biblioteca/:id" element={<LivroDetalhePage />} />
         <Route path="/educacao" element={<EducacaoPage />} />
         <Route path="/educacao/:id" element={<FormacaoDetalhePage />} />
+        <Route path="/perfil" element={<PerfilPage />} />
+        <Route
+          path="/configuracoes"
+          element={
+            <AdminRoute>
+              <ConfiguracoesPage />
+            </AdminRoute>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
