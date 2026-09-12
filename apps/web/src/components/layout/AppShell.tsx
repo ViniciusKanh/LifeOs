@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutGrid, Sun, ListChecks, Timer, BookOpen, Menu, X, SunMedium, Moon, Sparkles } from "lucide-react";
+import { LayoutGrid, Sun, ListChecks, Timer, BookOpen, GraduationCap, Menu, X, SunMedium, Moon, Sparkles } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -10,6 +10,7 @@ const NAV = [
   { to: "/tarefas", label: "Tarefas", icon: ListChecks },
   { to: "/foco", label: "Focus", icon: Timer },
   { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
+  { to: "/educacao", label: "Educação", icon: GraduationCap },
 ];
 
 export function AppShell() {
@@ -110,16 +111,21 @@ export function AppShell() {
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                {["Projetos", "Educação", "Saúde", "Hábitos", "Metas", "Analytics", "Calendário", "Insights", "Config."].map(
-                  (m) => (
-                    <div
-                      key={m}
-                      className="rounded-xl px-3 py-4 text-xs text-center text-slate border border-paper-border dark:border-ink-border"
-                    >
-                      {m}
-                    </div>
-                  )
-                )}
+                <NavLink
+                  to="/educacao"
+                  onClick={() => setMoreOpen(false)}
+                  className="rounded-xl px-3 py-4 text-xs text-center text-slate border border-paper-border dark:border-ink-border"
+                >
+                  Educação
+                </NavLink>
+                {["Projetos", "Saúde", "Hábitos", "Metas", "Analytics", "Calendário", "Insights", "Config."].map((m) => (
+                  <div
+                    key={m}
+                    className="rounded-xl px-3 py-4 text-xs text-center text-slate border border-paper-border dark:border-ink-border"
+                  >
+                    {m}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

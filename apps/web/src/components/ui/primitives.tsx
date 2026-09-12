@@ -33,11 +33,20 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   );
 }
 
-export function Field({
-  label,
-  error,
-  ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string }) {
+/**
+ * Precisa ser forwardRef: o react-hook-form manda um `ref` junto de
+ * {...register("campo")} para conseguir ler o valor do input direto
+ * do DOM (é assim que ele funciona por baixo dos panos, sem re-render
+ * a cada tecla). Sem forwardRef, o React descarta esse ref antes de
+ * chegar no <input> real, o campo nunca é registrado de fato e o
+ * formulário passa a enxergar o valor como vazio no submit — foi
+ * exatamente isso que causava o "Required" em todos os campos mesmo
+ * preenchidos (Login, Cadastro e Esqueci a Senha usam este Field).
+ */
+export const Field = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string }
+>(function Field({ label, error, ...props }, ref) {
   const id = React.useId();
   return (
     <div>
@@ -46,6 +55,7 @@ export function Field({
       </label>
       <input
         id={id}
+        ref={ref}
         className={clsx(
           "mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border",
           error ? "border-drop" : "border-paper-border dark:border-ink-border"
@@ -61,7 +71,7 @@ export function Field({
       )}
     </div>
   );
-}
+});
 
 export function EmptyState({
   title,

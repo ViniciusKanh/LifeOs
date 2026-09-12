@@ -7,6 +7,10 @@ import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { HojePage } from "@/pages/hoje/HojePage";
 import { TarefasPage } from "@/pages/tarefas/TarefasPage";
+import { BibliotecaPage } from "@/pages/biblioteca/BibliotecaPage";
+import { LivroDetalhePage } from "@/pages/biblioteca/LivroDetalhePage";
+import { EducacaoPage } from "@/pages/educacao/EducacaoPage";
+import { FormacaoDetalhePage } from "@/pages/educacao/FormacaoDetalhePage";
 import { EmptyState } from "@/components/ui/primitives";
 
 function ProtectedRoutes() {
@@ -42,16 +46,10 @@ export default function App() {
             />
           }
         />
-        <Route
-          path="/biblioteca"
-          element={
-            <EmptyState
-              title="Sua estante está vazia"
-              description="Cadastre um livro pelo ISBN ou pelo título para começar a registrar sua leitura."
-              ctaLabel="Adicionar meu primeiro livro"
-            />
-          }
-        />
+        <Route path="/biblioteca" element={<BibliotecaPage />} />
+        <Route path="/biblioteca/:id" element={<LivroDetalhePage />} />
+        <Route path="/educacao" element={<EducacaoPage />} />
+        <Route path="/educacao/:id" element={<FormacaoDetalhePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

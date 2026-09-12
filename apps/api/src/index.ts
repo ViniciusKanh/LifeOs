@@ -6,6 +6,8 @@ import { authRouter } from "./routes/auth.routes.js";
 import { tasksRouter } from "./routes/tasks.routes.js";
 import { habitsRouter } from "./routes/habits.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
+import { libraryRouter } from "./routes/library.routes.js";
+import { educationRouter } from "./routes/education.routes.js";
 
 const app = express();
 
@@ -24,6 +26,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/habits", habitsRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api", libraryRouter);
+app.use("/api", educationRouter);
 
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
