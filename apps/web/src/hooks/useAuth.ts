@@ -1,0 +1,46 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { authService } from "@/services/authService";
+import { ApiError } from "@/services/api";
+
+export function useAuth() {
+  const queryClient = useQueryClient();
+
+  const meQuery = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: authService.me,
+    retry: false,
+    // Um 401 aqui é esperado (usuário deslogado) — não deve virar erro visual.
+    throwOnError: (error) => !(error instanceof ApiError && error.status === 401),
+  });
+
+  const loginMutation = useMutation({
+    mutationFn: ({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) =>
+      authService.login(email, password, rememberMe),
+    onSuccess: (user) => queryClient.setQueryData(["auth", "me"], user),
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: ({ name, email, password }: { name: string; email: string; password: string }) =>
+      authService.register(name, email, password),
+    onSuccess: (user) => queryClient.setQueryData(["auth", "me"], user),
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: authService.logout,
+    onSuccess: () => queryClient.setQueryData(["auth", "me"], null),
+  });
+
+  return {
+    user: meQuery.data ?? null,
+    isLoading: meQuery.isLoading,
+    isAuthenticated: !!meQuery.data,
+    isAdmin: meQuery.data?.role === "admin",
+    login: loginMutation.mutateAsync,
+    loginError: loginMutation.error as ApiError | null,
+    isLoggingIn: loginMutation.isPending,
+    register: registerMutation.mutateAsync,
+    registerError: registerMutation.error as ApiError | null,
+    isRegistering: registerMutation.isPending,
+    logout: logoutMutation.mutateAsync,
+  };
+}
