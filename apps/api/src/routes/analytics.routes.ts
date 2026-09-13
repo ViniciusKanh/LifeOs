@@ -207,7 +207,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT he.id, h.name AS label, he.entry_date AS at FROM habit_entries he JOIN habits h ON h.id = he.habit_id
+      sql: `SELECT he.id, h.name AS label, he.count, he.created_at AS at FROM habit_entries he JOIN habits h ON h.id = he.habit_id
             WHERE he.owner_id = ? AND he.entry_date >= ? AND he.entry_date <= ? AND he.count >= h.target_count`,
       args: [ownerId, from, to],
     }),
