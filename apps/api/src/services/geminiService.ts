@@ -45,26 +45,21 @@ export async function getGeminiConfig(): Promise<GeminiConfig | null> {
   return { apiKey, model: model ?? DEFAULT_GEMINI_MODEL };
 }
 
-/**
- * Testa a chave de verdade: manda um prompt trivial para a API do
- * Gemini e devolve a resposta (ou o erro real da Google, sem
- * mascarar) — assim dá pra saber se a chave, o modelo e a cota
- * estão realmente funcionando, não só se o formato da chave parece ok.
- */
-export async function testGeminiConnection(): Promise<{ ok: boolean; message: string }> {
-  const config = await getGeminiConfig();
-  if (!config) {
-    return { ok: false, message: "Configure a API Key do Gemini antes de testar." };
-  }
+export type GeminiCallResult = { ok: true; text: string } | { ok: false; message: string };
 
+/**
+ * Chamada genérica à API do Gemini — usada tanto pelo teste de
+ * conexão quanto pelo LifeOS Copilot (geração de insights). Nunca
+ * mascara o erro real da Google: se a chave, o modelo ou a cota
+ * estiverem com problema, a mensagem devolvida é a da própria API.
+ */
+export async function generateText(prompt: string, config: GeminiConfig): Promise<GeminiCallResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: "Responda em uma frase curta: você está funcionando?" }] }],
-      }),
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     });
 
     const data = (await res.json().catch(() => null)) as
@@ -77,13 +72,28 @@ export async function testGeminiConnection(): Promise<{ ok: boolean; message: st
     }
 
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return {
-      ok: true,
-      message: text
-        ? `Modelo "${config.model}" respondeu: "${text}"`
-        : `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.`,
-    };
+    if (!text) {
+      return { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.` };
+    }
+    return { ok: true, text };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? `Falha ao chamar a API do Gemini: ${err.message}` : "Falha ao chamar a API do Gemini." };
   }
+}
+
+/**
+ * Testa a chave de verdade: manda um prompt trivial para a API do
+ * Gemini e devolve a resposta (ou o erro real da Google, sem
+ * mascarar) — assim dá pra saber se a chave, o modelo e a cota
+ * estão realmente funcionando, não só se o formato da chave parece ok.
+ */
+export async function testGeminiConnection(): Promise<{ ok: boolean; message: string }> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, message: "Configure a API Key do Gemini antes de testar." };
+  }
+
+  const result = await generateText("Responda em uma frase curta: você está funcionando?", config);
+  if (!result.ok) return result;
+  return { ok: true, message: `Modelo "${config.model}" respondeu: "${result.text}"` };
 }

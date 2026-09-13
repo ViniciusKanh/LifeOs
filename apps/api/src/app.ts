@@ -14,6 +14,7 @@ import { focusRouter } from "./routes/focus.routes.js";
 import { reviewsRouter } from "./routes/reviews.routes.js";
 import { analyticsRouter } from "./routes/analytics.routes.js";
 import { notificationsRouter } from "./routes/notifications.routes.js";
+import { copilotRouter } from "./routes/copilot.routes.js";
 
 /**
  * Configuração do Express extraída para um módulo próprio (sem
@@ -51,6 +52,7 @@ app.use("/api/focus", focusRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/copilot", copilotRouter);
 
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

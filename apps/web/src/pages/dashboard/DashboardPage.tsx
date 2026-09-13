@@ -17,9 +17,19 @@ import {
   Plus,
   Timer,
   Check,
+  Sparkles,
+  Briefcase,
+  GraduationCap,
+  Repeat,
+  History as HistoryIcon,
+  CheckSquare,
+  Dumbbell,
+  Brain,
+  Moon,
+  Wand2,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
-import { useLifeScore, useAnalyticsOverview } from "@/hooks/useAnalytics";
+import { useLifeScore, useAnalyticsOverview, useTimeline } from "@/hooks/useAnalytics";
 import { useWeeklyReviewHistory } from "@/hooks/useReviews";
 import { useAuth } from "@/hooks/useAuth";
 import { useTasks } from "@/hooks/useTasks";
@@ -28,7 +38,9 @@ import { useHealth, useHealthSummary } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
 import { useBooks } from "@/hooks/useBooks";
 import { useGoals } from "@/hooks/useGoals";
+import { useCopilotInsight } from "@/hooks/useCopilot";
 import { Card, IconBadge } from "@/components/ui/primitives";
+import type { TimelineEvent } from "@/types";
 
 const DIMENSION_LABELS: Record<string, string> = {
   productivity: "Produtividade",
@@ -40,10 +52,57 @@ const DIMENSION_LABELS: Record<string, string> = {
   goals: "Metas",
 };
 
+// Cor de cada dimensão no radar/lista — o mesmo significado usado em
+// toda a aplicação (ver comentário em primitives.tsx: IconBadge).
+const DIMENSION_BAR_TONE: Record<string, string> = {
+  productivity: "bg-signal",
+  professional: "bg-signal",
+  health: "bg-cat-blue",
+  education: "bg-cat-purple",
+  reading: "bg-cat-pink",
+  habits: "bg-cat-green",
+  goals: "bg-cat-teal",
+};
+
 // Meta diária de água — ainda não é configurável por usuário no
 // backend, então usamos um valor de referência fixo só para calcular
 // o "% da meta" exibido; o litro registrado em si é sempre real.
 const WATER_GOAL_ML = 2500;
+
+const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
+  task: CheckSquare,
+  habit: Repeat,
+  workout: Dumbbell,
+  reading: BookOpen,
+  focus: Brain,
+  education: GraduationCap,
+  sleep: Moon,
+};
+
+function timelineLabel(e: TimelineEvent): string {
+  switch (e.type) {
+    case "task":
+      return `Tarefa concluída: ${e.label}`;
+    case "habit":
+      return `Hábito cumprido: ${e.label}`;
+    case "workout":
+      return e.label;
+    case "reading":
+      return `Leitura: ${e.label}`;
+    case "focus":
+      return "Sessão de foco";
+    case "education":
+      return `Disciplina concluída: ${e.label}`;
+    default:
+      return e.label;
+  }
+}
+
+function formatEventTime(at: string) {
+  const iso = at.includes("T") ? at : at.replace(" ", "T");
+  const d = new Date(iso.endsWith("Z") ? iso : `${iso}Z`);
+  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
 
 function formatMinutes(total: number) {
   if (total <= 0) return "0min";
@@ -70,16 +129,19 @@ export function DashboardPage() {
   const { overview } = useAnalyticsOverview(14);
   const { history: reviewHistory } = useWeeklyReviewHistory(8);
   const today = new Date().toISOString().slice(0, 10);
+  const { events } = useTimeline({ from: today, to: today });
+  const copilot = useCopilotInsight();
 
   const [quickTitle, setQuickTitle] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const dims = lifeScore
     ? Object.entries(DIMENSION_LABELS).map(([key, dim]) => ({
+        key,
         dim,
         value: (lifeScore as unknown as Record<string, number>)[key] ?? 0,
       }))
-    : Object.values(DIMENSION_LABELS).map((dim) => ({ dim, value: 0 }));
+    : Object.entries(DIMENSION_LABELS).map(([key, dim]) => ({ key, dim, value: 0 }));
 
   const overall = lifeScore?.overall ?? 0;
 
@@ -90,6 +152,15 @@ export function DashboardPage() {
     .filter((t) => t.status !== "Concluído")
     .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
     .slice(0, 5);
+
+  const todaysEvents = useMemo(
+    () =>
+      [...events]
+        .filter((e) => String(e.at).slice(0, 10) === today)
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+        .slice(0, 5),
+    [events, today]
+  );
 
   const habitsDoneToday = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
   const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
@@ -187,7 +258,7 @@ export function DashboardPage() {
         />
       </div>
 
-      {/* Life Score + Ações rápidas */}
+      {/* Life Score + Como é calculado */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4 mb-4">
         <Card className="p-6">
           <div className="flex items-center justify-between mb-1">
@@ -214,7 +285,7 @@ export function DashboardPage() {
                   <div key={d.dim} className="flex items-center gap-3 text-xs">
                     <span className="w-24 shrink-0 text-slate">{d.dim}</span>
                     <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                      <div className="h-full rounded-full bg-brand-500" style={{ width: `${d.value}%` }} />
+                      <div className={`h-full rounded-full ${DIMENSION_BAR_TONE[d.key]}`} style={{ width: `${d.value}%` }} />
                     </div>
                     <span className="w-6 text-right font-medium">{d.value}</span>
                   </div>
@@ -225,64 +296,79 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Wrench size={15} className="text-slate" />
-            <p className="text-sm font-semibold">Ações rápidas</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Info size={15} className="text-slate" />
+            <p className="text-sm font-semibold">Como o Life Score é calculado</p>
           </div>
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2">
-              <input
-                value={quickTitle}
-                onChange={(e) => setQuickTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleQuickTask()}
-                placeholder="Nova tarefa rápida..."
-                className="flex-1 rounded-xl px-3 py-2.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500 transition-colors"
-              />
-              <button
-                onClick={handleQuickTask}
-                disabled={!quickTitle.trim()}
-                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-brand-500 text-white disabled:opacity-40"
-                title="Adicionar tarefa"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-
-            <button
-              onClick={handleQuickWater}
-              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-            >
-              <IconBadge tone="blue" size={28} icon={<Droplets size={13} />} />
-              <span className="flex-1 text-left">Registrar +250ml de água</span>
-            </button>
-
-            <button
-              onClick={handleQuickFocus}
-              disabled={!!activeSession}
-              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50"
-            >
-              <IconBadge tone="teal" size={28} icon={<Timer size={13} />} />
-              <span className="flex-1 text-left">
-                {activeSession ? "Sessão de foco já em andamento" : "Iniciar foco (Pomodoro 25min)"}
-              </span>
-            </button>
-
-            <Link
-              to="/saude"
-              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-            >
-              <IconBadge tone="pink" size={28} icon={<Heart size={13} />} />
-              <span className="flex-1 text-left">Registrar humor do dia</span>
-            </Link>
-
-            {actionFeedback && (
-              <p className="flex items-center gap-1.5 text-[11px] text-growth pt-1">
-                <Check size={12} /> {actionFeedback}
-              </p>
-            )}
+          <p className="text-xs text-slate mb-4">
+            O Life Score reflete o seu progresso nas principais áreas da vida, com base em dados reais da sua rotina.
+          </p>
+          <div className="space-y-3">
+            <ExplainRow
+              tone="amber"
+              icon={<Briefcase size={14} />}
+              title="Produtividade e Profissional"
+              description="% de tarefas concluídas (geral e por projetos profissionais)."
+            />
+            <ExplainRow tone="blue" icon={<Heart size={14} />} title="Saúde" description="Água, sono e exercício de hoje." />
+            <ExplainRow
+              tone="purple"
+              icon={<GraduationCap size={14} />}
+              title="Educação"
+              description="Progresso médio das suas formações."
+            />
+            <ExplainRow tone="pink" icon={<BookOpen size={14} />} title="Leitura" description="Progresso dos livros que você está lendo." />
+            <ExplainRow tone="green" icon={<Repeat size={14} />} title="Hábitos" description="% de hábitos cumpridos hoje." />
+            <ExplainRow tone="teal" icon={<Flag size={14} />} title="Metas" description="Progresso médio das metas ativas." />
           </div>
+          <p className="text-[11px] text-slate mt-4 pt-3 border-t border-paper-border dark:border-ink-border">
+            💡 Todas as dimensões vêm de dados reais registrados no LifeOS — nada aqui é estimado.
+          </p>
         </Card>
       </div>
+
+      {/* LifeOS Copilot — insight gerado por IA */}
+      <Card className="p-6 mb-4 bg-gradient-to-br from-brand-600 to-cat-purple text-white border-0 shadow-card">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="font-display font-semibold text-base">LifeOS Copilot</p>
+              <p className="text-xs opacity-90 mt-0.5 max-w-md">
+                Peça um insight gerado por IA com base nos seus dados reais de hoje — tarefas, hábitos, água e leitura.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => copilot.generate()}
+            disabled={copilot.isGenerating}
+            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+          >
+            <Wand2 size={15} />
+            {copilot.isGenerating ? "Gerando..." : copilot.text ? "Gerar outro insight" : "Gerar insight com IA"}
+          </button>
+        </div>
+
+        {copilot.error && (
+          <p className="text-sm mt-4 bg-white/10 rounded-xl px-4 py-3">
+            {copilot.error.message}
+            {copilot.error.status === 400 && (
+              <>
+                {" "}
+                <Link to="/configuracoes" className="underline font-semibold">
+                  Ir para Configurações
+                </Link>
+              </>
+            )}
+          </p>
+        )}
+
+        {copilot.text && !copilot.error && (
+          <p className="text-sm leading-relaxed mt-4 bg-white/10 rounded-xl px-4 py-3">{copilot.text}</p>
+        )}
+      </Card>
 
       {/* Gráficos de análise */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -328,8 +414,39 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {/* Linha inferior */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Linha principal — mesma composição do protótipo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <Card className="p-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <IconBadge tone="blue" size={30} icon={<HistoryIcon size={14} />} />
+            <p className="text-sm font-semibold">Resumo do dia</p>
+          </div>
+          {todaysEvents.length === 0 ? (
+            <p className="text-xs text-slate">Nada registrado ainda hoje.</p>
+          ) : (
+            <div className="relative pl-4 border-l-2 border-paper-border dark:border-ink-border space-y-3">
+              {todaysEvents.map((e) => {
+                const Icon = TIMELINE_ICON[e.type] ?? CheckSquare;
+                return (
+                  <div key={`${e.type}-${e.id}`} className="relative">
+                    <span className="absolute -left-[19px] top-0.5 w-2 h-2 rounded-full bg-brand-500 ring-4 ring-paper-raised dark:ring-ink-raised" />
+                    <div className="flex items-start gap-2">
+                      <Icon size={12} className="text-slate mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium truncate">{timelineLabel(e)}</p>
+                        <p className="text-[10px] text-slate">{formatEventTime(String(e.at))}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <Link to="/hoje" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
+            Ver hoje →
+          </Link>
+        </Card>
+
         <Card className="p-5">
           <p className="text-sm font-semibold mb-3">Próximas prioridades</p>
           {priorities.length === 0 ? (
@@ -391,6 +508,112 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-5">
+          <p className="text-sm font-semibold mb-3">Leitura atual</p>
+          {!currentBook ? (
+            <p className="text-xs text-slate">Nenhum livro em andamento — comece um na Biblioteca.</p>
+          ) : (
+            <div className="flex gap-3">
+              {currentBook.cover_url ? (
+                <img
+                  src={currentBook.cover_url}
+                  alt={currentBook.title}
+                  className="w-12 h-[72px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border"
+                />
+              ) : (
+                <div className="w-12 h-[72px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
+                  <BookOpen size={18} className="text-cat-pink" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold leading-snug truncate">{currentBook.title}</p>
+                {currentBook.author && <p className="text-xs text-slate mt-0.5 truncate">{currentBook.author}</p>}
+                {currentBook.total_pages ? (
+                  <div className="mt-2.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate mb-1">
+                      <span>
+                        Página {currentBook.current_page} de {currentBook.total_pages}
+                      </span>
+                      <span>{Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                      <div
+                        className="h-full rounded-full bg-cat-pink"
+                        style={{ width: `${Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+          <Link to="/biblioteca" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
+            Continuar lendo →
+          </Link>
+        </Card>
+      </div>
+
+      {/* Linha secundária */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Wrench size={15} className="text-slate" />
+            <p className="text-sm font-semibold">Ações rápidas</p>
+          </div>
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <input
+                value={quickTitle}
+                onChange={(e) => setQuickTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleQuickTask()}
+                placeholder="Nova tarefa rápida..."
+                className="flex-1 rounded-xl px-3 py-2.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500 transition-colors"
+              />
+              <button
+                onClick={handleQuickTask}
+                disabled={!quickTitle.trim()}
+                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-brand-500 text-white disabled:opacity-40"
+                title="Adicionar tarefa"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+
+            <button
+              onClick={handleQuickWater}
+              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
+            >
+              <IconBadge tone="blue" size={28} icon={<Droplets size={13} />} />
+              <span className="flex-1 text-left">Registrar +250ml de água</span>
+            </button>
+
+            <button
+              onClick={handleQuickFocus}
+              disabled={!!activeSession}
+              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50"
+            >
+              <IconBadge tone="teal" size={28} icon={<Timer size={13} />} />
+              <span className="flex-1 text-left">
+                {activeSession ? "Sessão de foco já em andamento" : "Iniciar foco (Pomodoro 25min)"}
+              </span>
+            </button>
+
+            <Link
+              to="/saude"
+              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
+            >
+              <IconBadge tone="pink" size={28} icon={<Heart size={13} />} />
+              <span className="flex-1 text-left">Registrar humor do dia</span>
+            </Link>
+
+            {actionFeedback && (
+              <p className="flex items-center gap-1.5 text-[11px] text-growth pt-1">
+                <Check size={12} /> {actionFeedback}
+              </p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-5">
           <p className="text-sm font-semibold mb-3">Foco e bem-estar</p>
           <div className="space-y-2.5 text-xs">
             <div className="flex items-center justify-between">
@@ -414,37 +637,6 @@ export function DashboardPage() {
           </div>
           <Link to="/saude" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
             Ver saúde →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Leitura atual</p>
-          {!currentBook ? (
-            <p className="text-xs text-slate">Nenhum livro em andamento — comece um na Biblioteca.</p>
-          ) : (
-            <div>
-              <p className="text-sm font-semibold leading-snug">{currentBook.title}</p>
-              {currentBook.author && <p className="text-xs text-slate mt-0.5">{currentBook.author}</p>}
-              {currentBook.total_pages ? (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between text-[11px] text-slate mb-1">
-                    <span>
-                      Página {currentBook.current_page} de {currentBook.total_pages}
-                    </span>
-                    <span>{Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                    <div
-                      className="h-full rounded-full bg-cat-pink"
-                      style={{ width: `${Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
-          <Link to="/biblioteca" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Continuar lendo →
           </Link>
         </Card>
 
@@ -473,6 +665,28 @@ export function DashboardPage() {
             Ver metas →
           </Link>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+function ExplainRow({
+  tone,
+  icon,
+  title,
+  description,
+}: {
+  tone: "blue" | "purple" | "green" | "pink" | "teal" | "amber";
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <IconBadge tone={tone} icon={icon} size={30} />
+      <div className="min-w-0">
+        <p className="text-xs font-semibold">{title}</p>
+        <p className="text-[11px] text-slate leading-snug">{description}</p>
       </div>
     </div>
   );
