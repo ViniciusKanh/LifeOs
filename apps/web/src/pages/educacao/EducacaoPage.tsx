@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { GraduationCap, Plus, X } from "lucide-react";
-import { useAcademicProjects, useEducations } from "@/hooks/useEducations";
-import { Button, Card, EmptyState, Field } from "@/components/ui/primitives";
+import { useMemo, useState, type ReactNode } from "react";
+import { Plus, X } from "lucide-react";
+import { useEducations } from "@/hooks/useEducations";
+import { Button, EmptyState, Field } from "@/components/ui/primitives";
+import { EducationDashboard } from "./EducationDashboard";
 import type { EducationKind, EducationPhase } from "@/types";
 
 const KIND_LABEL: Record<EducationKind, string> = {
@@ -46,13 +46,27 @@ export function PhaseBadge({ phase }: { phase: EducationPhase }) {
 
 export function EducacaoPage() {
   const { educations, isLoading, createEducation } = useEducations();
-  const { academicProjects } = useAcademicProjects();
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Formação em destaque no painel: a primeira ainda ativa (não
+  // concluída); se todas estiverem concluídas, cai na mais recente.
+  // Sempre real — nunca uma escolha aleatória — e trocável pelas
+  // abas quando o usuário tem mais de uma formação cadastrada.
+  const sortedEducations = useMemo(
+    () => [...educations].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")),
+    [educations]
+  );
+  const defaultEducation = sortedEducations.find((e) => e.phase !== "concluida") ?? sortedEducations[0];
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const activeEducationId = activeId ?? defaultEducation?.id ?? null;
+
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto">
+    <div className="px-4 py-6 md:px-8 md:py-8">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-        <p className="font-display font-medium text-2xl">Educação</p>
+        <div>
+          <p className="font-display font-bold text-2xl">Educação</p>
+          <p className="text-sm text-slate mt-0.5">Organize seus estudos, disciplinas, projetos e prazos em um só lugar.</p>
+        </div>
         <Button onClick={() => setModalOpen(true)}>
           <Plus size={15} /> Nova formação
         </Button>
@@ -67,55 +81,25 @@ export function EducacaoPage() {
         />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {educations.map((edu) => (
-          <Link key={edu.id} to={`/educacao/${edu.id}`}>
-            <Card className="p-4 h-full hover:opacity-90 transition-opacity">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <GraduationCap size={16} className="text-slate shrink-0" />
-                <span className="text-[10px] rounded-full px-2 py-0.5 border border-paper-border dark:border-ink-border text-slate">
-                  {KIND_LABEL[edu.kind]}
-                </span>
-                <PhaseBadge phase={edu.phase} />
-              </div>
-              <p className="text-sm font-semibold leading-snug">{edu.course_name}</p>
-              {edu.institution && <p className="text-xs text-slate mt-0.5">{edu.institution}</p>}
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs text-slate mb-1">
-                  <span>Progresso</span>
-                  <span>{edu.progress_pct}%</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                  <div className="h-full rounded-full bg-signal" style={{ width: `${edu.progress_pct}%` }} />
-                </div>
-              </div>
-            </Card>
-          </Link>
-        ))}
-      </div>
-
-      {academicProjects.length > 0 && (
-        <div>
-          <p className="text-sm font-semibold mb-3">TCC, dissertação e projetos acadêmicos</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {academicProjects.map((p) => (
-              <Card key={p.id} className="p-4">
-                <p className="text-sm font-semibold leading-snug">{p.title}</p>
-                {p.advisor && <p className="text-xs text-slate mt-0.5">Orientador(a): {p.advisor}</p>}
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-xs text-slate mb-1">
-                    <span>Progresso</span>
-                    <span>{p.progress_pct}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                    <div className="h-full rounded-full bg-growth" style={{ width: `${p.progress_pct}%` }} />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+      {sortedEducations.length > 1 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          {sortedEducations.map((edu) => (
+            <button
+              key={edu.id}
+              onClick={() => setActiveId(edu.id)}
+              className={`text-xs font-semibold rounded-full px-3 py-1.5 border transition-colors ${
+                edu.id === activeEducationId
+                  ? "bg-brand-600 border-brand-600 text-white"
+                  : "border-paper-border dark:border-ink-border text-slate hover:bg-paper dark:hover:bg-ink-overlay"
+              }`}
+            >
+              {edu.course_name}
+            </button>
+          ))}
         </div>
       )}
+
+      {activeEducationId && <EducationDashboard educationId={activeEducationId} />}
 
       {modalOpen && <NovaFormacaoModal onClose={() => setModalOpen(false)} onCreate={createEducation} />}
     </div>

@@ -219,3 +219,118 @@ export async function generateHealthInsight(ownerId: string): Promise<{ ok: bool
   }
   return { ok: true, text: result.text };
 }
+
+/**
+ * Insight de estudos — mesmo princípio, contexto restrito a uma única
+ * formação (disciplinas, prazos, horas de estudo x meta semanal,
+ * projetos acadêmicos), para o Gemini conseguir cruzar ritmo de
+ * estudo com prazos reais em vez de um resumo genérico.
+ */
+async function buildEducationContext(ownerId: string, educationId: string) {
+  const db = getDb();
+
+  const eduRes = await db.execute({
+    sql: "SELECT course_name, progress_pct, weekly_study_goal_minutes FROM educations WHERE id = ? AND owner_id = ?",
+    args: [educationId, ownerId],
+  });
+  const education = eduRes.rows[0] as unknown as { course_name: string; progress_pct: number; weekly_study_goal_minutes: number } | undefined;
+  if (!education) return null;
+
+  const now = new Date();
+  const jsDay = now.getDay();
+  const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(now.getDate() + mondayOffset);
+  const weekStart = monday.toISOString().slice(0, 10);
+  const nextMonday = new Date(monday);
+  nextMonday.setDate(monday.getDate() + 7);
+  const weekEnd = nextMonday.toISOString().slice(0, 10);
+
+  const [subjectsByStatus, pendingDeadlines, urgentDeadlines, studyMinutesThisWeek, academicProjects] = await Promise.all([
+    db.execute({
+      sql: `SELECT s.status, COUNT(*) as n FROM subjects s JOIN courses c ON c.id = s.course_id
+            WHERE c.education_id = ? AND s.owner_id = ? GROUP BY s.status`,
+      args: [educationId, ownerId],
+    }),
+    scalar(db, "SELECT COUNT(*) FROM academic_deadlines WHERE education_id = ? AND owner_id = ? AND done = 0", [educationId, ownerId]),
+    scalar(
+      db,
+      "SELECT COUNT(*) FROM academic_deadlines WHERE education_id = ? AND owner_id = ? AND done = 0 AND due_date <= date('now', '+7 days')",
+      [educationId, ownerId]
+    ),
+    scalar(
+      db,
+      "SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE education_id = ? AND owner_id = ? AND occurred_at >= ? AND occurred_at < ?",
+      [educationId, ownerId, weekStart, weekEnd]
+    ),
+    db.execute({
+      sql: "SELECT COUNT(*) as n, COALESCE(AVG(progress_pct), 0) as avg_pct FROM academic_projects WHERE education_id = ? AND owner_id = ? AND progress_pct < 100",
+      args: [educationId, ownerId],
+    }),
+  ]);
+
+  const statusCounts: Record<string, number> = {};
+  for (const row of subjectsByStatus.rows as unknown as { status: string; n: number }[]) {
+    statusCounts[row.status] = Number(row.n);
+  }
+  const projectsRow = academicProjects.rows[0] as unknown as { n: number; avg_pct: number } | undefined;
+
+  return {
+    courseName: education.course_name,
+    progressPct: education.progress_pct,
+    weeklyGoalMinutes: education.weekly_study_goal_minutes,
+    subjectsInProgress: statusCounts["Em andamento"] ?? 0,
+    subjectsDone: statusCounts["Concluída"] ?? 0,
+    subjectsPlanned: statusCounts["Planejada"] ?? 0,
+    pendingDeadlines,
+    urgentDeadlines,
+    studyMinutesThisWeek,
+    activeProjectsCount: projectsRow ? Number(projectsRow.n) : 0,
+    activeProjectsAvgPct: projectsRow ? Math.round(Number(projectsRow.avg_pct)) : 0,
+  };
+}
+
+function buildEducationPrompt(ctx: NonNullable<Awaited<ReturnType<typeof buildEducationContext>>>): string {
+  const weeklyGoalPct = ctx.weeklyGoalMinutes > 0 ? Math.round((ctx.studyMinutesThisWeek / ctx.weeklyGoalMinutes) * 100) : 0;
+  const lines = [
+    `Formação: "${ctx.courseName}", progresso geral ${ctx.progressPct}%.`,
+    `Disciplinas: ${ctx.subjectsInProgress} em andamento, ${ctx.subjectsDone} concluídas, ${ctx.subjectsPlanned} planejadas.`,
+    `Prazos pendentes: ${ctx.pendingDeadlines} (${ctx.urgentDeadlines} vencem nos próximos 7 dias).`,
+    `Horas de estudo nesta semana: ${Math.floor(ctx.studyMinutesThisWeek / 60)}h${(ctx.studyMinutesThisWeek % 60).toString().padStart(2, "0")} de uma meta de ${Math.floor(ctx.weeklyGoalMinutes / 60)}h${(ctx.weeklyGoalMinutes % 60).toString().padStart(2, "0")} (${weeklyGoalPct}%).`,
+    ctx.activeProjectsCount > 0
+      ? `Projetos acadêmicos em andamento: ${ctx.activeProjectsCount}, progresso médio ${ctx.activeProjectsAvgPct}%.`
+      : "Nenhum projeto acadêmico em andamento.",
+  ];
+
+  return [
+    "Você é o LifeOS Copilot, especializado em rotina de estudos. Com base SOMENTE nos dados reais abaixo (nunca invente números, disciplinas ou prazos que não estejam listados), escreva um insight curto em português do Brasil.",
+    "",
+    "Dados da formação do usuário:",
+    ...lines.map((l) => `- ${l}`),
+    "",
+    "Regras: no máximo 3 frases (até ~65 palavras); se fizer sentido, relacione o ritmo de estudo da semana com os prazos pendentes (ex.: poucas horas estudadas e prazo urgente próximo) — só se os números sustentarem isso; cite pelo menos um número real; termine com UMA sugestão prática para esta semana; nunca prometa nota, aprovação ou resultado acadêmico — fale só de ritmo e organização.",
+  ].join("\n");
+}
+
+export async function generateEducationInsight(
+  ownerId: string,
+  educationId: string
+): Promise<{ ok: boolean; text?: string; message?: string }> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, message: "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
+  }
+
+  const ctx = await buildEducationContext(ownerId, educationId);
+  if (!ctx) {
+    return { ok: false, message: "Formação não encontrada." };
+  }
+  const prompt = buildEducationPrompt(ctx);
+  const result = await generateText(prompt, config);
+
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return { ok: true, text: result.text };
+}

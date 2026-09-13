@@ -23,3 +23,14 @@ export function useHealthInsight() {
     error: mutation.error as ApiError | null,
   };
 }
+
+/** Mesma ideia, focado em uma única formação (disciplinas, prazos, horas de estudo) — usado no painel de Educação. */
+export function useEducationInsight() {
+  const mutation = useMutation({ mutationFn: copilotService.generateEducationInsight });
+  return {
+    generate: mutation.mutateAsync,
+    isGenerating: mutation.isPending,
+    text: mutation.data?.text ?? null,
+    error: mutation.error as ApiError | null,
+  };
+}
