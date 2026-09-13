@@ -45,3 +45,14 @@ export function useHabitsInsight() {
     error: mutation.error as ApiError | null,
   };
 }
+
+/** Mesma ideia, focado no período selecionado em Analytics (totais, variação e correlações reais). */
+export function useAnalyticsInsight() {
+  const mutation = useMutation({ mutationFn: copilotService.generateAnalyticsInsight });
+  return {
+    generate: mutation.mutateAsync,
+    isGenerating: mutation.isPending,
+    text: mutation.data?.text ?? null,
+    error: mutation.error as ApiError | null,
+  };
+}

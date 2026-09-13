@@ -1,5 +1,5 @@
 import { getDb } from "../db/client.js";
-import { computeLifeScore } from "./metricsService.js";
+import { computeLifeScore, computeRangeMetrics, computeInsights, changePct } from "./metricsService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 
 /**
@@ -456,6 +456,82 @@ function buildHabitsPrompt(ctx: NonNullable<Awaited<ReturnType<typeof buildHabit
     "",
     "Regras: no máximo 3 frases (até ~65 palavras); se houver hábito em risco, priorize alertar sobre ele citando o nome e a sequência; senão, destaque a consistência de 30 dias ou o horário de pico; cite pelo menos um número real; termine com UMA sugestão prática para hoje; nunca invente conquistas ou prometa resultados.",
   ].join("\n");
+}
+
+/**
+ * Insight de Analytics — mesmo princípio, mas com o período selecionado
+ * (7/30/90 dias): totais, variação contra o período anterior, correlações
+ * (sono x produtividade, humor x foco) e melhor dia/horário — para o
+ * Gemini apontar UM padrão de verdade cruzando métricas, em vez de um
+ * resumo genérico "continue assim".
+ */
+async function buildAnalyticsContext(ownerId: string, days: number) {
+  const to = new Date();
+  const from = new Date(to);
+  from.setUTCDate(from.getUTCDate() - days);
+  const toBoundary = new Date(to);
+  toBoundary.setUTCDate(toBoundary.getUTCDate() + 1);
+  const fromStr = from.toISOString().slice(0, 10);
+  const toBoundaryStr = toBoundary.toISOString().slice(0, 10);
+
+  const prevFrom = new Date(from);
+  prevFrom.setUTCDate(prevFrom.getUTCDate() - days);
+  const prevFromStr = prevFrom.toISOString().slice(0, 10);
+  const prevToStr = fromStr;
+
+  const [metrics, previous, insights] = await Promise.all([
+    computeRangeMetrics(ownerId, fromStr, toBoundaryStr),
+    computeRangeMetrics(ownerId, prevFromStr, prevToStr),
+    computeInsights(ownerId, fromStr, to.toISOString().slice(0, 10)),
+  ]);
+
+  return { days, metrics, previous, insights };
+}
+
+function buildAnalyticsPrompt(ctx: Awaited<ReturnType<typeof buildAnalyticsContext>>): string {
+  const { days, metrics, previous, insights } = ctx;
+  const tasksDelta = changePct(metrics.tasksCompleted, previous.tasksCompleted);
+  const focusDelta = changePct(metrics.focusMinutes, previous.focusMinutes);
+
+  const lines = [
+    `Período analisado: últimos ${days} dias.`,
+    `Tarefas concluídas: ${metrics.tasksCompleted}${tasksDelta !== null ? ` (${tasksDelta >= 0 ? "+" : ""}${tasksDelta}% vs. período anterior)` : ""}.`,
+    `Minutos de foco: ${metrics.focusMinutes}${focusDelta !== null ? ` (${focusDelta >= 0 ? "+" : ""}${focusDelta}% vs. período anterior)` : ""}.`,
+    `Páginas lidas: ${metrics.pagesRead}. Exercícios: ${metrics.workouts}. Consistência de hábitos: ${metrics.habitsCompletionPct}%.`,
+    insights.bestWeekday ? `Dia mais produtivo: ${insights.bestWeekday.label} (média de ${insights.bestWeekday.avgCompleted} tarefas concluídas).` : "",
+    insights.bestFocusHour ? `Horário de foco mais produtivo: por volta das ${insights.bestFocusHour.hour}h.` : "",
+    insights.sleepVsNextDayProductivity.r !== null
+      ? `Correlação entre sono e produtividade do dia seguinte: r = ${insights.sleepVsNextDayProductivity.r} (${insights.sleepVsNextDayProductivity.pairs} noites comparadas).`
+      : "",
+    insights.moodVsFocusMinutes.r !== null
+      ? `Correlação entre humor e minutos de foco: r = ${insights.moodVsFocusMinutes.r} (${insights.moodVsFocusMinutes.pairs} dias comparados).`
+      : "",
+  ].filter(Boolean);
+
+  return [
+    "Você é o LifeOS Copilot, especializado em analisar padrões de produtividade e rotina. Com base SOMENTE nos dados reais abaixo (nunca invente números, correlações ou tendências que os dados não sustentem), escreva um insight curto em português do Brasil.",
+    "",
+    "Dados do período:",
+    ...lines.map((l) => `- ${l}`),
+    "",
+    "Regras: no máximo 3 frases (até ~65 palavras); priorize citar uma correlação real se houver uma com |r| >= 0.3, senão destaque a maior variação percentual do período; cite pelo menos um número real; termine com UMA sugestão prática e específica; nunca prometa resultados nem dê conselho médico ou financeiro.",
+  ].join("\n");
+}
+
+export async function generateAnalyticsInsight(ownerId: string, days = 30): Promise<{ ok: boolean; text?: string; message?: string }> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, message: "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
+  }
+
+  const ctx = await buildAnalyticsContext(ownerId, days);
+  const prompt = buildAnalyticsPrompt(ctx);
+  const result = await generateText(prompt, config);
+
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return { ok: true, text: result.text };
 }
 
 export async function generateHabitsInsight(ownerId: string): Promise<{ ok: boolean; text?: string; message?: string }> {

@@ -176,6 +176,8 @@ export interface RangeMetrics {
   studyMinutes: number;
   pagesRead: number;
   workouts: number;
+  readingMinutes: number;
+  workoutMinutes: number;
   habitsCompletionPct: number;
   habitsDoneCount: number;
   habitsPossibleCount: number;
@@ -185,7 +187,7 @@ export interface RangeMetrics {
 export async function computeRangeMetrics(ownerId: string, from: string, to: string): Promise<RangeMetrics> {
   const db = getDb();
 
-  const [tasksCompleted, tasksPlanned, focusMinutes, studyMinutes, pagesRead, workouts, habitsTotal, habitsDone] = await Promise.all([
+  const [tasksCompleted, tasksPlanned, focusMinutes, studyMinutes, pagesRead, workouts, readingMinutes, workoutMinutes, habitsTotal, habitsDone] = await Promise.all([
     scalar(
       db,
       "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?) AND date(updated_at) < date(?)",
@@ -222,6 +224,16 @@ export async function computeRangeMetrics(ownerId: string, from: string, to: str
     ),
     scalar(
       db,
+      "SELECT COALESCE(SUM(duration_minutes), 0) FROM reading_sessions WHERE owner_id = ? AND date(started_at) >= date(?) AND date(started_at) < date(?)",
+      [ownerId, from, to]
+    ),
+    scalar(
+      db,
+      "SELECT COALESCE(SUM(duration_minutes), 0) FROM workouts WHERE owner_id = ? AND date(performed_at) >= date(?) AND date(performed_at) < date(?)",
+      [ownerId, from, to]
+    ),
+    scalar(
+      db,
       "SELECT COUNT(*) * CAST(julianday(?) - julianday(?) AS INTEGER) FROM habits WHERE owner_id = ? AND archived_at IS NULL",
       [to, from, ownerId]
     ),
@@ -243,6 +255,8 @@ export async function computeRangeMetrics(ownerId: string, from: string, to: str
     studyMinutes,
     pagesRead,
     workouts,
+    readingMinutes,
+    workoutMinutes,
     habitsCompletionPct: habitsTotal > 0 ? clamp((habitsDone / habitsTotal) * 100) : 0,
     habitsDoneCount: habitsDone,
     habitsPossibleCount: habitsTotal,
@@ -292,6 +306,7 @@ export interface LifeInsights {
   moodVsFocusMinutes: { r: number | null; pairs: number };
   bestWeekday: { label: string; avgCompleted: number } | null;
   bestFocusHour: { hour: number; totalMinutes: number } | null;
+  weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
 const WEEKDAY_LABEL = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -382,6 +397,12 @@ export async function computeInsights(ownerId: string, from: string, to: string)
     if (best) bestWeekday = { label: WEEKDAY_LABEL[best.weekday], avgCompleted: Math.round(best.avg * 10) / 10 };
   }
 
+  // Média de tarefas concluídas por dia da semana (todos os dias com dado,
+  // não só o melhor) — usado no gráfico "Conclusões por dia da semana".
+  const weekdayBreakdown = [...weekdayTotals.entries()]
+    .map(([weekday, entry]) => ({ weekday, label: WEEKDAY_LABEL[weekday], avgCompleted: Math.round((entry.sum / entry.count) * 10) / 10 }))
+    .sort((a, b) => (a.weekday === 0 ? 7 : a.weekday) - (b.weekday === 0 ? 7 : b.weekday));
+
   const bestHourRow = (focusByHour.rows as unknown as Row[])[0];
   const bestFocusHour =
     bestHourRow && Number(bestHourRow.minutes) > 0
@@ -395,6 +416,7 @@ export async function computeInsights(ownerId: string, from: string, to: string)
     moodVsFocusMinutes: { r: pearson(moodPairsX, moodPairsY), pairs: moodPairsX.length },
     bestWeekday,
     bestFocusHour,
+    weekdayBreakdown,
   };
 }
 

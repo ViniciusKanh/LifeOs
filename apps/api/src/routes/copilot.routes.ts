@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { generateDashboardInsight, generateHealthInsight, generateEducationInsight, generateHabitsInsight } from "../services/copilotService.js";
+import { generateDashboardInsight, generateHealthInsight, generateEducationInsight, generateHabitsInsight, generateAnalyticsInsight } from "../services/copilotService.js";
 
 export const copilotRouter = Router();
 
@@ -59,6 +59,21 @@ copilotRouter.post("/education-insight", rateLimit({ windowMs: 10 * 60 * 1000, m
  */
 copilotRouter.post("/habits-insight", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), async (req, res) => {
   const result = await generateHabitsInsight(req.user!.id);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+  return res.json({ text: result.text });
+});
+
+/**
+ * POST /api/copilot/analytics-insight — mesma ideia, com o período
+ * selecionado em Analytics (7/30/90 dias): totais, variação e
+ * correlações reais (sono x produtividade, humor x foco).
+ * Body: { days? }.
+ */
+copilotRouter.post("/analytics-insight", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), async (req, res) => {
+  const days = Number(req.body?.days) || 30;
+  const result = await generateAnalyticsInsight(req.user!.id, days);
   if (!result.ok) {
     return res.status(400).json({ error: result.message });
   }

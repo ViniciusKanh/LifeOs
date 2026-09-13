@@ -456,9 +456,23 @@ export interface RangeMetrics {
   studyMinutes: number;
   pagesRead: number;
   workouts: number;
+  readingMinutes: number;
+  workoutMinutes: number;
   habitsCompletionPct: number;
   habitsDoneCount: number;
   habitsPossibleCount: number;
+}
+
+export interface DailySeriesPoint {
+  day: string;
+  total: number;
+}
+
+export interface AnalyticsTimeDistribution {
+  trabalho: number;
+  estudo: number;
+  leitura: number;
+  exercicio: number;
 }
 
 export interface AnalyticsChangePct {
@@ -476,6 +490,17 @@ export interface AnalyticsOverview extends RangeMetrics {
   avgSleepMinutes: number;
   avgWaterMl: number;
   tasksCompletedByDay: Array<{ day: string; total: number }>;
+  dailySeries: {
+    tasks: DailySeriesPoint[];
+    focus: DailySeriesPoint[];
+    study: DailySeriesPoint[];
+    pages: DailySeriesPoint[];
+    workouts: DailySeriesPoint[];
+    habits: DailySeriesPoint[];
+    sleep: DailySeriesPoint[];
+    water: DailySeriesPoint[];
+  };
+  timeDistribution: AnalyticsTimeDistribution;
   changePct: AnalyticsChangePct;
 }
 
@@ -486,6 +511,7 @@ export interface LifeInsights {
   moodVsFocusMinutes: { r: number | null; pairs: number };
   bestWeekday: { label: string; avgCompleted: number } | null;
   bestFocusHour: { hour: number; totalMinutes: number } | null;
+  weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
 export interface TimelineEvent {

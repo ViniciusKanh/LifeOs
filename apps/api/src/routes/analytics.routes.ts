@@ -64,7 +64,7 @@ analyticsRouter.get("/overview", async (req, res) => {
   const prevToStr = isoDate(prevTo);
 
   const db = getDb();
-  const [metrics, previous, current, prevWater, tasksByDay] = await Promise.all([
+  const [metrics, previous, current, prevWater, tasksByDay, focusByDay, studyByDay, pagesByDay, workoutsByDay, habitsByDay, sleepByDay, waterByDay] = await Promise.all([
     computeRangeMetrics(ownerId, fromStr, toBoundaryStr),
     computeRangeMetrics(ownerId, prevFromStr, prevToStr),
     sleepWaterAverages(ownerId, fromStr, toBoundaryStr),
@@ -75,13 +75,106 @@ analyticsRouter.get("/overview", async (req, res) => {
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),
+    db.execute({
+      sql: `SELECT date(started_at) AS day, COALESCE(SUM(actual_minutes), 0) AS total FROM focus_sessions
+            WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) >= date(?)
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
+    db.execute({
+      sql: `SELECT date(fs.started_at) AS day, COALESCE(SUM(fs.actual_minutes), 0) AS total FROM focus_sessions fs
+            JOIN tasks t ON t.id = fs.task_id JOIN projects p ON p.id = t.project_id
+            WHERE fs.owner_id = ? AND p.kind = 'academic' AND fs.ended_at IS NOT NULL AND date(fs.started_at) >= date(?)
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
+    db.execute({
+      sql: `SELECT date(started_at) AS day, COALESCE(SUM(pages_read), 0) AS total FROM reading_sessions
+            WHERE owner_id = ? AND date(started_at) >= date(?)
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
+    db.execute({
+      sql: `SELECT date(performed_at) AS day, COUNT(*) AS total FROM workouts
+            WHERE owner_id = ? AND date(performed_at) >= date(?)
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
+    db.execute({
+      sql: `SELECT he.entry_date AS day, COUNT(*) AS total FROM habit_entries he JOIN habits h ON h.id = he.habit_id
+            WHERE he.owner_id = ? AND h.archived_at IS NULL AND he.count >= h.target_count AND he.entry_date >= ?
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
+    db.execute({
+      sql: `SELECT date(went_to_bed_at) AS day, AVG(duration_minutes) AS total FROM sleep_entries
+            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(went_to_bed_at) >= date(?)
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
+    db.execute({
+      sql: `SELECT date(recorded_at) AS day, COALESCE(SUM(amount_ml), 0) AS total FROM water_entries
+            WHERE owner_id = ? AND date(recorded_at) >= date(?)
+            GROUP BY day ORDER BY day ASC`,
+      args: [ownerId, fromStr],
+    }),
   ]);
+
+  // Preenche todos os dias do período (não só os que têm dado) para os
+  // gráficos de linha ficarem contínuos — cada série vira um mapa por
+  // data e depois é lida dia a dia, nunca um valor inventado (0 quando
+  // não há registro naquele dia).
+  const toMap = (rows: unknown[]) => new Map((rows as Array<{ day: string; total: number }>).map((r) => [r.day, Number(r.total)]));
+  const tasksMap = toMap(tasksByDay.rows as unknown[]);
+  const focusMap = toMap(focusByDay.rows as unknown[]);
+  const studyMap = toMap(studyByDay.rows as unknown[]);
+  const pagesMap = toMap(pagesByDay.rows as unknown[]);
+  const workoutsMap = toMap(workoutsByDay.rows as unknown[]);
+  const habitsMap = toMap(habitsByDay.rows as unknown[]);
+  const sleepMap = toMap(sleepByDay.rows as unknown[]);
+  const waterMap = toMap(waterByDay.rows as unknown[]);
+
+  const allDays: string[] = [];
+  const cursor = new Date(`${fromStr}T00:00:00Z`);
+  const end = new Date(`${toStr}T00:00:00Z`);
+  while (cursor <= end) {
+    allDays.push(isoDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  const seriesFor = (map: Map<string, number>) => allDays.map((day) => ({ day: day.slice(5), total: map.get(day) ?? 0 }));
+
+  const dailySeries = {
+    tasks: seriesFor(tasksMap),
+    focus: seriesFor(focusMap),
+    study: seriesFor(studyMap),
+    pages: seriesFor(pagesMap),
+    workouts: seriesFor(workoutsMap),
+    habits: seriesFor(habitsMap),
+    sleep: seriesFor(sleepMap),
+    water: seriesFor(waterMap),
+  };
+
+  // "Distribuição do tempo" — média de minutos/dia investidos em cada
+  // área ativa no período, sempre a partir de somas reais já calculadas
+  // acima (nunca uma proporção inventada). O sono fica de fora deste
+  // gráfico de propósito: por ser muito maior em minutos que as demais
+  // áreas, misturado no mesmo donut ele dominaria o gráfico e esconderia
+  // a distribuição entre trabalho/estudo/leitura/exercício, que é o que
+  // este card se propõe a mostrar — o sono já tem seu próprio card acima.
+  const timeDistribution = {
+    trabalho: Math.max(0, Math.round((metrics.focusMinutes - metrics.studyMinutes) / days)),
+    estudo: Math.round(metrics.studyMinutes / days),
+    leitura: Math.round(metrics.readingMinutes / days),
+    exercicio: Math.round(metrics.workoutMinutes / days),
+  };
 
   return res.json({
     ...metrics,
     ...current,
     to: toStr,
     tasksCompletedByDay: tasksByDay.rows,
+    dailySeries,
+    timeDistribution,
     changePct: {
       tasksCompleted: changePct(metrics.tasksCompleted, previous.tasksCompleted),
       focusMinutes: changePct(metrics.focusMinutes, previous.focusMinutes),
