@@ -11,3 +11,4 @@ apps/api/*.db-wal
 apps/api/*.db-shm
 
 .vercel
+.env*
