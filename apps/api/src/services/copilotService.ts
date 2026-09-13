@@ -97,3 +97,125 @@ export async function generateDashboardInsight(ownerId: string): Promise<{ ok: b
   }
   return { ok: true, text: result.text };
 }
+
+/**
+ * Insight de bem-estar — mesmo princípio do Copilot do Dashboard, mas
+ * com um contexto muito mais específico (só água, sono, exercício e
+ * humor dos últimos 7 dias) para o Gemini conseguir cruzar os
+ * próprios números do usuário com mais precisão (ex.: relação entre
+ * poucas horas de sono e humor mais baixo) em vez de um resumo geral.
+ */
+const WATER_GOAL_ML = 2500;
+
+async function buildHealthContext(ownerId: string) {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [waterTodayMl, sleepRows, workoutsWeekRows, moodRows] = await Promise.all([
+    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)", [
+      ownerId,
+      today,
+    ]),
+    db.execute({
+      sql: `SELECT duration_minutes, quality, went_to_bed_at FROM sleep_entries
+            WHERE owner_id = ? AND went_to_bed_at >= datetime(?, '-7 days')
+            ORDER BY went_to_bed_at DESC`,
+      args: [ownerId, today],
+    }),
+    db.execute({
+      sql: `SELECT kind, duration_minutes, performed_at FROM workouts
+            WHERE owner_id = ? AND performed_at >= datetime(?, '-7 days')
+            ORDER BY performed_at DESC`,
+      args: [ownerId, today],
+    }),
+    db.execute({
+      sql: `SELECT mood, energy, stress, recorded_at FROM mood_entries
+            WHERE owner_id = ? AND recorded_at >= datetime(?, '-7 days')
+            ORDER BY recorded_at DESC`,
+      args: [ownerId, today],
+    }),
+  ]);
+
+  const sleepEntries = sleepRows.rows as unknown as { duration_minutes: number | null; quality: number | null }[];
+  const workoutEntries = workoutsWeekRows.rows as unknown as { kind: string; duration_minutes: number | null }[];
+  const moodEntries = moodRows.rows as unknown as { mood: number; energy: number; stress: number }[];
+
+  const sleepWithDuration = sleepEntries.filter((s) => s.duration_minutes);
+  const avgSleepMinutes =
+    sleepWithDuration.length > 0
+      ? Math.round(sleepWithDuration.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0) / sleepWithDuration.length)
+      : null;
+  const sleepWithQuality = sleepEntries.filter((s) => s.quality);
+  const avgSleepQuality =
+    sleepWithQuality.length > 0
+      ? Number((sleepWithQuality.reduce((sum, s) => sum + (s.quality ?? 0), 0) / sleepWithQuality.length).toFixed(1))
+      : null;
+  const lastNightMinutes = sleepEntries[0]?.duration_minutes ?? null;
+
+  const workoutsTotalMinutes = workoutEntries.reduce((sum, w) => sum + (w.duration_minutes ?? 0), 0);
+
+  const avgMood = moodEntries.length > 0 ? Number((moodEntries.reduce((s, m) => s + m.mood, 0) / moodEntries.length).toFixed(1)) : null;
+  const avgEnergy = moodEntries.length > 0 ? Number((moodEntries.reduce((s, m) => s + m.energy, 0) / moodEntries.length).toFixed(1)) : null;
+  const avgStress =
+    moodEntries.filter((m) => m.stress).length > 0
+      ? Number((moodEntries.reduce((s, m) => s + (m.stress ?? 0), 0) / moodEntries.length).toFixed(1))
+      : null;
+  const lastMood = moodEntries[0] ?? null;
+
+  return {
+    waterTodayMl,
+    avgSleepMinutes,
+    avgSleepQuality,
+    lastNightMinutes,
+    workoutsCount: workoutEntries.length,
+    workoutsTotalMinutes,
+    workoutKinds: [...new Set(workoutEntries.map((w) => w.kind))],
+    avgMood,
+    avgEnergy,
+    avgStress,
+    lastMood,
+  };
+}
+
+function buildHealthPrompt(ctx: Awaited<ReturnType<typeof buildHealthContext>>): string {
+  const lines = [
+    `Água hoje: ${(ctx.waterTodayMl / 1000).toFixed(1)} L de uma meta de ${(WATER_GOAL_ML / 1000).toFixed(1)} L (${Math.round((ctx.waterTodayMl / WATER_GOAL_ML) * 100)}%).`,
+    ctx.lastNightMinutes
+      ? `Sono da última noite: ${Math.floor(ctx.lastNightMinutes / 60)}h${(ctx.lastNightMinutes % 60).toString().padStart(2, "0")}.`
+      : "Sem registro de sono na última noite.",
+    ctx.avgSleepMinutes
+      ? `Média de sono nos últimos 7 dias: ${Math.floor(ctx.avgSleepMinutes / 60)}h${(ctx.avgSleepMinutes % 60).toString().padStart(2, "0")}${ctx.avgSleepQuality ? `, qualidade média ${ctx.avgSleepQuality}/5` : ""}.`
+      : "Sem registros de sono suficientes nos últimos 7 dias para calcular média.",
+    ctx.workoutsCount > 0
+      ? `Exercícios nos últimos 7 dias: ${ctx.workoutsCount} (${ctx.workoutsTotalMinutes} min no total) — tipos: ${ctx.workoutKinds.join(", ")}.`
+      : "Nenhum exercício registrado nos últimos 7 dias.",
+    ctx.avgMood
+      ? `Humor médio (7 dias): ${ctx.avgMood}/5, energia média ${ctx.avgEnergy}/5${ctx.avgStress ? `, estresse médio ${ctx.avgStress}/5` : ""}.`
+      : "Sem registros de humor/energia nos últimos 7 dias.",
+  ];
+
+  return [
+    "Você é o LifeOS Copilot, especializado em analisar dados de bem-estar (água, sono, exercício e humor). Com base SOMENTE nos dados reais abaixo (nunca invente números, tendências ou correlações que os dados não sustentem), escreva um insight curto em português do Brasil.",
+    "",
+    "Dados de bem-estar do usuário (últimos 7 dias, salvo indicação contrária):",
+    ...lines.map((l) => `- ${l}`),
+    "",
+    "Regras: no máximo 3 frases (até ~65 palavras); se houver dados suficientes, aponte UMA relação concreta entre duas métricas (ex.: sono baixo e energia baixa) — só se os números realmente sugerirem isso, senão comente a métrica mais relevante isoladamente; cite pelo menos um número real; termine com UMA sugestão prática para hoje ou amanhã; nunca dê diagnóstico, conselho médico ou nutricional — fale só de hábitos e rotina.",
+  ].join("\n");
+}
+
+export async function generateHealthInsight(ownerId: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, message: "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
+  }
+
+  const ctx = await buildHealthContext(ownerId);
+  const prompt = buildHealthPrompt(ctx);
+  const result = await generateText(prompt, config);
+
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return { ok: true, text: result.text };
+}
