@@ -6,6 +6,10 @@ const educationKey = (id: string) => ["educations", id];
 const coursesKey = (educationId: string) => ["educations", educationId, "courses"];
 const subjectsKey = (courseId: string) => ["courses", courseId, "subjects"];
 const ACADEMIC_PROJECTS_KEY = ["academic-projects"];
+const educationSubjectsKey = (educationId: string) => ["educations", educationId, "subjects"];
+const deadlinesKey = (educationId: string) => ["educations", educationId, "deadlines"];
+const checklistKey = (educationId: string) => ["educations", educationId, "checklist"];
+const statsKey = (educationId: string) => ["educations", educationId, "stats"];
 
 export function useEducations() {
   const queryClient = useQueryClient();
@@ -133,5 +137,125 @@ export function useAcademicProjects() {
     createProject: createProject.mutateAsync,
     updateProject: updateProject.mutate,
     removeProject: removeProject.mutateAsync,
+  };
+}
+
+/**
+ * Alimenta o painel completo de uma formação (dashboard): disciplinas
+ * consolidadas, prazos, checklist do semestre e os indicadores em
+ * "stats" — tudo real, vindo do backend. Usado pela nova
+ * FormacaoDetalhePage, sem duplicar a lógica de useEducation/useSubjects
+ * já usada pela seção de períodos/kanban mais abaixo na mesma página.
+ */
+export function useEducationDashboard(educationId: string | undefined) {
+  const queryClient = useQueryClient();
+  const id = educationId as string;
+
+  const subjectsQuery = useQuery({
+    queryKey: educationId ? educationSubjectsKey(id) : ["educations", "none", "subjects"],
+    queryFn: () => educationService.listEducationSubjects(id),
+    enabled: !!educationId,
+  });
+
+  const deadlinesQuery = useQuery({
+    queryKey: educationId ? deadlinesKey(id) : ["educations", "none", "deadlines"],
+    queryFn: () => educationService.listDeadlines(id),
+    enabled: !!educationId,
+  });
+
+  const checklistQuery = useQuery({
+    queryKey: educationId ? checklistKey(id) : ["educations", "none", "checklist"],
+    queryFn: () => educationService.listChecklist(id),
+    enabled: !!educationId,
+  });
+
+  const statsQuery = useQuery({
+    queryKey: educationId ? statsKey(id) : ["educations", "none", "stats"],
+    queryFn: () => educationService.getStats(id),
+    enabled: !!educationId,
+  });
+
+  const invalidateSubjects = () => educationId && queryClient.invalidateQueries({ queryKey: educationSubjectsKey(id) });
+  const invalidateStats = () => educationId && queryClient.invalidateQueries({ queryKey: statsKey(id) });
+
+  const quickCreateSubject = useMutation({
+    mutationFn: (input: { name: string; professor?: string | null }) => educationService.quickCreateSubject(id, input),
+    onSuccess: () => {
+      invalidateSubjects();
+      invalidateStats();
+    },
+  });
+
+  const updateSubjectProgress = useMutation({
+    mutationFn: ({ subjectId, patch }: { subjectId: string; patch: Record<string, unknown> }) =>
+      educationService.updateSubject(subjectId, patch),
+    onSuccess: () => {
+      invalidateSubjects();
+      invalidateStats();
+    },
+  });
+
+  const createDeadline = useMutation({
+    mutationFn: (input: { title: string; dueDate: string; subjectId?: string | null }) => educationService.createDeadline(id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: deadlinesKey(id) });
+      invalidateStats();
+    },
+  });
+
+  const updateDeadline = useMutation({
+    mutationFn: ({ deadlineId, patch }: { deadlineId: string; patch: Record<string, unknown> }) =>
+      educationService.updateDeadline(deadlineId, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: deadlinesKey(id) });
+      invalidateStats();
+    },
+  });
+
+  const removeDeadline = useMutation({
+    mutationFn: (deadlineId: string) => educationService.removeDeadline(deadlineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: deadlinesKey(id) });
+      invalidateStats();
+    },
+  });
+
+  const logStudySession = useMutation({
+    mutationFn: (input: { occurredAt: string; durationMinutes: number; subjectId?: string | null }) =>
+      educationService.createStudySession(id, input),
+    onSuccess: invalidateStats,
+  });
+
+  const createChecklistItem = useMutation({
+    mutationFn: (input: { title: string; dueDate?: string | null }) => educationService.createChecklistItem(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: checklistKey(id) }),
+  });
+
+  const updateChecklistItem = useMutation({
+    mutationFn: ({ itemId, patch }: { itemId: string; patch: Record<string, unknown> }) =>
+      educationService.updateChecklistItem(itemId, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: checklistKey(id) }),
+  });
+
+  const removeChecklistItem = useMutation({
+    mutationFn: (itemId: string) => educationService.removeChecklistItem(itemId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: checklistKey(id) }),
+  });
+
+  return {
+    subjects: subjectsQuery.data ?? [],
+    deadlines: deadlinesQuery.data ?? [],
+    checklist: checklistQuery.data ?? [],
+    stats: statsQuery.data ?? null,
+    isLoading: subjectsQuery.isLoading || statsQuery.isLoading,
+    quickCreateSubject: quickCreateSubject.mutateAsync,
+    updateSubjectProgress: updateSubjectProgress.mutateAsync,
+    createDeadline: createDeadline.mutateAsync,
+    updateDeadline: updateDeadline.mutateAsync,
+    removeDeadline: removeDeadline.mutateAsync,
+    logStudySession: logStudySession.mutateAsync,
+    createChecklistItem: createChecklistItem.mutateAsync,
+    updateChecklistItem: updateChecklistItem.mutateAsync,
+    removeChecklistItem: removeChecklistItem.mutateAsync,
   };
 }

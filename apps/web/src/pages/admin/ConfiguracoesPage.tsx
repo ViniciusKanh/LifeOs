@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { KeyRound, Mail, Plus, Trash2, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CheckCircle2, KeyRound, Mail, Plus, Trash2, Users, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminSettings, useAdminUsers } from "@/hooks/useAdmin";
-import { Button, Card, Field } from "@/components/ui/primitives";
+import { adminService } from "@/services/adminService";
+import { NovoUsuarioModal } from "@/components/admin/NovoUsuarioModal";
+import { Button, Card } from "@/components/ui/primitives";
 import type { AdminIntegration, AdminSetting } from "@/types";
 
 function findSetting(settings: AdminSetting[], integration: AdminIntegration, keyName: string) {
@@ -69,6 +72,39 @@ function SecretField({
   );
 }
 
+/** Botão "Testar conexão" — hoje só implementado de verdade para SMTP (conecta no servidor com as credenciais salvas). */
+function TestConnectionButton({ integration }: { integration: AdminIntegration }) {
+  const [state, setState] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setState(null);
+    try {
+      const result = await adminService.testConnection(integration);
+      setState({ ok: true, message: (result as unknown as { message?: string }).message ?? "Conexão verificada com sucesso." });
+    } catch (err) {
+      setState({ ok: false, message: err instanceof Error ? err.message : "Falha ao testar a conexão." });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div>
+      <Button variant="secondary" onClick={handleTest} disabled={testing}>
+        {testing ? "Testando..." : "Testar conexão"}
+      </Button>
+      {state && (
+        <p className={`flex items-center gap-1.5 text-xs mt-2 ${state.ok ? "text-growth" : "text-drop"}`}>
+          {state.ok ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+          {state.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SectionCard({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
   return (
     <Card className="p-5 md:p-6">
@@ -83,14 +119,15 @@ function SectionCard({ icon, title, description, children }: { icon: ReactNode; 
 }
 
 export function ConfiguracoesPage() {
-  const { user } = useAuth();
   const { settings, upsertSetting, removeSetting } = useAdminSettings();
-  const { users, createUser, updateUserRole, removeUser } = useAdminUsers();
+  const { users, createUser } = useAdminUsers();
   const [userModalOpen, setUserModalOpen] = useState(false);
 
   const gemini = findSetting(settings, "gemini", "api_key");
   const tursoUrl = findSetting(settings, "turso", "database_url");
   const tursoToken = findSetting(settings, "turso", "auth_token");
+  const smtpHost = findSetting(settings, "smtp", "host");
+  const smtpPort = findSetting(settings, "smtp", "port");
   const smtpUser = findSetting(settings, "smtp", "user");
   const smtpPass = findSetting(settings, "smtp", "app_password");
 
@@ -135,9 +172,25 @@ export function ConfiguracoesPage() {
 
       <SectionCard
         icon={<Mail size={16} className="text-slate" />}
-        title="E-mail (Gmail) para recuperação de senha"
-        description="Use um app password do Gmail (não sua senha normal): Conta Google → Segurança → Verificação em duas etapas → Senhas de app."
+        title="E-mail (Gmail) para cadastro, validação e recuperação de senha"
+        description="Use um app password do Gmail (não sua senha normal): Conta Google → Segurança → Verificação em duas etapas → Senhas de app. Este e-mail envia a mensagem de boas-vindas no cadastro, o link de redefinição de senha e o aviso de troca de senha."
       >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SecretField
+            label="Servidor SMTP"
+            placeholder="smtp.gmail.com"
+            existing={smtpHost}
+            onSave={(value) => upsertSetting({ integration: "smtp", keyName: "host", value })}
+            onRemove={() => removeSetting({ integration: "smtp", keyName: "host" })}
+          />
+          <SecretField
+            label="Porta"
+            placeholder="587"
+            existing={smtpPort}
+            onSave={(value) => upsertSetting({ integration: "smtp", keyName: "port", value })}
+            onRemove={() => removeSetting({ integration: "smtp", keyName: "port" })}
+          />
+        </div>
         <SecretField
           label="E-mail do remetente"
           placeholder="seuemail@gmail.com"
@@ -152,118 +205,36 @@ export function ConfiguracoesPage() {
           onSave={(value) => upsertSetting({ integration: "smtp", keyName: "app_password", value })}
           onRemove={() => removeSetting({ integration: "smtp", keyName: "app_password" })}
         />
+        <TestConnectionButton integration="smtp" />
         <p className="text-[11px] text-slate">
-          O envio real de e-mails ainda não está implementado (Fase 6) — por enquanto, o link de recuperação de senha
-          é apenas registrado no servidor.
+          Sem servidor, porta, e-mail e senha de app configurados, o link de redefinição de senha continua sendo
+          apenas registrado no servidor (modo de desenvolvimento) em vez de enviado por e-mail.
         </p>
       </SectionCard>
 
       <Card className="p-5 md:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">Usuários do LifeOS</p>
-          <Button onClick={() => setUserModalOpen(true)}>
-            <Plus size={14} /> Novo usuário
-          </Button>
-        </div>
-        <div className="space-y-2">
-          {users.map((u) => (
-            <div
-              key={u.id}
-              className="flex items-center justify-between gap-2 rounded-lg p-2.5 border border-paper-border dark:border-ink-border"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{u.name}</p>
-                <p className="text-xs text-slate truncate">{u.email}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <select
-                  value={u.role}
-                  disabled={u.id === user?.id}
-                  onChange={(e) => updateUserRole({ id: u.id, role: e.target.value as "user" | "admin" })}
-                  className="text-xs rounded-lg px-2 py-1.5 bg-transparent border border-paper-border dark:border-ink-border disabled:opacity-50"
-                >
-                  <option value="user">Usuário</option>
-                  <option value="admin">Administrador</option>
-                </select>
-                <button
-                  onClick={() => removeUser(u.id)}
-                  disabled={u.id === user?.id}
-                  className="text-slate disabled:opacity-30"
-                  title={u.id === user?.id ? "Você não pode remover sua própria conta" : "Remover usuário"}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <Users size={16} className="text-slate" />
+            <div>
+              <p className="text-sm font-semibold">Usuários do LifeOS</p>
+              <p className="text-xs text-slate mt-0.5">{users.length} conta(s) cadastrada(s).</p>
             </div>
-          ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <Link to="/admin/usuarios">
+              <Button variant="secondary">
+                <Users size={14} /> Ver painel de usuários
+              </Button>
+            </Link>
+            <Button onClick={() => setUserModalOpen(true)}>
+              <Plus size={14} /> Novo usuário
+            </Button>
+          </div>
         </div>
       </Card>
 
       {userModalOpen && <NovoUsuarioModal onClose={() => setUserModalOpen(false)} onCreate={createUser} />}
-    </div>
-  );
-}
-
-function NovoUsuarioModal({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void;
-  onCreate: (input: { name: string; email: string; password: string; role?: "user" | "admin" }) => Promise<unknown>;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"user" | "admin">("user");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async () => {
-    setError(null);
-    setSaving(true);
-    try {
-      await onCreate({ name: name.trim(), email: email.trim(), password, role });
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar o usuário.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-2xl p-5 md:p-6 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">Novo usuário</p>
-          <button onClick={onClose} className="text-slate">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="space-y-3">
-          <Field label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
-          <Field label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Field label="Senha provisória" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <div>
-            <label className="text-xs text-slate">Perfil de acesso</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as "user" | "admin")}
-              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
-            >
-              <option value="user">Usuário</option>
-              <option value="admin">Administrador</option>
-            </select>
-          </div>
-          {error && <p className="text-xs text-drop">{error}</p>}
-          <Button onClick={handleSubmit} disabled={saving || !name.trim() || !email.trim() || password.length < 8} className="w-full">
-            {saving ? "Criando..." : "Criar usuário"}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

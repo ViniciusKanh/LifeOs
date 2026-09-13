@@ -18,14 +18,24 @@ import {
 } from "../validators/auth.schema.js";
 import { requireAuth, SESSION_COOKIE_NAME } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { sendMail, passwordResetEmail, welcomeEmail, passwordChangedEmail } from "../services/emailService.js";
 import type { User } from "../types/index.js";
+
+const APP_URL = process.env.APP_URL ?? "http://localhost:5173";
 
 export const authRouter = Router();
 
+// Em produção com o proxy documentado em DEPLOY.md (front reescrevendo
+// /api/* para o backend), front e back são same-site e "lax" funciona
+// normalmente. Só quem optar por publicar os dois em domínios
+// realmente separados, sem proxy, precisa de COOKIE_SAMESITE=none
+// (exige HTTPS nos dois lados — sempre o caso na Vercel).
+const COOKIE_SAMESITE = (process.env.COOKIE_SAMESITE as "lax" | "strict" | "none" | undefined) ?? "lax";
+
 const COOKIE_BASE = {
   httpOnly: true,
-  sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
+  sameSite: COOKIE_SAMESITE,
+  secure: process.env.NODE_ENV === "production" || COOKIE_SAMESITE === "none",
   path: "/",
 };
 
@@ -67,6 +77,11 @@ authRouter.post("/register", rateLimit(), async (req, res) => {
 
   const token = signSessionToken({ sub: id, role });
   res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+  // E-mail de boas-vindas: melhor esforço — se o SMTP não estiver
+  // configurado ou o envio falhar, o cadastro não é bloqueado por isso.
+  const welcome = welcomeEmail(name);
+  sendMail({ to: email, ...welcome }).catch((err) => console.error("[email] falha ao enviar boas-vindas:", err));
 
   return res.status(201).json({ id, name, email, role });
 });
@@ -198,6 +213,13 @@ authRouter.post("/change-password", requireAuth, rateLimit({ max: 5 }), async (r
     args: [newHash, req.user!.id],
   });
 
+  const userRow = await db.execute({ sql: "SELECT email FROM users WHERE id = ?", args: [req.user!.id] });
+  const userEmail = (userRow.rows[0] as { email?: string } | undefined)?.email;
+  if (userEmail) {
+    const notice = passwordChangedEmail();
+    sendMail({ to: userEmail, ...notice }).catch((err) => console.error("[email] falha ao enviar aviso de troca de senha:", err));
+  }
+
   return res.json({ message: "Senha atualizada com sucesso." });
 });
 
@@ -230,13 +252,18 @@ authRouter.post("/forgot-password", rateLimit({ max: 5 }), async (req, res) => {
     args: [nanoid(), user.id, hash, expiresAt],
   });
 
-  // TODO(fase 6): disparar e-mail real via services/emailService.ts
-  // usando as configurações SMTP cadastradas no painel admin.
-  // Por enquanto, o token é logado no servidor em desenvolvimento
-  // (e devolvido na própria resposta, só fora de produção) para
-  // permitir testar o fluxo ponta a ponta sem SMTP configurado.
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[dev] token de reset de senha para ${parsed.data.email}: ${raw}`);
+  const resetUrl = `${APP_URL}/redefinir-senha?token=${raw}`;
+  const email = passwordResetEmail(resetUrl);
+  const sent = await sendMail({ to: parsed.data.email, ...email }).catch((err) => {
+    console.error("[email] falha ao enviar reset de senha:", err);
+    return false;
+  });
+
+  // Sem SMTP configurado (ou falha no envio), o token ainda é logado
+  // em desenvolvimento — e devolvido na própria resposta, só fora de
+  // produção — para permitir testar o fluxo ponta a ponta sem e-mail real.
+  if (!sent && process.env.NODE_ENV !== "production") {
+    console.log(`[dev] SMTP não configurado — token de reset de senha para ${parsed.data.email}: ${raw}`);
     return res.json({ ...genericResponse, devToken: raw });
   }
 

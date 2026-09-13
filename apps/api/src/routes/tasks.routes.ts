@@ -155,6 +155,69 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   return res.status(204).send();
 });
 
+/** GET /api/tasks/:id/time/active — apontamento de tempo em aberto para esta tarefa, se houver */
+tasksRouter.get("/:id/time/active", async (req, res) => {
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT * FROM time_entries WHERE task_id = ? AND owner_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+    args: [req.params.id, req.user!.id],
+  });
+  return res.json(result.rows[0] ?? null);
+});
+
+/** POST /api/tasks/:id/time/start — inicia o cronômetro de uma tarefa (monitora o tempo gasto nela) */
+tasksRouter.post("/:id/time/start", async (req, res) => {
+  const db = getDb();
+  const task = await db.execute({
+    sql: "SELECT id, project_id FROM tasks WHERE id = ? AND owner_id = ?",
+    args: [req.params.id, req.user!.id],
+  });
+  if (task.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+
+  // Só um apontamento aberto por vez — fecha qualquer um pendurado antes de abrir outro.
+  await db.execute({
+    sql: "UPDATE time_entries SET ended_at = datetime('now') WHERE owner_id = ? AND ended_at IS NULL",
+    args: [req.user!.id],
+  });
+
+  const id = nanoid();
+  await db.execute({
+    sql: `INSERT INTO time_entries (id, owner_id, task_id, project_id, started_at, kind)
+          VALUES (?, ?, ?, ?, datetime('now'), 'manual')`,
+    args: [id, req.user!.id, req.params.id, task.rows[0].project_id ?? null],
+  });
+  const created = await db.execute({ sql: "SELECT * FROM time_entries WHERE id = ?", args: [id] });
+  return res.status(201).json(created.rows[0]);
+});
+
+/** PATCH /api/tasks/:id/time/stop — encerra o cronômetro e soma o tempo em tasks.time_spent_minutes */
+tasksRouter.patch("/:id/time/stop", async (req, res) => {
+  const db = getDb();
+  const open = await db.execute({
+    sql: "SELECT * FROM time_entries WHERE task_id = ? AND owner_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+    args: [req.params.id, req.user!.id],
+  });
+  const entry = open.rows[0];
+  if (!entry) return res.status(404).json({ error: "Nenhum apontamento de tempo em aberto para esta tarefa." });
+
+  await db.execute({
+    sql: `UPDATE time_entries
+          SET ended_at = datetime('now'),
+              duration_minutes = CAST((julianday(datetime('now')) - julianday(started_at)) * 24 * 60 AS INTEGER)
+          WHERE id = ?`,
+    args: [entry.id],
+  });
+  const updatedEntry = await db.execute({ sql: "SELECT * FROM time_entries WHERE id = ?", args: [entry.id] });
+  const minutes = Number(updatedEntry.rows[0]?.duration_minutes ?? 0);
+
+  await db.execute({
+    sql: "UPDATE tasks SET time_spent_minutes = time_spent_minutes + ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    args: [minutes, req.params.id, req.user!.id],
+  });
+  const task = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  return res.json(task.rows[0]);
+});
+
 /** DELETE /api/tasks/:id */
 tasksRouter.delete("/:id", async (req, res) => {
   const db = getDb();

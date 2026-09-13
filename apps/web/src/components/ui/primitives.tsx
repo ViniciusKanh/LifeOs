@@ -5,6 +5,10 @@ import clsx from "clsx";
    Design system mínimo do LifeOS. Todo componente novo deve
    reaproveitar estas primitivas em vez de estilizar do zero
    (ver seção 66 do briefing: evitar duplicação).
+
+   Linha visual "SaaS moderno": cartões brancos com borda suave e
+   sombra discreta, CTA primário em gradiente âmbar, navegação e
+   links em índigo (brand). Ver tailwind.config.ts para os tokens.
    ============================================================ */
 
 export function Button({
@@ -12,11 +16,14 @@ export function Button({
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
-  const base = "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-semibold px-4 py-2.5 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed";
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold px-4 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed";
   const variants: Record<string, string> = {
-    primary: "bg-signal text-ink hover:opacity-90",
-    secondary: "border border-paper-border dark:border-ink-border text-inherit hover:opacity-80",
-    ghost: "text-slate hover:opacity-80",
+    primary:
+      "bg-gradient-to-b from-signal to-signal-deep text-white shadow-sm shadow-signal-deep/30 hover:brightness-105 active:brightness-95",
+    secondary:
+      "border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised text-inherit hover:bg-paper dark:hover:bg-ink",
+    ghost: "text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06]",
   };
   return <button className={clsx(base, variants[variant], className)} {...props} />;
 }
@@ -25,7 +32,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={clsx(
-        "rounded-2xl border bg-paper-raised border-paper-border dark:bg-ink-raised dark:border-ink-border",
+        "rounded-2xl border bg-paper-raised border-paper-border shadow-card dark:bg-ink-raised dark:border-ink-border dark:shadow-none",
         className
       )}
       {...props}
@@ -46,19 +53,23 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 export const Field = React.forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string }
->(function Field({ label, error, ...props }, ref) {
+>(function Field({ label, error, className, ...props }, ref) {
   const id = React.useId();
   return (
     <div>
-      <label htmlFor={id} className="text-xs text-slate">
-        {label}
-      </label>
+      {label && (
+        <label htmlFor={id} className="text-xs text-slate">
+          {label}
+        </label>
+      )}
       <input
         id={id}
         ref={ref}
         className={clsx(
-          "mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border",
-          error ? "border-drop" : "border-paper-border dark:border-ink-border"
+          "w-full rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border transition-colors focus:border-brand-500",
+          label && "mt-1.5",
+          error ? "border-drop" : "border-paper-border dark:border-ink-border",
+          className
         )}
         aria-invalid={!!error}
         aria-describedby={error ? `${id}-error` : undefined}
@@ -86,11 +97,46 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center text-center max-w-md mx-auto py-16 px-5">
-      <p className="font-display text-xl">{title}</p>
+      <p className="font-display font-semibold text-xl">{title}</p>
       <p className="text-sm mt-2 text-slate">{description}</p>
       <Button className="mt-6" onClick={onCta}>
         {ctaLabel}
       </Button>
     </div>
+  );
+}
+
+/**
+ * Badge circular colorido por categoria — mesmo padrão visual usado
+ * nos cartões de stat do Dashboard, Hoje, Saúde etc. `tone` decide a
+ * cor (sempre com o mesmo significado em toda a aplicação: azul =
+ * produtividade/geral, roxo = foco/metas, verde = saúde/hábitos,
+ * rosa = leitura, âmbar = energia/ação).
+ */
+const ICON_TONE: Record<string, string> = {
+  blue: "bg-cat-blue/10 text-cat-blue",
+  purple: "bg-cat-purple/10 text-cat-purple",
+  green: "bg-cat-green/10 text-cat-green",
+  pink: "bg-cat-pink/10 text-cat-pink",
+  teal: "bg-cat-teal/10 text-cat-teal",
+  amber: "bg-signal/15 text-signal-deep",
+};
+
+export function IconBadge({
+  icon,
+  tone = "blue",
+  size = 40,
+}: {
+  icon: React.ReactNode;
+  tone?: keyof typeof ICON_TONE;
+  size?: number;
+}) {
+  return (
+    <span
+      className={clsx("inline-flex items-center justify-center rounded-xl shrink-0", ICON_TONE[tone])}
+      style={{ width: size, height: size }}
+    >
+      {icon}
+    </span>
   );
 }

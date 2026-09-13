@@ -1,10 +1,13 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Tokens de identidade visual do LifeOS.
- * Ink (grafite-azulado) no lugar de preto puro, papel morno no
- * lugar de creme-clichê, âmbar como cor de "sinal de progresso".
- * Ver DESIGN_SYSTEM.md para o racional completo.
+ * Tokens de identidade visual do LifeOS — linha "SaaS moderno" (v2).
+ * Fundo off-white azulado, cartões brancos com borda suave e sombra
+ * discreta, uma cor de marca (índigo) para navegação/links e um
+ * acento âmbar reservado para ações primárias (CTAs). Cores de
+ * categoria (blue/purple/green/pink) identificam cada módulo em
+ * badges de ícone e barras de progresso, sempre com o mesmo
+ * significado em toda a aplicação.
  */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -12,30 +15,51 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Fundo/superfícies
         ink: {
-          DEFAULT: "#14181F",
-          raised: "#1B2029",
-          border: "#272E3A",
+          DEFAULT: "#0F1420",
+          raised: "#171E2E",
+          border: "#2A3346",
         },
         paper: {
-          DEFAULT: "#F6F4EF",
+          DEFAULT: "#F6F7FB",
           raised: "#FFFFFF",
-          border: "#E4E0D6",
+          border: "#E6E9F2",
         },
+        // Marca — navegação ativa, links, ícone do logo
+        brand: {
+          50: "#EEF1FF",
+          100: "#E0E5FF",
+          500: "#5B6EF5",
+          600: "#4C5FE0",
+          700: "#3F4FC4",
+        },
+        // Acento de ação (CTAs primários)
         signal: {
-          DEFAULT: "#E8A33D",
-          deep: "#B87A22",
+          DEFAULT: "#F0A93B",
+          deep: "#D9860F",
         },
-        slate: "#5B6B7A",
-        growth: "#4F8F63",
-        drop: "#C75146",
+        slate: "#6B7690",
+        growth: "#22A06B",
+        drop: "#E5484D",
+        // Cores de categoria — mesmo significado em todo o app
+        cat: {
+          blue: "#3B82F6",
+          purple: "#8B5CF6",
+          green: "#16A34A",
+          pink: "#EC4899",
+          teal: "#0D9488",
+        },
       },
       fontFamily: {
-        display: ["Fraunces", "serif"],
+        display: ["Inter", "system-ui", "sans-serif"],
         sans: ["Inter", "system-ui", "sans-serif"],
       },
       borderRadius: {
-        xl2: "1rem",
+        xl2: "1.25rem",
+      },
+      boxShadow: {
+        card: "0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06)",
       },
     },
   },

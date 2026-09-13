@@ -11,7 +11,7 @@ export function LifeScoreRadar({ data }: { data: LifeScoreDimension[] }) {
       <RadarChart data={data} outerRadius="75%">
         <PolarGrid stroke="currentColor" className="text-paper-border dark:text-ink-border" />
         <PolarAngleAxis dataKey="dim" tick={{ fontSize: 9, fill: "currentColor" }} className="text-slate" />
-        <Radar dataKey="value" stroke="#E8A33D" fill="#E8A33D" fillOpacity={0.25} strokeWidth={2} />
+        <Radar dataKey="value" stroke="#4C5FE0" fill="#5B6EF5" fillOpacity={0.3} strokeWidth={2} />
       </RadarChart>
     </ResponsiveContainer>
   );

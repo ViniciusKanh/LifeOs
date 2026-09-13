@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { GraduationCap, Plus, X } from "lucide-react";
 import { useAcademicProjects, useEducations } from "@/hooks/useEducations";
 import { Button, Card, EmptyState, Field } from "@/components/ui/primitives";
-import type { EducationKind } from "@/types";
+import type { EducationKind, EducationPhase } from "@/types";
 
 const KIND_LABEL: Record<EducationKind, string> = {
   graduacao: "Graduação",
@@ -14,6 +14,35 @@ const KIND_LABEL: Record<EducationKind, string> = {
   certificacao: "Certificação",
   curso_livre: "Curso livre",
 };
+
+// Fase calculada no backend a partir de dados reais (disciplinas em
+// andamento, projetos acadêmicos em aberto, progresso) — diferencia
+// se o usuário está cursando disciplinas ou já só em fase de
+// projeto/TCC/dissertação, como pedido.
+export const PHASE_LABEL: Record<EducationPhase, string> = {
+  cursando_disciplinas: "Em período de aulas",
+  fase_projeto: "Fase de projeto/TCC",
+  concluida: "Concluída",
+  sem_atividade: "Sem atividade recente",
+};
+
+export const PHASE_COLOR: Record<EducationPhase, string> = {
+  cursando_disciplinas: "#2E7D6B",
+  fase_projeto: "#C9821E",
+  concluida: "#5B6B7A",
+  sem_atividade: "#8A93A0",
+};
+
+export function PhaseBadge({ phase }: { phase: EducationPhase }) {
+  return (
+    <span
+      className="text-[10px] font-semibold rounded-full px-2 py-0.5"
+      style={{ color: PHASE_COLOR[phase], background: `${PHASE_COLOR[phase]}1A` }}
+    >
+      {PHASE_LABEL[phase]}
+    </span>
+  );
+}
 
 export function EducacaoPage() {
   const { educations, isLoading, createEducation } = useEducations();
@@ -42,11 +71,12 @@ export function EducacaoPage() {
         {educations.map((edu) => (
           <Link key={edu.id} to={`/educacao/${edu.id}`}>
             <Card className="p-4 h-full hover:opacity-90 transition-opacity">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <GraduationCap size={16} className="text-slate shrink-0" />
                 <span className="text-[10px] rounded-full px-2 py-0.5 border border-paper-border dark:border-ink-border text-slate">
                   {KIND_LABEL[edu.kind]}
                 </span>
+                <PhaseBadge phase={edu.phase} />
               </div>
               <p className="text-sm font-semibold leading-snug">{edu.course_name}</p>
               {edu.institution && <p className="text-xs text-slate mt-0.5">{edu.institution}</p>}

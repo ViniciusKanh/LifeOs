@@ -1,0 +1,166 @@
+import { Router } from "express";
+import { nanoid } from "nanoid";
+import { getDb } from "../db/client.js";
+import { requireAuth } from "../middleware/auth.js";
+import { dailyReviewSchema, weeklyReviewSchema } from "../validators/reviews.schema.js";
+import { changePct, computeLifeScore, computeRangeMetrics } from "../services/metricsService.js";
+
+export const reviewsRouter = Router();
+reviewsRouter.use(requireAuth);
+
+function addDays(date: string, days: number) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/* ---------------------------- Diária ---------------------------- */
+
+/** GET /api/reviews/daily?date=YYYY-MM-DD */
+reviewsRouter.get("/daily", async (req, res) => {
+  const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT * FROM daily_reviews WHERE owner_id = ? AND review_date = ?",
+    args: [req.user!.id, date],
+  });
+  return res.json(result.rows[0] ?? null);
+});
+
+/** PUT /api/reviews/daily — upsert */
+reviewsRouter.put("/daily", async (req, res) => {
+  const parsed = dailyReviewSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const d = parsed.data;
+  const db = getDb();
+  await db.execute({
+    sql: `INSERT INTO daily_reviews (id, owner_id, review_date, completion_pct, highlights, notes)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT (owner_id, review_date) DO UPDATE SET
+            completion_pct = excluded.completion_pct, highlights = excluded.highlights, notes = excluded.notes`,
+    args: [nanoid(), req.user!.id, d.reviewDate, d.completionPct ?? null, d.highlights ?? null, d.notes ?? null],
+  });
+  const saved = await db.execute({
+    sql: "SELECT * FROM daily_reviews WHERE owner_id = ? AND review_date = ?",
+    args: [req.user!.id, d.reviewDate],
+  });
+  return res.json(saved.rows[0]);
+});
+
+/* --------------------------- Semanal --------------------------- */
+
+/**
+ * GET /api/reviews/weekly/compute?weekStartDate=YYYY-MM-DD — métricas reais
+ * da semana, sem salvar nada ainda, incluindo a variação real contra a
+ * semana anterior (nunca inventada: sem base na semana anterior, o campo
+ * volta null e o front mostra "—").
+ */
+reviewsRouter.get("/weekly/compute", async (req, res) => {
+  const weekStartDate = (req.query.weekStartDate as string) || new Date().toISOString().slice(0, 10);
+  const weekEndExclusive = addDays(weekStartDate, 7);
+  const prevWeekStartDate = addDays(weekStartDate, -7);
+
+  const [metrics, lifeScore, prevMetrics, prevLifeScore] = await Promise.all([
+    computeRangeMetrics(req.user!.id, weekStartDate, weekEndExclusive),
+    computeLifeScore(req.user!.id, addDays(weekEndExclusive, -1)),
+    computeRangeMetrics(req.user!.id, prevWeekStartDate, weekStartDate),
+    computeLifeScore(req.user!.id, addDays(weekStartDate, -1)),
+  ]);
+
+  return res.json({
+    ...metrics,
+    lifeScore,
+    changePct: {
+      tasksCompleted: changePct(metrics.tasksCompleted, prevMetrics.tasksCompleted),
+      studyMinutes: changePct(metrics.studyMinutes, prevMetrics.studyMinutes),
+      pagesRead: changePct(metrics.pagesRead, prevMetrics.pagesRead),
+      focusMinutes: changePct(metrics.focusMinutes, prevMetrics.focusMinutes),
+      // Diferença em pontos percentuais (não variação relativa) — mesma
+      // convenção usada em Analytics: evita um "+925%" absurdo quando a
+      // semana anterior tinha uma base perto de zero.
+      productivity: lifeScore.productivity - prevLifeScore.productivity,
+      health: lifeScore.health - prevLifeScore.health,
+      education: lifeScore.education - prevLifeScore.education,
+      reading: lifeScore.reading - prevLifeScore.reading,
+      habits: lifeScore.habits - prevLifeScore.habits,
+    },
+  });
+});
+
+/** GET /api/reviews/weekly?weekStartDate=YYYY-MM-DD */
+reviewsRouter.get("/weekly", async (req, res) => {
+  const weekStartDate = (req.query.weekStartDate as string) || new Date().toISOString().slice(0, 10);
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT * FROM weekly_reviews WHERE owner_id = ? AND week_start_date = ?",
+    args: [req.user!.id, weekStartDate],
+  });
+  return res.json(result.rows[0] ?? null);
+});
+
+/** GET /api/reviews/weekly/history?limit=12 */
+reviewsRouter.get("/weekly/history", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 12, 52);
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT * FROM weekly_reviews WHERE owner_id = ? ORDER BY week_start_date DESC LIMIT ?",
+    args: [req.user!.id, limit],
+  });
+  return res.json(result.rows);
+});
+
+/** PUT /api/reviews/weekly — recalcula as métricas reais da semana e salva junto com a parte qualitativa */
+reviewsRouter.put("/weekly", async (req, res) => {
+  const parsed = weeklyReviewSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const d = parsed.data;
+  const weekEndExclusive = addDays(d.weekStartDate, 7);
+  const [metrics, lifeScore] = await Promise.all([
+    computeRangeMetrics(req.user!.id, d.weekStartDate, weekEndExclusive),
+    computeLifeScore(req.user!.id, addDays(weekEndExclusive, -1)),
+  ]);
+
+  const db = getDb();
+  await db.execute({
+    sql: `INSERT INTO weekly_reviews (
+            id, owner_id, week_start_date, productivity_pct, health_pct, education_pct, reading_pct, habits_pct,
+            tasks_completed, study_minutes, pages_read, focus_minutes,
+            what_worked, what_didnt_work, what_to_improve, next_priorities
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (owner_id, week_start_date) DO UPDATE SET
+            productivity_pct = excluded.productivity_pct, health_pct = excluded.health_pct,
+            education_pct = excluded.education_pct, reading_pct = excluded.reading_pct, habits_pct = excluded.habits_pct,
+            tasks_completed = excluded.tasks_completed, study_minutes = excluded.study_minutes,
+            pages_read = excluded.pages_read, focus_minutes = excluded.focus_minutes,
+            what_worked = excluded.what_worked, what_didnt_work = excluded.what_didnt_work,
+            what_to_improve = excluded.what_to_improve, next_priorities = excluded.next_priorities`,
+    args: [
+      nanoid(),
+      req.user!.id,
+      d.weekStartDate,
+      lifeScore.productivity,
+      lifeScore.health,
+      lifeScore.education,
+      lifeScore.reading,
+      lifeScore.habits,
+      metrics.tasksCompleted,
+      metrics.studyMinutes,
+      metrics.pagesRead,
+      metrics.focusMinutes,
+      d.whatWorked ?? null,
+      d.whatDidntWork ?? null,
+      d.whatToImprove ?? null,
+      d.nextPriorities ?? null,
+    ],
+  });
+
+  const saved = await db.execute({
+    sql: "SELECT * FROM weekly_reviews WHERE owner_id = ? AND week_start_date = ?",
+    args: [req.user!.id, d.weekStartDate],
+  });
+  return res.json(saved.rows[0]);
+});

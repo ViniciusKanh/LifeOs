@@ -33,6 +33,22 @@ export const forgotPasswordFormSchema = z.object({
 });
 export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordFormSchema>;
 
+export const resetPasswordFormSchema = z
+  .object({
+    newPassword: z
+      .string()
+      .min(8, "Mínimo de 8 caracteres")
+      .regex(/[a-z]/, "Inclua uma letra minúscula")
+      .regex(/[A-Z]/, "Inclua uma letra maiúscula")
+      .regex(/[0-9]/, "Inclua um número"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "As senhas não coincidem",
+    path: ["confirmPassword"],
+  });
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordFormSchema>;
+
 /** Força de senha simples (0-4), usada no indicador visual de cadastro. */
 export function passwordStrength(password: string): number {
   let score = 0;

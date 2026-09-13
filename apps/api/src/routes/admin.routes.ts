@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
 import { encryptSecret, maskPreview } from "../services/cryptoService.js";
 import { hashPassword } from "../services/authService.js";
+import { verifySmtpConnection } from "../services/emailService.js";
 
 export const adminRouter = Router();
 
@@ -98,15 +99,22 @@ adminRouter.delete("/settings/:integration/:keyName", async (req, res) => {
 
 /**
  * POST /api/admin/settings/:integration/test — testa a conexão.
- * Implementação real (chamada ao Gemini, ping no Turso, envio de
- * e-mail de teste via SMTP) fica para a Fase 6, quando os serviços
- * externos (services/geminiService.ts, services/emailService.ts)
- * forem implementados. Aqui a rota já existe e já audita a tentativa,
- * então o frontend pode ser construído contra este contrato agora.
+ * SMTP já testa de verdade (conecta no servidor com as credenciais
+ * salvas). Gemini e Turso ainda não têm teste real implementado —
+ * a rota audita a tentativa e devolve 501 para esses dois casos.
  */
 adminRouter.post("/settings/:integration/test", async (req, res) => {
   const db = getDb();
   await logAudit(db, req.user!.id, "admin_settings.test", req.params.integration, req);
+
+  if (req.params.integration === "smtp") {
+    const result = await verifySmtpConnection();
+    if (!result.ok) {
+      return res.status(400).json({ error: result.message });
+    }
+    return res.json({ ok: true, message: result.message });
+  }
+
   return res.status(501).json({
     error: `Teste de conexão para "${req.params.integration}" ainda não implementado (Fase 6).`,
   });

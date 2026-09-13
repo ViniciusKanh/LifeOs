@@ -1,0 +1,527 @@
+import { useMemo, useState } from "react";
+import {
+  Briefcase,
+  Calendar,
+  ChevronRight,
+  Flag,
+  GraduationCap,
+  Heart,
+  ListChecks,
+  Pencil,
+  Plus,
+  Target,
+  Trash2,
+  Trophy,
+  User,
+  X,
+} from "lucide-react";
+import { useGoals } from "@/hooks/useGoals";
+import { Button, Card, Field, IconBadge, EmptyState } from "@/components/ui/primitives";
+import type { Goal, GoalKind, GoalPeriod } from "@/types";
+
+function goalProgressPct(goal: Goal): number {
+  if (goal.status === "done") return 100;
+  if (goal.kind === "percentage") return Math.min(100, Math.max(0, Math.round(goal.current_value)));
+  if (goal.kind === "numeric" && goal.target_value) {
+    return Math.min(100, Math.max(0, Math.round((goal.current_value / goal.target_value) * 100)));
+  }
+  return 0;
+}
+
+function diasLabel(n: number) {
+  return `${n} ${n === 1 ? "dia" : "dias"}`;
+}
+
+function progressLabel(goal: Goal): string | null {
+  if (goal.kind === "numeric" && goal.target_value) {
+    return `${goal.current_value} de ${goal.target_value}${goal.unit ? ` ${goal.unit}` : ""}`;
+  }
+  return null;
+}
+
+const PERIOD_TABS: Array<{ value: GoalPeriod | "todas"; label: string }> = [
+  { value: "todas", label: "Todas" },
+  { value: "anual", label: "Anuais" },
+  { value: "mensal", label: "Mensais" },
+  { value: "semanal", label: "Semanais" },
+  { value: "semestral", label: "Semestrais" },
+];
+const PERIOD_TAG: Record<GoalPeriod, string> = { anual: "Anual", semestral: "Semestral", mensal: "Mensal", semanal: "Semanal" };
+
+const GOAL_CATEGORIES: Array<{ value: string; label: string; tone: "green" | "blue" | "purple" | "pink"; icon: typeof Heart }> = [
+  { value: "Saúde", label: "Saúde", tone: "green", icon: Heart },
+  { value: "Educação", label: "Educação", tone: "blue", icon: GraduationCap },
+  { value: "Carreira", label: "Carreira", tone: "purple", icon: Briefcase },
+  { value: "Pessoal", label: "Pessoal", tone: "pink", icon: User },
+];
+const GOAL_CATEGORY_BY_VALUE = new Map(GOAL_CATEGORIES.map((c) => [c.value, c]));
+const FALLBACK_GOAL_CATEGORY = { label: "Sem área", tone: "blue" as const, icon: Target };
+
+function formatDate(value: string | null) {
+  if (!value) return null;
+  const d = new Date(`${value.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+}
+
+export function MetasPage() {
+  const { goals, stats, createGoal, updateGoal, removeGoal, addProgress } = useGoals({ parentGoalId: "null" });
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
+  const [periodTab, setPeriodTab] = useState<GoalPeriod | "todas">("todas");
+
+  const activeGoals = goals.filter((g) => g.status === "active");
+  const overallProgressPct = activeGoals.length > 0 ? Math.round(activeGoals.reduce((sum, g) => sum + goalProgressPct(g), 0) / activeGoals.length) : 0;
+
+  const visibleGoals = useMemo(() => {
+    const list = periodTab === "todas" ? goals : goals.filter((g) => g.period === periodTab);
+    return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [goals, periodTab]);
+
+  return (
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div>
+          <p className="font-display font-semibold text-2xl">Metas</p>
+          <p className="text-sm text-slate mt-1">Transforme planos em conquistas. Metas claras, progresso real.</p>
+        </div>
+        <Button onClick={() => setModalOpen(true)}>
+          <Plus size={14} /> Nova meta
+        </Button>
+      </div>
+
+      {goals.length === 0 ? (
+        <EmptyState
+          title="Nenhuma meta cadastrada"
+          description="Crie metas anuais, mensais ou semanais e ligue tarefas a elas — assim você sabe por que está fazendo o que faz."
+          ctaLabel="Criar meta"
+          onCta={() => setModalOpen(true)}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <IconBadge icon={<Target size={18} />} tone="blue" />
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold leading-tight">{activeGoals.length}</p>
+                  <p className="text-xs text-slate leading-tight">Metas ativas</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate mt-2">de {goals.length} criadas</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <IconBadge icon={<Flag size={18} />} tone="green" />
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold leading-tight">{overallProgressPct}%</p>
+                  <p className="text-xs text-slate leading-tight">Progresso geral</p>
+                </div>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-2">
+                <div className="h-full rounded-full bg-cat-green" style={{ width: `${overallProgressPct}%` }} />
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <IconBadge icon={<Calendar size={18} />} tone="purple" />
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold leading-tight">{stats?.completedThisYear ?? 0}</p>
+                  <p className="text-xs text-slate leading-tight">Metas concluídas</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate mt-2">neste ano</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <IconBadge icon={<Trophy size={18} />} tone="amber" />
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold leading-tight">{diasLabel(stats?.daysInFocus ?? 0)}</p>
+                  <p className="text-xs text-slate leading-tight">Dias em foco</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate mt-2">seguindo suas metas</p>
+            </Card>
+          </div>
+
+          <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
+            {/* Coluna principal: lista de metas */}
+            <div className="space-y-4 min-w-0">
+              <Card className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-semibold">Minhas metas</p>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {PERIOD_TABS.filter((t) => t.value === "todas" || goals.some((g) => g.period === t.value)).map((t) => {
+                    const count = t.value === "todas" ? goals.length : goals.filter((g) => g.period === t.value).length;
+                    const active = periodTab === t.value;
+                    return (
+                      <button
+                        key={t.value}
+                        onClick={() => setPeriodTab(t.value)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          active ? "bg-brand-500 text-white border-brand-500" : "border-paper-border dark:border-ink-border text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        {t.label} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-3">
+                  {visibleGoals.map((goal) => {
+                    const pct = goalProgressPct(goal);
+                    const label = progressLabel(goal);
+                    const meta = GOAL_CATEGORY_BY_VALUE.get(goal.category?.trim() ?? "") ?? FALLBACK_GOAL_CATEGORY;
+                    const Icon = meta.icon;
+                    return (
+                      <div key={goal.id} className="rounded-xl border border-paper-border dark:border-ink-border p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <IconBadge icon={<Icon size={15} />} tone={meta.tone} size={30} />
+                              <p className="text-sm font-semibold truncate">{goal.title}</p>
+                            </div>
+                            {goal.description && <p className="text-xs text-slate mt-1.5 ml-9">{goal.description}</p>}
+                            <div className="mt-3 flex items-center gap-3">
+                              <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                                <div className="h-full rounded-full bg-signal" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs w-10 text-right shrink-0">{pct}%</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-slate">
+                              {label && <span>{label}</span>}
+                              {goal.due_date && (
+                                <span>
+                                  {formatDate(goal.due_date)}
+                                  {goal.period ? ` • ${PERIOD_TAG[goal.period]}` : ""}
+                                </span>
+                              )}
+                              <span className="capitalize">{goal.status === "active" ? "Ativa" : goal.status === "done" ? "Concluída" : "Abandonada"}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {goal.status === "active" && (
+                              <>
+                                <Button variant="secondary" onClick={() => setProgressGoal(goal)}>
+                                  Atualizar
+                                </Button>
+                                <Button variant="ghost" onClick={() => updateGoal({ id: goal.id, patch: { status: "done" } })}>
+                                  Concluir
+                                </Button>
+                              </>
+                            )}
+                            <button onClick={() => setEditingGoal(goal)} className="text-slate hover:text-inherit p-1">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => removeGoal(goal.id)} className="text-slate hover:text-drop p-1">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {visibleGoals.length === 0 && <p className="text-xs text-slate py-6 text-center">Nenhuma meta nesse período.</p>}
+                </div>
+              </Card>
+            </div>
+
+            {/* Coluna lateral: progresso por período, áreas, marcos e conquistas */}
+            <div className="space-y-4">
+              <Card className="p-5">
+                <p className="text-sm font-semibold mb-4">Progresso por período</p>
+                {stats && stats.periods.length > 0 ? (
+                  <div className="space-y-3">
+                    {stats.periods.map((p) => (
+                      <div key={p.period}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-medium">{p.label}</span>
+                          <span className="text-slate">{p.pct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                          <div className="h-full rounded-full bg-brand-500" style={{ width: `${p.pct}%` }} />
+                        </div>
+                        <p className="text-[11px] text-slate mt-1">
+                          {p.doneCount} de {p.totalCount}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate">Defina uma periodicidade nas suas metas para ver o progresso aqui.</p>
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <p className="text-sm font-semibold mb-4">Metas por área da vida</p>
+                {stats && stats.categories.length > 0 ? (
+                  <div className="space-y-1">
+                    {stats.categories.map((c) => {
+                      const meta = GOAL_CATEGORY_BY_VALUE.get(c.category) ?? FALLBACK_GOAL_CATEGORY;
+                      const Icon = meta.icon;
+                      return (
+                        <div key={c.category} className="flex items-center gap-3 py-2">
+                          <IconBadge icon={<Icon size={14} />} tone={meta.tone} size={30} />
+                          <p className="text-sm flex-1 truncate">{meta.label}</p>
+                          <p className="text-xs text-slate">
+                            {c.count} {c.count === 1 ? "meta" : "metas"}
+                          </p>
+                          <ChevronRight size={14} className="text-slate" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate">Defina uma área da vida nas suas metas para agrupá-las aqui.</p>
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <p className="text-sm font-semibold mb-3">Próximos marcos</p>
+                {stats && stats.upcomingMilestones.length > 0 ? (
+                  <div className="space-y-3">
+                    {stats.upcomingMilestones.map((m) => (
+                      <div key={`${m.goalId}-${m.nextActionDue}`} className="flex items-start gap-2">
+                        <ListChecks size={14} className="text-brand-500 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{m.nextAction}</p>
+                          <p className="text-[11px] text-slate truncate">
+                            {m.goalTitle} • {formatDate(m.nextActionDue)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate">Adicione o próximo passo de uma meta para vê-lo aqui.</p>
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <p className="text-sm font-semibold mb-3">Conquistas recentes</p>
+                {stats && stats.recentAchievements.length > 0 ? (
+                  <div className="space-y-3">
+                    {stats.recentAchievements.map((a, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <Trophy size={14} className="text-signal-deep mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{a.title}</p>
+                          <p className="text-[11px] text-slate truncate">
+                            {a.subtitle} • {formatDate(a.at) ?? a.at.slice(0, 10)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate">Suas conquistas (metas concluídas, sequências de hábito) vão aparecer aqui.</p>
+                )}
+              </Card>
+
+              <Card className="p-5 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-0">
+                <p className="font-display font-semibold text-lg">Grandes conquistas começam com pequenos passos.</p>
+                <p className="text-xs text-brand-100 mt-2">Mantenha o foco. Você está mais perto do que imagina.</p>
+              </Card>
+            </div>
+          </div>
+        </>
+      )}
+
+      {modalOpen && (
+        <MetaModal
+          onClose={() => setModalOpen(false)}
+          onSubmit={async (input) => {
+            await createGoal(input);
+          }}
+        />
+      )}
+      {editingGoal && (
+        <MetaModal
+          goal={editingGoal}
+          onClose={() => setEditingGoal(null)}
+          onSubmit={async (input) => {
+            await updateGoal({ id: editingGoal.id, patch: input });
+          }}
+        />
+      )}
+      {progressGoal && (
+        <ProgressoModal
+          goal={progressGoal}
+          onClose={() => setProgressGoal(null)}
+          onSave={(value) => addProgress({ id: progressGoal.id, value })}
+        />
+      )}
+    </div>
+  );
+}
+
+function MetaModal({
+  goal,
+  onClose,
+  onSubmit,
+}: {
+  goal?: Goal;
+  onClose: () => void;
+  onSubmit: (input: {
+    title: string;
+    description?: string;
+    category?: string;
+    kind: GoalKind;
+    targetValue?: number;
+    unit?: string;
+    dueDate?: string;
+    period?: GoalPeriod;
+    nextAction?: string;
+    nextActionDue?: string;
+  }) => Promise<unknown>;
+}) {
+  const [title, setTitle] = useState(goal?.title ?? "");
+  const [description, setDescription] = useState(goal?.description ?? "");
+  const [category, setCategory] = useState(goal?.category ?? "");
+  const [kind, setKind] = useState<GoalKind>(goal?.kind ?? "percentage");
+  const [targetValue, setTargetValue] = useState(goal?.target_value != null ? String(goal.target_value) : "");
+  const [unit, setUnit] = useState(goal?.unit ?? "");
+  const [dueDate, setDueDate] = useState(goal?.due_date ?? "");
+  const [period, setPeriod] = useState<GoalPeriod | "">(goal?.period ?? "");
+  const [nextAction, setNextAction] = useState(goal?.next_action ?? "");
+  const [nextActionDue, setNextActionDue] = useState(goal?.next_action_due ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        category: category || undefined,
+        kind,
+        targetValue: targetValue ? Number(targetValue) : undefined,
+        unit: unit.trim() || undefined,
+        dueDate: dueDate || undefined,
+        period: period || undefined,
+        nextAction: nextAction.trim() || undefined,
+        nextActionDue: nextActionDue || undefined,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl p-5 md:p-6 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">{goal ? "Editar meta" : "Nova meta"}</p>
+          <button onClick={onClose} className="text-slate">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <Field label="Título" placeholder="Publicar 3 artigos" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Field label="Descrição (opcional)" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-slate">Área da vida</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+              >
+                <option value="">Sem área</option>
+                {GOAL_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate">Período</label>
+              <select
+                value={period}
+                onChange={(e) => setPeriod(e.target.value as GoalPeriod | "")}
+                className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+              >
+                <option value="">Sem período</option>
+                <option value="semanal">Semanal</option>
+                <option value="mensal">Mensal</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Anual</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate">Tipo de acompanhamento</label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as GoalKind)}
+              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            >
+              <option value="percentage">Percentual (0-100%)</option>
+              <option value="numeric">Numérico (com meta e unidade)</option>
+              <option value="binary">Sim/Não</option>
+              <option value="task_based">Baseada em tarefas</option>
+            </select>
+          </div>
+          {kind === "numeric" && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Meta" type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} />
+              <Field label="Unidade" placeholder="páginas, marcos, livros..." value={unit} onChange={(e) => setUnit(e.target.value)} />
+            </div>
+          )}
+          <Field label="Prazo (opcional)" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <div className="pt-2 border-t border-paper-border dark:border-ink-border">
+            <p className="text-xs text-slate mb-2">Próximo passo (opcional — aparece em "Próximos marcos")</p>
+            <Field label="O que fazer a seguir" placeholder="Ler 2 capítulos, finalizar módulo 3..." value={nextAction} onChange={(e) => setNextAction(e.target.value)} />
+            <div className="mt-2">
+              <Field label="Data" type="date" value={nextActionDue} onChange={(e) => setNextActionDue(e.target.value)} />
+            </div>
+          </div>
+          <Button onClick={submit} disabled={saving || !title.trim()} className="w-full">
+            {saving ? "Salvando..." : goal ? "Salvar alterações" : "Criar meta"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProgressoModal({ goal, onClose, onSave }: { goal: Goal; onClose: () => void; onSave: (value: number) => Promise<unknown> }) {
+  const [value, setValue] = useState(String(goal.current_value));
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await onSave(Number(value) || 0);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-xs rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold mb-3">Atualizar progresso de "{goal.title}"</p>
+        <Field
+          label={goal.kind === "percentage" ? "Progresso (%)" : `Valor atual${goal.unit ? ` (${goal.unit})` : ""}`}
+          type="number"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button onClick={submit} disabled={saving} className="w-full mt-3">
+          {saving ? "Salvando..." : "Salvar"}
+        </Button>
+      </div>
+    </div>
+  );
+}
