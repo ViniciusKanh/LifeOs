@@ -23,6 +23,8 @@ export const GEMINI_MODELS = [
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 
+const VALID_MODEL_IDS = new Set<string>(GEMINI_MODELS.map((m) => m.id));
+
 export interface GeminiConfig {
   apiKey: string;
   model: string;
@@ -40,11 +42,18 @@ async function readSetting(db: Db, keyName: string): Promise<string | null> {
   return decryptSecret(row.encrypted_value);
 }
 
+/**
+ * Se o modelo salvo no banco não existir mais na lista atual (a Google
+ * aposentou/renomeou), cai pro padrão em vez de continuar chamando um
+ * modelo morto — evita reviver o mesmo erro "no longer available"
+ * sempre que a Google descontinuar outro modelo antigo salvo aqui.
+ */
 export async function getGeminiConfig(): Promise<GeminiConfig | null> {
   const db = getDb();
   const [apiKey, model] = await Promise.all([readSetting(db, "api_key"), readSetting(db, "model")]);
   if (!apiKey) return null;
-  return { apiKey, model: model ?? DEFAULT_GEMINI_MODEL };
+  const resolvedModel = model && VALID_MODEL_IDS.has(model) ? model : DEFAULT_GEMINI_MODEL;
+  return { apiKey, model: resolvedModel };
 }
 
 export type GeminiCallResult = { ok: true; text: string } | { ok: false; message: string };
