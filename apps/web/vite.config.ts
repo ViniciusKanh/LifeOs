@@ -40,4 +40,18 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    // Code-splitting: cada rota já vira um chunk via React.lazy (App.tsx);
+    // aqui separamos as libs pesadas usadas só por parte do app (gráficos,
+    // formulários) do vendor principal, pra elas só baixarem quando a
+    // tela que precisa delas é visitada.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ["recharts"],
+          forms: ["react-hook-form", "@hookform/resolvers", "zod"],
+        },
+      },
+    },
+  },
 });

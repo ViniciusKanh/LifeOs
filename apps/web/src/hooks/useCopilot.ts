@@ -1,6 +1,33 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { copilotService } from "@/services/copilotService";
 import { ApiError } from "@/services/api";
+
+const DAILY_INSIGHT_KEY = ["copilot", "daily-insight"];
+
+/**
+ * Copilot proativo: busca o insight do dia já pronto assim que o
+ * Dashboard abre (o backend gera e guarda em cache na primeira vez do
+ * dia) — o usuário não precisa clicar em nada pra ver algo. O botão
+ * "gerar outro insight" continua disponível e, ao regenerar, atualiza
+ * este mesmo cache do dia.
+ */
+export function useDailyInsight() {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: DAILY_INSIGHT_KEY, queryFn: copilotService.dailyInsight, retry: false });
+
+  const regenerate = useMutation({
+    mutationFn: copilotService.generateInsight,
+    onSuccess: (data) => queryClient.setQueryData(DAILY_INSIGHT_KEY, data),
+  });
+
+  return {
+    text: query.data?.text ?? null,
+    isLoading: query.isLoading,
+    error: (query.error ?? regenerate.error) as ApiError | null,
+    regenerate: regenerate.mutateAsync,
+    isRegenerating: regenerate.isPending,
+  };
+}
 
 /** LifeOS Copilot — gera um insight sob demanda com base nos dados reais do usuário (Gemini, configurado em Configurações). */
 export function useCopilotInsight() {

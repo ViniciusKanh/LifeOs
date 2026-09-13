@@ -13,6 +13,7 @@ import {
   Eye,
   EyeOff,
   Check,
+  Download,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,6 +21,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useTheme } from "@/hooks/useTheme";
 import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
+import { api } from "@/services/api";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
 
@@ -39,6 +41,31 @@ function formatFullDate(dateStr: string) {
 export function PerfilPage() {
   const { user } = useAuth();
   const { mode, setMode } = useTheme();
+  const [isExporting, setIsExporting] = useState(false);
+
+  /**
+   * Exporta todos os dados reais do usuário (tarefas, hábitos, livros,
+   * saúde, metas, foco...) num único JSON, baixado direto no navegador
+   * — nenhuma credencial é incluída. O endpoint (/export/me) devolve o
+   * dado bruto de cada tabela; aqui só transformamos em arquivo.
+   */
+  const handleExportData = async () => {
+    setIsExporting(true);
+    try {
+      const payload = await api.get<unknown>("/export/me");
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lifeos-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const {
     updateProfile,
     isUpdatingProfile,
@@ -297,6 +324,19 @@ export function PerfilPage() {
                 {isChangingPassword ? "Salvando..." : "Atualizar senha"}
               </Button>
             </form>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center gap-2.5 mb-3">
+              <IconBadge tone="green" size={32} icon={<Download size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">Exportar meus dados</p>
+                <p className="text-xs text-slate">Baixe tudo o que você registrou no LifeOS — tarefas, hábitos, livros, saúde, metas e mais — num único arquivo JSON.</p>
+              </div>
+            </div>
+            <Button variant="secondary" className="w-full" onClick={handleExportData} disabled={isExporting}>
+              <Download size={14} /> {isExporting ? "Gerando arquivo..." : "Baixar meus dados (.json)"}
+            </Button>
           </Card>
 
           <Card className="p-5">

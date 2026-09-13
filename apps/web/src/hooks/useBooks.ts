@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { libraryService, type BookUpdateInput } from "@/services/libraryService";
+import { triggerAchievementsCheck } from "@/services/achievementsService";
 import type { BookNote } from "@/types";
 
 const BOOKS_KEY = ["books"];
@@ -25,6 +26,8 @@ export function useBooks(filters?: { status?: string; search?: string }) {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: BOOKS_KEY });
       queryClient.invalidateQueries({ queryKey: bookKey(vars.id) });
+      // Terminar um livro é o gatilho das conquistas de leitura ("Leitor assíduo", "Bibliófilo").
+      if (vars.patch.status === "Concluído") triggerAchievementsCheck();
     },
   });
 

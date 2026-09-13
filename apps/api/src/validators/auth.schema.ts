@@ -55,6 +55,7 @@ export const updateProfileSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   language: z.string().trim().min(2).max(10).optional(),
   timezone: z.string().trim().min(1).max(60).optional(),
+  onboardingDone: z.boolean().optional(),
 });
 
 export const verifyEmailSchema = z.object({

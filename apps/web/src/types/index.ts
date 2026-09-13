@@ -566,3 +566,29 @@ export interface WeeklyComputedMetrics extends RangeMetrics {
   lifeScore: LifeScoreBreakdown;
   changePct: WeeklyChangePct;
 }
+
+/** Item unificado do Calendário — evento manual ou prazo real de outro módulo (tarefa, meta, TCC). */
+export interface CalendarItem {
+  id: string;
+  title: string;
+  description: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  allDay: boolean;
+  sourceType: "manual" | "task" | "goal" | "academic_project";
+  sourceId: string | null;
+  link: string | null;
+}
+
+/** Uma conquista do catálogo (`achievements`) — se `unlockedAt` existir, o usuário já destravou. */
+export interface Achievement {
+  id: string;
+  code: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  metric: string | null;
+  threshold: number | null;
+  progress: number;
+  unlockedAt: string | null;
+}

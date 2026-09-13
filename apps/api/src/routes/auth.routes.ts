@@ -204,13 +204,15 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
     theme: "theme",
     language: "language",
     timezone: "timezone",
+    onboardingDone: "onboarding_done",
   };
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
   for (const [key, column] of Object.entries(fieldMap)) {
     if (key in data) {
+      const value = (data as Record<string, string | boolean | null | undefined>)[key];
       sets.push(`${column} = ?`);
-      args.push((data as Record<string, string | null | undefined>)[key] ?? null);
+      args.push(typeof value === "boolean" ? (value ? 1 : 0) : (value ?? null));
     }
   }
   if (sets.length === 0) {

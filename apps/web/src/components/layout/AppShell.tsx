@@ -18,11 +18,15 @@ import {
   SunMedium,
   Moon,
   Search,
+  CalendarDays,
+  Trophy,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationsBell } from "./NotificationsBell";
 import { ProfileMenu } from "./ProfileMenu";
+import { AchievementToast } from "./AchievementToast";
+import { OnboardingFlow } from "./OnboardingFlow";
 
 // Frases curtas por área — só decoração de cabeçalho, sem dado
 // nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
@@ -36,6 +40,8 @@ const PAGE_QUOTES: Record<string, string> = {
   "/saude": "Corpo saudável, mente mais forte.",
   "/habitos": "Disciplina é a ponte entre seus objetivos e seus sonhos.",
   "/metas": "Um objetivo sem plano é apenas um desejo.",
+  "/calendario": "Quem planeja o tempo, comanda o progresso.",
+  "/conquistas": "Cada conquista começou com um hábito repetido.",
   "/analytics": "Dados transformam esforço em clareza.",
   "/timeline": "Disciplina de hoje, liberdade de amanhã.",
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
@@ -50,11 +56,13 @@ const NAV = [
 ];
 
 const SECONDARY_NAV = [
+  { to: "/calendario", label: "Calendário", icon: CalendarDays },
   { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
   { to: "/educacao", label: "Educação", icon: GraduationCap },
   { to: "/saude", label: "Saúde", icon: HeartPulse },
   { to: "/habitos", label: "Hábitos", icon: Repeat },
   { to: "/metas", label: "Metas", icon: Target },
+  { to: "/conquistas", label: "Conquistas", icon: Trophy },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/timeline", label: "Timeline", icon: History },
   { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
@@ -242,6 +250,9 @@ export function AppShell() {
             </div>
           </div>
         )}
+
+        <AchievementToast />
+        <OnboardingFlow />
       </div>
     </div>
   );

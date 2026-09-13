@@ -38,7 +38,7 @@ import { useHealth, useHealthSummary } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
 import { useBooks } from "@/hooks/useBooks";
 import { useGoals } from "@/hooks/useGoals";
-import { useCopilotInsight } from "@/hooks/useCopilot";
+import { useDailyInsight } from "@/hooks/useCopilot";
 import { Card, IconBadge } from "@/components/ui/primitives";
 import type { TimelineEvent } from "@/types";
 
@@ -130,7 +130,7 @@ export function DashboardPage() {
   const { history: reviewHistory } = useWeeklyReviewHistory(8);
   const today = new Date().toISOString().slice(0, 10);
   const { events } = useTimeline({ from: today, to: today });
-  const copilot = useCopilotInsight();
+  const copilot = useDailyInsight();
 
   const [quickTitle, setQuickTitle] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -337,19 +337,21 @@ export function DashboardPage() {
             <div>
               <p className="font-display font-semibold text-base">LifeOS Copilot</p>
               <p className="text-xs opacity-90 mt-0.5 max-w-md">
-                Peça um insight gerado por IA com base nos seus dados reais de hoje — tarefas, hábitos, água e leitura.
+                Insight do dia gerado por IA com base nos seus dados reais — tarefas, hábitos, água e leitura.
               </p>
             </div>
           </div>
           <button
-            onClick={() => copilot.generate()}
-            disabled={copilot.isGenerating}
+            onClick={() => copilot.regenerate()}
+            disabled={copilot.isRegenerating || copilot.isLoading}
             className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
           >
             <Wand2 size={15} />
-            {copilot.isGenerating ? "Gerando..." : copilot.text ? "Gerar outro insight" : "Gerar insight com IA"}
+            {copilot.isRegenerating ? "Gerando..." : "Gerar outro insight"}
           </button>
         </div>
+
+        {copilot.isLoading && <p className="text-sm mt-4 bg-white/10 rounded-xl px-4 py-3 opacity-80">Preparando o insight de hoje...</p>}
 
         {copilot.error && (
           <p className="text-sm mt-4 bg-white/10 rounded-xl px-4 py-3">
@@ -365,7 +367,7 @@ export function DashboardPage() {
           </p>
         )}
 
-        {copilot.text && !copilot.error && (
+        {copilot.text && !copilot.error && !copilot.isLoading && (
           <p className="text-sm leading-relaxed mt-4 bg-white/10 rounded-xl px-4 py-3">{copilot.text}</p>
         )}
       </Card>

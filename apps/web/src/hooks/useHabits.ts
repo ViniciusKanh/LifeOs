@@ -1,5 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { habitService } from "@/services/habitService";
+import { triggerAchievementsCheck } from "@/services/achievementsService";
 import type { Habit } from "@/types";
 
 const HABITS_KEY = ["habits"];
@@ -28,7 +29,11 @@ export function useHabits() {
   const checkIn = useMutation({
     mutationFn: ({ id, entryDate, count }: { id: string; entryDate: string; count?: number }) =>
       habitService.checkIn(id, entryDate, count),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      // Marcar um hábito é o gatilho de conquistas de sequência (ex.: "Consistente", "Disciplina de ferro").
+      triggerAchievementsCheck();
+    },
   });
 
   const summaryByHabitId = new Map((summaryQuery.data ?? []).map((s) => [s.habitId, s]));

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { taskService, type TaskInput } from "@/services/taskService";
+import { triggerAchievementsCheck } from "@/services/achievementsService";
 import type { Task } from "@/types";
 
 const TASKS_KEY = ["tasks"];
@@ -17,7 +18,11 @@ export function useTasks() {
 
   const updateTask = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<TaskInput> }) => taskService.update(id, patch),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => {
+      invalidate();
+      // Concluir uma tarefa é o gatilho mais comum de conquista (ex.: "Produtivo", "Máquina de produtividade").
+      if (variables.patch.status === "Concluído") triggerAchievementsCheck();
+    },
   });
 
   const removeTask = useMutation({
@@ -40,7 +45,10 @@ export function useTasks() {
     onError: (_err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(TASKS_KEY, context.previous);
     },
-    onSettled: invalidate,
+    onSettled: (_data, _error, variables) => {
+      invalidate();
+      if (variables.status === "Concluído") triggerAchievementsCheck();
+    },
   });
 
   return {

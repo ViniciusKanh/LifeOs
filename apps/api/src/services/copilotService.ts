@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { computeLifeScore, computeRangeMetrics, computeInsights, changePct } from "./metricsService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
@@ -532,6 +533,58 @@ export async function generateAnalyticsInsight(ownerId: string, days = 30): Prom
     return { ok: false, message: result.message };
   }
   return { ok: true, text: result.text };
+}
+
+/**
+ * Copilot proativo: guarda o insight do Dashboard já gerado para o
+ * dia (tabela `daily_insights`), pra próxima leitura ser instantânea
+ * — usado tanto pelo cache automático (getOrGenerateDailyInsight)
+ * quanto por uma regeneração manual, que sobrescreve o mesmo dia.
+ */
+async function saveDailyInsight(ownerId: string, text: string): Promise<void> {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  await db.execute({
+    sql: `INSERT INTO daily_insights (id, owner_id, insight_date, text) VALUES (?, ?, ?, ?)
+          ON CONFLICT (owner_id, insight_date) DO UPDATE SET text = excluded.text, created_at = datetime('now')`,
+    args: [nanoid(), ownerId, today, text],
+  });
+}
+
+/**
+ * Copilot proativo: devolve o insight do dia já pronto sem o usuário
+ * precisar clicar em nada — se ainda não existe um pra hoje, gera na
+ * hora (mesmo caminho do botão manual) e guarda em cache. Chamado ao
+ * abrir o Dashboard; troca de dia = novo insight automaticamente.
+ */
+export async function getOrGenerateDailyInsight(
+  ownerId: string
+): Promise<{ ok: boolean; text?: string; message?: string; generatedAt?: string }> {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const cached = await db.execute({
+    sql: "SELECT text, created_at FROM daily_insights WHERE owner_id = ? AND insight_date = ?",
+    args: [ownerId, today],
+  });
+  const row = cached.rows[0] as { text?: string; created_at?: string } | undefined;
+  if (row?.text) {
+    return { ok: true, text: row.text, generatedAt: row.created_at };
+  }
+
+  const result = await generateDashboardInsight(ownerId);
+  if (!result.ok) return result;
+  await saveDailyInsight(ownerId, result.text!);
+  return { ok: true, text: result.text, generatedAt: new Date().toISOString() };
+}
+
+/** Chamado pelo botão manual "gerar outro insight" — regenera e atualiza o cache do dia junto. */
+export async function regenerateDailyInsight(ownerId: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+  const result = await generateDashboardInsight(ownerId);
+  if (result.ok && result.text) {
+    await saveDailyInsight(ownerId, result.text);
+  }
+  return result;
 }
 
 export async function generateHabitsInsight(ownerId: string): Promise<{ ok: boolean; text?: string; message?: string }> {

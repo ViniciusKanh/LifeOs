@@ -15,6 +15,9 @@ import { reviewsRouter } from "./routes/reviews.routes.js";
 import { analyticsRouter } from "./routes/analytics.routes.js";
 import { notificationsRouter } from "./routes/notifications.routes.js";
 import { copilotRouter } from "./routes/copilot.routes.js";
+import { eventsRouter } from "./routes/events.routes.js";
+import { achievementsRouter } from "./routes/achievements.routes.js";
+import { exportRouter } from "./routes/export.routes.js";
 
 /**
  * Configuração do Express extraída para um módulo próprio (sem
@@ -53,6 +56,9 @@ app.use("/api/reviews", reviewsRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/copilot", copilotRouter);
+app.use("/api/events", eventsRouter);
+app.use("/api/achievements", achievementsRouter);
+app.use("/api/export", exportRouter);
 
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

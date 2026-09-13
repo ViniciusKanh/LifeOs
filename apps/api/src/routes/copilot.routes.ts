@@ -1,20 +1,43 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { generateDashboardInsight, generateHealthInsight, generateEducationInsight, generateHabitsInsight, generateAnalyticsInsight } from "../services/copilotService.js";
+import {
+  generateHealthInsight,
+  generateEducationInsight,
+  generateHabitsInsight,
+  generateAnalyticsInsight,
+  getOrGenerateDailyInsight,
+  regenerateDailyInsight,
+} from "../services/copilotService.js";
 
 export const copilotRouter = Router();
 
 copilotRouter.use(requireAuth);
 
 /**
- * POST /api/copilot/insight — gera um insight do LifeOS Copilot com
- * base nos dados reais do próprio usuário logado. Limitado por IP+rota
- * (a chamada à API do Gemini tem custo/cota) — 10 gerações a cada 10
- * minutos é generoso para uso humano normal e barra abuso acidental.
+ * GET /api/copilot/daily-insight — Copilot proativo: devolve o
+ * insight do dia já pronto (gerando e guardando em cache na primeira
+ * vez que alguém abre o Dashboard no dia) em vez de exigir clique.
+ * Sem rate limit próprio: no pior caso gera uma vez por usuário por
+ * dia — o rate limit de verdade continua em POST /insight (regenerar).
+ */
+copilotRouter.get("/daily-insight", async (req, res) => {
+  const result = await getOrGenerateDailyInsight(req.user!.id);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+  return res.json({ text: result.text, generatedAt: result.generatedAt });
+});
+
+/**
+ * POST /api/copilot/insight — regenera o insight do Dashboard sob
+ * pedido explícito do usuário (botão "gerar outro insight") e
+ * atualiza o cache do dia. Limitado por IP+rota (a chamada à API do
+ * Gemini tem custo/cota) — 10 gerações a cada 10 minutos é generoso
+ * para uso humano normal e barra abuso acidental.
  */
 copilotRouter.post("/insight", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), async (req, res) => {
-  const result = await generateDashboardInsight(req.user!.id);
+  const result = await regenerateDailyInsight(req.user!.id);
   if (!result.ok) {
     return res.status(400).json({ error: result.message });
   }
