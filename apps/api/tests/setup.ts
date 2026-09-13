@@ -15,7 +15,9 @@ const dbPath = path.join(dataDir, `test-${process.pid}-${Date.now()}.db`);
 
 process.env.DATABASE_URL = `file:${dbPath}`;
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-only-for-automated-tests";
-process.env.CREDENTIALS_ENCRYPTION_KEY = process.env.CREDENTIALS_ENCRYPTION_KEY ?? "0123456789abcdef0123456789abcdef";
+// Precisa ter 32 bytes em hex (64 caracteres) — ver cryptoService.ts.
+process.env.CREDENTIALS_ENCRYPTION_KEY =
+  process.env.CREDENTIALS_ENCRYPTION_KEY ?? "8f36c6f81b4ca6956ac78e226bfbad3cbbdbc7df34d17d661b07c7cad77ac9b8";
 process.env.NODE_ENV = "test";
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@teste.lifeos";
 

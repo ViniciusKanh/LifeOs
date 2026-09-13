@@ -18,6 +18,8 @@ import { copilotRouter } from "./routes/copilot.routes.js";
 import { eventsRouter } from "./routes/events.routes.js";
 import { achievementsRouter } from "./routes/achievements.routes.js";
 import { exportRouter } from "./routes/export.routes.js";
+import { pushRouter } from "./routes/push.routes.js";
+import { projectsRouter } from "./routes/projects.routes.js";
 
 /**
  * Configuração do Express extraída para um módulo próprio (sem
@@ -45,8 +47,17 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/api/auth", authRouter);
 app.use("/api/tasks", tasksRouter);
+app.use("/api/projects", projectsRouter);
 app.use("/api/habits", habitsRouter);
 app.use("/api/admin", adminRouter);
+// pushRouter tem uma rota pública (GET /vapid-public-key) e precisa
+// ser montado ANTES de libraryRouter/educationRouter: os dois são
+// montados no prefixo genérico "/api" com requireAuth incondicional,
+// então se viessem antes, qualquer requisição não autenticada a
+// /api/push/* seria barrada por eles antes de chegar no pushRouter
+// de verdade (Express tenta os middlewares na ordem em que foram
+// registrados, e "/api" também "bate" com "/api/push/...").
+app.use("/api/push", pushRouter);
 app.use("/api", libraryRouter);
 app.use("/api", educationRouter);
 app.use("/api/health", healthRouter);

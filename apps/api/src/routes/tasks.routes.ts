@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
+import { addDependencySchema } from "../validators/project.schema.js";
 
 export const tasksRouter = Router();
 
@@ -216,6 +217,59 @@ tasksRouter.patch("/:id/time/stop", async (req, res) => {
   });
   const task = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
   return res.json(task.rows[0]);
+});
+
+/** GET /api/tasks/:id/dependencies — ids das tarefas das quais esta depende. */
+tasksRouter.get("/:id/dependencies", async (req, res) => {
+  const db = getDb();
+  const owned = await db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  if (owned.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+
+  const result = await db.execute({ sql: "SELECT depends_on_id FROM task_dependencies WHERE task_id = ?", args: [req.params.id] });
+  return res.json((result.rows as unknown as Array<{ depends_on_id: string }>).map((r) => r.depends_on_id));
+});
+
+/**
+ * POST /api/tasks/:id/dependencies — marca que esta tarefa só pode
+ * avançar depois de outra (usado pelo Gantt de projetos). Ambas as
+ * tarefas precisam pertencer ao usuário logado, e uma tarefa nunca
+ * pode depender dela mesma.
+ */
+tasksRouter.post("/:id/dependencies", async (req, res) => {
+  const parsed = addDependencySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  if (parsed.data.dependsOnId === req.params.id) {
+    return res.status(400).json({ error: "Uma tarefa não pode depender dela mesma." });
+  }
+  const db = getDb();
+
+  const [task, dependsOn] = await Promise.all([
+    db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] }),
+    db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [parsed.data.dependsOnId, req.user!.id] }),
+  ]);
+  if (task.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+  if (dependsOn.rows.length === 0) return res.status(404).json({ error: "Tarefa da qual depende não encontrada." });
+
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)",
+    args: [req.params.id, parsed.data.dependsOnId],
+  });
+  return res.status(201).json({ ok: true });
+});
+
+/** DELETE /api/tasks/:id/dependencies/:dependsOnId */
+tasksRouter.delete("/:id/dependencies/:dependsOnId", async (req, res) => {
+  const db = getDb();
+  const owned = await db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  if (owned.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+
+  await db.execute({
+    sql: "DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_id = ?",
+    args: [req.params.id, req.params.dependsOnId],
+  });
+  return res.status(204).send();
 });
 
 /** DELETE /api/tasks/:id */

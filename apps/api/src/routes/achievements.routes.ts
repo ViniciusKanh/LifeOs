@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { listAchievements, evaluateAchievements } from "../services/achievementsService.js";
+import { sendPushToUser } from "../services/pushService.js";
 
 export const achievementsRouter = Router();
 achievementsRouter.use(requireAuth);
@@ -20,5 +21,16 @@ achievementsRouter.get("/", async (req, res) => {
  */
 achievementsRouter.post("/check", async (req, res) => {
   const newlyUnlocked = await evaluateAchievements(req.user!.id);
+
+  // Push é "melhor esforço": nunca deve atrasar nem quebrar a resposta
+  // do /check (o desbloqueio em si já foi gravado no banco acima).
+  for (const achievement of newlyUnlocked) {
+    sendPushToUser(req.user!.id, {
+      title: "Conquista desbloqueada! 🏆",
+      body: achievement.title,
+      url: "/conquistas",
+    }).catch((err) => console.error("[push] falha ao notificar conquista:", err));
+  }
+
   return res.json({ newlyUnlocked });
 });

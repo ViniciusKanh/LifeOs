@@ -20,6 +20,7 @@ import {
   Search,
   CalendarDays,
   Trophy,
+  GanttChartSquare,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,6 +53,7 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { to: "/hoje", label: "Hoje", icon: Sun },
   { to: "/tarefas", label: "Tarefas", icon: ListChecks },
+  { to: "/projetos", label: "Projetos", icon: GanttChartSquare },
   { to: "/foco", label: "Focus", icon: Timer },
 ];
 

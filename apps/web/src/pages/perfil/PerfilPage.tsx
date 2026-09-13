@@ -14,11 +14,15 @@ import {
   EyeOff,
   Check,
   Download,
+  Bell,
+  BellOff,
+  Send,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useTheme } from "@/hooks/useTheme";
+import { usePush } from "@/hooks/usePush";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { api } from "@/services/api";
@@ -327,6 +331,8 @@ export function PerfilPage() {
             </form>
           </Card>
 
+          <PushNotificationsCard />
+
           <Card className="p-5">
             <div className="flex items-center gap-2.5 mb-3">
               <IconBadge tone="green" size={32} icon={<Download size={15} />} />
@@ -363,5 +369,84 @@ export function PerfilPage() {
 
       {cropFile && <ImageCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={handleCropConfirm} />}
     </div>
+  );
+}
+
+/**
+ * Notificações push reais (Web Push/VAPID) — o toggle reflete o
+ * estado de verdade do navegador (usePush já confere PushManager.
+ * getSubscription()), não um booleano só salvo no nosso banco.
+ */
+function PushNotificationsCard() {
+  const { support, permission, isSubscribed, loading, error, subscribe, unsubscribe, sendTest } = usePush();
+  const [testState, setTestState] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const handleToggle = async () => {
+    setTestState(null);
+    if (isSubscribed) {
+      await unsubscribe();
+    } else {
+      await subscribe();
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestState(null);
+    try {
+      const result = await sendTest();
+      setTestState({ ok: true, message: `Notificação de teste enviada (${result.sent} dispositivo(s)).` });
+    } catch (err) {
+      setTestState({ ok: false, message: err instanceof Error ? err.message : "Falha ao enviar notificação de teste." });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2.5 mb-3">
+        <IconBadge tone={isSubscribed ? "green" : "purple"} size={32} icon={isSubscribed ? <Bell size={15} /> : <BellOff size={15} />} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Notificações push</p>
+          <p className="text-xs text-slate">Receba um aviso no navegador/celular quando desbloquear uma conquista ou seu insight diário estiver pronto.</p>
+        </div>
+      </div>
+
+      {support === "unsupported" ? (
+        <p className="text-xs text-slate">Seu navegador não tem suporte a notificações push.</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-3 rounded-xl p-3 bg-paper dark:bg-ink">
+            <div>
+              <p className="text-sm font-medium">{isSubscribed ? "Ativadas neste dispositivo" : "Desativadas neste dispositivo"}</p>
+              {permission === "denied" && <p className="text-[11px] text-drop mt-0.5">Bloqueadas nas configurações do navegador.</p>}
+            </div>
+            <button
+              type="button"
+              onClick={handleToggle}
+              disabled={loading || permission === "denied"}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
+                isSubscribed ? "bg-growth" : "bg-paper-border dark:bg-ink-border"
+              }`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${isSubscribed ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+
+          {error && <p className="text-xs text-drop mt-2">{error}</p>}
+
+          {isSubscribed && (
+            <Button variant="secondary" className="w-full mt-3" onClick={handleTest} disabled={testing}>
+              <Send size={14} /> {testing ? "Enviando..." : "Enviar notificação de teste"}
+            </Button>
+          )}
+          {testState && (
+            <p className={`text-xs mt-2 ${testState.ok ? "text-growth" : "text-drop"}`}>{testState.message}</p>
+          )}
+        </>
+      )}
+    </Card>
   );
 }

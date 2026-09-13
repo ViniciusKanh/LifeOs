@@ -54,6 +54,39 @@ export interface Task {
   updated_at: string;
 }
 
+export type ProjectKind = "personal" | "workspace" | "professional" | "academic";
+
+export interface Project {
+  id: string;
+  owner_id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  kind: ProjectKind;
+  color: string | null;
+  archived_at: string | null;
+  task_count: number;
+  done_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GanttTask {
+  id: string;
+  title: string;
+  status: string;
+  priority: TaskPriority;
+  startDate: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  dependsOn: string[];
+}
+
+export interface GanttData {
+  project: { id: string; name: string };
+  tasks: GanttTask[];
+}
+
 export interface TimeEntry {
   id: string;
   task_id: string | null;

@@ -13,6 +13,17 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // injectManifest (em vez de generateSW): o service worker agora é
+      // escrito à mão (src/sw.ts) porque precisa reagir a eventos 'push'
+      // e 'notificationclick' (Web Push/VAPID) — o generateSW automático
+      // não permite código customizado, só cache de shell.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectManifest: {
+        // Mesmo padrão de arquivos que o generateSW cacheava antes.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
+      },
       registerType: "autoUpdate",
       includeAssets: ["logo/favicon-32.png", "logo/icon-192.png", "logo/icon-512.png"],
       manifest: {
@@ -29,11 +40,6 @@ export default defineConfig({
           { src: "/logo/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
           { src: "/logo/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
-      },
-      workbox: {
-        // Cache básico de shell: preparado para evoluir com sincronização
-        // offline de tarefas/hábitos/leitura (ver seção 47 do briefing).
-        globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
       },
     }),
   ],
