@@ -122,6 +122,19 @@ export function welcomeEmail(name: string) {
   };
 }
 
+/** Usado pelo botão "Enviar e-mail de teste" em Configurações — confirma entrega de ponta a ponta, não só o handshake SMTP. */
+export function testEmail() {
+  return {
+    subject: "Teste de e-mail — LifeOS",
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color:#1E2537;">Tudo certo por aqui!</h2>
+        <p>Este é um e-mail de teste disparado pela tela de Configurações do LifeOS.</p>
+        <p style="color:#6B7280;font-size:12px;">Se você recebeu esta mensagem, o envio de e-mail (SMTP) está funcionando corretamente.</p>
+      </div>`,
+  };
+}
+
 export function passwordChangedEmail() {
   return {
     subject: "Sua senha foi alterada — LifeOS",

@@ -31,6 +31,8 @@ export interface AdminSetting {
   is_active: number;
   extra_config: string | null;
   updated_at: string;
+  /** Só presente para key_name = 'model' — não é secreto, é devolvido em texto puro. */
+  value?: string;
 }
 
 export type TaskPriority = "Baixa" | "Média" | "Alta";

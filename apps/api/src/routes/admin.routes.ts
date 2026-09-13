@@ -4,9 +4,11 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
-import { encryptSecret, maskPreview } from "../services/cryptoService.js";
+import { encryptSecret, decryptSecret, maskPreview } from "../services/cryptoService.js";
 import { hashPassword } from "../services/authService.js";
-import { verifySmtpConnection } from "../services/emailService.js";
+import { verifySmtpConnection, sendMail, testEmail } from "../services/emailService.js";
+import { testGeminiConnection, GEMINI_MODELS } from "../services/geminiService.js";
+import { testTursoConnection } from "../services/tursoService.js";
 
 export const adminRouter = Router();
 
@@ -46,14 +48,27 @@ async function logAudit(db: ReturnType<typeof getDb>, actorId: string, action: s
   });
 }
 
-/** GET /api/admin/settings — nunca retorna o valor bruto, só o preview mascarado */
+/**
+ * GET /api/admin/settings — nunca retorna o valor bruto de credenciais
+ * (senha, token, api key), só o preview mascarado. A única exceção é
+ * key_name = 'model' (ex.: qual modelo do Gemini usar): não é um
+ * segredo, é só uma escolha — devolvido em texto puro em `value` pra
+ * a UI conseguir marcar a opção certa no seletor.
+ */
 adminRouter.get("/settings", async (req, res) => {
   const db = getDb();
   const result = await db.execute(
-    `SELECT id, integration, key_name, masked_preview, is_active, extra_config, updated_at
+    `SELECT id, integration, key_name, encrypted_value, masked_preview, is_active, extra_config, updated_at
      FROM admin_settings ORDER BY integration, key_name`
   );
-  return res.json(result.rows);
+  const rows = result.rows.map((row: any) => {
+    const { encrypted_value, ...rest } = row;
+    if (row.key_name === "model" && encrypted_value) {
+      return { ...rest, value: decryptSecret(encrypted_value as string) };
+    }
+    return rest;
+  });
+  return res.json(rows);
 });
 
 /** PUT /api/admin/settings — cria ou atualiza uma credencial */
@@ -98,25 +113,79 @@ adminRouter.delete("/settings/:integration/:keyName", async (req, res) => {
 });
 
 /**
- * POST /api/admin/settings/:integration/test — testa a conexão.
- * SMTP já testa de verdade (conecta no servidor com as credenciais
- * salvas). Gemini e Turso ainda não têm teste real implementado —
- * a rota audita a tentativa e devolve 501 para esses dois casos.
+ * POST /api/admin/settings/:integration/test — testa a conexão de
+ * verdade em todos os três casos: SMTP conecta no servidor, Gemini
+ * chama a API com um prompt real, Turso abre uma conexão separada
+ * e roda um SELECT 1 — nenhum deles é só validação de formato.
  */
 adminRouter.post("/settings/:integration/test", async (req, res) => {
   const db = getDb();
   await logAudit(db, req.user!.id, "admin_settings.test", req.params.integration, req);
 
+  let result: { ok: boolean; message: string };
   if (req.params.integration === "smtp") {
-    const result = await verifySmtpConnection();
-    if (!result.ok) {
-      return res.status(400).json({ error: result.message });
-    }
-    return res.json({ ok: true, message: result.message });
+    result = await verifySmtpConnection();
+  } else if (req.params.integration === "gemini") {
+    result = await testGeminiConnection();
+  } else if (req.params.integration === "turso") {
+    result = await testTursoConnection();
+  } else {
+    return res.status(400).json({ error: `Integração "${req.params.integration}" desconhecida.` });
   }
 
-  return res.status(501).json({
-    error: `Teste de conexão para "${req.params.integration}" ainda não implementado (Fase 6).`,
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+  return res.json({ ok: true, message: result.message });
+});
+
+/** GET /api/admin/settings/gemini/models — lista de modelos válidos hoje (ver geminiService.ts). */
+adminRouter.get("/settings/gemini/models", (_req, res) => {
+  return res.json({ models: GEMINI_MODELS, default: "gemini-2.5-flash" });
+});
+
+/**
+ * POST /api/admin/settings/email/send-test — envia um e-mail de
+ * teste de verdade (não só o handshake SMTP) para o próprio e-mail
+ * do admin logado, pra confirmar entrega ponta a ponta.
+ */
+adminRouter.post("/settings/email/send-test", async (req, res) => {
+  const db = getDb();
+  const userRow = await db.execute({ sql: "SELECT email FROM users WHERE id = ?", args: [req.user!.id] });
+  const to = (userRow.rows[0] as { email?: string } | undefined)?.email;
+  if (!to) {
+    return res.status(400).json({ error: "Não foi possível identificar seu e-mail." });
+  }
+
+  const email = testEmail();
+  const sent = await sendMail({ to, ...email }).catch((err) => {
+    console.error("[email] falha ao enviar e-mail de teste:", err);
+    return false;
+  });
+
+  await logAudit(db, req.user!.id, "admin_settings.send_test_email", to, req);
+
+  if (!sent) {
+    return res.status(400).json({ error: "SMTP não configurado, ou o envio falhou — confira as credenciais e tente 'Testar conexão' primeiro." });
+  }
+  return res.json({ ok: true, message: `E-mail de teste enviado para ${to}. Confira sua caixa de entrada (e o spam).` });
+});
+
+/**
+ * GET /api/admin/settings/security — configurações de segurança
+ * efetivas hoje. Só leitura: esses valores vêm de variáveis de
+ * ambiente (JWT_SECRET, AUTH_RATE_LIMIT_*, etc.) definidas na Vercel
+ * ou no .env local — mudar aqui exigiria redeploy de qualquer forma,
+ * então esta seção é só um painel de conferência, não um formulário.
+ */
+adminRouter.get("/settings/security", (_req, res) => {
+  return res.json({
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
+    cookieSameSite: process.env.COOKIE_SAMESITE ?? "lax",
+    authRateLimitWindowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS ?? 900000),
+    authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
+    credentialsEncryptionConfigured: Boolean(process.env.CREDENTIALS_ENCRYPTION_KEY),
+    nodeEnv: process.env.NODE_ENV ?? "development",
   });
 });
 

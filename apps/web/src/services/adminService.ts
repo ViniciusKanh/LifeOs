@@ -8,7 +8,18 @@ export const adminService = {
   removeSetting: (integration: AdminIntegration, keyName: string) =>
     api.delete<void>(`/admin/settings/${integration}/${encodeURIComponent(keyName)}`),
   testConnection: (integration: AdminIntegration) =>
-    api.post<{ error: string }>(`/admin/settings/${integration}/test`),
+    api.post<{ ok: boolean; message: string }>(`/admin/settings/${integration}/test`),
+  geminiModels: () => api.get<{ models: Array<{ id: string; label: string }>; default: string }>("/admin/settings/gemini/models"),
+  sendTestEmail: () => api.post<{ ok: boolean; message: string }>("/admin/settings/email/send-test"),
+  security: () =>
+    api.get<{
+      jwtExpiresIn: string;
+      cookieSameSite: string;
+      authRateLimitWindowMs: number;
+      authRateLimitMax: number;
+      credentialsEncryptionConfigured: boolean;
+      nodeEnv: string;
+    }>("/admin/settings/security"),
 
   listUsers: () => api.get<AdminUser[]>("/admin/users"),
   createUser: (input: { name: string; email: string; password: string; role?: "user" | "admin" }) =>
