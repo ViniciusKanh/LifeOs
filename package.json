@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "LifeOS — Transforme sua rotina em progresso.",
+  "type": "module",
   "workspaces": [
     "apps/web",
     "apps/api"
