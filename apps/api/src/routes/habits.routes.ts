@@ -224,6 +224,10 @@ habitsRouter.get("/stats", async (req, res) => {
       bestStreakMax: 0,
       categories: [],
       consistency: { days: [], daysWithAnyHabit: 0, ratePct: 0, changePct: null },
+      completedToday: 0,
+      completedYesterday: 0,
+      totalHabits: 0,
+      bestTimes: [],
     });
   }
 
@@ -316,11 +320,36 @@ habitsRouter.get("/stats", async (req, res) => {
   const secondRate = rateOf(secondHalf);
   const changePct = firstRate !== null && secondRate !== null && firstRate > 0 ? Math.round(((secondRate - firstRate) / firstRate) * 100) : null;
 
+  // Hábitos concluídos hoje/ontem — usados no delta do card "concluídos hoje".
+  const todayIso = todayCursor.toISOString().slice(0, 10);
+  const yesterdayIso = new Date(todayCursor.getTime() - 86_400_000).toISOString().slice(0, 10);
+  const completedToday = byDate.get(todayIso)?.size ?? 0;
+  const completedYesterday = byDate.get(yesterdayIso)?.size ?? 0;
+
+  // "Melhores horários" — distribuição real por hora do dia em que os
+  // check-ins foram registrados (habit_entries.created_at), últimos 30
+  // dias. Nunca inventado: reflete o horário em que o próprio usuário
+  // marcou o hábito como feito.
+  const timesResult = await db.execute({
+    sql: `SELECT created_at FROM habit_entries WHERE owner_id = ? AND entry_date >= date('now', '-29 days')`,
+    args: [req.user!.id],
+  });
+  const hourCounts = new Array(24).fill(0);
+  for (const row of timesResult.rows as unknown as Array<{ created_at: string }>) {
+    const hour = new Date(row.created_at.replace(" ", "T") + "Z").getUTCHours();
+    hourCounts[hour] += 1;
+  }
+  const bestTimes = hourCounts.map((count, hour) => ({ hour, count }));
+
   return res.json({
     currentStreakMax,
     bestStreakMax,
     categories,
     consistency: { days: dayList, daysWithAnyHabit, ratePct, changePct },
+    completedToday,
+    completedYesterday,
+    totalHabits: habits.length,
+    bestTimes,
   });
 });
 

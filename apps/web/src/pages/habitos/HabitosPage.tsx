@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import {
   Activity,
   BookOpen,
-  Calendar,
   CheckCircle2,
   Circle,
+  Clock,
   Flame,
   Heart,
   Pencil,
@@ -12,10 +12,15 @@ import {
   Sparkles,
   Target,
   Trash2,
+  TrendingUp,
+  Wand2,
   X,
   Zap,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis } from "recharts";
+import { Link } from "react-router-dom";
 import { useHabitEntriesRange, useHabits } from "@/hooks/useHabits";
+import { useHabitsInsight } from "@/hooks/useCopilot";
 import { Button, Card, Field, IconBadge, EmptyState } from "@/components/ui/primitives";
 import type { Habit } from "@/types";
 
@@ -33,18 +38,23 @@ const HABIT_CATEGORIES: Array<{ value: string; label: string; tone: "green" | "b
 const CATEGORY_BY_VALUE = new Map(HABIT_CATEGORIES.map((c) => [c.value, c]));
 const FALLBACK_CATEGORY = { label: "Geral", tone: "blue" as const, icon: Target };
 
-const TONE_BAR: Record<string, string> = {
-  green: "bg-cat-green",
-  blue: "bg-cat-blue",
-  purple: "bg-cat-purple",
-  amber: "bg-signal",
+const DONUT_COLORS: Record<string, string> = {
+  green: "#2E7D6B",
+  blue: "#3B6FE0",
+  purple: "#8B5CF6",
+  amber: "#C9821E",
 };
-const TONE_TEXT: Record<string, string> = {
-  green: "text-cat-green",
-  blue: "text-cat-blue",
-  purple: "text-cat-purple",
-  amber: "text-signal-deep",
-};
+
+/** Frases motivacionais fixas — usadas só como pano de fundo estético do card, nunca como dado analítico. */
+const FALLBACK_QUOTES = [
+  "Disciplina hoje, liberdade amanhã.",
+  "Cada pequeno hábito é um voto na pessoa que você quer se tornar.",
+  "Consistência vence intensidade.",
+  "Você não precisa ser perfeito, só precisa continuar.",
+];
+function fallbackQuoteOfTheDay() {
+  return FALLBACK_QUOTES[Math.floor(Date.now() / 86_400_000) % FALLBACK_QUOTES.length];
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -74,25 +84,55 @@ function currentWeekDates() {
   return days;
 }
 
+type FilterTab = "Todos" | "Hoje" | "Concluidos" | "EmRisco";
+
 export function HabitosPage() {
   const { habits, summaryByHabitId, stats, createHabit, updateHabit, removeHabit, checkIn } = useHabits();
+  const insight = useHabitsInsight();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string>("Todos");
+  const [filterTab, setFilterTab] = useState<FilterTab>("Todos");
   const today = todayStr();
   const week = useMemo(() => currentWeekDates(), []);
   const entriesByHabitId = useHabitEntriesRange(habits, week[0].iso, week[6].iso);
 
-  const categoriesPresent = useMemo(() => {
-    const set = new Set<string>();
-    habits.forEach((h) => set.add(h.category?.trim() || "Geral"));
-    return [...set];
-  }, [habits]);
+  const habitsWithStatus = useMemo(
+    () =>
+      habits.map((h) => {
+        const summary = summaryByHabitId.get(h.id);
+        const checkedInToday = summary?.checkedInToday ?? false;
+        const atRisk = !checkedInToday && (summary?.currentStreak ?? 0) > 0;
+        return { habit: h, summary, checkedInToday, atRisk };
+      }),
+    [habits, summaryByHabitId]
+  );
 
-  const filteredHabits = categoryFilter === "Todos" ? habits : habits.filter((h) => (h.category?.trim() || "Geral") === categoryFilter);
-
-  const completedToday = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
+  const completedToday = stats?.completedToday ?? habitsWithStatus.filter((h) => h.checkedInToday).length;
+  const completedYesterday = stats?.completedYesterday ?? null;
+  const completedDelta = completedYesterday !== null ? completedToday - completedYesterday : null;
+  const totalHabits = stats?.totalHabits ?? habits.length;
   const consistency = stats?.consistency;
+
+  const filteredHabits = useMemo(() => {
+    switch (filterTab) {
+      case "Hoje":
+        return habitsWithStatus.filter((h) => !h.checkedInToday);
+      case "Concluidos":
+        return habitsWithStatus.filter((h) => h.checkedInToday);
+      case "EmRisco":
+        return habitsWithStatus.filter((h) => h.atRisk);
+      default:
+        return habitsWithStatus;
+    }
+  }, [habitsWithStatus, filterTab]);
+
+  const tabCounts: Record<FilterTab, number> = {
+    Todos: habits.length,
+    Hoje: habitsWithStatus.filter((h) => !h.checkedInToday).length,
+    Concluidos: habitsWithStatus.filter((h) => h.checkedInToday).length,
+    EmRisco: habitsWithStatus.filter((h) => h.atRisk).length,
+  };
+  const TAB_LABEL: Record<FilterTab, string> = { Todos: "Todos", Hoje: "Hoje", Concluidos: "Concluídos", EmRisco: "Em risco" };
 
   // Heatmap agrupado em semanas (colunas), Seg→Dom (linhas) — a partir dos
   // dias reais retornados por /habits/stats.
@@ -101,7 +141,6 @@ export function HabitosPage() {
     if (days.length === 0) return [];
     const weeks: Array<typeof days> = [];
     let cursor = 0;
-    // Alinha a primeira semana ao dia da semana do primeiro dia disponível.
     const firstDow = new Date(`${days[0].date}T00:00:00`).getDay();
     const firstWeekLen = firstDow === 0 ? 1 : 8 - firstDow;
     weeks.push(days.slice(0, Math.min(firstWeekLen, days.length)));
@@ -120,6 +159,38 @@ export function HabitosPage() {
     if (ratio < 1) return "bg-cat-green/80";
     return "bg-cat-green";
   };
+
+  const donutData = useMemo(
+    () =>
+      (stats?.categories ?? []).map((c) => {
+        const meta = CATEGORY_BY_VALUE.get(c.category) ?? FALLBACK_CATEGORY;
+        return { name: meta.label, value: c.habitCount, color: DONUT_COLORS[meta.tone] };
+      }),
+    [stats]
+  );
+
+  // Horários de melhor desempenho — agrupa as 24h reais em faixas legíveis
+  // (manhã/tarde/noite/madrugada) a partir dos check-ins dos últimos 30 dias.
+  const bestTimesData = useMemo(() => {
+    const raw = stats?.bestTimes ?? [];
+    if (raw.length === 0) return { buckets: [], peakLabel: null as string | null };
+    const buckets = [
+      { label: "Madrugada", range: "0-5h", value: 0 },
+      { label: "Manhã", range: "6-11h", value: 0 },
+      { label: "Tarde", range: "12-17h", value: 0 },
+      { label: "Noite", range: "18-23h", value: 0 },
+    ];
+    for (const { hour, count } of raw) {
+      if (hour < 6) buckets[0].value += count;
+      else if (hour < 12) buckets[1].value += count;
+      else if (hour < 18) buckets[2].value += count;
+      else buckets[3].value += count;
+    }
+    const peakHourEntry = [...raw].sort((a, b) => b.count - a.count)[0];
+    const peakLabel = peakHourEntry && peakHourEntry.count > 0 ? `Pico às ${peakHourEntry.hour}h` : null;
+    return { buckets, peakLabel };
+  }, [stats]);
+  const hasBestTimesData = bestTimesData.buckets.some((b) => b.value > 0);
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
@@ -143,7 +214,7 @@ export function HabitosPage() {
       ) : (
         <>
           {/* Cartões de estatística */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <IconBadge icon={<Flame size={18} />} tone="amber" />
@@ -152,167 +223,221 @@ export function HabitosPage() {
                   <p className="text-xs text-slate leading-tight">Sequência atual</p>
                 </div>
               </div>
-              <p className="text-[11px] text-slate mt-2">Melhor sequência: {diasLabel(stats?.bestStreakMax ?? 0)}</p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <IconBadge icon={<Target size={18} />} tone="blue" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">
-                    {completedToday} / {habits.length}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xl font-semibold leading-tight">
+                      {completedToday} / {totalHabits}
+                    </p>
+                    {completedDelta !== null && completedDelta !== 0 && (
+                      <span className={`text-[11px] font-semibold ${completedDelta > 0 ? "text-growth" : "text-drop"}`}>
+                        {completedDelta > 0 ? "↑" : "↓"}{Math.abs(completedDelta)}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate leading-tight">Hábitos concluídos hoje</p>
                 </div>
               </div>
               <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-2">
-                <div className="h-full rounded-full bg-cat-blue" style={{ width: `${habits.length ? (completedToday / habits.length) * 100 : 0}%` }} />
+                <div className="h-full rounded-full bg-cat-blue" style={{ width: `${totalHabits ? (completedToday / totalHabits) * 100 : 0}%` }} />
               </div>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <IconBadge icon={<Activity size={18} />} tone="purple" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{habits.length}</p>
-                  <p className="text-xs text-slate leading-tight">Total de hábitos</p>
+                  <p className="text-xl font-semibold leading-tight">{totalHabits}</p>
+                  <p className="text-xs text-slate leading-tight">Hábitos ativos</p>
                 </div>
               </div>
-              <p className="text-[11px] text-slate mt-2">Ativos no momento</p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <IconBadge icon={<Calendar size={18} />} tone="teal" />
+                <IconBadge icon={<TrendingUp size={18} />} tone="teal" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{consistency?.ratePct ?? 0}%</p>
-                  <p className="text-xs text-slate leading-tight">Taxa de consistência</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xl font-semibold leading-tight">{consistency?.ratePct ?? 0}%</p>
+                    {consistency?.changePct !== null && consistency?.changePct !== undefined && consistency.changePct !== 0 && (
+                      <span className={`text-[11px] font-semibold ${consistency.changePct > 0 ? "text-growth" : "text-drop"}`}>
+                        {consistency.changePct > 0 ? "↑" : "↓"}{Math.abs(consistency.changePct)}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate leading-tight">Consistência (30 dias)</p>
                 </div>
               </div>
-              <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-2">
-                <div className="h-full rounded-full bg-cat-purple" style={{ width: `${consistency?.ratePct ?? 0}%` }} />
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <IconBadge icon={<Sparkles size={18} />} tone="pink" />
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold leading-tight">{diasLabel(stats?.bestStreakMax ?? 0)}</p>
+                  <p className="text-xs text-slate leading-tight">Melhor sequência</p>
+                </div>
               </div>
-              <p className="text-[11px] text-slate mt-1">Últimos 30 dias</p>
             </Card>
           </div>
 
           <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
-            {/* Coluna principal: tabela de hábitos + categorias */}
+            {/* Coluna principal: tabela de hábitos + categorias + horários */}
             <div className="space-y-4 min-w-0">
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm font-semibold">Meus hábitos</p>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {["Todos", ...categoriesPresent].map((cat) => {
-                    const count = cat === "Todos" ? habits.length : habits.filter((h) => (h.category?.trim() || "Geral") === cat).length;
-                    const active = categoryFilter === cat;
+                  {(["Todos", "Hoje", "Concluidos", "EmRisco"] as FilterTab[]).map((tab) => {
+                    const active = filterTab === tab;
                     return (
                       <button
-                        key={cat}
-                        onClick={() => setCategoryFilter(cat)}
+                        key={tab}
+                        onClick={() => setFilterTab(tab)}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                           active ? "bg-brand-500 text-white border-brand-500" : "border-paper-border dark:border-ink-border text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
                         }`}
                       >
-                        {cat} ({count})
+                        {TAB_LABEL[tab]} ({tabCounts[tab]})
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="overflow-x-auto">
-                  <div className="min-w-[560px]">
-                    <div className="grid gap-2 pb-2 border-b border-paper-border dark:border-ink-border" style={{ gridTemplateColumns: "1.6fr repeat(7, 34px) 70px 60px" }}>
-                      <span className="text-[11px] text-slate font-medium">Hábito</span>
-                      {week.map((d) => (
-                        <span key={d.iso} className="text-[10px] text-slate text-center">
-                          <span className="block capitalize">{d.weekday}</span>
-                          <span className="block">{d.dayNum}</span>
-                        </span>
-                      ))}
-                      <span className="text-[11px] text-slate font-medium text-center">Sequência</span>
-                      <span />
-                    </div>
-                    {filteredHabits.map((habit) => {
-                      const summary = summaryByHabitId.get(habit.id);
-                      const meta = CATEGORY_BY_VALUE.get(habit.category?.trim() ?? "") ?? FALLBACK_CATEGORY;
-                      const checkedDates = entriesByHabitId.get(habit.id) ?? new Set<string>();
-                      return (
-                        <div
-                          key={habit.id}
-                          className="grid items-center gap-2 py-2.5 border-b border-paper-border dark:border-ink-border last:border-0"
-                          style={{ gridTemplateColumns: "1.6fr repeat(7, 34px) 70px 60px" }}
-                        >
-                          <div className="min-w-0 flex items-center gap-2">
-                            <span className="text-base leading-none">{habit.icon || "•"}</span>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{habit.name}</p>
-                              <p className="text-[11px] text-slate truncate">{meta.label}</p>
+                {filteredHabits.length === 0 ? (
+                  <p className="text-xs text-slate py-6 text-center">Nenhum hábito nesse filtro.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[560px]">
+                      <div className="grid gap-2 pb-2 border-b border-paper-border dark:border-ink-border" style={{ gridTemplateColumns: "1.6fr repeat(7, 34px) 70px 60px" }}>
+                        <span className="text-[11px] text-slate font-medium">Hábito</span>
+                        {week.map((d) => (
+                          <span key={d.iso} className="text-[10px] text-slate text-center">
+                            <span className="block capitalize">{d.weekday}</span>
+                            <span className="block">{d.dayNum}</span>
+                          </span>
+                        ))}
+                        <span className="text-[11px] text-slate font-medium text-center">Sequência</span>
+                        <span />
+                      </div>
+                      {filteredHabits.map(({ habit, summary, atRisk }) => {
+                        const meta = CATEGORY_BY_VALUE.get(habit.category?.trim() ?? "") ?? FALLBACK_CATEGORY;
+                        const checkedDates = entriesByHabitId.get(habit.id) ?? new Set<string>();
+                        return (
+                          <div
+                            key={habit.id}
+                            className="grid items-center gap-2 py-2.5 border-b border-paper-border dark:border-ink-border last:border-0"
+                            style={{ gridTemplateColumns: "1.6fr repeat(7, 34px) 70px 60px" }}
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <span className="text-base leading-none">{habit.icon || "•"}</span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-sm font-medium truncate">{habit.name}</p>
+                                  {atRisk && (
+                                    <span className="shrink-0 text-[9px] font-semibold text-drop bg-drop/10 rounded-full px-1.5 py-0.5">Em risco</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate truncate">{meta.label}</p>
+                              </div>
+                            </div>
+                            {week.map((d) => {
+                              const done = checkedDates.has(d.iso);
+                              const isFuture = d.iso > today;
+                              return (
+                                <button
+                                  key={d.iso}
+                                  disabled={isFuture}
+                                  onClick={() => checkIn({ id: habit.id, entryDate: d.iso, count: done ? 0 : habit.target_count })}
+                                  className="w-7 h-7 mx-auto flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title={d.iso}
+                                >
+                                  {done ? <CheckCircle2 size={20} className="text-growth" /> : <Circle size={18} className="text-paper-border dark:text-ink-border" />}
+                                </button>
+                              );
+                            })}
+                            <div className="flex items-center justify-center gap-1 text-xs text-slate">
+                              <Flame size={12} className={summary?.currentStreak ? "text-signal" : ""} />
+                              {diasLabel(summary?.currentStreak ?? 0)}
+                            </div>
+                            <div className="flex items-center justify-center gap-2">
+                              <button onClick={() => setEditingHabit(habit)} className="text-slate hover:text-inherit">
+                                <Pencil size={13} />
+                              </button>
+                              <button onClick={() => removeHabit(habit.id)} className="text-slate hover:text-drop">
+                                <Trash2 size={13} />
+                              </button>
                             </div>
                           </div>
-                          {week.map((d) => {
-                            const done = checkedDates.has(d.iso);
-                            const isFuture = d.iso > today;
-                            return (
-                              <button
-                                key={d.iso}
-                                disabled={isFuture}
-                                onClick={() => checkIn({ id: habit.id, entryDate: d.iso, count: done ? 0 : habit.target_count })}
-                                className="w-7 h-7 mx-auto flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
-                                title={d.iso}
-                              >
-                                {done ? <CheckCircle2 size={20} className="text-growth" /> : <Circle size={18} className="text-paper-border dark:text-ink-border" />}
-                              </button>
-                            );
-                          })}
-                          <div className="flex items-center justify-center gap-1 text-xs text-slate">
-                            <Flame size={12} className={summary?.currentStreak ? "text-signal" : ""} />
-                            {diasLabel(summary?.currentStreak ?? 0)}
-                          </div>
-                          <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => setEditingHabit(habit)} className="text-slate hover:text-inherit">
-                              <Pencil size={13} />
-                            </button>
-                            <button onClick={() => removeHabit(habit.id)} className="text-slate hover:text-drop">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </Card>
-
-              <Card className="p-5">
-                <p className="text-sm font-semibold mb-4">Hábitos por categoria</p>
-                {stats && stats.categories.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {stats.categories.map((c) => {
-                      const meta = CATEGORY_BY_VALUE.get(c.category) ?? FALLBACK_CATEGORY;
-                      const Icon = meta.icon;
-                      return (
-                        <div key={c.category} className="rounded-xl border border-paper-border dark:border-ink-border p-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Icon size={14} className={TONE_TEXT[meta.tone]} />
-                            <p className="text-xs font-medium truncate">{meta.label}</p>
-                          </div>
-                          <p className="text-[11px] text-slate mb-1.5">
-                            {c.habitCount} {c.habitCount === 1 ? "hábito" : "hábitos"}
-                          </p>
-                          <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                            <div className={`h-full rounded-full ${TONE_BAR[meta.tone]}`} style={{ width: `${c.avgCompletionPct}%` }} />
-                          </div>
-                          <p className="text-[11px] text-slate mt-1">{c.avgCompletionPct}%</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate">Defina uma categoria para seus hábitos para ver o resumo por área.</p>
                 )}
               </Card>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="p-5">
+                  <p className="text-sm font-semibold mb-1">Hábitos por categoria</p>
+                  <p className="text-xs text-slate mb-3">Distribuição dos seus hábitos ativos.</p>
+                  {donutData.length > 0 ? (
+                    <div className="flex items-center gap-4">
+                      <div className="w-32 h-32 shrink-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={donutData} dataKey="value" nameKey="name" innerRadius={34} outerRadius={56} paddingAngle={2}>
+                              {donutData.map((d, i) => (
+                                <Cell key={i} fill={d.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ fontSize: 12 }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="space-y-2 min-w-0">
+                        {donutData.map((d) => (
+                          <div key={d.name} className="flex items-center gap-2 text-xs">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                            <span className="truncate">{d.name}</span>
+                            <span className="text-slate ml-auto">{d.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate">Defina uma categoria para seus hábitos para ver a distribuição.</p>
+                  )}
+                </Card>
+
+                <Card className="p-5">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm font-semibold">Melhores horários</p>
+                    {bestTimesData.peakLabel && (
+                      <span className="text-[10px] font-semibold text-cat-blue bg-cat-blue/10 rounded-full px-2 py-0.5 flex items-center gap-1">
+                        <Clock size={10} /> {bestTimesData.peakLabel}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate mb-3">Quando você mais registra seus check-ins (30 dias).</p>
+                  {hasBestTimesData ? (
+                    <div className="h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={bestTimesData.buckets}>
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v: number) => [`${v} check-ins`, ""]} />
+                          <Bar dataKey="value" fill="#3B6FE0" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate py-8 text-center">Ainda sem check-ins suficientes para identificar um padrão de horário.</p>
+                  )}
+                </Card>
+              </div>
             </div>
 
-            {/* Coluna lateral: heatmap de consistência + motivação */}
+            {/* Coluna lateral: heatmap de consistência + insight + motivação */}
             <div className="space-y-4">
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -320,15 +445,30 @@ export function HabitosPage() {
                   <span className="text-[11px] text-slate">Últimos 30 dias</span>
                 </div>
                 {heatmapWeeks.length > 0 ? (
-                  <div className="flex gap-1.5 overflow-x-auto pb-1">
-                    {heatmapWeeks.map((wk, wi) => (
-                      <div key={wi} className="flex flex-col gap-1.5">
-                        {wk.map((d) => (
-                          <div key={d.date} title={`${d.date}: ${d.completed}/${d.total}`} className={`w-4 h-4 rounded-sm ${heatmapColor(d.ratio)}`} />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {heatmapWeeks.map((wk, wi) => (
+                        <div key={wi} className="flex flex-col gap-1.5">
+                          {wk.map((d) => (
+                            <div key={d.date} title={`${d.date}: ${d.completed}/${d.total}`} className={`w-4 h-4 rounded-sm ${heatmapColor(d.ratio)}`} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                      {[
+                        { label: "Perfeito", cls: "bg-cat-green" },
+                        { label: "Muito bom", cls: "bg-cat-green/80" },
+                        { label: "Bom", cls: "bg-cat-green/55" },
+                        { label: "Parcial", cls: "bg-cat-green/25" },
+                        { label: "Nenhum", cls: "bg-paper-border dark:bg-ink-border" },
+                      ].map((l) => (
+                        <span key={l.label} className="flex items-center gap-1 text-[10px] text-slate">
+                          <span className={`w-2.5 h-2.5 rounded-sm ${l.cls}`} /> {l.label}
+                        </span>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <p className="text-xs text-slate">Sem check-ins registrados ainda.</p>
                 )}
@@ -347,6 +487,42 @@ export function HabitosPage() {
                     <p className="text-[11px] text-slate">dias no período de {consistency?.days.length ?? 30}</p>
                   </div>
                 </div>
+              </Card>
+
+              <Card className="p-5">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <IconBadge tone="pink" size={34} icon={<Sparkles size={15} />} />
+                  <div>
+                    <p className="text-sm font-semibold">Insights da sua jornada</p>
+                    <p className="text-xs text-slate">Análise da IA sobre sequências e consistência.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => insight.generate()}
+                  disabled={insight.isGenerating}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-paper-border dark:border-ink-border px-3.5 py-2 text-xs font-semibold hover:bg-paper dark:hover:bg-ink-overlay disabled:opacity-60 transition-colors"
+                >
+                  <Wand2 size={13} />
+                  {insight.isGenerating ? "Analisando..." : insight.text ? "Gerar outra análise" : "Analisar com IA"}
+                </button>
+
+                {insight.error ? (
+                  <p className="text-xs mt-3 bg-drop/10 text-drop rounded-xl px-4 py-3">
+                    {insight.error.message}
+                    {insight.error.status === 400 && (
+                      <>
+                        {" "}
+                        <Link to="/configuracoes" className="underline font-semibold">
+                          Ir para Configurações
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                ) : insight.text ? (
+                  <p className="text-sm leading-relaxed mt-3 bg-cat-pink/5 border border-cat-pink/15 rounded-xl px-4 py-3">{insight.text}</p>
+                ) : (
+                  <p className="text-xs italic text-slate mt-3">{fallbackQuoteOfTheDay()}</p>
+                )}
               </Card>
 
               <Card className="p-5 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-0">

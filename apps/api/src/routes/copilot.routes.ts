@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { generateDashboardInsight, generateHealthInsight, generateEducationInsight } from "../services/copilotService.js";
+import { generateDashboardInsight, generateHealthInsight, generateEducationInsight, generateHabitsInsight } from "../services/copilotService.js";
 
 export const copilotRouter = Router();
 
@@ -46,6 +46,19 @@ copilotRouter.post("/education-insight", rateLimit({ windowMs: 10 * 60 * 1000, m
     return res.status(400).json({ error: "educationId é obrigatório." });
   }
   const result = await generateEducationInsight(req.user!.id, educationId);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+  return res.json({ text: result.text });
+});
+
+/**
+ * POST /api/copilot/habits-insight — mesma ideia, focado em sequências,
+ * consistência de 30 dias, hábitos em risco de quebrar a sequência hoje
+ * e horário de pico real dos check-ins.
+ */
+copilotRouter.post("/habits-insight", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), async (req, res) => {
+  const result = await generateHabitsInsight(req.user!.id);
   if (!result.ok) {
     return res.status(400).json({ error: result.message });
   }

@@ -34,3 +34,14 @@ export function useEducationInsight() {
     error: mutation.error as ApiError | null,
   };
 }
+
+/** Mesma ideia, focado em sequências, consistência e horários reais de check-in — usado na tela de Hábitos. */
+export function useHabitsInsight() {
+  const mutation = useMutation({ mutationFn: copilotService.generateHabitsInsight });
+  return {
+    generate: mutation.mutateAsync,
+    isGenerating: mutation.isPending,
+    text: mutation.data?.text ?? null,
+    error: mutation.error as ApiError | null,
+  };
+}

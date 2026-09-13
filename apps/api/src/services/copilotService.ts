@@ -334,3 +334,145 @@ export async function generateEducationInsight(
   }
   return { ok: true, text: result.text };
 }
+
+/**
+ * Insight de hábitos — mesmo princípio, contexto restrito a sequências,
+ * consistência dos últimos 30 dias, categorias e horários reais de
+ * check-in, para o Gemini apontar um padrão concreto (ex.: hábito em
+ * risco de quebrar a sequência, ou horário do dia mais consistente)
+ * em vez de um resumo genérico de "continue assim".
+ */
+async function buildHabitsContext(ownerId: string) {
+  const db = getDb();
+
+  const habitsResult = await db.execute({
+    sql: "SELECT id, name, category, target_count FROM habits WHERE owner_id = ? AND archived_at IS NULL ORDER BY created_at ASC",
+    args: [ownerId],
+  });
+  const habits = habitsResult.rows as unknown as Array<{ id: string; name: string; category: string | null; target_count: number }>;
+  if (habits.length === 0) return null;
+
+  const allEntriesResult = await db.execute({
+    sql: `SELECT he.habit_id, he.entry_date, he.count, he.created_at FROM habit_entries he
+          WHERE he.owner_id = ? ORDER BY he.entry_date ASC`,
+    args: [ownerId],
+  });
+  const allEntries = allEntriesResult.rows as unknown as Array<{ habit_id: string; entry_date: string; count: number; created_at: string }>;
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const yesterdayIso = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+  const perHabit = habits.map((h) => {
+    const dates = allEntries.filter((e) => e.habit_id === h.id && e.count >= h.target_count).map((e) => e.entry_date);
+    const set = new Set(dates);
+    const { current, best } = computeStreaksLocal(dates);
+    const checkedToday = set.has(todayIso);
+    const atRisk = !checkedToday && current > 0;
+    return { name: h.name, category: h.category?.trim() || "Geral", currentStreak: current, bestStreak: best, checkedToday, atRisk };
+  });
+
+  const completedToday = perHabit.filter((h) => h.checkedToday).length;
+  const completedYesterday = allEntries.filter((e) => e.entry_date === yesterdayIso).length > 0
+    ? new Set(allEntries.filter((e) => e.entry_date === yesterdayIso).map((e) => e.habit_id)).size
+    : 0;
+  const habitsAtRisk = perHabit.filter((h) => h.atRisk);
+  const bestStreakOverall = Math.max(0, ...perHabit.map((h) => h.bestStreak));
+  const currentStreakOverall = Math.max(0, ...perHabit.map((h) => h.currentStreak));
+
+  const last30Entries = allEntries.filter((e) => e.entry_date >= new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10));
+  const hourCounts = new Array(24).fill(0);
+  for (const e of last30Entries) {
+    const hour = new Date(e.created_at.replace(" ", "T") + "Z").getUTCHours();
+    hourCounts[hour] += 1;
+  }
+  const peakHour = hourCounts.reduce((best, count, hour) => (count > hourCounts[best] ? hour : best), 0);
+  const hasTimeData = hourCounts.some((c) => c > 0);
+
+  const totalPossible30d = habits.length * 30;
+  const completed30d = last30Entries.length;
+  const ratePct30d = totalPossible30d > 0 ? Math.round((completed30d / totalPossible30d) * 100) : 0;
+
+  return {
+    totalHabits: habits.length,
+    completedToday,
+    completedYesterday,
+    currentStreakOverall,
+    bestStreakOverall,
+    ratePct30d,
+    habitsAtRisk: habitsAtRisk.map((h) => ({ name: h.name, currentStreak: h.currentStreak })),
+    peakHour: hasTimeData ? peakHour : null,
+  };
+}
+
+function computeStreaksLocal(entryDates: string[]): { current: number; best: number } {
+  const dates = new Set(entryDates);
+  let best = 0;
+  let running = 0;
+  const sorted = [...dates].sort();
+  let prev: string | null = null;
+  for (const date of sorted) {
+    if (prev) {
+      const gapDays = Math.round((Date.parse(date) - Date.parse(prev)) / 86_400_000);
+      running = gapDays === 1 ? running + 1 : 1;
+    } else {
+      running = 1;
+    }
+    best = Math.max(best, running);
+    prev = date;
+  }
+  let current = 0;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const cursor = new Date(today);
+  if (!dates.has(cursor.toISOString().slice(0, 10))) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  while (dates.has(cursor.toISOString().slice(0, 10))) {
+    current += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return { current, best };
+}
+
+function buildHabitsPrompt(ctx: NonNullable<Awaited<ReturnType<typeof buildHabitsContext>>>): string {
+  const lines = [
+    `Hábitos ativos: ${ctx.totalHabits}.`,
+    `Concluídos hoje: ${ctx.completedToday} de ${ctx.totalHabits} (ontem: ${ctx.completedYesterday}).`,
+    `Melhor sequência ativa entre os hábitos: ${ctx.currentStreakOverall} dia(s). Recorde histórico: ${ctx.bestStreakOverall} dia(s).`,
+    `Consistência nos últimos 30 dias: ${ctx.ratePct30d}%.`,
+    ctx.habitsAtRisk.length > 0
+      ? `Hábitos em risco de perder a sequência hoje (ainda não concluídos, com sequência ativa): ${ctx.habitsAtRisk.map((h) => `"${h.name}" (${h.currentStreak}d)`).join(", ")}.`
+      : "Nenhum hábito com sequência ativa em risco hoje.",
+    ctx.peakHour !== null
+      ? `Horário do dia com mais check-ins registrados: por volta das ${ctx.peakHour}h.`
+      : "Ainda sem dados suficientes de horário dos check-ins.",
+  ];
+
+  return [
+    "Você é o LifeOS Copilot, especializado em hábitos e consistência. Com base SOMENTE nos dados reais abaixo (nunca invente hábitos, sequências ou horários que não estejam listados), escreva um insight curto em português do Brasil.",
+    "",
+    "Dados de hábitos do usuário:",
+    ...lines.map((l) => `- ${l}`),
+    "",
+    "Regras: no máximo 3 frases (até ~65 palavras); se houver hábito em risco, priorize alertar sobre ele citando o nome e a sequência; senão, destaque a consistência de 30 dias ou o horário de pico; cite pelo menos um número real; termine com UMA sugestão prática para hoje; nunca invente conquistas ou prometa resultados.",
+  ].join("\n");
+}
+
+export async function generateHabitsInsight(ownerId: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, message: "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
+  }
+
+  const ctx = await buildHabitsContext(ownerId);
+  if (!ctx) {
+    return { ok: false, message: "Cadastre pelo menos um hábito para gerar uma análise." };
+  }
+  const prompt = buildHabitsPrompt(ctx);
+  const result = await generateText(prompt, config);
+
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return { ok: true, text: result.text };
+}

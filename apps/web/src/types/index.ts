@@ -326,6 +326,10 @@ export interface HabitStats {
     ratePct: number;
     changePct: number | null;
   };
+  completedToday: number;
+  completedYesterday: number;
+  totalHabits: number;
+  bestTimes: Array<{ hour: number; count: number }>;
 }
 
 /* ------------------------------- Metas ------------------------------- */
