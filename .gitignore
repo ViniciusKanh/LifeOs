@@ -9,3 +9,5 @@ apps/api/*.db
 apps/api/*.db-journal
 apps/api/*.db-wal
 apps/api/*.db-shm
+
+.vercel
