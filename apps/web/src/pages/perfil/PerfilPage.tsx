@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useTheme } from "@/hooks/useTheme";
-import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
+import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { api } from "@/services/api";
 
@@ -141,8 +141,7 @@ export function PerfilPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
-      <p className="font-display font-bold text-2xl">Meu perfil</p>
-      <p className="text-sm text-slate mt-0.5 mb-5">Gerencie suas informações pessoais e preferências da sua conta LifeOS.</p>
+      <PageHeader icon={<User size={20} />} title="Meu perfil" subtitle="Gerencie suas informações pessoais e preferências da sua conta LifeOS." />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
         <div className="space-y-4">
@@ -164,14 +163,16 @@ export function PerfilPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center bg-paper dark:bg-ink border border-paper-border dark:border-ink-border"
+                  className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center bg-gradient-to-br from-brand-500 to-signal p-[2.5px]"
                   title="Trocar foto"
                 >
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt={user.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <User size={28} className="text-slate" />
-                  )}
+                  <span className="w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-paper dark:bg-ink">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt={user.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={28} className="text-slate" />
+                    )}
+                  </span>
                 </button>
                 <button
                   type="button"

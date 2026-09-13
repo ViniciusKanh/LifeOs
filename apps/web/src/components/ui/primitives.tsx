@@ -182,3 +182,84 @@ export function IconBadge({
     </span>
   );
 }
+
+const STAT_BAR_TONE: Record<string, string> = {
+  blue: "bg-cat-blue",
+  purple: "bg-cat-purple",
+  green: "bg-cat-green",
+  pink: "bg-cat-pink",
+  teal: "bg-cat-teal",
+  amber: "bg-signal",
+};
+
+/**
+ * Cartão de indicador (número grande + barra de progresso opcional),
+ * usado no topo de quase toda tela do app (Hoje, Dashboard, Tarefas,
+ * Biblioteca, Metas, Foco...). Extraído aqui pra evitar reimplementar
+ * o mesmo cartão em cada página (era duplicado em Hoje e Dashboard).
+ */
+export function StatTile({
+  icon,
+  label,
+  value,
+  tone,
+  progressPct,
+  caption,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: "blue" | "purple" | "green" | "pink" | "teal" | "amber";
+  progressPct?: number;
+  caption?: string;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2.5 mb-2.5">
+        <IconBadge tone={tone} icon={icon} size={36} />
+        <span className="text-xs text-slate leading-tight">{label}</span>
+      </div>
+      <p className="font-display font-bold text-xl leading-none">{value}</p>
+      {progressPct !== undefined && (
+        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
+          <div className={clsx("h-full rounded-full", STAT_BAR_TONE[tone])} style={{ width: `${Math.min(progressPct, 100)}%` }} />
+        </div>
+      )}
+      {caption && <p className="text-[11px] text-slate mt-1.5">{caption}</p>}
+    </Card>
+  );
+}
+
+/**
+ * Cabeçalho padrão de página: título em display font + subtítulo, com
+ * um ícone opcional num badge com leve gradiente — mesmo padrão visual
+ * em todas as telas principais do app.
+ */
+export function PageHeader({
+  icon,
+  title,
+  subtitle,
+  actions,
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
+      <div className="flex items-center gap-3">
+        {icon && (
+          <span className="hidden sm:inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500/15 to-signal/15 text-brand-600 dark:text-brand-400 shrink-0">
+            {icon}
+          </span>
+        )}
+        <div>
+          <p className="font-display font-bold text-2xl">{title}</p>
+          {subtitle && <p className="text-sm text-slate mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
+    </div>
+  );
+}

@@ -4,7 +4,7 @@ import { ArrowLeft, Plus, Search, ShieldCheck, Trash2, User as UserIcon, Users }
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminUsers } from "@/hooks/useAdmin";
 import { NovoUsuarioModal } from "@/components/admin/NovoUsuarioModal";
-import { Button, Card, IconBadge } from "@/components/ui/primitives";
+import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
@@ -33,17 +33,20 @@ export function AdminUsuariosPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <Link to="/configuracoes" className="inline-flex items-center gap-1.5 text-xs text-slate hover:underline mb-1.5">
-            <ArrowLeft size={13} /> Configurações
-          </Link>
-          <p className="font-display font-semibold text-2xl">Usuários</p>
-          <p className="text-sm text-slate mt-1">Veja e gerencie todas as contas cadastradas no LifeOS.</p>
-        </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <Plus size={14} /> Novo usuário
-        </Button>
+      <div>
+        <Link to="/configuracoes" className="inline-flex items-center gap-1.5 text-xs text-slate hover:underline mb-1.5">
+          <ArrowLeft size={13} /> Configurações
+        </Link>
+        <PageHeader
+          icon={<Users size={20} />}
+          title="Usuários"
+          subtitle="Veja e gerencie todas as contas cadastradas no LifeOS."
+          actions={
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus size={14} /> Novo usuário
+            </Button>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

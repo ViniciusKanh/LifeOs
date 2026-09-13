@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useGoals } from "@/hooks/useGoals";
-import { Button, Card, Field, IconBadge, EmptyState } from "@/components/ui/primitives";
+import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/components/ui/primitives";
 import type { Goal, GoalKind, GoalPeriod } from "@/types";
 
 function goalProgressPct(goal: Goal): number {
@@ -81,15 +81,16 @@ export function MetasPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <p className="font-display font-semibold text-2xl">Metas</p>
-          <p className="text-sm text-slate mt-1">Transforme planos em conquistas. Metas claras, progresso real.</p>
-        </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <Plus size={14} /> Nova meta
-        </Button>
-      </div>
+      <PageHeader
+        icon={<Flag size={20} />}
+        title="Metas"
+        subtitle="Transforme planos em conquistas. Metas claras, progresso real."
+        actions={
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus size={14} /> Nova meta
+          </Button>
+        }
+      />
 
       {goals.length === 0 ? (
         <EmptyState

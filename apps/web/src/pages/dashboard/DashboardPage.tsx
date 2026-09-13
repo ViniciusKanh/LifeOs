@@ -39,7 +39,7 @@ import { useFocus } from "@/hooks/useFocus";
 import { useBooks } from "@/hooks/useBooks";
 import { useGoals } from "@/hooks/useGoals";
 import { useDailyInsight } from "@/hooks/useCopilot";
-import { Card, IconBadge } from "@/components/ui/primitives";
+import { Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import type { TimelineEvent } from "@/types";
 
 const DIMENSION_LABELS: Record<string, string> = {
@@ -694,39 +694,3 @@ function ExplainRow({
   );
 }
 
-function StatTile({
-  icon,
-  label,
-  value,
-  tone,
-  progressPct,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone: "blue" | "purple" | "green" | "pink" | "teal" | "amber";
-  progressPct?: number;
-}) {
-  const barTone: Record<string, string> = {
-    blue: "bg-cat-blue",
-    purple: "bg-cat-purple",
-    green: "bg-cat-green",
-    pink: "bg-cat-pink",
-    teal: "bg-cat-teal",
-    amber: "bg-signal",
-  };
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <IconBadge tone={tone} icon={icon} size={36} />
-        <span className="text-xs text-slate leading-tight">{label}</span>
-      </div>
-      <p className="font-display font-bold text-xl leading-none">{value}</p>
-      {progressPct !== undefined && (
-        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
-          <div className={`h-full rounded-full ${barTone[tone]}`} style={{ width: `${Math.min(progressPct, 100)}%` }} />
-        </div>
-      )}
-    </Card>
-  );
-}

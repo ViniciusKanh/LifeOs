@@ -24,7 +24,7 @@ import { useHealthSummary, useHealth } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
 import { useTimeline } from "@/hooks/useAnalytics";
 import { useCopilotInsight } from "@/hooks/useCopilot";
-import { Button, Card, IconBadge } from "@/components/ui/primitives";
+import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import type { Task, TimelineEvent } from "@/types";
 
@@ -417,51 +417,3 @@ function PriorityBadge({ priority }: { priority: Task["priority"] }) {
   return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${PRIORITY_TONE[priority]}`}>{priority}</span>;
 }
 
-function StatTile({
-  icon,
-  label,
-  value,
-  tone,
-  progressPct,
-  caption,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone: "blue" | "purple" | "green" | "pink" | "teal" | "amber";
-  progressPct?: number;
-  caption?: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <IconBadge tone={tone} icon={icon} size={36} />
-        <span className="text-xs text-slate">{label}</span>
-      </div>
-      <p className="font-display font-bold text-lg leading-none">{value}</p>
-      {progressPct !== undefined ? (
-        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
-          <div
-            className={`h-full rounded-full ${
-              tone === "blue"
-                ? "bg-cat-blue"
-                : tone === "purple"
-                ? "bg-cat-purple"
-                : tone === "green"
-                ? "bg-cat-green"
-                : tone === "pink"
-                ? "bg-cat-pink"
-                : tone === "teal"
-                ? "bg-cat-teal"
-                : "bg-signal"
-            }`}
-            style={{ width: `${Math.min(progressPct, 100)}%` }}
-          />
-        </div>
-      ) : (
-        <div className="h-1.5 mt-3" />
-      )}
-      {caption && <p className="text-[11px] text-slate mt-1.5">{caption}</p>}
-    </Card>
-  );
-}

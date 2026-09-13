@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { LayoutGrid, List, Plus, Search, ChevronDown } from "lucide-react";
+import { LayoutGrid, List, Plus, Search, ChevronDown, ListChecks, Flame, CheckCircle2, Clock } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
-import { Button } from "@/components/ui/primitives";
+import { Button, PageHeader, StatTile } from "@/components/ui/primitives";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
@@ -31,6 +31,10 @@ export function TarefasPage() {
   }, [tasks, priorityFilter, search]);
 
   const doneCount = filtered.filter((t) => t.status === "Concluído").length;
+  const highCount = tasks.filter((t) => t.priority === "Alta" && t.status !== "Concluído").length;
+  const inProgressCount = tasks.filter((t) => t.status === "Em Andamento").length;
+  const totalOpen = tasks.filter((t) => t.status !== "Concluído").length;
+  const donePct = tasks.length > 0 ? Math.round((tasks.filter((t) => t.status === "Concluído").length / tasks.length) * 100) : 0;
   const visible = useMemo(() => {
     if (showAllDone || doneCount <= DONE_LIMIT) return filtered;
     const hiddenIds = new Set(
@@ -56,14 +60,27 @@ export function TarefasPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
-      <div className="flex items-center justify-between mb-1 max-w-none gap-3 flex-wrap">
-        <div>
-          <p className="font-display font-bold text-2xl">Tarefas</p>
-          <p className="text-sm text-slate mt-0.5">Organize suas tarefas e mantenha o foco no que realmente importa.</p>
-        </div>
+      <PageHeader
+        icon={<ListChecks size={20} />}
+        title="Tarefas"
+        subtitle="Organize suas tarefas e mantenha o foco no que realmente importa."
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <StatTile tone="blue" icon={<ListChecks size={18} />} label="Em aberto" value={String(totalOpen)} />
+        <StatTile tone="amber" icon={<Flame size={18} />} label="Prioridade alta" value={String(highCount)} />
+        <StatTile tone="purple" icon={<Clock size={18} />} label="Em andamento" value={String(inProgressCount)} />
+        <StatTile
+          tone="green"
+          icon={<CheckCircle2 size={18} />}
+          label="Concluídas"
+          value={String(doneCount)}
+          progressPct={donePct}
+          caption={`${donePct}% do total`}
+        />
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap mt-5 mb-5">
+      <div className="flex items-center gap-2 flex-wrap mb-5">
         <div className="flex items-center rounded-xl border border-paper-border dark:border-ink-border p-1 bg-paper-raised dark:bg-ink-raised">
           <button
             onClick={() => setView("quadro")}
@@ -141,20 +158,37 @@ export function TarefasPage() {
           )}
         />
       ) : (
-        <div className="space-y-1.5 max-w-3xl">
+        <div className="space-y-2 max-w-3xl">
           {filtered.length === 0 ? (
             <p className="text-sm text-slate">Nenhuma tarefa encontrada.</p>
           ) : (
-            filtered.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => openEdit(t)}
-                className="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border hover:border-brand-500/50 transition-colors"
-              >
-                <span className={`text-sm flex-1 truncate ${t.status === "Concluído" ? "line-through text-slate" : ""}`}>{t.title}</span>
-                <span className="text-xs text-slate shrink-0">{t.status}</span>
-              </button>
-            ))
+            filtered.map((t) => {
+              const priorityAccent =
+                t.priority === "Alta" ? "bg-drop" : t.priority === "Média" ? "bg-signal" : "bg-cat-teal";
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => openEdit(t)}
+                  className="w-full flex items-center gap-3 rounded-xl pl-3 pr-4 py-3 text-left bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border hover:border-brand-500/50 hover:shadow-card transition-all"
+                >
+                  <span className={`w-1 self-stretch rounded-full shrink-0 ${priorityAccent}`} />
+                  {t.status === "Concluído" ? (
+                    <CheckCircle2 size={16} className="text-growth shrink-0" />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border-2 border-paper-border dark:border-ink-border shrink-0" />
+                  )}
+                  <span className={`text-sm flex-1 truncate ${t.status === "Concluído" ? "line-through text-slate" : ""}`}>{t.title}</span>
+                  {t.due_date && (
+                    <span className="text-[11px] text-slate shrink-0 hidden sm:inline">
+                      {new Date(`${t.due_date.slice(0, 10)}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  )}
+                  <span className="text-[11px] font-medium text-slate shrink-0 rounded-full px-2 py-0.5 bg-paper dark:bg-ink border border-paper-border dark:border-ink-border">
+                    {t.status}
+                  </span>
+                </button>
+              );
+            })
           )}
         </div>
       )}

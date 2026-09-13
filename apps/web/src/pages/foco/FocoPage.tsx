@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Square, Timer as TimerIcon, Coffee, Lightbulb, History, ChevronDown } from "lucide-react";
 import { useFocus } from "@/hooks/useFocus";
 import { useTasks } from "@/hooks/useTasks";
-import { Button, Card, IconBadge } from "@/components/ui/primitives";
+import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
 
 function formatMinutes(min: number) {
   const h = Math.floor(min / 60);
@@ -88,8 +88,11 @@ export function FocoPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
-      <p className="font-display font-bold text-2xl mb-1">Focus Mode</p>
-      <p className="text-sm text-slate mb-6">Concentre-se em uma coisa de cada vez e acompanhe seu ritmo de foco.</p>
+      <PageHeader
+        icon={<TimerIcon size={20} />}
+        title="Focus Mode"
+        subtitle="Concentre-se em uma coisa de cada vez e acompanhe seu ritmo de foco."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         <div className="space-y-4">
@@ -115,7 +118,11 @@ export function FocoPage() {
               </div>
             )}
 
-            <div className="relative w-[220px] h-[220px] flex items-center justify-center mb-6">
+            <div
+              className={`relative w-[220px] h-[220px] flex items-center justify-center mb-6 rounded-full transition-shadow duration-700 ${
+                activeSession ? "shadow-glow-signal" : ""
+              }`}
+            >
               <svg width={220} height={220} className="absolute inset-0 -rotate-90">
                 <circle cx={110} cy={110} r={RING_RADIUS} fill="none" strokeWidth={10} className="stroke-paper dark:stroke-ink" />
                 <circle

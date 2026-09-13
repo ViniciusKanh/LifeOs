@@ -15,7 +15,7 @@ import {
   Bookmark,
 } from "lucide-react";
 import { useBooks, useIsbnLookup } from "@/hooks/useBooks";
-import { Button, Card, EmptyState, Field, IconBadge } from "@/components/ui/primitives";
+import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import type { BookCreateInput } from "@/services/libraryService";
 import type { Book, BookLookupResult, BookStatus } from "@/types";
 
@@ -118,22 +118,23 @@ export function BibliotecaPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
-      <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
-        <div>
-          <p className="font-display font-bold text-2xl">Biblioteca</p>
-          <p className="text-sm text-slate mt-0.5">Seus livros, ideias e aprendizados em um só lugar.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setModal("manual")}>
-            <Plus size={15} /> Manual
-          </Button>
-          <Button onClick={() => setModal("isbn")}>
-            <ScanLine size={15} /> Adicionar por ISBN
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        icon={<BookOpen size={20} />}
+        title="Biblioteca"
+        subtitle="Seus livros, ideias e aprendizados em um só lugar."
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setModal("manual")}>
+              <Plus size={15} /> Manual
+            </Button>
+            <Button onClick={() => setModal("isbn")}>
+              <ScanLine size={15} /> Adicionar por ISBN
+            </Button>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 mt-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-5">
             <div className="flex gap-1.5 flex-wrap">
@@ -212,8 +213,8 @@ export function BibliotecaPage() {
                 const pct = progressPct(book);
                 return (
                   <Link key={book.id} to={`/biblioteca/${book.id}`}>
-                    <Card className="p-3 h-full flex flex-col hover:border-brand-500/50 transition-colors">
-                      <div className="aspect-[2/3] rounded-lg overflow-hidden mb-2 flex items-center justify-center bg-paper dark:bg-ink">
+                    <Card className="p-3 h-full flex flex-col hover:border-brand-500/50 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                      <div className="aspect-[2/3] rounded-lg overflow-hidden mb-2 flex items-center justify-center bg-gradient-to-br from-brand-500/10 to-signal/10 dark:from-brand-500/15 dark:to-signal/15">
                         {book.cover_url ? (
                           <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
                         ) : (
@@ -337,20 +338,20 @@ export function BibliotecaPage() {
           <Card className="p-4">
             <p className="text-sm font-semibold mb-3">Minha biblioteca</p>
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="rounded-xl p-2.5 bg-paper dark:bg-ink">
-                <p className="font-display font-semibold text-lg">{stats.total}</p>
+              <div className="rounded-xl p-2.5 bg-cat-blue/10">
+                <p className="font-display font-semibold text-lg text-cat-blue">{stats.total}</p>
                 <p className="text-[11px] text-slate">Livros no total</p>
               </div>
-              <div className="rounded-xl p-2.5 bg-paper dark:bg-ink">
-                <p className="font-display font-semibold text-lg">{stats.lendo}</p>
+              <div className="rounded-xl p-2.5 bg-growth/10">
+                <p className="font-display font-semibold text-lg text-growth">{stats.lendo}</p>
                 <p className="text-[11px] text-slate">Lendo</p>
               </div>
-              <div className="rounded-xl p-2.5 bg-paper dark:bg-ink">
-                <p className="font-display font-semibold text-lg">{stats.queroLer}</p>
+              <div className="rounded-xl p-2.5 bg-signal/10">
+                <p className="font-display font-semibold text-lg text-signal-deep">{stats.queroLer}</p>
                 <p className="text-[11px] text-slate">Quero ler</p>
               </div>
-              <div className="rounded-xl p-2.5 bg-paper dark:bg-ink">
-                <p className="font-display font-semibold text-lg">{stats.concluido}</p>
+              <div className="rounded-xl p-2.5 bg-brand-500/10">
+                <p className="font-display font-semibold text-lg text-brand-600 dark:text-brand-400">{stats.concluido}</p>
                 <p className="text-[11px] text-slate">Concluído</p>
               </div>
             </div>

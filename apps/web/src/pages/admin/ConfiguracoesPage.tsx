@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAdminSettings, useAdminUsers, useGeminiModels, useSecurityInfo } from "@/hooks/useAdmin";
 import { adminService } from "@/services/adminService";
 import { NovoUsuarioModal } from "@/components/admin/NovoUsuarioModal";
-import { Button, Card } from "@/components/ui/primitives";
+import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
 import type { AdminIntegration, AdminSetting } from "@/types";
 
 function findSetting(settings: AdminSetting[], integration: AdminIntegration, keyName: string) {
@@ -238,10 +238,10 @@ export function ConfiguracoesPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-3xl mx-auto space-y-4">
-      <p className="font-display font-medium text-2xl mb-2">Configurações</p>
+      <PageHeader icon={<ShieldCheck size={20} />} title="Configurações" subtitle="Integrações, segurança e administração do LifeOS." />
 
       <SectionCard
-        icon={<KeyRound size={16} className="text-slate" />}
+        icon={<IconBadge tone="purple" size={30} icon={<KeyRound size={14} />} />}
         title="Gemini API"
         description="Chave usada pelo LifeOS Copilot (recursos de IA). Fica criptografada no banco — nunca é devolvida em texto puro."
       >
@@ -261,7 +261,7 @@ export function ConfiguracoesPage() {
       </SectionCard>
 
       <SectionCard
-        icon={<KeyRound size={16} className="text-slate" />}
+        icon={<IconBadge tone="blue" size={30} icon={<KeyRound size={14} />} />}
         title="Banco de dados (Turso)"
         description="Usado apenas como referência/rotação de credenciais aqui na UI — a conexão real da API ainda é feita pelas variáveis de ambiente do servidor (.env)."
       >
@@ -287,7 +287,7 @@ export function ConfiguracoesPage() {
       </SectionCard>
 
       <SectionCard
-        icon={<Mail size={16} className="text-slate" />}
+        icon={<IconBadge tone="green" size={30} icon={<Mail size={14} />} />}
         title="E-mail (Gmail) para cadastro, validação e recuperação de senha"
         description="Use um app password do Gmail (não sua senha normal): Conta Google → Segurança → Verificação em duas etapas → Senhas de app. Este e-mail envia a mensagem de boas-vindas no cadastro, o link de redefinição de senha e o aviso de troca de senha."
       >
@@ -334,7 +334,7 @@ export function ConfiguracoesPage() {
       </SectionCard>
 
       <SectionCard
-        icon={<ShieldCheck size={16} className="text-slate" />}
+        icon={<IconBadge tone="amber" size={30} icon={<ShieldCheck size={14} />} />}
         title="Segurança"
         description="Configurações efetivas de sessão, cookies e limite de tentativas de login — só leitura aqui."
       >
