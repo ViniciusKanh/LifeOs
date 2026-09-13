@@ -84,6 +84,47 @@ export const Field = React.forwardRef<
   );
 });
 
+/**
+ * Variante do Field com um ícone fixo à esquerda (usada em
+ * Login/Cadastro). Mesma lógica de forwardRef do Field — sem isso o
+ * react-hook-form não enxerga o valor digitado (ver comentário acima).
+ */
+export const IconField = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string; icon: React.ReactNode }
+>(function IconField({ label, error, icon, className, ...props }, ref) {
+  const id = React.useId();
+  return (
+    <div>
+      {label && (
+        <label htmlFor={id} className="text-xs text-slate">
+          {label}
+        </label>
+      )}
+      <div className="relative mt-1.5">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate">{icon}</span>
+        <input
+          id={id}
+          ref={ref}
+          className={clsx(
+            "w-full rounded-xl pl-10 pr-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border transition-colors focus:border-brand-500",
+            error ? "border-drop" : "border-paper-border dark:border-ink-border",
+            className
+          )}
+          aria-invalid={!!error}
+          aria-describedby={error ? `${id}-error` : undefined}
+          {...props}
+        />
+      </div>
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-xs text-drop">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+});
+
 export function EmptyState({
   title,
   description,

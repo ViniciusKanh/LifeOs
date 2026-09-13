@@ -19,10 +19,20 @@ export function useAuth() {
     onSuccess: (user) => queryClient.setQueryData(["auth", "me"], user),
   });
 
+  // Sem onSuccess de login automático: o cadastro agora fica pendente
+  // de confirmação por e-mail (ver RegisterPage / VerifyEmailPage).
   const registerMutation = useMutation({
     mutationFn: ({ name, email, password }: { name: string; email: string; password: string }) =>
       authService.register(name, email, password),
+  });
+
+  const verifyEmailMutation = useMutation({
+    mutationFn: (token: string) => authService.verifyEmail(token),
     onSuccess: (user) => queryClient.setQueryData(["auth", "me"], user),
+  });
+
+  const resendVerificationMutation = useMutation({
+    mutationFn: (email: string) => authService.resendVerification(email),
   });
 
   const logoutMutation = useMutation({
@@ -41,6 +51,12 @@ export function useAuth() {
     register: registerMutation.mutateAsync,
     registerError: registerMutation.error as ApiError | null,
     isRegistering: registerMutation.isPending,
+    verifyEmail: verifyEmailMutation.mutateAsync,
+    verifyEmailError: verifyEmailMutation.error as ApiError | null,
+    isVerifyingEmail: verifyEmailMutation.isPending,
+    resendVerification: resendVerificationMutation.mutateAsync,
+    isResendingVerification: resendVerificationMutation.isPending,
+    resendVerificationSuccess: resendVerificationMutation.isSuccess,
     logout: logoutMutation.mutateAsync,
   };
 }

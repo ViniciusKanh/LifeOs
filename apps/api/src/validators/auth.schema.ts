@@ -57,6 +57,14 @@ export const updateProfileSchema = z.object({
   timezone: z.string().trim().min(1).max(60).optional(),
 });
 
+export const verifyEmailSchema = z.object({
+  token: z.string().min(10),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().toLowerCase().email("E-mail inválido"),
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Informe a senha atual"),

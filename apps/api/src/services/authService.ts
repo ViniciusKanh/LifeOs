@@ -44,3 +44,13 @@ export function generatePasswordResetToken(): { raw: string; hash: string } {
 export function hashToken(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
+
+/**
+ * Token de verificação de e-mail no cadastro: mesmo formato do token
+ * de reset de senha (valor bruto por e-mail, hash sha256 no banco) —
+ * reaproveitado aqui em vez de duplicado, já que a necessidade é
+ * idêntica (link de uso único, com validade).
+ */
+export function generateVerificationToken(): { raw: string; hash: string } {
+  return generatePasswordResetToken();
+}

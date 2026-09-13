@@ -6,6 +6,7 @@ import { LoginPage } from "@/pages/auth/LoginPage";
 import { RegisterPage } from "@/pages/auth/RegisterPage";
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
+import { VerifyEmailPage } from "@/pages/auth/VerifyEmailPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { HojePage } from "@/pages/hoje/HojePage";
 import { TarefasPage } from "@/pages/tarefas/TarefasPage";
@@ -59,6 +60,7 @@ export default function App() {
       <Route path="/cadastro" element={<RegisterPage />} />
       <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
       <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
+      <Route path="/verificar-email" element={<VerifyEmailPage />} />
 
       <Route element={<ProtectedRoutes />}>
         <Route path="/dashboard" element={<DashboardPage />} />

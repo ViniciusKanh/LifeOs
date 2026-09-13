@@ -6,6 +6,7 @@ import {
   verifyPassword,
   signSessionToken,
   generatePasswordResetToken,
+  generateVerificationToken,
   hashToken,
 } from "../services/authService.js";
 import {
@@ -13,12 +14,20 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
   updateProfileSchema,
   changePasswordSchema,
 } from "../validators/auth.schema.js";
 import { requireAuth, SESSION_COOKIE_NAME } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { sendMail, passwordResetEmail, welcomeEmail, passwordChangedEmail } from "../services/emailService.js";
+import {
+  sendMail,
+  passwordResetEmail,
+  welcomeEmail,
+  passwordChangedEmail,
+  verificationEmail,
+} from "../services/emailService.js";
 import type { User } from "../types/index.js";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:5173";
@@ -64,9 +73,13 @@ authRouter.post("/register", rateLimit(), async (req, res) => {
   const adminEmail = (process.env.ADMIN_EMAIL ?? "").toLowerCase();
   const role = email === adminEmail ? "admin" : "user";
 
+  // Todo cadastro feito pelo próprio usuário nasce não-verificado —
+  // só contas criadas por um admin (POST /admin/users) já nascem
+  // verificadas (email_verified tem DEFAULT 1 na tabela). Sem sessão
+  // criada aqui: só depois de clicar no link de confirmação.
   await db.execute({
-    sql: `INSERT INTO users (id, name, email, password_hash, role)
-          VALUES (?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO users (id, name, email, password_hash, role, email_verified)
+          VALUES (?, ?, ?, ?, ?, 0)`,
     args: [id, name, email, passwordHash, role],
   });
 
@@ -75,15 +88,38 @@ authRouter.post("/register", rateLimit(), async (req, res) => {
     args: [id],
   });
 
-  const token = signSessionToken({ sub: id, role });
-  res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  const { raw, hash } = generateVerificationToken();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h de validade
 
-  // E-mail de boas-vindas: melhor esforço — se o SMTP não estiver
-  // configurado ou o envio falhar, o cadastro não é bloqueado por isso.
-  const welcome = welcomeEmail(name);
-  sendMail({ to: email, ...welcome }).catch((err) => console.error("[email] falha ao enviar boas-vindas:", err));
+  await db.execute({
+    sql: `INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at)
+          VALUES (?, ?, ?, ?)`,
+    args: [nanoid(), id, hash, expiresAt],
+  });
 
-  return res.status(201).json({ id, name, email, role });
+  const verifyUrl = `${APP_URL}/verificar-email?token=${raw}`;
+  const verification = verificationEmail(verifyUrl);
+  const sent = await sendMail({ to: email, ...verification }).catch((err) => {
+    console.error("[email] falha ao enviar verificação de e-mail:", err);
+    return false;
+  });
+
+  // Sem SMTP configurado (ou falha no envio), o token ainda é devolvido
+  // na resposta, só fora de produção — para permitir testar o fluxo
+  // ponta a ponta sem e-mail real, igual ao forgot-password.
+  if (!sent && process.env.NODE_ENV !== "production") {
+    console.log(`[dev] SMTP não configurado — token de verificação de e-mail para ${email}: ${raw}`);
+    return res.status(201).json({
+      message: "Cadastro realizado! Verifique seu e-mail para ativar sua conta.",
+      email,
+      devToken: raw,
+    });
+  }
+
+  return res.status(201).json({
+    message: "Cadastro realizado! Verifique seu e-mail para ativar sua conta.",
+    email,
+  });
 });
 
 /** POST /api/auth/login */
@@ -110,6 +146,13 @@ authRouter.post("/login", rateLimit(), async (req, res) => {
   const valid = await verifyPassword(password, (user as any).password_hash);
   if (!valid) {
     return res.status(401).json({ error: "E-mail ou senha inválidos." });
+  }
+
+  if (Number((user as any).email_verified) === 0) {
+    return res.status(403).json({
+      error: "Confirme seu e-mail para entrar. Verifique sua caixa de entrada ou reenvie o link de confirmação.",
+      code: "EMAIL_NOT_VERIFIED",
+    });
   }
 
   const token = signSessionToken({ sub: user.id, role: user.role });
@@ -302,4 +345,100 @@ authRouter.post("/reset-password", rateLimit({ max: 10 }), async (req, res) => {
   });
 
   return res.json({ message: "Senha atualizada. Você já pode entrar com a nova senha." });
+});
+
+/** POST /api/auth/verify-email — confirma o cadastro e já loga o usuário */
+authRouter.post("/verify-email", rateLimit({ max: 10 }), async (req, res) => {
+  const parsed = verifyEmailSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Link de confirmação inválido." });
+  }
+  const db = getDb();
+  const tokenHash = hashToken(parsed.data.token);
+
+  const result = await db.execute({
+    sql: `SELECT id, user_id, expires_at, used_at FROM email_verification_tokens WHERE token_hash = ?`,
+    args: [tokenHash],
+  });
+  const record = result.rows[0] as unknown as
+    | { id: string; user_id: string; expires_at: string; used_at: string | null }
+    | undefined;
+
+  if (!record || record.used_at || new Date(record.expires_at) < new Date()) {
+    return res.status(400).json({ error: "Link de confirmação inválido ou expirado. Peça um novo link." });
+  }
+
+  await db.execute({
+    sql: "UPDATE users SET email_verified = 1, updated_at = datetime('now') WHERE id = ?",
+    args: [record.user_id],
+  });
+  await db.execute({
+    sql: "UPDATE email_verification_tokens SET used_at = datetime('now') WHERE id = ?",
+    args: [record.id],
+  });
+
+  const userRow = await db.execute({
+    sql: "SELECT id, name, email, role FROM users WHERE id = ?",
+    args: [record.user_id],
+  });
+  const user = userRow.rows[0] as unknown as { id: string; name: string; email: string; role: "user" | "admin" } | undefined;
+  if (!user) {
+    return res.status(404).json({ error: "Usuário não encontrado." });
+  }
+
+  const token = signSessionToken({ sub: user.id, role: user.role });
+  res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+  // E-mail de boas-vindas só depois da confirmação — melhor esforço,
+  // não bloqueia a resposta.
+  const welcome = welcomeEmail(user.name);
+  sendMail({ to: user.email, ...welcome }).catch((err) => console.error("[email] falha ao enviar boas-vindas:", err));
+
+  return res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+/** POST /api/auth/resend-verification */
+authRouter.post("/resend-verification", rateLimit({ max: 5 }), async (req, res) => {
+  const parsed = resendVerificationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "E-mail inválido." });
+  }
+  const db = getDb();
+
+  // Resposta idêntica em todos os casos, para não vazar quais e-mails
+  // têm conta no LifeOS nem se já estão verificados.
+  const genericResponse = {
+    message: "Se este e-mail tiver um cadastro pendente de confirmação, reenviamos o link agora.",
+  };
+
+  const result = await db.execute({
+    sql: "SELECT id, name, email_verified FROM users WHERE email = ?",
+    args: [parsed.data.email],
+  });
+  const user = result.rows[0] as unknown as { id: string; name: string; email_verified: number } | undefined;
+  if (!user || Number(user.email_verified) === 1) {
+    return res.json(genericResponse);
+  }
+
+  const { raw, hash } = generateVerificationToken();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  await db.execute({
+    sql: `INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at)
+          VALUES (?, ?, ?, ?)`,
+    args: [nanoid(), user.id, hash, expiresAt],
+  });
+
+  const verifyUrl = `${APP_URL}/verificar-email?token=${raw}`;
+  const verification = verificationEmail(verifyUrl);
+  const sent = await sendMail({ to: parsed.data.email, ...verification }).catch((err) => {
+    console.error("[email] falha ao reenviar verificação de e-mail:", err);
+    return false;
+  });
+
+  if (!sent && process.env.NODE_ENV !== "production") {
+    console.log(`[dev] SMTP não configurado — token de verificação (reenvio) para ${parsed.data.email}: ${raw}`);
+    return res.json({ ...genericResponse, devToken: raw });
+  }
+
+  return res.json(genericResponse);
 });

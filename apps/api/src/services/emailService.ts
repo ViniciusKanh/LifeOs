@@ -97,6 +97,19 @@ export function passwordResetEmail(resetUrl: string) {
   };
 }
 
+export function verificationEmail(verifyUrl: string) {
+  return {
+    subject: "Confirme seu e-mail — LifeOS",
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color:#1E2537;">Confirme seu e-mail</h2>
+        <p>Falta um passo para começar a usar o LifeOS: confirme seu e-mail para ativar sua conta.</p>
+        <p><a href="${verifyUrl}" style="background:#E8A33D;color:#1E2126;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Confirmar e-mail</a></p>
+        <p style="color:#6B7280;font-size:12px;">Se você não criou uma conta no LifeOS, ignore este e-mail — o link expira em 24 horas.</p>
+      </div>`,
+  };
+}
+
 export function welcomeEmail(name: string) {
   return {
     subject: "Bem-vindo(a) ao LifeOS 👋",
