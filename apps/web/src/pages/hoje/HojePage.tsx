@@ -16,15 +16,31 @@ import {
   BookOpen,
   Brain,
   GraduationCap,
+  Wand2,
 } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealthSummary, useHealth } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
 import { useTimeline } from "@/hooks/useAnalytics";
+import { useCopilotInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import type { Task, TimelineEvent } from "@/types";
+
+// Frases de abertura variadas para o card do Copilot antes do primeiro
+// insight gerado no dia — trocam por dia (não por render) para não
+// parecerem aleatórias a cada F5, e nunca fingem ser um insight real.
+const FALLBACK_QUOTES = [
+  "Pequenas ações consistentes hoje constroem a vida que você deseja amanhã.",
+  "Você não precisa de um dia perfeito — precisa de um dia que some com os outros.",
+  "O progresso de hoje é a base do resultado de amanhã. Um passo de cada vez.",
+  "Feito é melhor que perfeito. Avance no que dá para avançar agora.",
+];
+function fallbackQuoteOfTheDay() {
+  const dayIndex = Math.floor(Date.now() / 86_400_000);
+  return FALLBACK_QUOTES[dayIndex % FALLBACK_QUOTES.length];
+}
 
 // Metas de referência usadas só para calcular "% da meta" nos
 // indicadores — ainda não são configuráveis por usuário no backend
@@ -89,6 +105,7 @@ export function HojePage() {
   const { summary: focus } = useFocus();
   const today = todayStr();
   const { events } = useTimeline({ from: today, to: today });
+  const copilot = useCopilotInsight();
   const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const priorities = useMemo(() => {
@@ -300,14 +317,41 @@ export function HojePage() {
           </Card>
 
           <Card className="p-6 bg-gradient-to-br from-brand-600 to-cat-purple text-white border-0 shadow-card">
-            <Sparkles size={22} className="mb-3 opacity-90" />
-            <p className="font-display font-bold text-lg leading-snug">Um novo dia, novas oportunidades</p>
-            <p className="text-sm opacity-90 mt-2 leading-relaxed">
-              Pequenas ações consistentes hoje constroem a vida que você deseja amanhã.
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 mb-3">
+                  <Sparkles size={18} />
+                </span>
+                <p className="font-display font-bold text-lg leading-snug">Copilot do dia</p>
+              </div>
+            </div>
+
+            <p className="text-sm leading-relaxed mt-3 bg-white/10 rounded-xl px-4 py-3">
+              {copilot.text && !copilot.error ? copilot.text : fallbackQuoteOfTheDay()}
             </p>
-            <p className="text-xs italic opacity-80 mt-4 pt-4 border-t border-white/20">
-              &ldquo;Disciplina é a ponte entre seus objetivos e suas conquistas.&rdquo; — Jim Rohn
-            </p>
+
+            {copilot.error && (
+              <p className="text-xs mt-2.5 opacity-90">
+                {copilot.error.message}
+                {copilot.error.status === 400 && (
+                  <>
+                    {" "}
+                    <Link to="/configuracoes" className="underline font-semibold">
+                      Ir para Configurações
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
+
+            <button
+              onClick={() => copilot.generate()}
+              disabled={copilot.isGenerating}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+            >
+              <Wand2 size={15} />
+              {copilot.isGenerating ? "Gerando..." : copilot.text ? "Gerar outro insight" : "Gerar insight do dia com IA"}
+            </button>
           </Card>
 
           <Card className="p-5">

@@ -22,7 +22,7 @@ export function Button({
     primary:
       "bg-gradient-to-b from-signal to-signal-deep text-white shadow-sm shadow-signal-deep/30 hover:brightness-105 active:brightness-95",
     secondary:
-      "border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised text-inherit hover:bg-paper dark:hover:bg-ink",
+      "border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised text-inherit hover:bg-paper dark:hover:bg-ink-overlay",
     ghost: "text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06]",
   };
   return <button className={clsx(base, variants[variant], className)} {...props} />;
@@ -32,7 +32,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={clsx(
-        "rounded-2xl border bg-paper-raised border-paper-border shadow-card dark:bg-ink-raised dark:border-ink-border dark:shadow-none",
+        "rounded-2xl border bg-paper-raised border-paper-border shadow-card dark:bg-ink-raised dark:border-ink-border/60 dark:shadow-card-dark",
         className
       )}
       {...props}
@@ -155,12 +155,12 @@ export function EmptyState({
  * rosa = leitura, âmbar = energia/ação).
  */
 const ICON_TONE: Record<string, string> = {
-  blue: "bg-cat-blue/10 text-cat-blue",
-  purple: "bg-cat-purple/10 text-cat-purple",
-  green: "bg-cat-green/10 text-cat-green",
-  pink: "bg-cat-pink/10 text-cat-pink",
-  teal: "bg-cat-teal/10 text-cat-teal",
-  amber: "bg-signal/15 text-signal-deep",
+  blue: "bg-cat-blue/10 text-cat-blue dark:bg-cat-blue/15 dark:text-cat-blue-dark",
+  purple: "bg-cat-purple/10 text-cat-purple dark:bg-cat-purple/15 dark:text-cat-purple-dark",
+  green: "bg-cat-green/10 text-cat-green dark:bg-cat-green/15 dark:text-cat-green-dark",
+  pink: "bg-cat-pink/10 text-cat-pink dark:bg-cat-pink/15 dark:text-cat-pink-dark",
+  teal: "bg-cat-teal/10 text-cat-teal dark:bg-cat-teal/15 dark:text-cat-teal-dark",
+  amber: "bg-signal/15 text-signal-deep dark:text-signal",
 };
 
 export function IconBadge({
