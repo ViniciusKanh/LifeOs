@@ -32,7 +32,7 @@ export function useAdminSettings() {
 /** Lista de modelos Gemini válidos hoje (a API devolve, pra não fixar nomes de modelo desatualizados no frontend). */
 export function useGeminiModels() {
   const query = useQuery({ queryKey: ["admin", "gemini-models"], queryFn: adminService.geminiModels, staleTime: 60 * 60 * 1000 });
-  return { models: query.data?.models ?? [], defaultModel: query.data?.default ?? "gemini-2.5-flash" };
+  return { models: query.data?.models ?? [], defaultModel: query.data?.default ?? "gemini-3.6-flash" };
 }
 
 /** Configurações de segurança efetivas (só leitura — vêm de variáveis de ambiente). */

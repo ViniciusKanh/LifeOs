@@ -9,17 +9,19 @@ import { decryptSecret } from "./cryptoService.js";
  * Modelos válidos: a lista muda com o tempo (a Google aposenta
  * versões antigas), então NUNCA fixe um nome de modelo sem antes
  * conferir a documentação oficial (https://ai.google.dev/gemini-api/docs/models).
- * Os IDs abaixo foram checados na documentação nesta implementação —
- * revise-os se o teste de conexão passar a falhar com "model not found".
+ * Os IDs abaixo foram checados na documentação em 13/09/2026, após a
+ * Google aposentar "gemini-2.5-flash" para contas novas — revise-os
+ * de novo se o teste de conexão voltar a falhar com "model not found"
+ * ou "no longer available".
  */
 export const GEMINI_MODELS = [
-  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recomendado — rápido e econômico)" },
-  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro (raciocínio mais avançado)" },
-  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (mais recente)" },
+  { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recomendado — rápido e econômico)" },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (mais inteligente, tarefas complexas)" },
+  { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (mais econômico)" },
+  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro (raciocínio avançado)" },
 ] as const;
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 
 export interface GeminiConfig {
   apiKey: string;

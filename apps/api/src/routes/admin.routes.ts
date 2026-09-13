@@ -7,7 +7,7 @@ import { requireAdmin } from "../middleware/requireAdmin.js";
 import { encryptSecret, decryptSecret, maskPreview } from "../services/cryptoService.js";
 import { hashPassword } from "../services/authService.js";
 import { verifySmtpConnection, sendMail, testEmail } from "../services/emailService.js";
-import { testGeminiConnection, GEMINI_MODELS } from "../services/geminiService.js";
+import { testGeminiConnection, GEMINI_MODELS, DEFAULT_GEMINI_MODEL } from "../services/geminiService.js";
 import { testTursoConnection } from "../services/tursoService.js";
 
 export const adminRouter = Router();
@@ -141,7 +141,7 @@ adminRouter.post("/settings/:integration/test", async (req, res) => {
 
 /** GET /api/admin/settings/gemini/models — lista de modelos válidos hoje (ver geminiService.ts). */
 adminRouter.get("/settings/gemini/models", (_req, res) => {
-  return res.json({ models: GEMINI_MODELS, default: "gemini-2.5-flash" });
+  return res.json({ models: GEMINI_MODELS, default: DEFAULT_GEMINI_MODEL });
 });
 
 /**
