@@ -19,11 +19,14 @@ import {
   Wand2,
   Flame,
   Smile,
+  CalendarClock,
+  TimerReset,
 } from "lucide-react";
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealthSummary, useHealth } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
+import { useEvents } from "@/hooks/useEvents";
 import { useTimeline } from "@/hooks/useAnalytics";
 import { useCopilotInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
@@ -107,9 +110,10 @@ export function HojePage() {
   const { habits, summaryByHabitId, checkIn } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
-  const { summary: focus } = useFocus();
+  const { summary: focus, activeSession } = useFocus();
   const today = todayStr();
   const { events } = useTimeline({ from: today, to: today });
+  const { items: calendarItems } = useEvents(today, today);
   const copilot = useCopilotInsight();
   const [taskModalOpen, setTaskModalOpen] = useState(false);
 
@@ -133,6 +137,10 @@ export function HojePage() {
     .filter((e) => String(e.at).slice(0, 10) === today)
     .sort((a, b) => String(a.at).localeCompare(String(b.at)));
 
+  const todaysAgenda = [...calendarItems]
+    .filter((it) => String(it.startsAt).slice(0, 10) === today)
+    .sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)));
+
   const toggleTask = (id: string, currentStatus: string) => {
     moveTask({ id, status: currentStatus === "Concluído" ? "A Fazer" : "Concluído" });
   };
@@ -144,6 +152,24 @@ export function HojePage() {
         {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {prioritiesPct}% das
         prioridades concluídas
       </p>
+
+      {activeSession && (
+        <Link
+          to="/foco"
+          className="mb-4 flex items-center justify-between gap-3 rounded-2xl px-5 py-3.5 bg-gradient-to-r from-signal to-signal-deep text-white shadow-card hover:opacity-95 transition-opacity"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <TimerReset size={18} className="shrink-0 animate-pulse" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">
+                Sessão de foco em andamento{activeSession.mode === "pomodoro" ? " · Pomodoro" : " · Cronômetro livre"}
+              </p>
+              <p className="text-xs text-white/80">Iniciada às {formatTime(activeSession.started_at)}</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold shrink-0">Abrir Focus Mode →</span>
+        </Link>
+      )}
 
       {/* Stat tiles — 2 colunas no celular (mobile-first) para caber bem em telas ~360-400px */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 mb-4">
@@ -342,6 +368,39 @@ export function HojePage() {
 
         {/* Coluna direita */}
         <div className="space-y-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2.5">
+                <IconBadge tone="blue" size={32} icon={<CalendarClock size={15} />} />
+                <div>
+                  <p className="text-sm font-semibold">Compromissos de hoje</p>
+                  <p className="text-xs text-slate">Sua agenda para o dia.</p>
+                </div>
+              </div>
+              <Link to="/calendario" className="text-xs text-brand-600 dark:text-brand-500 font-medium shrink-0">
+                Ver calendário →
+              </Link>
+            </div>
+
+            {todaysAgenda.length === 0 ? (
+              <p className="text-xs text-slate mt-4">Nenhum compromisso agendado para hoje.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {todaysAgenda.map((it) => (
+                  <div
+                    key={it.id}
+                    className="flex items-center gap-3 rounded-lg border border-paper-border dark:border-ink-border px-3 py-2.5"
+                  >
+                    <span className="text-[11px] font-semibold text-slate w-12 shrink-0">
+                      {it.allDay ? "Dia todo" : formatTime(it.startsAt)}
+                    </span>
+                    <span className="text-sm truncate flex-1">{it.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
           <Card className="p-5">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2.5">

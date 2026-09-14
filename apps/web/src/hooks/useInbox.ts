@@ -10,17 +10,19 @@ const INBOX_KEY = ["inbox"];
  * de pendentes alimenta a página /inbox, onde cada item é processado
  * (vira tarefa ou é descartado).
  *
- * `includeProcessed` traz também os itens já processados (com
- * `processed_at` preenchido) — sem isso, um item descartado ou virado
- * tarefa simplesmente desaparecia da tela sem deixar rastro, o que
- * parecia "a captura não gravou nada".
+ * Sempre buscamos a lista completa (pendentes + processados) uma
+ * única vez — o filtro por `includeProcessed` acontece no cliente.
+ * Isso mantém um único cache compartilhado entre o botão flutuante e
+ * a página de Inbox (antes eram duas chaves de query diferentes) e
+ * permite calcular estatísticas (processados, total capturado) sem
+ * uma segunda requisição.
  */
 export function useInbox(includeProcessed = false) {
   const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: [...INBOX_KEY, includeProcessed],
-    queryFn: () => inboxService.list(includeProcessed),
-  });
+  const query = useQuery({ queryKey: INBOX_KEY, queryFn: () => inboxService.list(true) });
+
+  const allItems = query.data ?? [];
+  const items = includeProcessed ? allItems : allItems.filter((item) => !item.processed_at);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: INBOX_KEY });
@@ -36,10 +38,15 @@ export function useInbox(includeProcessed = false) {
   const remove = useMutation({ mutationFn: (id: string) => inboxService.remove(id), onSuccess: invalidate });
 
   return {
-    items: query.data ?? [],
+    items,
+    allItems,
     isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error as Error | null,
+    refetch: query.refetch,
     capture: capture.mutateAsync,
     isCapturing: capture.isPending,
+    captureError: capture.error as Error | null,
     process: process.mutateAsync,
     isProcessing: process.isPending,
     remove: remove.mutateAsync,
