@@ -1,5 +1,7 @@
 # LifeOS
 
+[![CI](https://github.com/ViniciusKanh/LifeOs/actions/workflows/ci.yml/badge.svg)](https://github.com/ViniciusKanh/LifeOs/actions/workflows/ci.yml)
+
 **Transforme sua rotina em progresso.**
 
 LifeOS é um sistema operacional pessoal para produtividade, estudos, saúde e
