@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidRecurrenceRule } from "../services/recurrenceService.js";
 
 export const createTaskSchema = z.object({
   title: z.string().trim().min(1, "Título é obrigatório").max(200),
@@ -15,6 +16,16 @@ export const createTaskSchema = z.object({
   impact: z.number().int().min(1).max(5).optional().nullable(),
   urgency: z.number().int().min(1).max(5).optional().nullable(),
   effort: z.number().int().min(1).max(5).optional().nullable(),
+  // Recorrência ("repetir toda semana/dia/mês") — ver recurrenceService.ts.
+  // String vazia normaliza pra null (= "sem recorrência"), pra PATCH
+  // conseguir remover a regra sem precisar mandar `null` explícito.
+  recurrenceRule: z
+    .string()
+    .max(200)
+    .optional()
+    .nullable()
+    .transform((v) => (v === "" ? null : v))
+    .refine((v) => v == null || isValidRecurrenceRule(v), "Regra de recorrência inválida."),
 });
 
 export const updateTaskSchema = createTaskSchema.partial().extend({

@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
+import { computeNextOccurrence, parseRecurrenceRule } from "../services/recurrenceService.js";
 
 export const tasksRouter = Router();
 
@@ -29,6 +30,81 @@ async function recomputePriorityScore(db: ReturnType<typeof getDb>, taskId: stri
           WHERE id = ? AND owner_id = ?`,
     args: [taskId, ownerId],
   });
+}
+
+/**
+ * Recorrência: quando uma tarefa com recurrence_rule é marcada
+ * "Concluído", gera a próxima ocorrência como uma tarefa nova (a
+ * atual fica concluída de verdade, preservando o histórico — não
+ * "volta" pro Backlog). A data de referência é o due_date da tarefa
+ * concluída, ou hoje se ela não tinha prazo. Silenciosamente não faz
+ * nada se a regra estiver vazia/inválida (não deveria acontecer, já
+ * que o schema valida na entrada, mas nunca falha a resposta por
+ * causa disso — a tarefa já foi concluída, isso é só um efeito extra).
+ */
+async function maybeSpawnNextOccurrence(db: ReturnType<typeof getDb>, taskId: string, ownerId: string) {
+  const result = await db.execute({
+    sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
+    args: [taskId, ownerId],
+  });
+  const task = result.rows[0] as unknown as
+    | {
+        recurrence_rule: string | null;
+        status: string;
+        project_id: string | null;
+        title: string;
+        description: string | null;
+        priority: string;
+        due_date: string | null;
+        start_date: string | null;
+        estimate_minutes: number | null;
+        impact: number | null;
+        urgency: number | null;
+        effort: number | null;
+      }
+    | undefined;
+  if (!task || task.status !== "Concluído" || !task.recurrence_rule) return;
+
+  const rule = parseRecurrenceRule(task.recurrence_rule);
+  if (!rule) return;
+
+  const fromIso = task.due_date ?? new Date().toISOString().slice(0, 10);
+  const nextDue = computeNextOccurrence(rule, fromIso);
+  // Prazo original mantido como deslocamento pra data de início, se havia um intervalo entre eles.
+  const nextStart =
+    task.start_date && task.due_date
+      ? (() => {
+          const spanDays = Math.round(
+            (new Date(`${task.due_date!.slice(0, 10)}T00:00:00Z`).getTime() - new Date(`${task.start_date!.slice(0, 10)}T00:00:00Z`).getTime()) /
+              86_400_000
+          );
+          const d = new Date(`${nextDue}T00:00:00Z`);
+          d.setUTCDate(d.getUTCDate() - Math.max(spanDays, 0));
+          return d.toISOString().slice(0, 10);
+        })()
+      : null;
+
+  const newId = nanoid();
+  await db.execute({
+    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort, recurrence_rule)
+          VALUES (?, ?, ?, ?, ?, 'Backlog', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      newId,
+      ownerId,
+      task.project_id,
+      task.title,
+      task.description,
+      task.priority,
+      nextDue,
+      nextStart,
+      task.estimate_minutes,
+      task.impact,
+      task.urgency,
+      task.effort,
+      task.recurrence_rule,
+    ],
+  });
+  await recomputePriorityScore(db, newId, ownerId);
 }
 
 /** GET /api/tasks?status=&projectId= */
@@ -124,8 +200,8 @@ tasksRouter.post("/", async (req, res) => {
   const id = nanoid();
 
   await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort, recurrence_rule)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       req.user!.id,
@@ -140,6 +216,7 @@ tasksRouter.post("/", async (req, res) => {
       d.impact ?? null,
       d.urgency ?? null,
       d.effort ?? null,
+      d.recurrenceRule ?? null,
     ],
   });
   await recomputePriorityScore(db, id, req.user!.id);
@@ -182,6 +259,7 @@ tasksRouter.patch("/:id", async (req, res) => {
     impact: "impact",
     urgency: "urgency",
     effort: "effort",
+    recurrenceRule: "recurrence_rule",
   };
 
   const sets: string[] = [];
@@ -201,6 +279,9 @@ tasksRouter.patch("/:id", async (req, res) => {
     args,
   });
   await recomputePriorityScore(db, req.params.id, req.user!.id);
+  if (parsed.data.status === "Concluído") {
+    await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
+  }
 
   const updated = await db.execute({
     sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
@@ -224,6 +305,9 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   });
   if (result.rowsAffected === 0) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
+  }
+  if (parsed.data.status === "Concluído") {
+    await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
   }
   return res.status(204).send();
 });

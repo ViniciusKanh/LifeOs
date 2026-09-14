@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { X, Play, Square, Trash2 } from "lucide-react";
+import { X, Play, Square, Trash2, Repeat } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
 import { useTaskTimer } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
+import { WEEKDAY_CODES, WEEKDAY_LABELS, buildRecurrenceRule, parseRecurrenceRule, type RecurrenceFreq } from "@/utils/recurrence";
 import type { Task, TaskPriority } from "@/types";
 import type { TaskInput } from "@/services/taskService";
 
@@ -84,6 +85,9 @@ export function TaskModal({
   const [impact, setImpact] = useState(task?.impact ?? 0);
   const [urgency, setUrgency] = useState(task?.urgency ?? 0);
   const [effort, setEffort] = useState(task?.effort ?? 0);
+  const initialRecurrence = parseRecurrenceRule(task?.recurrence_rule ?? null);
+  const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>(initialRecurrence.freq);
+  const [recurrenceByDay, setRecurrenceByDay] = useState<string[]>(initialRecurrence.byDay);
   const [saving, setSaving] = useState(false);
 
   const { projects } = useProjects();
@@ -120,6 +124,7 @@ export function TaskModal({
         impact: isProfessional && impact > 0 ? impact : null,
         urgency: isProfessional && urgency > 0 ? urgency : null,
         effort: isProfessional && effort > 0 ? effort : null,
+        recurrenceRule: buildRecurrenceRule({ freq: recurrenceFreq, byDay: recurrenceByDay }),
       });
       onClose();
     } finally {
@@ -231,6 +236,55 @@ export function TaskModal({
             value={estimateMinutes}
             onChange={(e) => setEstimateMinutes(e.target.value)}
           />
+
+          <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Repeat size={14} className="text-slate" />
+              <p className="text-xs font-semibold">Repetir</p>
+            </div>
+            <select
+              value={recurrenceFreq}
+              onChange={(e) => {
+                const freq = e.target.value as RecurrenceFreq;
+                setRecurrenceFreq(freq);
+                if (freq !== "WEEKLY") setRecurrenceByDay([]);
+              }}
+              className="w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            >
+              <option value="">Não repetir</option>
+              <option value="DAILY">Diariamente</option>
+              <option value="WEEKLY">Semanalmente</option>
+              <option value="MONTHLY">Mensalmente</option>
+            </select>
+            {recurrenceFreq === "WEEKLY" && (
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {WEEKDAY_CODES.map((code) => {
+                  const active = recurrenceByDay.includes(code);
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() =>
+                        setRecurrenceByDay((prev) =>
+                          active ? prev.filter((d) => d !== code) : [...prev, code]
+                        )
+                      }
+                      className={`w-10 h-8 rounded-lg text-xs font-medium border transition-colors ${
+                        active
+                          ? "bg-brand-500 border-brand-500 text-white"
+                          : "border-paper-border dark:border-ink-border text-slate"
+                      }`}
+                    >
+                      {WEEKDAY_LABELS[code]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-slate mt-2">
+              Ao concluir, uma nova tarefa é criada automaticamente na próxima data — o histórico desta é preservado.
+            </p>
+          </div>
 
           {isEditing && task && (
             <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">

@@ -1,5 +1,6 @@
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, Repeat } from "lucide-react";
 import type { Task } from "@/types";
+import { describeRecurrenceRule } from "@/utils/recurrence";
 
 const PRIORITY_TONE: Record<Task["priority"], string> = {
   Alta: "text-drop bg-drop/10",
@@ -35,6 +36,7 @@ export function TaskCard({
   // Progresso real: só aparece quando a tarefa tem uma estimativa de
   // tempo definida — nunca inventamos uma % de conclusão sem base.
   const progressPct = task.estimate_minutes ? Math.min(100, Math.round((task.time_spent_minutes / task.estimate_minutes) * 100)) : null;
+  const recurrenceLabel = describeRecurrenceRule(task.recurrence_rule);
 
   return (
     <button
@@ -57,6 +59,11 @@ export function TaskCard({
         {timeLabel && (
           <span className="flex items-center gap-1 text-[10px] text-slate">
             <Clock size={11} /> {timeLabel}
+          </span>
+        )}
+        {recurrenceLabel && (
+          <span className="flex items-center gap-1 text-[10px] text-slate" title={recurrenceLabel}>
+            <Repeat size={11} />
           </span>
         )}
       </div>
