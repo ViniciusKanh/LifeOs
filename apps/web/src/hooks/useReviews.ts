@@ -3,6 +3,30 @@ import { reviewsService } from "@/services/reviewsService";
 import { triggerAchievementsCheck } from "@/services/achievementsService";
 import type { ApiError } from "@/services/api";
 
+/** Preferência de resumo semanal por e-mail + botão "me envie agora" — usado em Perfil. */
+export function useWeeklyEmail() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["reviews", "weekly-email-settings"],
+    queryFn: () => reviewsService.getWeeklyEmailSettings(),
+  });
+
+  const setEnabled = useMutation({
+    mutationFn: (enabled: boolean) => reviewsService.setWeeklyEmailSettings(enabled),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reviews", "weekly-email-settings"] }),
+  });
+
+  const sendNow = useMutation({ mutationFn: reviewsService.sendWeeklyEmailNow });
+
+  return {
+    enabled: settingsQuery.data?.enabled ?? false,
+    isLoading: settingsQuery.isLoading,
+    setEnabled: setEnabled.mutateAsync,
+    sendNow: sendNow.mutateAsync,
+    isSending: sendNow.isPending,
+  };
+}
+
 /** Segunda-feira (00:00) da semana que contém `date` (ou hoje). */
 export function mondayOf(date = new Date()): string {
   const d = new Date(date);

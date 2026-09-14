@@ -1,6 +1,6 @@
 # Sugestões de novas telas e ferramentas para o LifeOS
 
-> **Status (14/09/2026):** itens "Notas rápidas / Inbox", "Área Profissional dedicada", "Modo Semana" e "Recorrência de tarefas de verdade" implementados. Inbox: botão de captura flutuante em qualquer tela + tela `/inbox` pra processar cada item (vira tarefa ou é descartado). Área Profissional: tela `/profissional` com Priority Score (impacto/urgência/esforço agora editáveis na tarefa quando vinculada a um projeto Profissional), metas ativas da categoria "Carreira" e log de reuniões 1:1/anotações. Modo Semana: tela `/semana`, os 7 dias como colunas com prazos (mesma fonte do Calendário) e check-in de hábitos direto na grade. Recorrência: campo `recurrence_rule` agora implementado de ponta a ponta — seletor "Repetir" (diária/semanal com dias da semana/mensal) no TaskModal, e ao concluir uma tarefa recorrente uma nova ocorrência é criada automaticamente na próxima data (a tarefa concluída não é reaberta, preservando histórico). Próximo da fila: CI automatizado.
+> **Status (14/09/2026):** itens "Notas rápidas / Inbox", "Área Profissional dedicada", "Modo Semana" e "Recorrência de tarefas de verdade" implementados. Inbox: botão de captura flutuante em qualquer tela + tela `/inbox` pra processar cada item (vira tarefa ou é descartado). Área Profissional: tela `/profissional` com Priority Score (impacto/urgência/esforço agora editáveis na tarefa quando vinculada a um projeto Profissional), metas ativas da categoria "Carreira" e log de reuniões 1:1/anotações. Modo Semana: tela `/semana`, os 7 dias como colunas com prazos (mesma fonte do Calendário) e check-in de hábitos direto na grade. Recorrência: campo `recurrence_rule` agora implementado de ponta a ponta — seletor "Repetir" (diária/semanal com dias da semana/mensal) no TaskModal, e ao concluir uma tarefa recorrente uma nova ocorrência é criada automaticamente na próxima data (a tarefa concluída não é reaberta, preservando histórico). CI: GitHub Actions rodando `tsc --noEmit`, build e testes (api + web) a cada push/PR na main, badge de status no README. Todos os itens da fila original de "novas telas/ferramentas" foram entregues. Seguindo para a fila secundária: "Correlações de saúde automáticas" implementado (card na tela Saúde cruzando sono/exercício/água/humor via Pearson).
 
 Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as ideias de evolução da rodada anterior (Copilot proativo, conquistas reais, onboarding, exportação de dados, code-splitting e testes automatizados), aqui vão sugestões de telas e ferramentas novas — coisas que ainda não existem no app e que fariam sentido dado o que já está construído. Agrupei por tema e marquei uma prioridade sugerida (Alta/Média/Baixa) pensando em esforço vs. valor.
 
@@ -22,7 +22,7 @@ Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as
 
 ## Saúde e hábitos
 
-**Correlações automáticas** (Média) — com água, sono, humor, energia, exercício e foco todos já registrados diariamente, dá para computar correlações reais (ex.: "nos dias em que você dorme menos de 6h, seu foco médio cai 30%") e mostrar isso como um card de insight — dado real, não estimativa do Copilot. Isso é diferente do Copilot atual porque é estatística sobre os próprios dados, não texto gerado por IA.
+**Correlações automáticas** (Média, ✅ implementado) — cruza sono, exercício, água e humor/energia/estresse (agregados por dia) e calcula a correlação de Pearson entre pares plausíveis (sono×humor, sono×energia, qualidade do sono×energia, exercício×humor, exercício×energia, água×energia, sono×estresse). Só mostra um par com pelo menos 7 dias de dados cruzados, evitando "padrão" de amostra pequena. Card "Correlações de saúde" na tela Saúde, com frase em PT-BR explicando o achado e aviso de que correlação não implica causalidade — é estatística sobre os próprios dados, não texto gerado por IA (isso é o que diferencia do Copilot).
 
 **Hábitos com regras condicionais** (Baixa) — hábitos que só "contam" em certos dias da semana, ou hábitos com meta variável (ex.: "beber água: 2L em dias normais, 3L em dias de treino"). Hoje todo hábito tem uma meta fixa.
 
@@ -42,7 +42,7 @@ Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as
 
 ## Infraestrutura e qualidade (não são telas, mas valem menção)
 
-- **CI (GitHub Actions)** rodando `npm test` e `tsc --noEmit` a cada push/PR — a suíte de testes que acabamos de criar só tem valor contínuo se rodar sozinha, sem depender de alguém lembrar de rodar `npm test` localmente.
+- **CI (GitHub Actions)** rodando `npm test` e `tsc --noEmit` a cada push/PR (✅ implementado — `.github/workflows/ci.yml`, dois jobs: api e web).
 - **Testes de frontend** (Vitest + Testing Library) — hoje só o backend tem testes automatizados; componentes críticos (TaskModal, KanbanBoard, o novo GanttChart) se beneficiariam de alguns testes de comportamento.
 - **Rate limiting mais amplo** — hoje só login/registro/troca de senha têm `rateLimit()`; rotas de escrita em geral (criar tarefa, hábito, etc.) não têm limite, o que é aceitável para uso pessoal mas vale revisar antes de qualquer uso mais público.
 
@@ -55,8 +55,8 @@ Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as
 3. Notas rápidas / Inbox — baixo esforço, alto uso diário.
 4. Modo "Semana" — complementa Hoje + Calendário + Weekly Review.
 5. ~~Recorrência de tarefas~~ — ✅ implementado.
-6. CI automatizado — protege tudo que já foi construído.
-7. Correlações de saúde automáticas — diferencial real de dado, baixo custo dado que os dados já existem.
+6. ~~CI automatizado~~ — ✅ implementado.
+7. ~~Correlações de saúde automáticas~~ — ✅ implementado.
 8. Resumo semanal por e-mail — reaproveita infraestrutura de SMTP já pronta.
 9. Metas de leitura anual e citações — polimento da Biblioteca.
 10. Financeiro pessoal e compartilhamento de projetos — maiores em escopo, ficam para uma fase mais madura do produto.

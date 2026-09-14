@@ -23,6 +23,7 @@ import { projectsRouter } from "./routes/projects.routes.js";
 import { searchRouter } from "./routes/search.routes.js";
 import { inboxRouter } from "./routes/inbox.routes.js";
 import { workNotesRouter } from "./routes/work-notes.routes.js";
+import { cronRouter } from "./routes/cron.routes.js";
 
 /**
  * Configuração do Express extraída para um módulo próprio (sem
@@ -76,6 +77,9 @@ app.use("/api/export", exportRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/inbox", inboxRouter);
 app.use("/api/work-notes", workNotesRouter);
+// Sem requireAuth — protegido por segredo próprio (ver cron.routes.ts),
+// chamado por um agendador externo, nunca por um usuário logado.
+app.use("/api/cron", cronRouter);
 
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -6,6 +6,7 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { dailyReviewSchema, weeklyReviewSchema } from "../validators/reviews.schema.js";
 import { changePct, computeLifeScore, computeRangeMetrics } from "../services/metricsService.js";
 import { generateWeeklyReviewDraft } from "../services/copilotService.js";
+import { mondayOf, sendWeeklySummaryForUser } from "../services/weeklyEmailService.js";
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -181,4 +182,50 @@ reviewsRouter.put("/weekly", async (req, res) => {
     args: [req.user!.id, d.weekStartDate],
   });
   return res.json(saved.rows[0]);
+});
+
+/* ---------------------- Resumo semanal por e-mail ---------------------- */
+
+/** GET /api/reviews/weekly/email-settings — preferência atual do usuário (desligada por padrão). */
+reviewsRouter.get("/weekly/email-settings", async (req, res) => {
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT weekly_email_enabled FROM user_settings WHERE user_id = ?",
+    args: [req.user!.id],
+  });
+  const enabled = Number(result.rows[0]?.weekly_email_enabled ?? 0) === 1;
+  return res.json({ enabled });
+});
+
+/** PATCH /api/reviews/weekly/email-settings — liga/desliga o recebimento do resumo semanal por e-mail. */
+reviewsRouter.patch("/weekly/email-settings", async (req, res) => {
+  const enabled = req.body?.enabled === true;
+  const db = getDb();
+  await db.execute({
+    sql: "UPDATE user_settings SET weekly_email_enabled = ?, updated_at = datetime('now') WHERE user_id = ?",
+    args: [enabled ? 1 : 0, req.user!.id],
+  });
+  return res.json({ enabled });
+});
+
+/**
+ * POST /api/reviews/weekly/send-email — "me envie agora": manda o
+ * resumo da última semana completa pro próprio e-mail do usuário,
+ * na hora, independente da preferência acima e sem checar o log de
+ * duplicidade (o log só existe pra evitar reenvio automático pelo
+ * cron — um pedido explícito do usuário sempre é atendido).
+ */
+reviewsRouter.post("/weekly/send-email", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const thisMonday = mondayOf(today);
+  const lastWeekStart = new Date(`${thisMonday}T00:00:00Z`);
+  lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
+  const weekStartDate = lastWeekStart.toISOString().slice(0, 10);
+
+  const db = getDb();
+  const result = await sendWeeklySummaryForUser(db, req.user!.id, weekStartDate, { skipDedup: true });
+  if (!result.sent) {
+    return res.status(400).json({ error: result.reason ?? "Não foi possível enviar o e-mail." });
+  }
+  return res.json({ sent: true, weekStartDate });
 });

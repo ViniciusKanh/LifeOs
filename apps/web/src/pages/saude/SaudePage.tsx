@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Droplets, Moon, Dumbbell, Smile, Trash2, ChevronDown, Sun, Sparkles, Wand2, X } from "lucide-react";
-import { useHealth } from "@/hooks/useHealth";
+import { Droplets, Moon, Dumbbell, Smile, Trash2, ChevronDown, Sun, Sparkles, Wand2, X, LineChart } from "lucide-react";
+import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
 import { useHealthInsight } from "@/hooks/useCopilot";
 import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
 import { Link } from "react-router-dom";
@@ -486,6 +486,8 @@ export function SaudePage() {
         </Card>
       </div>
 
+      <CorrelationsCard />
+
       {historyOpen && (
         <HistoryModal
           title={historyOpen === "water" ? "Histórico de água" : "Histórico de sono"}
@@ -613,6 +615,60 @@ function StatSummaryCard({
       {progressPct !== undefined && (
         <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
           <div className={`h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${progressPct}%` }} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const STRENGTH_TONE: Record<string, string> = {
+  fraca: "bg-slate/10 text-slate",
+  moderada: "bg-signal/15 text-signal-deep dark:text-signal",
+  forte: "bg-growth/10 text-growth",
+  "muito forte": "bg-brand-500/10 text-brand-600 dark:text-brand-400",
+};
+
+/**
+ * Correlações automáticas: cruza sono, exercício, água e humor/energia/
+ * estresse dos próprios dados (ver GET /api/health/correlations) e só
+ * mostra padrões com amostra suficiente (mín. 7 dias) — é uma
+ * observação estatística sobre os próprios números, não um diagnóstico.
+ */
+function CorrelationsCard() {
+  const { correlations, isLoading } = useHealthCorrelations();
+
+  return (
+    <Card className="p-5 md:p-6 mt-4">
+      <div className="flex items-center gap-2.5">
+        <IconBadge tone="green" size={34} icon={<LineChart size={15} />} />
+        <div>
+          <p className="text-sm font-semibold">Correlações de saúde</p>
+          <p className="text-xs text-slate">Padrões encontrados nos seus próprios registros de sono, exercício, água e humor.</p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-slate mt-4">Calculando...</p>
+      ) : correlations.length === 0 ? (
+        <p className="text-xs text-slate mt-4">
+          Ainda não há dados suficientes (pelo menos 7 dias com os dois registros no mesmo dia) para calcular uma correlação confiável. Continue registrando sono, exercício, água e humor.
+        </p>
+      ) : (
+        <div className="space-y-2.5 mt-4">
+          {correlations.map((c) => (
+            <div key={c.pair} className="rounded-xl border border-paper-border dark:border-ink-border px-4 py-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-medium">{c.label}</p>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${STRENGTH_TONE[c.strength]}`}>
+                  {c.strength} · r={c.r.toFixed(2)}
+                </span>
+              </div>
+              <p className="text-xs text-slate mt-1.5">{c.description}</p>
+            </div>
+          ))}
+          <p className="text-[11px] text-slate pt-1">
+            Correlação não implica causalidade — são padrões observados nos seus próprios dados, não um diagnóstico.
+          </p>
         </div>
       )}
     </Card>

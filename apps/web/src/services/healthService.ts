@@ -1,8 +1,9 @@
 import { api } from "./api";
-import type { WaterEntry, SleepEntry, Workout, MoodEntry, HealthSummary } from "@/types";
+import type { WaterEntry, SleepEntry, Workout, MoodEntry, HealthSummary, HealthCorrelation } from "@/types";
 
 export const healthService = {
   summary: (date?: string) => api.get<HealthSummary>(`/health/summary${date ? `?date=${date}` : ""}`),
+  correlations: () => api.get<HealthCorrelation[]>("/health/correlations"),
 
   listWater: (date?: string) => api.get<WaterEntry[]>(`/health/water${date ? `?date=${date}` : ""}`),
   addWater: (amountMl: number) => api.post<WaterEntry>("/health/water", { amountMl }),

@@ -9,6 +9,7 @@ import {
   moodEntrySchema,
   healthMetricEntrySchema,
 } from "../validators/health.schema.js";
+import { computeHealthCorrelations } from "../services/correlationService.js";
 
 export const healthRouter = Router();
 healthRouter.use(requireAuth);
@@ -221,6 +222,15 @@ healthRouter.post("/metrics", async (req, res) => {
   });
   const created = await db.execute({ sql: "SELECT * FROM health_entries WHERE id = ?", args: [id] });
   return res.status(201).json(created.rows[0]);
+});
+
+/* ------------------------- Correlações ------------------------- */
+
+/** GET /api/health/correlations — cruza sono, exercício, água e humor/energia/estresse (ver correlationService.ts). */
+healthRouter.get("/correlations", async (req, res) => {
+  const db = getDb();
+  const results = await computeHealthCorrelations(db, req.user!.id);
+  return res.json(results);
 });
 
 /* ---------------------------- Resumo ---------------------------- */
