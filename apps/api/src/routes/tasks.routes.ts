@@ -13,6 +13,24 @@ export const tasksRouter = Router();
 // vindo do corpo da requisição.
 tasksRouter.use(requireAuth);
 
+/**
+ * Recalcula priority_score (impacto*urgência/esforço) direto no SQL,
+ * a partir dos valores já salvos na linha — funciona tanto quando os
+ * três campos chegam juntos (criação) quanto quando só um muda depois
+ * (edição), sem precisar buscar a linha primeiro pra decidir.
+ */
+async function recomputePriorityScore(db: ReturnType<typeof getDb>, taskId: string, ownerId: string) {
+  await db.execute({
+    sql: `UPDATE tasks SET priority_score =
+            CASE WHEN impact IS NOT NULL AND urgency IS NOT NULL AND effort IS NOT NULL AND effort > 0
+              THEN (impact * 1.0 * urgency) / effort
+              ELSE NULL
+            END
+          WHERE id = ? AND owner_id = ?`,
+    args: [taskId, ownerId],
+  });
+}
+
 /** GET /api/tasks?status=&projectId= */
 tasksRouter.get("/", async (req, res) => {
   const db = getDb();
@@ -64,6 +82,25 @@ tasksRouter.get("/focus", async (req, res) => {
   });
 });
 
+/**
+ * GET /api/tasks/professional — Área Profissional: tarefas em aberto
+ * vinculadas a um projeto kind='professional', ordenadas pelo
+ * Priority Score (impacto*urgência/esforço) — quando ele não existe
+ * (campos não preenchidos), a tarefa cai pro fim da lista, ordenada
+ * só por prazo. Precisa vir ANTES de "/:id" nesta rota.
+ */
+tasksRouter.get("/professional", async (req, res) => {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT t.* FROM tasks t
+          JOIN projects p ON p.id = t.project_id
+          WHERE t.owner_id = ? AND p.kind = 'professional' AND t.status != 'Concluído'
+          ORDER BY (t.priority_score IS NULL) ASC, t.priority_score DESC, t.due_date ASC`,
+    args: [req.user!.id],
+  });
+  return res.json(result.rows);
+});
+
 /** GET /api/tasks/:id */
 tasksRouter.get("/:id", async (req, res) => {
   const db = getDb();
@@ -87,8 +124,8 @@ tasksRouter.post("/", async (req, res) => {
   const id = nanoid();
 
   await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       req.user!.id,
@@ -100,8 +137,12 @@ tasksRouter.post("/", async (req, res) => {
       d.dueDate ?? null,
       d.startDate ?? null,
       d.estimateMinutes ?? null,
+      d.impact ?? null,
+      d.urgency ?? null,
+      d.effort ?? null,
     ],
   });
+  await recomputePriorityScore(db, id, req.user!.id);
 
   const created = await db.execute({
     sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
@@ -138,6 +179,9 @@ tasksRouter.patch("/:id", async (req, res) => {
     estimateMinutes: "estimate_minutes",
     timeSpentMinutes: "time_spent_minutes",
     completedAt: "completed_at",
+    impact: "impact",
+    urgency: "urgency",
+    effort: "effort",
   };
 
   const sets: string[] = [];
@@ -156,6 +200,7 @@ tasksRouter.patch("/:id", async (req, res) => {
     sql: `UPDATE tasks SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`,
     args,
   });
+  await recomputePriorityScore(db, req.params.id, req.user!.id);
 
   const updated = await db.execute({
     sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",

@@ -52,6 +52,12 @@ export interface Task {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  // Priority Score profissional (Área Profissional) — 1-5 cada,
+  // opcionais; priority_score é calculado no backend a partir deles.
+  impact: number | null;
+  urgency: number | null;
+  effort: number | null;
+  priority_score: number | null;
 }
 
 /**

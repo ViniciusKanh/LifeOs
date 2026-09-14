@@ -10,6 +10,9 @@ export interface TaskInput {
   dueDate?: string | null;
   startDate?: string | null;
   estimateMinutes?: number | null;
+  impact?: number | null;
+  urgency?: number | null;
+  effort?: number | null;
 }
 
 export const taskService = {
@@ -27,6 +30,9 @@ export const taskService = {
   // aberto ordenadas pelo score de foco (prazo + prioridade +
   // impacto/urgência/esforço + dependências), calculado no backend.
   focusList: (limit = 5) => api.get<{ tasks: FocusTask[] }>(`/tasks/focus?limit=${limit}`),
+
+  // Área Profissional: tarefas em aberto de projetos kind='professional', ordenadas por Priority Score.
+  professionalList: () => api.get<Task[]>("/tasks/professional"),
 
   activeTimeEntry: (id: string) => api.get<TimeEntry | null>(`/tasks/${id}/time/active`),
   startTime: (id: string) => api.post<TimeEntry>(`/tasks/${id}/time/start`),

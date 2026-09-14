@@ -21,6 +21,7 @@ import {
   Trophy,
   GanttChartSquare,
   Inbox,
+  Briefcase,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,6 +40,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/hoje": "Consistência hoje, resultados amanhã.",
   "/tarefas": "Disciplina de hoje, liberdade de amanhã.",
   "/inbox": "Capture agora, decida depois.",
+  "/profissional": "Foco no que move os ponteiros.",
   "/foco": "Foco é a ponte entre onde você está e onde quer chegar.",
   "/biblioteca": "Livros constroem a melhor versão de nós.",
   "/educacao": "Estudo hoje, liberdade amanhã.",
@@ -63,6 +65,7 @@ const NAV = [
 
 const SECONDARY_NAV = [
   { to: "/inbox", label: "Inbox", icon: Inbox },
+  { to: "/profissional", label: "Profissional", icon: Briefcase },
   { to: "/calendario", label: "Calendário", icon: CalendarDays },
   { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
   { to: "/educacao", label: "Educação", icon: GraduationCap },
