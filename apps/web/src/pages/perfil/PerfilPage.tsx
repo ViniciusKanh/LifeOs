@@ -17,12 +17,14 @@ import {
   Bell,
   BellOff,
   Send,
+  Mails,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useTheme } from "@/hooks/useTheme";
 import { usePush } from "@/hooks/usePush";
+import { useWeeklyEmail } from "@/hooks/useReviews";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { api } from "@/services/api";
@@ -341,6 +343,7 @@ export function PerfilPage() {
           </Card>
 
           <PushNotificationsCard />
+          <WeeklyEmailCard />
 
           <Card className="p-5">
             <div className="flex items-center gap-2.5 mb-3">
@@ -456,6 +459,62 @@ function PushNotificationsCard() {
           )}
         </>
       )}
+    </Card>
+  );
+}
+
+function WeeklyEmailCard() {
+  const { enabled, isLoading, setEnabled, sendNow, isSending } = useWeeklyEmail();
+  const [sendState, setSendState] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleToggle = async () => {
+    setSendState(null);
+    await setEnabled(!enabled);
+  };
+
+  const handleSendNow = async () => {
+    setSendState(null);
+    try {
+      await sendNow();
+      setSendState({ ok: true, message: "Resumo enviado! Confira sua caixa de entrada." });
+    } catch (err) {
+      setSendState({
+        ok: false,
+        message: err instanceof Error ? err.message : "Falha ao enviar o resumo semanal.",
+      });
+    }
+  };
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2.5 mb-3">
+        <IconBadge tone={enabled ? "green" : "purple"} size={32} icon={<Mails size={15} />} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Resumo semanal por e-mail</p>
+          <p className="text-xs text-slate">Toda semana, um e-mail com seu Life Score e as métricas reais da Weekly Review.</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-xl p-3 bg-paper dark:bg-ink">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{enabled ? "Ativado" : "Desativado"}</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={isLoading}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
+            enabled ? "bg-growth" : "bg-paper-border dark:bg-ink-border"
+          }`}
+        >
+          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+        </button>
+      </div>
+
+      <Button variant="secondary" className="w-full mt-3" onClick={handleSendNow} disabled={isSending}>
+        <Send size={14} /> {isSending ? "Enviando..." : "Enviar resumo da última semana agora"}
+      </Button>
+      {sendState && <p className={`text-xs mt-2 ${sendState.ok ? "text-growth" : "text-drop"}`}>{sendState.message}</p>}
     </Card>
   );
 }

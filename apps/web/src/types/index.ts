@@ -360,6 +360,17 @@ export interface HealthSummary {
   mood: { mood: number; energy: number; stress: number | null } | null;
 }
 
+/** Correlações automáticas entre séries de saúde (ver correlationService.ts no backend) — observação estatística, não diagnóstico. */
+export interface HealthCorrelation {
+  pair: string;
+  label: string;
+  r: number;
+  n: number;
+  strength: "fraca" | "moderada" | "forte" | "muito forte";
+  direction: "positiva" | "negativa";
+  description: string;
+}
+
 /* ------------------------------ Hábitos ------------------------------ */
 
 export interface HabitSummary {

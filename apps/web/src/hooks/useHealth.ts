@@ -7,12 +7,19 @@ const KEYS = {
   sleep: ["health", "sleep"],
   workouts: ["health", "workouts"],
   mood: ["health", "mood"],
+  correlations: ["health", "correlations"],
 };
 
 /** Reaproveitado por Dashboard, Hoje e a própria tela de Saúde. */
 export function useHealthSummary() {
   const query = useQuery({ queryKey: KEYS.summary, queryFn: () => healthService.summary() });
   return { summary: query.data ?? null, isLoading: query.isLoading };
+}
+
+/** Correlações automáticas entre sono, exercício, água e humor/energia/estresse — só aparecem com amostra suficiente (ver correlationService.ts). */
+export function useHealthCorrelations() {
+  const query = useQuery({ queryKey: KEYS.correlations, queryFn: () => healthService.correlations() });
+  return { correlations: query.data ?? [], isLoading: query.isLoading };
 }
 
 export function useHealth() {

@@ -23,4 +23,10 @@ export const reviewsService = {
     api.post<{ draft: { wentWell: string; toImprove: string; nextWeekFocus: string } }>(
       `/reviews/weekly/draft?weekStartDate=${weekStartDate}`
     ),
+
+  /** Resumo semanal por e-mail — preferência (opt-in) e envio manual ("me envie agora"). */
+  getWeeklyEmailSettings: () => api.get<{ enabled: boolean }>("/reviews/weekly/email-settings"),
+  setWeeklyEmailSettings: (enabled: boolean) =>
+    api.patch<{ enabled: boolean }>("/reviews/weekly/email-settings", { enabled }),
+  sendWeeklyEmailNow: () => api.post<{ sent: boolean; weekStartDate: string }>("/reviews/weekly/send-email"),
 };
