@@ -1,18 +1,18 @@
 # Sugestões de novas telas e ferramentas para o LifeOS
 
-> **Status (14/09/2026):** item "Notas rápidas / Inbox" implementado — botão de captura flutuante em qualquer tela + tela `/inbox` pra processar cada item (vira tarefa ou é descartado). Próximos da fila de prioridade seguem em aberto (Área Profissional dedicada, Modo Semana, recorrência de tarefas...).
+> **Status (14/09/2026):** itens "Notas rápidas / Inbox", "Área Profissional dedicada" e "Modo Semana" implementados. Inbox: botão de captura flutuante em qualquer tela + tela `/inbox` pra processar cada item (vira tarefa ou é descartado). Área Profissional: tela `/profissional` com Priority Score (impacto/urgência/esforço agora editáveis na tarefa quando vinculada a um projeto Profissional), metas ativas da categoria "Carreira" e log de reuniões 1:1/anotações. Modo Semana: tela `/semana`, os 7 dias como colunas com prazos (mesma fonte do Calendário) e check-in de hábitos direto na grade. Próximos da fila seguem em aberto (recorrência de tarefas, CI...).
 
 Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as ideias de evolução da rodada anterior (Copilot proativo, conquistas reais, onboarding, exportação de dados, code-splitting e testes automatizados), aqui vão sugestões de telas e ferramentas novas — coisas que ainda não existem no app e que fariam sentido dado o que já está construído. Agrupei por tema e marquei uma prioridade sugerida (Alta/Média/Baixa) pensando em esforço vs. valor.
 
 ## Produtividade e organização
 
-**Área Profissional dedicada** (Alta) — o briefing original menciona uma "área profissional" como módulo próprio, mas hoje ela só existe implicitamente via `projects.kind = 'professional'` e o campo `impact/urgency/effort` (priority score) nas tarefas, sem nenhuma tela que os exponha. Uma tela própria poderia reunir: reuniões 1:1 e anotações recorrentes, OKRs/metas do trimestre vinculadas às Metas já existentes, e um painel de "priority score" (impacto × urgência ÷ esforço) ordenando as tarefas profissionais — os campos já existem no banco, só falta a tela.
+**Área Profissional dedicada** (Alta, ✅ implementado) — o briefing original menciona uma "área profissional" como módulo próprio, mas hoje ela só existe implicitamente via `projects.kind = 'professional'` e o campo `impact/urgency/effort` (priority score) nas tarefas, sem nenhuma tela que os exponha. Uma tela própria poderia reunir: reuniões 1:1 e anotações recorrentes, OKRs/metas do trimestre vinculadas às Metas já existentes, e um painel de "priority score" (impacto × urgência ÷ esforço) ordenando as tarefas profissionais — os campos já existem no banco, só falta a tela.
 
 **Notas rápidas / Inbox** (Alta, ✅ implementado) — um campo de captura única (atalho de teclado, sempre acessível) para jogar uma ideia, lembrete ou tarefa solta sem precisar escolher projeto/status/prioridade na hora. Um "GTD inbox" simples: entra tudo ali, depois se processa (vira tarefa, nota, ou é descartado). Reduz atrito de captura, que é onde a maioria dos apps de produtividade perde o usuário.
 
 **Recorrência de tarefas de verdade** (Média) — o campo `recurrence_rule` já existe na tabela `tasks` mas não está implementado em lugar nenhum (nem geração automática da próxima ocorrência, nem edição de regra pela UI). Hoje se o usuário quer uma tarefa "todo dia" ele recria manualmente. Vale entrar na fila.
 
-**Modo "Semana"** (Média) — hoje existe Hoje (diário) e Calendário (mensal). Uma visão semanal — os 7 dias como colunas, tarefas/eventos/hábitos empilhados — é o meio-termo que muita gente usa para planejar a semana inteira de uma vez, e complementaria bem o Weekly Review que já existe.
+**Modo "Semana"** (Média, ✅ implementado) — hoje existe Hoje (diário) e Calendário (mensal). Uma visão semanal — os 7 dias como colunas, tarefas/eventos/hábitos empilhados — é o meio-termo que muita gente usa para planejar a semana inteira de uma vez, e complementaria bem o Weekly Review que já existe.
 
 ## Biblioteca e leitura
 
