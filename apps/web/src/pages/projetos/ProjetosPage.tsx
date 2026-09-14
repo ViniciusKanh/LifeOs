@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Briefcase, GanttChartSquare, GraduationCap, Home, Plus, Users, X } from "lucide-react";
+import { Briefcase, GanttChartSquare, GraduationCap, Home, Plus, Trash2, Users, X } from "lucide-react";
 import { useProjects, useGantt, useProjectForecast } from "@/hooks/useProjects";
 import { taskService } from "@/services/taskService";
 import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
@@ -36,10 +36,11 @@ function ProjectForecastChip({ project }: { project: Project }) {
 
 export function ProjetosPage() {
   const queryClient = useQueryClient();
-  const { projects, isLoading, createProject } = useProjects();
+  const { projects, isLoading, createProject, removeProject } = useProjects();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<GanttTask | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   useEffect(() => {
     if (!selectedId && projects.length > 0) setSelectedId(projects[0].id);
@@ -47,6 +48,13 @@ export function ProjetosPage() {
 
   const { data: gantt, isLoading: ganttLoading, addDependency, removeDependency } = useGantt(selectedId ?? undefined);
   const selectedProject = projects.find((p) => p.id === selectedId);
+
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    await removeProject(projectToDelete.id);
+    if (selectedId === projectToDelete.id) setSelectedId(null);
+    setProjectToDelete(null);
+  };
 
   const handleSaveDates = async (patch: { startDate: string | null; dueDate: string | null }) => {
     if (!editingTask) return;
@@ -87,23 +95,35 @@ export function ProjetosPage() {
               const pct = p.task_count > 0 ? Math.round((p.done_count / p.task_count) * 100) : 0;
               const active = p.id === selectedId;
               return (
-                <button key={p.id} onClick={() => setSelectedId(p.id)} className="shrink-0 text-left">
-                  <Card
-                    className={`p-3.5 w-52 transition-colors ${active ? "border-brand-500 shadow-card" : "hover:border-brand-500/40"}`}
+                <div key={p.id} className="relative shrink-0 group">
+                  <button onClick={() => setSelectedId(p.id)} className="text-left block">
+                    <Card
+                      className={`p-3.5 w-52 transition-colors ${active ? "border-brand-500 shadow-card" : "hover:border-brand-500/40"}`}
+                    >
+                      <div className="flex items-center gap-2 mb-2 pr-5">
+                        <IconBadge tone={meta.tone} size={28} icon={<Icon size={13} />} />
+                        <p className="text-sm font-semibold truncate flex-1">{p.name}</p>
+                      </div>
+                      <p className="text-[11px] text-slate mb-1.5">
+                        {p.done_count}/{p.task_count} tarefas concluídas
+                      </p>
+                      <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                        <div className="h-full rounded-full bg-growth" style={{ width: `${pct}%` }} />
+                      </div>
+                      <ProjectForecastChip project={p} />
+                    </Card>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProjectToDelete(p);
+                    }}
+                    aria-label={`Excluir projeto ${p.name}`}
+                    className="absolute top-3 right-3 text-slate/60 hover:text-drop transition-colors"
                   >
-                    <div className="flex items-center gap-2 mb-2">
-                      <IconBadge tone={meta.tone} size={28} icon={<Icon size={13} />} />
-                      <p className="text-sm font-semibold truncate flex-1">{p.name}</p>
-                    </div>
-                    <p className="text-[11px] text-slate mb-1.5">
-                      {p.done_count}/{p.task_count} tarefas concluídas
-                    </p>
-                    <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                      <div className="h-full rounded-full bg-growth" style={{ width: `${pct}%` }} />
-                    </div>
-                    <ProjectForecastChip project={p} />
-                  </Card>
-                </button>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -139,6 +159,61 @@ export function ProjetosPage() {
       {editingTask && (
         <GanttDatesModal task={editingTask} onClose={() => setEditingTask(null)} onSave={handleSaveDates} />
       )}
+
+      {projectToDelete && (
+        <ConfirmDeleteProjectModal project={projectToDelete} onCancel={() => setProjectToDelete(null)} onConfirm={handleDeleteProject} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Confirmação antes de excluir um projeto — diferente da maioria das
+ * exclusões do app (ex.: disciplina, prazo), que são instantâneas,
+ * porque apagar um projeto pode desvincular várias tarefas de uma vez
+ * (elas continuam existindo, só perdem o vínculo com o projeto).
+ */
+function ConfirmDeleteProjectModal({
+  project,
+  onCancel,
+  onConfirm,
+}: {
+  project: Project;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleConfirm = async () => {
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+      <div
+        className="w-full max-w-sm rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold mb-2">Excluir "{project.name}"?</p>
+        <p className="text-xs text-slate mb-4">
+          {project.task_count > 0
+            ? `As ${project.task_count} tarefas deste projeto continuam existindo, mas perdem o vínculo com ele.`
+            : "Esta ação não pode ser desfeita."}
+        </p>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={onCancel} className="flex-1" disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button onClick={handleConfirm} disabled={deleting} className="flex-1 !bg-drop !from-drop !to-drop">
+            {deleting ? "Excluindo..." : "Excluir"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

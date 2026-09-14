@@ -115,20 +115,31 @@ export function useAcademicProjects() {
 
   const projectsQuery = useQuery({ queryKey: ACADEMIC_PROJECTS_KEY, queryFn: educationService.listAcademicProjects });
 
+  // O painel de Educação (useEducation) mostra academicProjects
+  // embutido dentro da própria formação, não a partir desta query —
+  // por isso toda mutação aqui precisa invalidar também EDUCATIONS_KEY
+  // (invalida por prefixo: pega tanto a lista quanto cada formação
+  // individual), senão criar/editar/excluir um projeto acadêmico não
+  // refletia no painel sem recarregar a página.
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ACADEMIC_PROJECTS_KEY });
+    queryClient.invalidateQueries({ queryKey: EDUCATIONS_KEY });
+  };
+
   const createProject = useMutation({
     mutationFn: (input: Record<string, unknown>) => educationService.createAcademicProject(input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ACADEMIC_PROJECTS_KEY }),
+    onSuccess: invalidate,
   });
 
   const updateProject = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
       educationService.updateAcademicProject(id, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ACADEMIC_PROJECTS_KEY }),
+    onSuccess: invalidate,
   });
 
   const removeProject = useMutation({
     mutationFn: educationService.removeAcademicProject,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ACADEMIC_PROJECTS_KEY }),
+    onSuccess: invalidate,
   });
 
   return {

@@ -181,13 +181,40 @@ educationRouter.patch("/educations/:id", async (req, res) => {
   return res.json(updated.rows[0]);
 });
 
+/**
+ * DELETE /education/educations/:id — apaga a formação inteira
+ * (cursos e disciplinas somem via ON DELETE CASCADE do próprio
+ * schema). Os projetos acadêmicos vinculados (TCC/dissertação/tese)
+ * são o único caso que o schema não cascateia sozinho —
+ * academic_projects.education_id é ON DELETE SET NULL de propósito
+ * (um projeto acadêmico pode existir sem formação), mas isso deixava
+ * projeto genérico + Kanban órfãos em Projetos toda vez que uma
+ * formação era apagada. Aqui apagamos esses projetos acadêmicos
+ * (e seus projetos genéricos vinculados) explicitamente antes de
+ * apagar a formação, para não sobrar lixo relacionado à educação.
+ */
 educationRouter.delete("/educations/:id", async (req, res) => {
   const db = getDb();
-  const result = await db.execute({
-    sql: "DELETE FROM educations WHERE id = ? AND owner_id = ?",
+  const owned = await db.execute({ sql: "SELECT id FROM educations WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  if (owned.rows.length === 0) return res.status(404).json({ error: "Formação não encontrada." });
+
+  const linkedProjects = await db.execute({
+    sql: "SELECT project_id FROM academic_projects WHERE education_id = ? AND owner_id = ?",
     args: [req.params.id, req.user!.id],
   });
-  if (result.rowsAffected === 0) return res.status(404).json({ error: "Formação não encontrada." });
+  for (const row of linkedProjects.rows as unknown as Array<{ project_id: string | null }>) {
+    if (row.project_id) {
+      // Cascade cuida de apagar a linha de academic_projects também.
+      await db.execute({ sql: "DELETE FROM projects WHERE id = ? AND owner_id = ?", args: [row.project_id, req.user!.id] });
+    } else {
+      await db.execute({
+        sql: "DELETE FROM academic_projects WHERE education_id = ? AND owner_id = ? AND project_id IS NULL",
+        args: [req.params.id, req.user!.id],
+      });
+    }
+  }
+
+  await db.execute({ sql: "DELETE FROM educations WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
   return res.status(204).send();
 });
 
@@ -852,12 +879,32 @@ educationRouter.patch("/academic-projects/:id", async (req, res) => {
   return res.json(updated.rows[0]);
 });
 
+/**
+ * DELETE /education/academic-projects/:id — apaga o projeto acadêmico
+ * (TCC/dissertação/tese...) e também o projeto genérico vinculado
+ * (Kanban/Gantt), quando existir. Sem isso o projeto genérico ficava
+ * órfão em Projetos (kind='academic', mas sem nenhum vínculo com
+ * Educação) e não havia como removê-lo — era exatamente o "lixo"
+ * de projetos de educação que o usuário não conseguia apagar.
+ * Apagar direto a linha de `projects` já é suficiente: a FK
+ * academic_projects.project_id é ON DELETE CASCADE, então a linha de
+ * academic_projects some junto — só precisamos apagar academic_projects
+ * primeiro nos casos (raros) em que project_id é nulo.
+ */
 educationRouter.delete("/academic-projects/:id", async (req, res) => {
   const db = getDb();
-  const result = await db.execute({
-    sql: "DELETE FROM academic_projects WHERE id = ? AND owner_id = ?",
+  const existing = await db.execute({
+    sql: "SELECT project_id FROM academic_projects WHERE id = ? AND owner_id = ?",
     args: [req.params.id, req.user!.id],
   });
-  if (result.rowsAffected === 0) return res.status(404).json({ error: "Projeto acadêmico não encontrado." });
+  if (existing.rows.length === 0) return res.status(404).json({ error: "Projeto acadêmico não encontrado." });
+
+  const projectId = (existing.rows[0] as unknown as { project_id: string | null }).project_id;
+  if (projectId) {
+    // Cascade cuida de apagar a linha de academic_projects também.
+    await db.execute({ sql: "DELETE FROM projects WHERE id = ? AND owner_id = ?", args: [projectId, req.user!.id] });
+  } else {
+    await db.execute({ sql: "DELETE FROM academic_projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  }
   return res.status(204).send();
 });
