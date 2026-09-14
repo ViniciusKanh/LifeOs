@@ -1,6 +1,6 @@
 # Sugestões de novas telas e ferramentas para o LifeOS
 
-> **Status (14/09/2026):** itens "Notas rápidas / Inbox", "Área Profissional dedicada" e "Modo Semana" implementados. Inbox: botão de captura flutuante em qualquer tela + tela `/inbox` pra processar cada item (vira tarefa ou é descartado). Área Profissional: tela `/profissional` com Priority Score (impacto/urgência/esforço agora editáveis na tarefa quando vinculada a um projeto Profissional), metas ativas da categoria "Carreira" e log de reuniões 1:1/anotações. Modo Semana: tela `/semana`, os 7 dias como colunas com prazos (mesma fonte do Calendário) e check-in de hábitos direto na grade. Próximos da fila seguem em aberto (recorrência de tarefas, CI...).
+> **Status (14/09/2026):** itens "Notas rápidas / Inbox", "Área Profissional dedicada", "Modo Semana" e "Recorrência de tarefas de verdade" implementados. Inbox: botão de captura flutuante em qualquer tela + tela `/inbox` pra processar cada item (vira tarefa ou é descartado). Área Profissional: tela `/profissional` com Priority Score (impacto/urgência/esforço agora editáveis na tarefa quando vinculada a um projeto Profissional), metas ativas da categoria "Carreira" e log de reuniões 1:1/anotações. Modo Semana: tela `/semana`, os 7 dias como colunas com prazos (mesma fonte do Calendário) e check-in de hábitos direto na grade. Recorrência: campo `recurrence_rule` agora implementado de ponta a ponta — seletor "Repetir" (diária/semanal com dias da semana/mensal) no TaskModal, e ao concluir uma tarefa recorrente uma nova ocorrência é criada automaticamente na próxima data (a tarefa concluída não é reaberta, preservando histórico). Próximo da fila: CI automatizado.
 
 Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as ideias de evolução da rodada anterior (Copilot proativo, conquistas reais, onboarding, exportação de dados, code-splitting e testes automatizados), aqui vão sugestões de telas e ferramentas novas — coisas que ainda não existem no app e que fariam sentido dado o que já está construído. Agrupei por tema e marquei uma prioridade sugerida (Alta/Média/Baixa) pensando em esforço vs. valor.
 
@@ -10,7 +10,7 @@ Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as
 
 **Notas rápidas / Inbox** (Alta, ✅ implementado) — um campo de captura única (atalho de teclado, sempre acessível) para jogar uma ideia, lembrete ou tarefa solta sem precisar escolher projeto/status/prioridade na hora. Um "GTD inbox" simples: entra tudo ali, depois se processa (vira tarefa, nota, ou é descartado). Reduz atrito de captura, que é onde a maioria dos apps de produtividade perde o usuário.
 
-**Recorrência de tarefas de verdade** (Média) — o campo `recurrence_rule` já existe na tabela `tasks` mas não está implementado em lugar nenhum (nem geração automática da próxima ocorrência, nem edição de regra pela UI). Hoje se o usuário quer uma tarefa "todo dia" ele recria manualmente. Vale entrar na fila.
+**Recorrência de tarefas de verdade** (Média, ✅ implementado) — o campo `recurrence_rule` já existia na tabela `tasks` mas não estava implementado em lugar nenhum. Agora: regra em formato `FREQ=DAILY|WEEKLY|MONTHLY` (com `BYDAY=` para semanal), seletor "Repetir" no TaskModal, ícone de recorrência no card, e ao concluir uma tarefa com regra, uma nova tarefa é gerada automaticamente para a próxima ocorrência (a concluída não é reaberta — histórico preservado).
 
 **Modo "Semana"** (Média, ✅ implementado) — hoje existe Hoje (diário) e Calendário (mensal). Uma visão semanal — os 7 dias como colunas, tarefas/eventos/hábitos empilhados — é o meio-termo que muita gente usa para planejar a semana inteira de uma vez, e complementaria bem o Weekly Review que já existe.
 
@@ -54,7 +54,7 @@ Depois de fechar o escopo original (Calendário, Gantt, push notifications) e as
 2. Área Profissional dedicada — fecha uma lacuna do escopo original.
 3. Notas rápidas / Inbox — baixo esforço, alto uso diário.
 4. Modo "Semana" — complementa Hoje + Calendário + Weekly Review.
-5. Recorrência de tarefas — campo já existe, só falta implementar.
+5. ~~Recorrência de tarefas~~ — ✅ implementado.
 6. CI automatizado — protege tudo que já foi construído.
 7. Correlações de saúde automáticas — diferencial real de dado, baixo custo dado que os dados já existem.
 8. Resumo semanal por e-mail — reaproveita infraestrutura de SMTP já pronta.
