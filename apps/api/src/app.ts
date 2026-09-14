@@ -21,6 +21,7 @@ import { exportRouter } from "./routes/export.routes.js";
 import { pushRouter } from "./routes/push.routes.js";
 import { projectsRouter } from "./routes/projects.routes.js";
 import { searchRouter } from "./routes/search.routes.js";
+import { inboxRouter } from "./routes/inbox.routes.js";
 
 /**
  * Configuração do Express extraída para um módulo próprio (sem
@@ -72,6 +73,7 @@ app.use("/api/events", eventsRouter);
 app.use("/api/achievements", achievementsRouter);
 app.use("/api/export", exportRouter);
 app.use("/api/search", searchRouter);
+app.use("/api/inbox", inboxRouter);
 
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

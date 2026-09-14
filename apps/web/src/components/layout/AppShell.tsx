@@ -20,6 +20,7 @@ import {
   CalendarDays,
   Trophy,
   GanttChartSquare,
+  Inbox,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +30,7 @@ import { AchievementToast } from "./AchievementToast";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
+import { QuickCaptureButton } from "./QuickCaptureButton";
 
 // Frases curtas por área — só decoração de cabeçalho, sem dado
 // nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
@@ -36,6 +38,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/dashboard": "Disciplina de hoje, liberdade de amanhã.",
   "/hoje": "Consistência hoje, resultados amanhã.",
   "/tarefas": "Disciplina de hoje, liberdade de amanhã.",
+  "/inbox": "Capture agora, decida depois.",
   "/foco": "Foco é a ponte entre onde você está e onde quer chegar.",
   "/biblioteca": "Livros constroem a melhor versão de nós.",
   "/educacao": "Estudo hoje, liberdade amanhã.",
@@ -59,6 +62,7 @@ const NAV = [
 ];
 
 const SECONDARY_NAV = [
+  { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/calendario", label: "Calendário", icon: CalendarDays },
   { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
   { to: "/educacao", label: "Educação", icon: GraduationCap },
@@ -252,6 +256,7 @@ export function AppShell() {
         <AchievementToast />
         <OnboardingFlow />
         <CopilotAssistant />
+        <QuickCaptureButton />
       </div>
     </div>
   );
