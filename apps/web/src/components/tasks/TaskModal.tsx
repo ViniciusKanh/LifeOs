@@ -20,6 +20,28 @@ const KIND_LABEL: Record<string, string> = {
   academic: "Acadêmico",
 };
 
+/** Seletor 1-5 compacto (pontinhos) usado pelos campos de Priority Score — 0 = não preenchido. */
+function ScoreField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <label className="text-[11px] text-slate">{label}</label>
+      <div className="flex items-center gap-1 mt-1.5">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(value === n ? 0 : n)}
+            aria-label={`${label}: ${n}`}
+            className={`w-5 h-5 rounded-full border transition-colors ${
+              n <= value ? "bg-brand-500 border-brand-500" : "border-paper-border dark:border-ink-border"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function toDateInput(value: string | null): string {
   if (!value) return "";
   return value.slice(0, 10);
@@ -59,9 +81,14 @@ export function TaskModal({
   const [dueDate, setDueDate] = useState(toDateInput(task?.due_date ?? null));
   const [estimateMinutes, setEstimateMinutes] = useState(task?.estimate_minutes ? String(task.estimate_minutes) : "");
   const [projectId, setProjectId] = useState<string>(task?.project_id ?? "");
+  const [impact, setImpact] = useState(task?.impact ?? 0);
+  const [urgency, setUrgency] = useState(task?.urgency ?? 0);
+  const [effort, setEffort] = useState(task?.effort ?? 0);
   const [saving, setSaving] = useState(false);
 
   const { projects } = useProjects();
+  const selectedProject = projects.find((p) => p.id === projectId);
+  const isProfessional = selectedProject?.kind === "professional";
   const { activeEntry, start, stop, isStarting, isStopping } = useTaskTimer(task?.id ?? null);
   const [elapsed, setElapsed] = useState(0);
 
@@ -90,6 +117,9 @@ export function TaskModal({
         dueDate: dueDate || null,
         estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
         projectId: projectId || null,
+        impact: isProfessional && impact > 0 ? impact : null,
+        urgency: isProfessional && urgency > 0 ? urgency : null,
+        effort: isProfessional && effort > 0 ? effort : null,
       });
       onClose();
     } finally {
@@ -169,6 +199,25 @@ export function TaskModal({
               Vincular a um projeto Workspace ou Profissional é o que faz a tarefa contar na dimensão "Profissional" do Life Score.
             </p>
           </div>
+
+          {isProfessional && (
+            <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">
+              <p className="text-xs font-semibold mb-0.5">Priority Score (opcional)</p>
+              <p className="text-[11px] text-slate mb-3">
+                Preenchendo os três, a tarefa entra ordenada por score na tela Profissional — impacto × urgência ÷ esforço.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <ScoreField label="Impacto" value={impact} onChange={setImpact} />
+                <ScoreField label="Urgência" value={urgency} onChange={setUrgency} />
+                <ScoreField label="Esforço" value={effort} onChange={setEffort} />
+              </div>
+              {impact > 0 && urgency > 0 && effort > 0 && (
+                <p className="text-[11px] text-brand-600 dark:text-brand-400 font-medium mt-2.5">
+                  Score: {((impact * urgency) / effort).toFixed(1)}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Data de início" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />

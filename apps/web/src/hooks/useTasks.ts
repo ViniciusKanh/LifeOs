@@ -149,6 +149,12 @@ export function useFocusTasks(limit = 5) {
   };
 }
 
+/** Área Profissional: tarefas em aberto de projetos profissionais, ordenadas pelo Priority Score. */
+export function useProfessionalTasks() {
+  const query = useQuery({ queryKey: ["tasks", "professional"], queryFn: taskService.professionalList });
+  return { tasks: query.data ?? [], isLoading: query.isLoading };
+}
+
 export function useTaskTimer(taskId: string | null) {
   const queryClient = useQueryClient();
 
