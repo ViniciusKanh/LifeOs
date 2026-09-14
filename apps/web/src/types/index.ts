@@ -58,6 +58,7 @@ export interface Task {
   urgency: number | null;
   effort: number | null;
   priority_score: number | null;
+  recurrence_rule: string | null;
 }
 
 /**

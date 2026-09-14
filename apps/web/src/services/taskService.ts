@@ -13,6 +13,7 @@ export interface TaskInput {
   impact?: number | null;
   urgency?: number | null;
   effort?: number | null;
+  recurrenceRule?: string | null;
 }
 
 export const taskService = {
