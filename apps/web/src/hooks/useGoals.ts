@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { goalsService, type GoalCreateInput, type GoalUpdateInput } from "@/services/goalsService";
+import { triggerAchievementsCheck } from "@/services/achievementsService";
 
 const GOALS_KEY = ["goals"];
 const STATS_KEY = ["goals", "stats"];
@@ -19,7 +20,11 @@ export function useGoals(params?: { parentGoalId?: string }) {
   const createGoal = useMutation({ mutationFn: (input: GoalCreateInput) => goalsService.create(input), onSuccess: invalidate });
   const updateGoal = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: GoalUpdateInput }) => goalsService.update(id, patch),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => {
+      invalidate();
+      // Concluir uma meta é gatilho de conquista (ex.: "Focado em metas") — antes não disparava nenhuma checagem.
+      if (variables.patch.status === "done") triggerAchievementsCheck();
+    },
   });
   const removeGoal = useMutation({ mutationFn: goalsService.remove, onSuccess: invalidate });
   const addProgress = useMutation({
