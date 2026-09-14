@@ -5,7 +5,7 @@ const ACTIVE_KEY = ["focus", "active"];
 const SUMMARY_KEY = ["focus", "summary"];
 const SESSIONS_KEY = ["focus", "sessions"];
 
-export function useFocus() {
+export function useFocus(sessionsLimit = 10) {
   const queryClient = useQueryClient();
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ACTIVE_KEY });
@@ -18,7 +18,10 @@ export function useFocus() {
 
   const activeQuery = useQuery({ queryKey: ACTIVE_KEY, queryFn: focusService.active, refetchInterval: 15_000 });
   const summaryQuery = useQuery({ queryKey: SUMMARY_KEY, queryFn: focusService.summary });
-  const sessionsQuery = useQuery({ queryKey: SESSIONS_KEY, queryFn: () => focusService.list(10) });
+  const sessionsQuery = useQuery({
+    queryKey: [...SESSIONS_KEY, sessionsLimit],
+    queryFn: () => focusService.list(sessionsLimit),
+  });
 
   const start = useMutation({ mutationFn: focusService.start, onSuccess: invalidate });
   const stop = useMutation({

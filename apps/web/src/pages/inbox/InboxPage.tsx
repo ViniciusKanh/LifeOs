@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
-import { Check, ChevronDown, Inbox as InboxIcon, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Inbox as InboxIcon, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { useInbox } from "@/hooks/useInbox";
 import { useProjects } from "@/hooks/useProjects";
-import { Button, Card, EmptyState, Field, PageHeader } from "@/components/ui/primitives";
+import { ApiError } from "@/services/api";
+import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import type { InboxItem } from "@/services/inboxService";
 
 function formatRelativeTime(value: string) {
@@ -17,6 +18,20 @@ function formatRelativeTime(value: string) {
   return `há ${diffD}d`;
 }
 
+// Erros de gateway/timeout (comuns em cold start de função serverless
+// ou banco pausado) merecem uma mensagem diferente de um erro de
+// validação — o usuário não fez nada errado, vale a pena tentar de novo.
+function friendlyErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof ApiError && (err.status === 502 || err.status === 503 || err.status === 504)) {
+    return "O servidor demorou para responder. Aguarde alguns segundos e tente novamente.";
+  }
+  return err instanceof Error ? err.message : fallback;
+}
+
+function isoDay(value: string) {
+  return value.length <= 10 ? value : value.replace(" ", "T").slice(0, 10);
+}
+
 /**
  * Notas rápidas / Inbox — tela onde os itens capturados (pelo botão
  * flutuante disponível em qualquer lugar do app, ou diretamente aqui)
@@ -26,7 +41,7 @@ function formatRelativeTime(value: string) {
  */
 export function InboxPage() {
   const [showProcessed, setShowProcessed] = useState(false);
-  const { items, isLoading, capture, isCapturing, process, remove } = useInbox(showProcessed);
+  const { items, allItems, isLoading, isError, refetch, capture, isCapturing, process, remove } = useInbox(showProcessed);
   const [text, setText] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -40,9 +55,19 @@ export function InboxPage() {
       await capture(content);
       setText("");
     } catch (err) {
-      setCaptureError(err instanceof Error ? err.message : "Não foi possível capturar agora. Tente de novo.");
+      setCaptureError(friendlyErrorMessage(err, "Não foi possível capturar agora. Tente de novo."));
     }
   };
+
+  // Estatísticas rápidas da caixa de entrada — sempre calculadas sobre
+  // a lista completa (allItems), independente do filtro de exibição.
+  const stats = useMemo(() => {
+    const pending = allItems.filter((i) => !i.processed_at).length;
+    const sevenDaysAgo = Date.now() - 7 * 86_400_000;
+    const processedLast7d = allItems.filter((i) => i.processed_at && new Date(isoDay(i.processed_at) + "T00:00:00").getTime() >= sevenDaysAgo).length;
+    const capturedLast7d = allItems.filter((i) => new Date(isoDay(i.created_at) + "T00:00:00").getTime() >= sevenDaysAgo).length;
+    return { pending, processedLast7d, capturedLast7d };
+  }, [allItems]);
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
@@ -51,6 +76,50 @@ export function InboxPage() {
         title="Inbox"
         subtitle="Capture qualquer ideia sem pensar em projeto ou prioridade — decida o que fazer com cada item aqui, com calma."
       />
+
+      {isError && (
+        <Card className="p-4 mb-5 border-drop/40 bg-drop/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-drop shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Não foi possível carregar o Inbox agora</p>
+              <p className="text-xs text-slate mt-0.5">
+                O servidor demorou para responder (comum logo após uma implantação nova). Tente novamente em alguns segundos.
+              </p>
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-paper-border dark:border-ink-border px-3 py-1.5 shrink-0 hover:bg-paper dark:hover:bg-ink"
+            >
+              <RefreshCw size={13} /> Tentar de novo
+            </button>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-3 mb-5">
+        <Card className="p-3 sm:p-3.5 flex items-center gap-2.5">
+          <IconBadge tone="amber" size={30} icon={<Sparkles size={14} />} />
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-[11px] text-slate leading-tight">Pendentes</p>
+            <p className="font-display font-semibold text-sm sm:text-base leading-tight">{stats.pending}</p>
+          </div>
+        </Card>
+        <Card className="p-3 sm:p-3.5 flex items-center gap-2.5">
+          <IconBadge tone="green" size={30} icon={<CheckCircle2 size={14} />} />
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-[11px] text-slate leading-tight">Processados (7d)</p>
+            <p className="font-display font-semibold text-sm sm:text-base leading-tight">{stats.processedLast7d}</p>
+          </div>
+        </Card>
+        <Card className="p-3 sm:p-3.5 flex items-center gap-2.5">
+          <IconBadge tone="blue" size={30} icon={<InboxIcon size={14} />} />
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-[11px] text-slate leading-tight">Capturados (7d)</p>
+            <p className="font-display font-semibold text-sm sm:text-base leading-tight">{stats.capturedLast7d}</p>
+          </div>
+        </Card>
+      </div>
 
       <Card className="p-4 mb-5">
         <form onSubmit={handleCapture} className="flex gap-2">
@@ -139,7 +208,7 @@ function InboxRow({
     try {
       await onConvert({ title: title.trim(), projectId: projectId || null, priority, dueDate: dueDate || null });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar a tarefa.");
+      setError(friendlyErrorMessage(err, "Não foi possível criar a tarefa."));
     } finally {
       setSaving(false);
     }

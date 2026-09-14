@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play, Square, Timer as TimerIcon, Coffee, Lightbulb, History, ChevronDown } from "lucide-react";
+import { Play, Square, Timer as TimerIcon, Coffee, Lightbulb, History, ChevronDown, Flame, ListChecks, X } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 import { useFocus } from "@/hooks/useFocus";
 import { useTasks } from "@/hooks/useTasks";
 import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
+
+const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function isoDay(at: string) {
+  return String(at).slice(0, 10);
+}
 
 function formatMinutes(min: number) {
   const h = Math.floor(min / 60);
@@ -28,7 +35,7 @@ const RING_RADIUS = 88;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function FocoPage() {
-  const { activeSession, summary, recentSessions, start, stop } = useFocus();
+  const { activeSession, summary, recentSessions, start, stop } = useFocus(50);
   const { tasks } = useTasks();
   const [mode, setMode] = useState<"pomodoro" | "free_timer">("pomodoro");
   const [plannedMinutes, setPlannedMinutes] = useState(25);
@@ -37,7 +44,45 @@ export function FocoPage() {
   const [showStopModal, setShowStopModal] = useState(false);
   const [productivity, setProductivity] = useState(3);
   const [error, setError] = useState<string | null>(null);
+  const [fullHistoryOpen, setFullHistoryOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t.title])), [tasks]);
+  const completedSessions = useMemo(() => recentSessions.filter((s) => s.ended_at && s.actual_minutes != null), [recentSessions]);
+
+  // Últimos 7 dias (hoje incluso) — soma de minutos por dia, a partir
+  // das sessões já carregadas (nunca um número inventado).
+  const weeklyChart = useMemo(() => {
+    const byDay = new Map<string, number>();
+    for (const s of completedSessions) {
+      const day = isoDay(s.started_at);
+      byDay.set(day, (byDay.get(day) ?? 0) + (s.actual_minutes ?? 0));
+    }
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      const iso = d.toISOString().slice(0, 10);
+      return { iso, label: WEEKDAY_LABELS[d.getDay()], minutes: byDay.get(iso) ?? 0, isToday: i === 6 };
+    });
+  }, [completedSessions]);
+
+  // Sequência de dias consecutivos (até hoje) com ao menos uma sessão
+  // concluída — mesmo raciocínio de streak usado em Hábitos.
+  const focusStreak = useMemo(() => {
+    const days = new Set(completedSessions.map((s) => isoDay(s.started_at)));
+    let streak = 0;
+    const cursor = new Date();
+    for (;;) {
+      const iso = cursor.toISOString().slice(0, 10);
+      if (!days.has(iso)) break;
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }, [completedSessions]);
+
+  const longestSession = completedSessions.length > 0 ? Math.max(...completedSessions.map((s) => s.actual_minutes ?? 0)) : null;
 
   // Só tarefas ainda não concluídas fazem sentido como alvo de um
   // ciclo de foco — não oferecemos um seletor de "Projeto" porque o
@@ -255,22 +300,73 @@ export function FocoPage() {
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
+            <Card className="p-3 sm:p-3.5 flex items-center gap-2.5">
+              <IconBadge tone="amber" size={30} icon={<Flame size={14} />} />
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-[11px] text-slate leading-tight">Sequência de dias</p>
+                <p className="font-display font-semibold text-sm sm:text-base leading-tight">
+                  {focusStreak > 0 ? `${focusStreak} ${focusStreak === 1 ? "dia" : "dias"}` : "—"}
+                </p>
+              </div>
+            </Card>
+            <Card className="p-3 sm:p-3.5 flex items-center gap-2.5">
+              <IconBadge tone="purple" size={30} icon={<TimerIcon size={14} />} />
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-[11px] text-slate leading-tight">Sessão mais longa</p>
+                <p className="font-display font-semibold text-sm sm:text-base leading-tight">{longestSession ? formatMinutes(longestSession) : "—"}</p>
+              </div>
+            </Card>
+          </div>
+
           <Card className="p-5">
-            <div className="flex items-center gap-2.5 mb-3">
-              <IconBadge tone="purple" size={32} icon={<History size={15} />} />
-              <p className="text-sm font-semibold">Histórico de foco</p>
+            <p className="text-sm font-semibold mb-1">Minutos de foco — últimos 7 dias</p>
+            <p className="text-xs text-slate mb-3">Soma real das sessões concluídas em cada dia.</p>
+            <div className="h-36">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyChart}>
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" width={28} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v: number) => [`${v}min`, "Foco"]} />
+                  <Bar dataKey="minutes" radius={[4, 4, 0, 0]}>
+                    {weeklyChart.map((d, i) => (
+                      <Cell key={i} fill={d.isToday ? "#D9860F" : "#8B5CF6"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <IconBadge tone="purple" size={32} icon={<History size={15} />} />
+                <p className="text-sm font-semibold">Histórico de foco</p>
+              </div>
+              {recentSessions.length > 6 && (
+                <button
+                  onClick={() => setFullHistoryOpen(true)}
+                  className="flex items-center gap-1 text-[11px] font-medium text-brand-600 dark:text-brand-500 hover:underline"
+                >
+                  <ListChecks size={12} /> Ver tudo
+                </button>
+              )}
             </div>
             {recentSessions.length === 0 ? (
               <p className="text-xs text-slate">Nenhuma sessão registrada ainda — inicie seu primeiro ciclo de foco.</p>
             ) : (
               <div className="space-y-2">
                 {recentSessions.slice(0, 6).map((s) => (
-                  <div key={s.id} className="flex items-center justify-between text-xs">
-                    <span className="text-slate">
+                  <div key={s.id} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate truncate">
                       {s.mode === "pomodoro" ? "Pomodoro" : "Cronômetro livre"} · {s.actual_minutes ?? "—"}min
+                      {s.task_id && taskById.get(s.task_id) && (
+                        <span className="text-inherit"> · {taskById.get(s.task_id)}</span>
+                      )}
                     </span>
                     {s.perceived_productivity && (
-                      <span className="text-[10px] font-semibold text-brand-600 dark:text-brand-500">{s.perceived_productivity}/5</span>
+                      <span className="shrink-0 text-[10px] font-semibold text-brand-600 dark:text-brand-500">{s.perceived_productivity}/5</span>
                     )}
                   </div>
                 ))}
@@ -308,6 +404,53 @@ export function FocoPage() {
             <Button onClick={handleConfirmStop} className="w-full">
               Salvar e encerrar
             </Button>
+          </div>
+        </div>
+      )}
+
+      {fullHistoryOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={() => setFullHistoryOpen(false)}>
+          <div
+            className="w-full max-w-lg max-h-[80vh] flex flex-col rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <IconBadge tone="purple" size={32} icon={<ListChecks size={15} />} />
+                <p className="text-sm font-semibold">Histórico completo de foco</p>
+              </div>
+              <button onClick={() => setFullHistoryOpen(false)} className="text-slate hover:text-inherit">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto space-y-2 pr-1">
+              {recentSessions.map((s) => {
+                const started = new Date(s.started_at.replace(" ", "T") + "Z");
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 text-xs rounded-xl border border-paper-border dark:border-ink-border px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        {s.mode === "pomodoro" ? "Pomodoro" : "Cronômetro livre"}
+                        {s.task_id && taskById.get(s.task_id) && <span className="text-slate"> · {taskById.get(s.task_id)}</span>}
+                      </p>
+                      <p className="text-slate mt-0.5">
+                        {started.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })} às{" "}
+                        {started.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-display font-semibold">{s.actual_minutes != null ? formatMinutes(s.actual_minutes) : "—"}</p>
+                      {s.perceived_productivity && (
+                        <p className="text-[10px] font-semibold text-brand-600 dark:text-brand-500">{s.perceived_productivity}/5</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
