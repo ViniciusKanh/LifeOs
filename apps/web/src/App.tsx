@@ -27,6 +27,7 @@ const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage").then(
 const HojePage = lazy(() => import("@/pages/hoje/HojePage").then((m) => ({ default: m.HojePage })));
 const TarefasPage = lazy(() => import("@/pages/tarefas/TarefasPage").then((m) => ({ default: m.TarefasPage })));
 const ProjetosPage = lazy(() => import("@/pages/projetos/ProjetosPage").then((m) => ({ default: m.ProjetosPage })));
+const InboxPage = lazy(() => import("@/pages/inbox/InboxPage").then((m) => ({ default: m.InboxPage })));
 const CalendarioPage = lazy(() =>
   import("@/pages/calendario/CalendarioPage").then((m) => ({ default: m.CalendarioPage }))
 );
@@ -108,6 +109,7 @@ export default function App() {
           <Route path="/hoje" element={<HojePage />} />
           <Route path="/tarefas" element={<TarefasPage />} />
           <Route path="/projetos" element={<ProjetosPage />} />
+          <Route path="/inbox" element={<InboxPage />} />
           <Route path="/calendario" element={<CalendarioPage />} />
           <Route path="/foco" element={<FocoPage />} />
           <Route path="/biblioteca" element={<BibliotecaPage />} />
