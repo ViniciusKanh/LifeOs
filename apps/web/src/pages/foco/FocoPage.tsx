@@ -119,11 +119,12 @@ export function FocoPage() {
             )}
 
             <div
-              className={`relative w-[220px] h-[220px] flex items-center justify-center mb-6 rounded-full transition-shadow duration-700 ${
+              className={`relative w-[min(220px,60vw)] h-[min(220px,60vw)] aspect-square flex items-center justify-center mb-6 rounded-full transition-shadow duration-700 ${
                 activeSession ? "shadow-glow-signal" : ""
               }`}
             >
-              <svg width={220} height={220} className="absolute inset-0 -rotate-90">
+              {/* viewBox fixo mantém a proporção do anel; o SVG escala via w-full/h-full para caber em telas estreitas */}
+              <svg viewBox="0 0 220 220" className="absolute inset-0 w-full h-full -rotate-90">
                 <circle cx={110} cy={110} r={RING_RADIUS} fill="none" strokeWidth={10} className="stroke-paper dark:stroke-ink" />
                 <circle
                   cx={110}
@@ -225,18 +226,18 @@ export function FocoPage() {
           </div>
 
           {summary && (
-            <div className="grid grid-cols-3 gap-2.5">
-              <Card className="p-3.5 text-center">
-                <p className="text-[11px] text-slate">Hoje</p>
-                <p className="font-display font-semibold text-base mt-0.5">{formatMinutes(summary.todayMinutes)}</p>
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5">
+              <Card className="p-2 sm:p-3.5 text-center">
+                <p className="text-[10px] sm:text-[11px] text-slate">Hoje</p>
+                <p className="font-display font-semibold text-sm sm:text-base mt-0.5">{formatMinutes(summary.todayMinutes)}</p>
               </Card>
-              <Card className="p-3.5 text-center">
-                <p className="text-[11px] text-slate">Semana</p>
-                <p className="font-display font-semibold text-base mt-0.5">{formatMinutes(summary.weekMinutes)}</p>
+              <Card className="p-2 sm:p-3.5 text-center">
+                <p className="text-[10px] sm:text-[11px] text-slate">Semana</p>
+                <p className="font-display font-semibold text-sm sm:text-base mt-0.5">{formatMinutes(summary.weekMinutes)}</p>
               </Card>
-              <Card className="p-3.5 text-center">
-                <p className="text-[11px] text-slate">Mês</p>
-                <p className="font-display font-semibold text-base mt-0.5">{formatMinutes(summary.monthMinutes)}</p>
+              <Card className="p-2 sm:p-3.5 text-center">
+                <p className="text-[10px] sm:text-[11px] text-slate">Mês</p>
+                <p className="font-display font-semibold text-sm sm:text-base mt-0.5">{formatMinutes(summary.monthMinutes)}</p>
               </Card>
             </div>
           )}

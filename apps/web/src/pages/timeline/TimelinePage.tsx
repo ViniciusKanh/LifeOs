@@ -228,7 +228,8 @@ export function TimelinePage() {
         <p className="text-sm text-slate mt-1">Histórico cronológico das suas atividades, hábitos, leitura, exercícios, foco e educação.</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      {/* Mobile-first: cartões empilham em telas estreitas, evitando espremer ícone + número em 3 colunas */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-4 flex items-center gap-3">
           <IconBadge icon={<CalendarDays size={17} />} tone="blue" size={38} />
           <div>
@@ -351,7 +352,7 @@ export function TimelinePage() {
             const dayEvents = [...byDay.get(day)!].sort((a, b) => String(b.at).localeCompare(String(a.at)));
             const collapsed = collapsedDays.has(day);
             return (
-              <Card key={day} className="p-5">
+              <Card key={day} className="p-4 sm:p-5">
                 <button
                   onClick={() =>
                     setCollapsedDays((prev) => {
@@ -399,7 +400,7 @@ export function TimelinePage() {
         </div>
 
         <div className="space-y-4">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <p className="text-sm font-semibold mb-1">Resumo da atividade</p>
             <p className="text-xs text-slate mb-3">Distribuição de atividades no período selecionado.</p>
             {categoryBreakdown.length === 0 ? (
@@ -442,7 +443,7 @@ export function TimelinePage() {
             )}
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <p className="text-sm font-semibold mb-3">Destaques</p>
             {!highlights ? (
               <p className="text-xs text-slate">Registre atividades para ver destaques aqui.</p>

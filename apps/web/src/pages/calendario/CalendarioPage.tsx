@@ -75,34 +75,34 @@ export function CalendarioPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto space-y-5">
+    <div className="px-3 py-5 sm:px-4 md:px-8 md:py-8 max-w-5xl mx-auto space-y-4 md:space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p className="font-display font-bold text-2xl tracking-tight capitalize">{monthLabel}</p>
-          <p className="text-sm text-slate mt-0.5">Prazos de tarefas, metas e TCC, mais os eventos que você criar aqui.</p>
+        <div className="min-w-0">
+          <p className="font-display font-bold text-xl md:text-2xl tracking-tight capitalize truncate">{monthLabel}</p>
+          <p className="text-xs md:text-sm text-slate mt-0.5">Prazos de tarefas, metas e TCC, mais os eventos que você criar aqui.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => changeMonth(-1)} aria-label="Mês anterior">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Button variant="secondary" onClick={() => changeMonth(-1)} aria-label="Mês anterior" className="!px-2.5 sm:!px-3.5">
             <ChevronLeft size={16} />
           </Button>
-          <Button variant="secondary" onClick={() => setCursor({ year: today.getUTCFullYear(), month: today.getUTCMonth() })}>
+          <Button variant="secondary" onClick={() => setCursor({ year: today.getUTCFullYear(), month: today.getUTCMonth() })} className="!px-2.5 sm:!px-3.5 text-xs sm:text-sm">
             Hoje
           </Button>
-          <Button variant="secondary" onClick={() => changeMonth(1)} aria-label="Próximo mês">
+          <Button variant="secondary" onClick={() => changeMonth(1)} aria-label="Próximo mês" className="!px-2.5 sm:!px-3.5">
             <ChevronRight size={16} />
           </Button>
         </div>
       </div>
 
-      <Card className="p-3 md:p-4">
-        <div className="grid grid-cols-7 gap-1 mb-1">
+      <Card className="p-2 sm:p-3 md:p-4">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-1">
           {WEEKDAYS.map((w) => (
-            <div key={w} className="text-center text-[11px] font-semibold text-slate py-1.5">
-              {w}
+            <div key={w} className="text-center text-[9px] sm:text-[11px] font-semibold text-slate py-1 sm:py-1.5">
+              {w.slice(0, 3)}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
           {grid.map((d) => {
             const iso = toISODate(d);
             const inMonth = d.getUTCMonth() === cursor.month;
@@ -112,20 +112,42 @@ export function CalendarioPage() {
               <button
                 key={iso}
                 onClick={() => setNewEventDate(iso)}
-                className={`group text-left min-h-[86px] rounded-xl p-1.5 border transition-colors ${
+                className={`group text-left min-h-[52px] sm:min-h-[86px] rounded-lg sm:rounded-xl p-1 sm:p-1.5 border transition-colors ${
                   inMonth
                     ? "border-paper-border dark:border-ink-border bg-paper dark:bg-ink"
                     : "border-transparent bg-transparent opacity-40"
                 } hover:border-brand-500/40`}
               >
                 <span
-                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
+                  className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full text-[10px] sm:text-xs ${
                     isToday ? "bg-gradient-to-r from-brand-500 to-signal text-white font-semibold" : "text-slate"
                   }`}
                 >
                   {d.getUTCDate()}
                 </span>
-                <div className="mt-1 space-y-0.5">
+
+                {/* mobile: só pontinhos por categoria (sem texto — não cabe em ~44px de largura) */}
+                {dayItems.length > 0 && (
+                  <div className="sm:hidden flex flex-wrap gap-0.5 mt-1">
+                    {dayItems.slice(0, 4).map((item) => (
+                      <span
+                        key={item.id}
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          item.sourceType === "task"
+                            ? "bg-signal"
+                            : item.sourceType === "goal"
+                              ? "bg-cat-purple"
+                              : item.sourceType === "academic_project"
+                                ? "bg-cat-green"
+                                : "bg-brand-500"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* sm+: pill com título truncado, como antes */}
+                <div className="hidden sm:block mt-1 space-y-0.5">
                   {dayItems.slice(0, 3).map((item) => (
                     <span
                       key={item.id}

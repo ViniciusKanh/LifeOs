@@ -162,7 +162,9 @@ export function PerfilPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-4">
+            {/* No celular a foto fica acima e o campo de nome ocupa a linha toda,
+                em vez de espremer avatar + input + botão numa única linha */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="relative w-20 h-20 shrink-0">
                 <button
                   type="button"
@@ -189,28 +191,35 @@ export function PerfilPage() {
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
 
-              <div className="flex-1 flex items-end gap-2">
-                <Field label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
-                <Button onClick={handleSaveName} disabled={isUpdatingProfile || !name.trim() || name.trim() === user.name}>
+              <div className="flex-1 flex flex-col sm:flex-row sm:items-end gap-2 w-full">
+                <div className="flex-1 min-w-0">
+                  <Field label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <Button
+                  onClick={handleSaveName}
+                  disabled={isUpdatingProfile || !name.trim() || name.trim() === user.name}
+                  className="sm:w-auto w-full"
+                >
                   Salvar
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-slate mt-1.5 ml-24">Esse é o nome que será exibido na sua conta.</p>
+            <p className="text-xs text-slate mt-1.5 sm:ml-24">Esse é o nome que será exibido na sua conta.</p>
             {avatarError && <p className="text-xs text-drop mt-2">{avatarError}</p>}
             {updateProfileError && <p className="text-xs text-drop mt-2">{updateProfileError.message}</p>}
 
-            <div className="mt-5 pt-5 border-t border-paper-border dark:border-ink-border grid grid-cols-2 gap-4">
-              <div className="flex items-start gap-2.5">
+            {/* 1 coluna no celular: evita apertar ícone + textos em ~170px de largura */}
+            <div className="mt-5 pt-5 border-t border-paper-border dark:border-ink-border grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-start gap-2.5 min-w-0">
                 <IconBadge tone="blue" size={30} icon={<Mail size={14} />} />
                 <div className="min-w-0">
                   <p className="text-xs text-slate">E-mail</p>
                   <p className="text-sm mt-0.5 truncate">{user.email}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-2.5">
+              <div className="flex items-start gap-2.5 min-w-0">
                 <IconBadge tone="purple" size={30} icon={<Lock size={14} />} />
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-slate">Perfil de acesso</p>
                   <p className="text-sm mt-0.5 font-medium">{user.role === "admin" ? "Administrador" : "Usuário"}</p>
                   <p className="text-[11px] text-slate">{user.role === "admin" ? "Acesso total à plataforma." : "Acesso à sua conta pessoal."}</p>
@@ -218,12 +227,12 @@ export function PerfilPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-xl p-3.5 bg-paper dark:bg-ink flex items-center gap-2.5">
                 <IconBadge tone="teal" size={30} icon={<Calendar size={14} />} />
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-slate">Membro desde</p>
-                  <p className="text-sm font-semibold">{formatFullDate(user.created_at)}</p>
+                  <p className="text-sm font-semibold truncate">{formatFullDate(user.created_at)}</p>
                   <p className="text-[11px] text-slate">{monthsSince(user.created_at)}</p>
                 </div>
               </div>
@@ -231,7 +240,7 @@ export function PerfilPage() {
                 <IconBadge tone="purple" size={30} icon={<MoonIcon size={14} />} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-slate">Tema preferido</p>
-                  <p className="text-sm font-semibold">{themeLabel}</p>
+                  <p className="text-sm font-semibold truncate">{themeLabel}</p>
                   <p className="text-[11px] text-slate">Você pode alterar nas configurações</p>
                 </div>
                 <ChevronRight size={14} className="text-slate shrink-0" />
@@ -358,10 +367,10 @@ export function PerfilPage() {
               href={`mailto:${ADMIN_EMAIL}`}
               className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm"
             >
-              <span className="flex items-center gap-2">
-                <Mail size={14} className="text-slate" /> {ADMIN_EMAIL}
+              <span className="flex items-center gap-2 min-w-0 truncate">
+                <Mail size={14} className="text-slate shrink-0" /> <span className="truncate">{ADMIN_EMAIL}</span>
               </span>
-              <ChevronRight size={14} className="text-slate" />
+              <ChevronRight size={14} className="text-slate shrink-0" />
             </a>
           </Card>
         </div>
@@ -419,7 +428,7 @@ function PushNotificationsCard() {
       ) : (
         <>
           <div className="flex items-center justify-between gap-3 rounded-xl p-3 bg-paper dark:bg-ink">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-medium">{isSubscribed ? "Ativadas neste dispositivo" : "Desativadas neste dispositivo"}</p>
               {permission === "denied" && <p className="text-[11px] text-drop mt-0.5">Bloqueadas nas configurações do navegador.</p>}
             </div>

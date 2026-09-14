@@ -99,18 +99,24 @@ export function LivroDetalhePage() {
         <Card className="p-4">
           <p className="text-sm font-semibold mb-3">Registrar sessão de leitura</p>
           <div className="flex gap-2 mb-2">
-            <Field
-              label="Páginas lidas"
-              type="number"
-              value={sessionPages}
-              onChange={(e) => setSessionPages(e.target.value)}
-            />
-            <Field
-              label="Minutos"
-              type="number"
-              value={sessionMinutes}
-              onChange={(e) => setSessionMinutes(e.target.value)}
-            />
+            {/* flex-1 nos dois campos: sem isso o input encolhe ao mínimo
+                em telas estreitas (~360-400px) e o par fica desproporcional */}
+            <div className="flex-1 min-w-0">
+              <Field
+                label="Páginas lidas"
+                type="number"
+                value={sessionPages}
+                onChange={(e) => setSessionPages(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <Field
+                label="Minutos"
+                type="number"
+                value={sessionMinutes}
+                onChange={(e) => setSessionMinutes(e.target.value)}
+              />
+            </div>
           </div>
           <Button onClick={handleAddSession} className="w-full">
             <Plus size={14} /> Registrar sessão

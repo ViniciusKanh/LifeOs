@@ -101,22 +101,22 @@ export function MetasPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Target size={18} />} tone="blue" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{activeGoals.length}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{activeGoals.length}</p>
                   <p className="text-xs text-slate leading-tight">Metas ativas</p>
                 </div>
               </div>
               <p className="text-[11px] text-slate mt-2">de {goals.length} criadas</p>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Flag size={18} />} tone="green" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{overallProgressPct}%</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{overallProgressPct}%</p>
                   <p className="text-xs text-slate leading-tight">Progresso geral</p>
                 </div>
               </div>
@@ -124,21 +124,21 @@ export function MetasPage() {
                 <div className="h-full rounded-full bg-cat-green" style={{ width: `${overallProgressPct}%` }} />
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Calendar size={18} />} tone="purple" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{stats?.completedThisYear ?? 0}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{stats?.completedThisYear ?? 0}</p>
                   <p className="text-xs text-slate leading-tight">Metas concluídas</p>
                 </div>
               </div>
               <p className="text-[11px] text-slate mt-2">neste ano</p>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Trophy size={18} />} tone="amber" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{diasLabel(stats?.daysInFocus ?? 0)}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{diasLabel(stats?.daysInFocus ?? 0)}</p>
                   <p className="text-xs text-slate leading-tight">Dias em foco</p>
                 </div>
               </div>

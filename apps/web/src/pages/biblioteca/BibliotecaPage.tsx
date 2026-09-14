@@ -208,7 +208,9 @@ export function BibliotecaPage() {
           )}
 
           {view === "grade" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+            // Mobile-first: 2 colunas em telas pequenas, escalando até 5 em
+            // telas grandes — evita cartões espremidos ou scroll horizontal.
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
               {sorted.map((book) => {
                 const pct = progressPct(book);
                 return (

@@ -45,15 +45,17 @@ function SecretField({
   return (
     <div>
       <label className="text-xs text-slate">{label}</label>
-      <div className="flex items-center gap-2 mt-1.5">
+      {/* flex-wrap: em telas estreitas (~360-400px) o botão e o ícone de remover
+          quebram para a linha seguinte em vez de espremer o input até ficar ilegível */}
+      <div className="flex flex-wrap items-center gap-2 mt-1.5">
         <input
           type={inputType}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={existing ? existing.masked_preview : placeholder}
-          className="flex-1 rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+          className="flex-1 min-w-[160px] rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
         />
-        <Button variant="secondary" onClick={handleSave} disabled={saving || !value.trim()}>
+        <Button variant="secondary" className="shrink-0" onClick={handleSave} disabled={saving || !value.trim()}>
           {existing ? "Atualizar" : "Salvar"}
         </Button>
         {existing && onRemove && (
@@ -196,9 +198,12 @@ function SecurityInfo() {
   return (
     <div className="space-y-2">
       {rows.map(([label, val]) => (
-        <div key={label} className="flex items-center justify-between text-xs py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
+        <div
+          key={label}
+          className="flex items-center justify-between gap-3 text-xs py-1.5 border-b border-paper-border dark:border-ink-border last:border-0"
+        >
           <span className="text-slate">{label}</span>
-          <span className="font-medium">{val}</span>
+          <span className="font-medium text-right shrink-0">{val}</span>
         </div>
       ))}
       <p className="text-[11px] text-slate pt-1">
