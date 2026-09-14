@@ -49,4 +49,71 @@ describe("Conquistas (gamificação real)", () => {
     expect(tasks10.progress).toBe(0);
     expect(tasks10.unlockedAt).toBeNull();
   });
+
+  it("permite cadastrar um troféu customizado (ex.: concluir 5 tarefas no dia) e destrava sozinho ao ser atingido", async () => {
+    const { agent } = await createAuthenticatedAgent();
+
+    const created = await agent.post("/api/achievements/custom").send({
+      title: "Dia produtivo",
+      description: "Conclua 5 tarefas no mesmo dia",
+      icon: "🔥",
+      metric: "tasks_completed_in_day",
+      threshold: 5,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.unlockedAt).toBeNull();
+    expect(created.body.progress).toBe(0);
+
+    // 4 tarefas concluídas hoje: ainda não deve destravar.
+    for (let i = 0; i < 4; i++) {
+      const task = await agent.post("/api/tasks").send({ title: `Tarefa ${i}` });
+      await agent.patch(`/api/tasks/${task.body.id}`).send({ status: "Concluído" });
+    }
+    const beforeCheck = await agent.post("/api/achievements/check");
+    expect(beforeCheck.body.newlyUnlocked).toEqual([]);
+
+    const beforeList = await agent.get("/api/achievements/custom");
+    expect(beforeList.body[0].progress).toBe(80);
+    expect(beforeList.body[0].unlockedAt).toBeNull();
+
+    // A 5ª tarefa do dia deve destravar o troféu customizado.
+    const fifth = await agent.post("/api/tasks").send({ title: "Tarefa 5" });
+    await agent.patch(`/api/tasks/${fifth.body.id}`).send({ status: "Concluído" });
+
+    const afterCheck = await agent.post("/api/achievements/check");
+    expect(afterCheck.body.newlyUnlocked.some((a: { id: string }) => a.id === created.body.id)).toBe(true);
+
+    const afterList = await agent.get("/api/achievements/custom");
+    expect(afterList.body[0].unlockedAt).not.toBeNull();
+    expect(afterList.body[0].progress).toBe(100);
+
+    // Idempotente.
+    const secondCheck = await agent.post("/api/achievements/check");
+    expect(secondCheck.body.newlyUnlocked).toEqual([]);
+  });
+
+  it("isola troféus customizados por usuário e recusa métrica fora do catálogo fixo", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const other = await createAuthenticatedAgent();
+
+    const mine = await agent.post("/api/achievements/custom").send({
+      title: "Meu troféu",
+      metric: "tasks_completed_total",
+      threshold: 1,
+    });
+    expect(mine.status).toBe(201);
+
+    const otherList = await other.agent.get("/api/achievements/custom");
+    expect(otherList.body).toEqual([]);
+
+    const invalid = await agent.post("/api/achievements/custom").send({
+      title: "Métrica inventada",
+      metric: "algo_que_nao_existe",
+      threshold: 1,
+    });
+    expect(invalid.status).toBe(400);
+
+    const removed = await other.agent.delete(`/api/achievements/custom/${mine.body.id}`);
+    expect(removed.status).toBe(404);
+  });
 });

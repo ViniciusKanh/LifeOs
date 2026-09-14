@@ -18,6 +18,7 @@ import {
   GraduationCap,
   Wand2,
   Flame,
+  Smile,
 } from "lucide-react";
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
@@ -71,6 +72,8 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   focus: Brain,
   education: GraduationCap,
   sleep: Moon,
+  mood: Smile,
+  water: Droplets,
 };
 
 function timelineLabel(e: TimelineEvent): string {

@@ -1,5 +1,13 @@
 import { api } from "./api";
-import type { Achievement } from "@/types";
+import type { Achievement, CustomAchievement, CustomAchievementMetricOption } from "@/types";
+
+export interface CustomAchievementInput {
+  title: string;
+  description?: string | null;
+  icon?: string;
+  metric: string;
+  threshold: number;
+}
 
 export const achievementsService = {
   list: () => api.get<Achievement[]>("/achievements"),
@@ -9,7 +17,11 @@ export const achievementsService = {
    * destravar uma (concluir tarefa, marcar hábito, terminar livro) —
    * sempre best-effort, nunca deve travar a ação principal se falhar.
    */
-  check: () => api.post<{ newlyUnlocked: Achievement[] }>("/achievements/check"),
+  check: () => api.post<{ newlyUnlocked: (Achievement | CustomAchievement)[] }>("/achievements/check"),
+  listCustom: () => api.get<CustomAchievement[]>("/achievements/custom"),
+  metrics: () => api.get<CustomAchievementMetricOption[]>("/achievements/custom/metrics"),
+  createCustom: (input: CustomAchievementInput) => api.post<CustomAchievement>("/achievements/custom", input),
+  removeCustom: (id: string) => api.delete<void>(`/achievements/custom/${id}`),
 };
 
 /** Nome do evento global disparado no window quando uma nova conquista é destravada — ver AchievementToast.tsx. */

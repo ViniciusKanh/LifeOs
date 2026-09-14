@@ -36,6 +36,7 @@ export function FocoPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showStopModal, setShowStopModal] = useState(false);
   const [productivity, setProductivity] = useState(3);
+  const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Só tarefas ainda não concluídas fazem sentido como alvo de um
@@ -71,17 +72,28 @@ export function FocoPage() {
     : 0;
   const ringOffset = RING_CIRCUMFERENCE * (1 - ringFraction);
 
-  const handleStart = () =>
-    start({
-      mode,
-      plannedMinutes: mode === "pomodoro" ? plannedMinutes : undefined,
-      taskId: taskId || undefined,
-    });
+  const handleStart = async () => {
+    setError(null);
+    try {
+      await start({
+        mode,
+        plannedMinutes: mode === "pomodoro" ? plannedMinutes : undefined,
+        taskId: taskId || undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível iniciar a sessão de foco.");
+    }
+  };
 
   const handleConfirmStop = async () => {
     if (!activeSession) return;
-    await stop({ id: activeSession.id, perceivedProductivity: productivity });
-    setShowStopModal(false);
+    setError(null);
+    try {
+      await stop({ id: activeSession.id, perceivedProductivity: productivity });
+      setShowStopModal(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível encerrar a sessão de foco.");
+    }
   };
 
   const activeTask = activeSession?.task_id ? tasks.find((t) => t.id === activeSession.task_id) : null;
@@ -207,6 +219,7 @@ export function FocoPage() {
                 </Button>
               </>
             )}
+            {error && <p className="text-xs text-drop mt-4">{error}</p>}
           </Card>
 
           {summary?.bestHour && (

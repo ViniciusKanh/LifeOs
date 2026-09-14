@@ -10,7 +10,19 @@ type Db = ReturnType<typeof getDb>;
  * checagem de desbloqueio (`evaluateAchievements`) são genéricos.
  */
 async function computeMetrics(db: Db, ownerId: string): Promise<Record<string, number>> {
-  const [tasksCompleted, booksCompleted, focusMinutes, weeklyReviews, goalsCompleted, habitEntries] = await Promise.all([
+  const [
+    tasksCompleted,
+    booksCompleted,
+    focusMinutes,
+    weeklyReviews,
+    goalsCompleted,
+    habitEntries,
+    tasksPerDay,
+    focusMinutesPerDay,
+    habitChecksPerDay,
+    waterMlPerDay,
+    workoutsPerDay,
+  ] = await Promise.all([
     db.execute({ sql: "SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído'", args: [ownerId] }),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM books WHERE owner_id = ? AND status = 'Concluído'", args: [ownerId] }),
     db.execute({
@@ -21,6 +33,30 @@ async function computeMetrics(db: Db, ownerId: string): Promise<Record<string, n
     db.execute({ sql: "SELECT COUNT(*) AS n FROM goals WHERE owner_id = ? AND status = 'done'", args: [ownerId] }),
     db.execute({
       sql: "SELECT habit_id, entry_date FROM habit_entries WHERE owner_id = ? ORDER BY habit_id, entry_date",
+      args: [ownerId],
+    }),
+    // Métricas "por dia" — usadas por troféus customizados do tipo
+    // "faça X em um único dia" (ex.: concluir 5 tarefas no dia).
+    // Guardamos o MAIOR valor já alcançado em qualquer dia da
+    // história do usuário, nunca um número inventado.
+    db.execute({
+      sql: "SELECT COALESCE(MAX(n), 0) AS n FROM (SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' GROUP BY date(completed_at))",
+      args: [ownerId],
+    }),
+    db.execute({
+      sql: "SELECT COALESCE(MAX(n), 0) AS n FROM (SELECT SUM(actual_minutes) AS n FROM focus_sessions WHERE owner_id = ? AND actual_minutes IS NOT NULL GROUP BY date(started_at))",
+      args: [ownerId],
+    }),
+    db.execute({
+      sql: "SELECT COALESCE(MAX(n), 0) AS n FROM (SELECT COUNT(DISTINCT habit_id) AS n FROM habit_entries WHERE owner_id = ? GROUP BY entry_date)",
+      args: [ownerId],
+    }),
+    db.execute({
+      sql: "SELECT COALESCE(MAX(n), 0) AS n FROM (SELECT SUM(amount_ml) AS n FROM water_entries WHERE owner_id = ? GROUP BY date(recorded_at))",
+      args: [ownerId],
+    }),
+    db.execute({
+      sql: "SELECT COALESCE(MAX(n), 0) AS n FROM (SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? GROUP BY date(performed_at))",
       args: [ownerId],
     }),
   ]);
@@ -54,7 +90,125 @@ async function computeMetrics(db: Db, ownerId: string): Promise<Record<string, n
     weekly_reviews_total: Number((weeklyReviews.rows[0] as unknown as { n: number }).n),
     goals_completed_total: Number((goalsCompleted.rows[0] as unknown as { n: number }).n),
     habit_best_streak: bestStreak,
+    tasks_completed_in_day: Number((tasksPerDay.rows[0] as unknown as { n: number }).n),
+    focus_minutes_in_day: Number((focusMinutesPerDay.rows[0] as unknown as { n: number }).n),
+    habit_checks_in_day: Number((habitChecksPerDay.rows[0] as unknown as { n: number }).n),
+    water_ml_in_day: Number((waterMlPerDay.rows[0] as unknown as { n: number }).n),
+    workouts_in_day: Number((workoutsPerDay.rows[0] as unknown as { n: number }).n),
   };
+}
+
+/** Catálogo fixo de métricas disponíveis para troféus customizados — nunca texto livre de fórmula. */
+export const CUSTOM_ACHIEVEMENT_METRICS = [
+  { value: "tasks_completed_in_day", label: "Tarefas concluídas em um dia" },
+  { value: "focus_minutes_in_day", label: "Minutos de foco em um dia" },
+  { value: "habit_checks_in_day", label: "Hábitos marcados em um dia" },
+  { value: "water_ml_in_day", label: "Água (ml) em um dia" },
+  { value: "workouts_in_day", label: "Treinos em um dia" },
+  { value: "tasks_completed_total", label: "Tarefas concluídas (total)" },
+  { value: "books_completed_total", label: "Livros concluídos (total)" },
+  { value: "focus_minutes_total", label: "Minutos de foco (total)" },
+  { value: "weekly_reviews_total", label: "Weekly Reviews preenchidas (total)" },
+  { value: "goals_completed_total", label: "Metas concluídas (total)" },
+  { value: "habit_best_streak", label: "Sequência de dias de hábito (streak)" },
+] as const;
+
+export type CustomAchievementMetric = (typeof CUSTOM_ACHIEVEMENT_METRICS)[number]["value"];
+
+export interface CustomAchievementView {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: string;
+  metric: string;
+  threshold: number;
+  progress: number;
+  unlockedAt: string | null;
+  createdAt: string;
+}
+
+function toCustomView(row: {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: string;
+  metric: string;
+  threshold: number;
+  unlocked_at: string | null;
+  created_at: string;
+}, metrics: Record<string, number>): CustomAchievementView {
+  const currentValue = metrics[row.metric] ?? 0;
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    icon: row.icon,
+    metric: row.metric,
+    threshold: row.threshold,
+    progress: Math.min(100, Math.round((currentValue / row.threshold) * 100)),
+    unlockedAt: row.unlocked_at,
+    createdAt: row.created_at,
+  };
+}
+
+/** Lista os troféus customizados do usuário, com progresso real recalculado. */
+export async function listCustomAchievements(ownerId: string): Promise<CustomAchievementView[]> {
+  const db = getDb();
+  const [rows, metrics] = await Promise.all([
+    db.execute({ sql: "SELECT * FROM custom_achievements WHERE owner_id = ? ORDER BY created_at DESC", args: [ownerId] }),
+    computeMetrics(db, ownerId),
+  ]);
+  return (rows.rows as unknown as Parameters<typeof toCustomView>[0][]).map((r) => toCustomView(r, metrics));
+}
+
+export async function createCustomAchievement(
+  ownerId: string,
+  input: { title: string; description?: string | null; icon?: string; metric: CustomAchievementMetric; threshold: number }
+): Promise<CustomAchievementView> {
+  const db = getDb();
+  const id = nanoid();
+  await db.execute({
+    sql: `INSERT INTO custom_achievements (id, owner_id, title, description, icon, metric, threshold)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, ownerId, input.title, input.description ?? null, input.icon ?? "🏆", input.metric, input.threshold],
+  });
+  const metrics = await computeMetrics(db, ownerId);
+  const created = await db.execute({ sql: "SELECT * FROM custom_achievements WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
+  return toCustomView(created.rows[0] as unknown as Parameters<typeof toCustomView>[0], metrics);
+}
+
+export async function removeCustomAchievement(ownerId: string, id: string): Promise<boolean> {
+  const db = getDb();
+  const result = await db.execute({ sql: "DELETE FROM custom_achievements WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
+  return result.rowsAffected > 0;
+}
+
+/**
+ * Recalcula as métricas reais e desbloqueia (grava `unlocked_at`)
+ * qualquer troféu customizado cujo limite já tenha sido atingido —
+ * mesma lógica de `evaluateAchievements`, mas para a tabela do
+ * próprio usuário (não precisa de tabela de junção).
+ */
+export async function evaluateCustomAchievements(ownerId: string): Promise<CustomAchievementView[]> {
+  const db = getDb();
+  const metrics = await computeMetrics(db, ownerId);
+  const rows = await db.execute({
+    sql: "SELECT * FROM custom_achievements WHERE owner_id = ? AND unlocked_at IS NULL",
+    args: [ownerId],
+  });
+
+  const newlyUnlocked: CustomAchievementView[] = [];
+  for (const row of rows.rows as unknown as Parameters<typeof toCustomView>[0][]) {
+    const value = metrics[row.metric] ?? 0;
+    if (value >= row.threshold) {
+      await db.execute({
+        sql: "UPDATE custom_achievements SET unlocked_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+        args: [row.id, ownerId],
+      });
+      newlyUnlocked.push(toCustomView({ ...row, unlocked_at: new Date().toISOString() }, metrics));
+    }
+  }
+  return newlyUnlocked;
 }
 
 export interface AchievementView {

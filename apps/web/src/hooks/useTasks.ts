@@ -7,7 +7,14 @@ const TASKS_KEY = ["tasks"];
 
 export function useTasks() {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: TASKS_KEY });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: TASKS_KEY });
+    // Concluir/mover/criar tarefa muda Produtividade e (se vinculada a
+    // projeto profissional) a dimensão Profissional do Life Score —
+    // sem isso, o Dashboard só atualizava esses números depois de um
+    // reload manual da página.
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+  };
 
   const tasksQuery = useQuery({ queryKey: TASKS_KEY, queryFn: taskService.list });
 
@@ -73,6 +80,9 @@ export function useProjectTasks(projectId: string | null) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: key });
     queryClient.invalidateQueries({ queryKey: TASKS_KEY });
+    // Idem useTasks: o Kanban de projetos (Profissional/Workspace/
+    // Acadêmico) também precisa refletir na hora no Life Score.
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
   };
 
   const tasksQuery = useQuery({

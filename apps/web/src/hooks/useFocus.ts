@@ -11,6 +11,9 @@ export function useFocus() {
     queryClient.invalidateQueries({ queryKey: ACTIVE_KEY });
     queryClient.invalidateQueries({ queryKey: SUMMARY_KEY });
     queryClient.invalidateQueries({ queryKey: SESSIONS_KEY });
+    // Encerrar uma sessão de foco também muda a dimensão Produtividade
+    // do Life Score (ver focusMinutesScore em metricsService.ts).
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
   };
 
   const activeQuery = useQuery({ queryKey: ACTIVE_KEY, queryFn: focusService.active, refetchInterval: 15_000 });
@@ -30,6 +33,8 @@ export function useFocus() {
     recentSessions: sessionsQuery.data ?? [],
     isLoading: activeQuery.isLoading,
     start: start.mutateAsync,
+    startError: start.error as Error | null,
     stop: stop.mutateAsync,
+    stopError: stop.error as Error | null,
   };
 }

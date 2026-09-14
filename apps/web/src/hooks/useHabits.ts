@@ -13,6 +13,7 @@ export function useHabits() {
     queryClient.invalidateQueries({ queryKey: HABITS_KEY });
     queryClient.invalidateQueries({ queryKey: SUMMARY_KEY });
     queryClient.invalidateQueries({ queryKey: STATS_KEY });
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
   };
 
   const habitsQuery = useQuery({ queryKey: HABITS_KEY, queryFn: habitService.list });

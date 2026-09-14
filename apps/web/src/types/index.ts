@@ -606,7 +606,7 @@ export interface LifeInsights {
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep";
+  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water";
   icon: string;
   id: string;
   label: string;
@@ -682,4 +682,22 @@ export interface Achievement {
   threshold: number | null;
   progress: number;
   unlockedAt: string | null;
+}
+
+/** Um troféu que o próprio usuário cadastrou (estilo PlayStation/Xbox) — desbloqueia sozinho ao atingir a métrica. */
+export interface CustomAchievement {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: string;
+  metric: string;
+  threshold: number;
+  progress: number;
+  unlockedAt: string | null;
+  createdAt: string;
+}
+
+export interface CustomAchievementMetricOption {
+  value: string;
+  label: string;
 }

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
+  Droplets,
   Dumbbell,
   Flame,
   GraduationCap,
@@ -14,6 +15,7 @@ import {
   ListChecks,
   Moon,
   Repeat,
+  Smile,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -22,7 +24,7 @@ import { useTimeline } from "@/hooks/useAnalytics";
 import { Card, EmptyState, IconBadge } from "@/components/ui/primitives";
 import type { TimelineEvent } from "@/types";
 
-type EventType = TimelineEvent["type"];
+type EventType = TimelineEvent["type"] | "mood" | "water";
 type Tone = "blue" | "purple" | "green" | "pink" | "teal" | "amber";
 
 const TYPE_CONFIG: Record<EventType, { tab: string; tag: string; tone: Tone; icon: typeof CheckCircle2 }> = {
@@ -33,6 +35,8 @@ const TYPE_CONFIG: Record<EventType, { tab: string; tag: string; tone: Tone; ico
   focus: { tab: "Foco", tag: "Foco", tone: "purple", icon: Target },
   education: { tab: "Estudo", tag: "Estudo", tone: "amber", icon: GraduationCap },
   sleep: { tab: "Sono", tag: "Sono", tone: "purple", icon: Moon },
+  mood: { tab: "Humor", tag: "Humor", tone: "amber", icon: Smile },
+  water: { tab: "Água", tag: "Água", tone: "blue", icon: Droplets },
 };
 
 const TAG_PILL: Record<Tone, string> = {
@@ -62,6 +66,8 @@ const TABS: Array<{ value: EventType | "todos"; label: string }> = [
   { value: "focus", label: "Foco" },
   { value: "reading", label: "Leitura" },
   { value: "sleep", label: "Sono" },
+  { value: "mood", label: "Humor" },
+  { value: "water", label: "Água" },
 ];
 
 const RANGE_OPTIONS = [
@@ -82,7 +88,14 @@ function formatMinutes(min: number) {
 function eventContent(e: TimelineEvent): { title: string; detail: string | null } {
   switch (e.type) {
     case "task":
-      return { title: "Tarefa concluída", detail: e.label };
+      return { title: "Tarefa concluída", detail: e.project_name ? `${e.label} · ${e.project_name}` : (e.label as string) };
+    case "mood":
+      return {
+        title: "Humor e energia",
+        detail: `humor ${e.mood}/5 · energia ${e.energy}/5${e.stress ? ` · estresse ${e.stress}/5` : ""}`,
+      };
+    case "water":
+      return { title: "Água", detail: `${e.amount_ml}ml` };
     case "habit":
       return { title: e.label, detail: Number(e.count ?? 1) > 1 ? `${e.count}x hoje` : "Hábito concluído" };
     case "workout": {

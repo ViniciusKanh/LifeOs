@@ -9,14 +9,23 @@ const INBOX_KEY = ["inbox"];
  * pelo botão flutuante (disponível em qualquer tela do app); a lista
  * de pendentes alimenta a página /inbox, onde cada item é processado
  * (vira tarefa ou é descartado).
+ *
+ * `includeProcessed` traz também os itens já processados (com
+ * `processed_at` preenchido) — sem isso, um item descartado ou virado
+ * tarefa simplesmente desaparecia da tela sem deixar rastro, o que
+ * parecia "a captura não gravou nada".
  */
-export function useInbox() {
+export function useInbox(includeProcessed = false) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: INBOX_KEY, queryFn: () => inboxService.list(false) });
+  const query = useQuery({
+    queryKey: [...INBOX_KEY, includeProcessed],
+    queryFn: () => inboxService.list(includeProcessed),
+  });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: INBOX_KEY });
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
   };
 
   const capture = useMutation({ mutationFn: (content: string) => inboxService.create(content), onSuccess: invalidate });

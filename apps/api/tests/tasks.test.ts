@@ -38,6 +38,18 @@ describe("Tarefas", () => {
     expect(res.status).toBe(400);
   });
 
+  it("cria tarefa mandando estimateMinutes como null (campo de estimativa deixado em branco no formulário)", async () => {
+    // Regressão: o TaskModal manda `estimateMinutes: null` quando o
+    // campo de estimativa fica vazio (o caso mais comum ao criar uma
+    // tarefa nova) — o schema só aceitava `optional()` (undefined),
+    // então TODA criação de tarefa sem estimativa preenchida voltava
+    // 400 e o botão "Criar tarefa" parecia simplesmente não funcionar.
+    const { agent } = await createAuthenticatedAgent();
+    const res = await agent.post("/api/tasks").send({ title: "Tarefa sem estimativa", estimateMinutes: null });
+    expect(res.status).toBe(201);
+    expect(res.body.estimate_minutes).toBeNull();
+  });
+
   it("todas as rotas de tarefas exigem sessão", async () => {
     const res = await request(app).get("/api/tasks");
     expect(res.status).toBe(401);

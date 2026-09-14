@@ -201,9 +201,13 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
 
-  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries, moodEntries, waterEntries] = await Promise.all([
+    // LEFT JOIN com projects: deixa claro a que projeto (profissional,
+    // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
-      sql: "SELECT id, title AS label, updated_at AS at FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)",
+      sql: `SELECT t.id, t.title AS label, t.updated_at AS at, p.name AS project_name, p.kind AS project_kind
+            FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
+            WHERE t.owner_id = ? AND t.status = 'Concluído' AND date(t.updated_at) >= date(?) AND date(t.updated_at) <= date(?)`,
       args: [ownerId, from, to],
     }),
     db.execute({
@@ -232,6 +236,14 @@ analyticsRouter.get("/timeline", async (req, res) => {
       sql: "SELECT id, went_to_bed_at AS at, woke_up_at, duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND date(went_to_bed_at) >= date(?) AND date(went_to_bed_at) <= date(?)",
       args: [ownerId, from, to],
     }),
+    db.execute({
+      sql: "SELECT id, mood, energy, stress, recorded_at AS at FROM mood_entries WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, amount_ml, recorded_at AS at FROM water_entries WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
   ]);
 
   type TimelineRow = Record<string, unknown> & { at: string };
@@ -245,6 +257,8 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(focusSessions.rows).map((r) => ({ type: "focus", icon: "🧠", ...r })),
     ...asRows(subjects.rows).map((r) => ({ type: "education", icon: "🎓", ...r })),
     ...asRows(sleepEntries.rows).map((r) => ({ type: "sleep", icon: "🌙", label: "Dormir", ...r })),
+    ...asRows(moodEntries.rows).map((r) => ({ type: "mood", icon: "🙂", label: "Humor e energia", ...r })),
+    ...asRows(waterEntries.rows).map((r) => ({ type: "water", icon: "💧", label: "Água", ...r })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
   return res.json({ from, to, events });

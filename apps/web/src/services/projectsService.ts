@@ -12,6 +12,10 @@ export interface ProjectCreateInput {
 export interface ProjectUpdateInput {
   name?: string;
   description?: string | null;
+  // Flegar um projeto já existente como profissional/workspace (ou
+  // reverter) — muda quais tarefas contam na dimensão Profissional do
+  // Life Score, sem precisar recriar o projeto do zero.
+  kind?: ProjectKind;
   color?: string | null;
   archived?: boolean;
 }

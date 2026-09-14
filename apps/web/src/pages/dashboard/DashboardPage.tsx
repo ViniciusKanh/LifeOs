@@ -26,6 +26,7 @@ import {
   Dumbbell,
   Brain,
   Moon,
+  Smile,
   Wand2,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
@@ -77,6 +78,8 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   focus: Brain,
   education: GraduationCap,
   sleep: Moon,
+  mood: Smile,
+  water: Droplets,
 };
 
 function timelineLabel(e: TimelineEvent): string {

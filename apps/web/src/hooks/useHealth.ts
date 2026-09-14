@@ -40,6 +40,7 @@ export function useHealth() {
   const addWorkout = useMutation({ mutationFn: healthService.addWorkout, onSuccess: invalidateAll });
   const removeWorkout = useMutation({ mutationFn: healthService.removeWorkout, onSuccess: invalidateAll });
   const addMood = useMutation({ mutationFn: healthService.addMood, onSuccess: invalidateAll });
+  const removeMood = useMutation({ mutationFn: healthService.removeMood, onSuccess: invalidateAll });
 
   return {
     water: waterQuery.data ?? [],
@@ -54,5 +55,6 @@ export function useHealth() {
     addWorkout: addWorkout.mutateAsync,
     removeWorkout: removeWorkout.mutateAsync,
     addMood: addMood.mutateAsync,
+    removeMood: removeMood.mutateAsync,
   };
 }

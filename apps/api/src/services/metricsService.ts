@@ -36,12 +36,31 @@ interface DimensionScore {
   hasData: boolean;
 }
 
-/** Produtividade: % de tarefas concluídas sobre o total já criado. */
+/**
+ * Produtividade: % de tarefas concluídas sobre o total já criado,
+ * combinado com um "bônus de foco" quando o usuário tem sessões de
+ * Focus Mode registradas nos últimos 30 dias (meta de referência:
+ * 25min/dia em média, mesma duração do Pomodoro padrão). Sem nenhuma
+ * sessão de foco, o bônus não entra — a nota fica só nas tarefas,
+ * exatamente como antes (nenhum usuário que não usa o Focus Mode é
+ * penalizado ou beneficiado por isso).
+ */
 async function productivityScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const total = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ?", [ownerId]);
   if (total === 0) return { score: 0, hasData: false };
   const done = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído'", [ownerId]);
-  return { score: clamp((done / total) * 100), hasData: true };
+  const taskRatio = clamp((done / total) * 100);
+
+  const focusMinutes30d = await scalar(
+    db,
+    "SELECT COALESCE(SUM(actual_minutes), 0) FROM focus_sessions WHERE owner_id = ? AND started_at >= date('now', '-29 days') AND ended_at IS NOT NULL",
+    [ownerId]
+  );
+  const hasFocusSessions = (await scalar(db, "SELECT COUNT(*) FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL", [ownerId])) > 0;
+  if (!hasFocusSessions) return { score: taskRatio, hasData: true };
+
+  const focusBonus = clamp((focusMinutes30d / (30 * 25)) * 100);
+  return { score: clamp(taskRatio * 0.8 + focusBonus * 0.2), hasData: true };
 }
 
 /**

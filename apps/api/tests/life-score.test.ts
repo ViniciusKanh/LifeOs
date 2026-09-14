@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createAuthenticatedAgent } from "./helpers.js";
+import { getDb } from "../src/db/client.js";
 
 describe("Life Score (GET /api/analytics/life-score)", () => {
   it("não deixa dimensões sem nenhum dado (profissional, educação, leitura, metas) derrubarem a nota geral", async () => {
@@ -49,5 +50,37 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
     const res = await agent.get("/api/analytics/life-score");
     expect(res.status).toBe(200);
     expect(res.body.professional).toBe(100);
+  });
+
+  it("sessões de Focus Mode contam na dimensão Produtividade (antes, o foco não influenciava o score em nada)", async () => {
+    const { agent } = await createAuthenticatedAgent();
+
+    const t1 = await agent.post("/api/tasks").send({ title: "Tarefa A" });
+    const t2 = await agent.post("/api/tasks").send({ title: "Tarefa B" });
+    // Só 1 de 2 concluída — taskRatio puro seria 50.
+    await agent.patch(`/api/tasks/${t1.body.id}`).send({ status: "Concluído" });
+    void t2;
+
+    const before = await agent.get("/api/analytics/life-score");
+    expect(before.body.productivity).toBe(50);
+
+    const started = await agent.post("/api/focus/sessions/start").send({ mode: "pomodoro", plannedMinutes: 25 });
+    expect(started.status).toBe(201);
+    const stopped = await agent.patch(`/api/focus/sessions/${started.body.id}/stop`).send({ perceivedProductivity: 5 });
+    expect(stopped.status).toBe(200);
+
+    // Sessões de teste duram milissegundos — forçamos actual_minutes
+    // pra um valor real (750min em 30 dias = bônus de foco máximo)
+    // pra verificar a mistura de forma determinística, sem esperar o
+    // relógio de verdade passar.
+    const db = getDb();
+    await db.execute({
+      sql: "UPDATE focus_sessions SET actual_minutes = 750 WHERE id = ?",
+      args: [started.body.id],
+    });
+
+    const after = await agent.get("/api/analytics/life-score");
+    // taskRatio=50, focusBonus=100 → 50*0.8 + 100*0.2 = 60.
+    expect(after.body.productivity).toBe(60);
   });
 });

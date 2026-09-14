@@ -65,4 +65,27 @@ describe("Projetos e Gantt", () => {
     const fullList = await agent.get("/api/projects?includeArchived=true");
     expect(fullList.body.some((p: { id: string }) => p.id === project.body.id)).toBe(true);
   });
+
+  it("permite flegar um projeto já existente como profissional (e as tarefas dele passam a contar no Life Score)", async () => {
+    // Regressão: updateProjectSchema não tinha o campo `kind`, então um
+    // projeto criado como "Pessoal" nunca podia virar "Profissional"
+    // depois — a única forma de flegar era recriando o projeto do zero.
+    const { agent } = await createAuthenticatedAgent();
+
+    const project = await agent.post("/api/projects").send({ name: "Projeto qualquer", kind: "personal" });
+    expect(project.body.kind).toBe("personal");
+
+    const task = await agent.post("/api/tasks").send({ title: "Trabalho de verdade", projectId: project.body.id });
+    await agent.patch(`/api/tasks/${task.body.id}`).send({ status: "Concluído" });
+
+    const beforeFlag = await agent.get("/api/analytics/life-score");
+    expect(beforeFlag.body.professional).toBe(0); // ainda "sem dado" — nenhuma tarefa profissional
+
+    const flagged = await agent.patch(`/api/projects/${project.body.id}`).send({ kind: "professional" });
+    expect(flagged.status).toBe(200);
+    expect(flagged.body.kind).toBe("professional");
+
+    const afterFlag = await agent.get("/api/analytics/life-score");
+    expect(afterFlag.body.professional).toBe(100);
+  });
 });

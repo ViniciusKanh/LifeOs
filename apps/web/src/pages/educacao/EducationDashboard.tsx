@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Clock,
   GraduationCap,
+  Pencil,
   Plus,
   Sparkles,
   Trash2,
@@ -920,6 +921,99 @@ function AcademicProjectKanban({ project }: { project: AcademicProject }) {
   );
 }
 
+/**
+ * Edição completa de uma disciplina — antes só dava pra trocar o
+ * status pelo select inline. Aqui dá pra ajustar professor, carga
+ * horária, progresso e anotações (notas/avaliações ficam em texto
+ * livre por enquanto, sem UI própria de lançamento nota a nota).
+ */
+function SubjectEditModal({
+  subject,
+  onClose,
+  onSave,
+}: {
+  subject: Subject;
+  onClose: () => void;
+  onSave: (patch: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [name, setName] = useState(subject.name);
+  const [professor, setProfessor] = useState(subject.professor ?? "");
+  const [workloadHours, setWorkloadHours] = useState(subject.workload_hours != null ? String(subject.workload_hours) : "");
+  const [status, setStatus] = useState<Subject["status"]>(subject.status);
+  const [progressPct, setProgressPct] = useState(String(subject.progress_pct));
+  const [notes, setNotes] = useState(subject.notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        name: name.trim(),
+        professor: professor.trim() || null,
+        workloadHours: workloadHours.trim() ? Number(workloadHours) : null,
+        status,
+        progressPct: Math.max(0, Math.min(100, Number(progressPct) || 0)),
+        notes: notes.trim() || null,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a disciplina.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalWrap title="Editar disciplina" onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+        <Field label="Professor(a)" value={professor} onChange={(e) => setProfessor(e.target.value)} placeholder="Opcional" />
+        <div className="grid grid-cols-2 gap-3">
+          <Field
+            label="Carga horária (h)"
+            type="number"
+            value={workloadHours}
+            onChange={(e) => setWorkloadHours(e.target.value)}
+            placeholder="Opcional"
+          />
+          <Field label="Progresso (%)" type="number" value={progressPct} onChange={(e) => setProgressPct(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-slate">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as Subject["status"])}
+            className="w-full mt-1.5 rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none"
+          >
+            {SUBJECT_STATUS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-slate">Anotações (notas, avaliações, observações)</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={4}
+            placeholder="Ex.: Prova 1: 8,5 · Trabalho final entregue dia 20/11..."
+            className="w-full mt-1.5 rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none resize-none"
+          />
+        </div>
+        {error && <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5">{error}</p>}
+        <Button onClick={handleSubmit} disabled={saving || !name.trim()} className="w-full">
+          {saving ? "Salvando..." : "Salvar disciplina"}
+        </Button>
+      </div>
+    </ModalWrap>
+  );
+}
+
 function CourseBlock({
   course,
   expanded,
@@ -933,6 +1027,7 @@ function CourseBlock({
 }) {
   const { subjects, createSubject, updateSubject, removeSubject } = useSubjects(course.id);
   const [subjectName, setSubjectName] = useState("");
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
 
   const handleAddSubject = async () => {
     if (!subjectName.trim()) return;
@@ -957,10 +1052,12 @@ function CourseBlock({
         <div className="mt-4 space-y-2">
           {subjects.map((s) => (
             <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg p-2.5 border border-paper-border dark:border-ink-border">
-              <div className="min-w-0">
+              <button className="min-w-0 text-left" onClick={() => setEditingSubject(s)}>
                 <p className="text-sm">{s.name}</p>
-                {s.professor && <p className="text-xs text-slate">{s.professor}</p>}
-              </div>
+                <p className="text-xs text-slate">
+                  {[s.professor, s.workload_hours ? `${s.workload_hours}h` : null].filter(Boolean).join(" · ") || "Toque para editar"}
+                </p>
+              </button>
               <div className="flex items-center gap-2 shrink-0">
                 <select
                   value={s.status}
@@ -973,6 +1070,9 @@ function CourseBlock({
                     </option>
                   ))}
                 </select>
+                <button onClick={() => setEditingSubject(s)} aria-label={`Editar ${s.name}`} className="text-slate">
+                  <Pencil size={13} />
+                </button>
                 <button onClick={() => removeSubject(s.id)} className="text-slate">
                   <Trash2 size={13} />
                 </button>
@@ -987,6 +1087,14 @@ function CourseBlock({
             </Button>
           </div>
         </div>
+      )}
+
+      {editingSubject && (
+        <SubjectEditModal
+          subject={editingSubject}
+          onClose={() => setEditingSubject(null)}
+          onSave={(patch) => updateSubject({ id: editingSubject.id, patch })}
+        />
       )}
     </Card>
   );

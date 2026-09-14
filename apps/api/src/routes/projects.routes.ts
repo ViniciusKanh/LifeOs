@@ -54,11 +54,12 @@ projectsRouter.patch("/:id", async (req, res) => {
   const existing = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
   if (existing.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
 
-  const { name, description, color, archived } = parsed.data;
+  const { name, description, kind, color, archived } = parsed.data;
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
   if (name !== undefined) { sets.push("name = ?"); args.push(name); }
   if (description !== undefined) { sets.push("description = ?"); args.push(description); }
+  if (kind !== undefined) { sets.push("kind = ?"); args.push(kind); }
   if (color !== undefined) { sets.push("color = ?"); args.push(color); }
   if (archived !== undefined) { sets.push("archived_at = ?"); args.push(archived ? new Date().toISOString() : null); }
   sets.push("updated_at = datetime('now')");
