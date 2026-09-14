@@ -315,3 +315,86 @@ goalsRouter.post("/:id/progress", async (req, res) => {
   const updated = await db.execute({ sql: "SELECT * FROM goals WHERE id = ?", args: [req.params.id] });
   return res.status(201).json(updated.rows[0]);
 });
+
+/**
+ * GET /api/goals/:id/forecast — projeção matemática (regressão linear
+ * simples) de quando a meta deve ser concluída, com base no ritmo real
+ * de progresso já registrado. Nunca inventa número: se não houver
+ * histórico suficiente ou o ritmo não indicar avanço, devolve
+ * forecast: null com um motivo em PT-BR (sempre 200, isso é um estado
+ * normal, não um erro).
+ */
+goalsRouter.get("/:id/forecast", async (req, res) => {
+  const db = getDb();
+  const goal = await getOwnedGoal(db, req.params.id, req.user!.id);
+  if (!goal) return res.status(404).json({ error: "Meta não encontrada." });
+
+  const g = goal as unknown as {
+    kind: string;
+    status: string;
+    target_value: number | null;
+    current_value: number;
+    due_date: string | null;
+  };
+
+  if (g.kind !== "numeric" && g.kind !== "percentage") {
+    return res.json({ forecast: null, reason: "Previsão disponível apenas para metas numéricas ou de percentual." });
+  }
+  if (g.target_value === null || g.target_value === undefined) {
+    return res.json({ forecast: null, reason: "Meta sem valor-alvo definido — não é possível projetar uma data." });
+  }
+  if (g.status === "done") {
+    return res.json({ forecast: null, reason: "Meta já concluída." });
+  }
+  if (g.status === "abandoned") {
+    return res.json({ forecast: null, reason: "Meta abandonada — sem projeção." });
+  }
+
+  const progressResult = await db.execute({
+    sql: "SELECT value, recorded_at FROM goal_progress WHERE goal_id = ? ORDER BY recorded_at ASC",
+    args: [req.params.id],
+  });
+  const progress = progressResult.rows as unknown as Array<{ value: number; recorded_at: string }>;
+
+  if (progress.length < 2) {
+    return res.json({ forecast: null, reason: "Ainda não há progresso suficiente registrado para projetar uma data." });
+  }
+
+  const first = progress[0];
+  const last = progress[progress.length - 1];
+  const elapsedDays = (new Date(last.recorded_at).getTime() - new Date(first.recorded_at).getTime()) / 86_400_000;
+
+  // Precisa de pelo menos 2 dias de intervalo real entre o primeiro e o
+  // último registro pra calcular um ritmo minimamente confiável.
+  if (elapsedDays < 2) {
+    return res.json({ forecast: null, reason: "Ainda não há progresso suficiente registrado para projetar uma data." });
+  }
+
+  const ratePerDay = (last.value - first.value) / elapsedDays;
+  if (ratePerDay <= 0) {
+    return res.json({ forecast: null, reason: "O ritmo atual não indica avanço — sem projeção possível." });
+  }
+
+  const daysRemaining = (g.target_value - g.current_value) / ratePerDay;
+  const forecastDateObj = new Date();
+  forecastDateObj.setUTCHours(0, 0, 0, 0);
+  forecastDateObj.setUTCDate(forecastDateObj.getUTCDate() + Math.ceil(daysRemaining));
+  const forecastDate = forecastDateObj.toISOString().slice(0, 10);
+
+  let aheadOrBehindDays: number | null = null;
+  if (g.due_date) {
+    const due = new Date(g.due_date);
+    due.setUTCHours(0, 0, 0, 0);
+    aheadOrBehindDays = Math.round((due.getTime() - forecastDateObj.getTime()) / 86_400_000);
+  }
+
+  return res.json({
+    forecast: {
+      date: forecastDate,
+      ratePerDay: Math.round(ratePerDay * 10_000) / 10_000,
+      daysRemaining: Math.round(daysRemaining * 10) / 10,
+      aheadOrBehindDays,
+    },
+    reason: null,
+  });
+});

@@ -4,6 +4,7 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
 import { addDependencySchema } from "../validators/project.schema.js";
+import { getFocusTasks } from "../services/priorityService.js";
 
 export const tasksRouter = Router();
 
@@ -35,6 +36,32 @@ tasksRouter.get("/", async (req, res) => {
   });
 
   return res.json(result.rows);
+});
+
+/**
+ * GET /api/tasks/focus?limit=5 — Priorização automática ("Foque
+ * nisso agora"): as N tarefas em aberto do usuário com maior score
+ * de foco (prazo + prioridade + impacto/urgência/esforço, com
+ * penalidade para tarefas bloqueadas por dependência). Precisa vir
+ * ANTES de "/:id" nesta rota, senão "focus" seria capturado como id.
+ */
+tasksRouter.get("/focus", async (req, res) => {
+  const db = getDb();
+  const rawLimit = Number(req.query.limit ?? 5);
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 20) : 5;
+
+  const tasks = await getFocusTasks(db, req.user!.id, limit);
+  return res.json({
+    tasks: tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      dueDate: t.dueDate,
+      priority: t.priority,
+      status: t.status,
+      score: t.score,
+      reasons: t.reasons,
+    })),
+  });
 });
 
 /** GET /api/tasks/:id */

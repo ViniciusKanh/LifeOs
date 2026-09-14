@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ListChecks, Target, Repeat, BookOpen, GraduationCap, GanttChartSquare, X } from "lucide-react";
+import { Search, ListChecks, Target, Repeat, BookOpen, GraduationCap, GanttChartSquare, X, Sparkles } from "lucide-react";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import type { GlobalSearchResult } from "@/services/searchService";
 
@@ -43,7 +43,17 @@ function ResultsList({ results, isSearching, query, onSelect }: {
                 <Icon size={15} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm truncate">{r.title}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-sm truncate">{r.title}</span>
+                  {r.matchType === "semantic" && (
+                    <span
+                      title="Encontrado por significado (busca semântica), não por palavra exata"
+                      className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-100"
+                    >
+                      <Sparkles size={9} /> por significado
+                    </span>
+                  )}
+                </span>
                 {r.subtitle && <span className="block text-[11px] text-slate truncate">{r.subtitle}</span>}
               </span>
             </button>

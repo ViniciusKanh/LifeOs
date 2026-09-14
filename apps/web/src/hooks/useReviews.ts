@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { reviewsService } from "@/services/reviewsService";
 import { triggerAchievementsCheck } from "@/services/achievementsService";
+import type { ApiError } from "@/services/api";
 
 /** Segunda-feira (00:00) da semana que contém `date` (ou hoje). */
 export function mondayOf(date = new Date()): string {
@@ -40,11 +41,20 @@ export function useWeeklyReview(weekStartDate: string) {
     },
   });
 
+  // Rascunho gerado pelo LifeOS Copilot com base nas métricas reais da semana — o
+  // usuário sempre revisa/edita antes de salvar, nunca é aplicado sozinho.
+  const generateDraft = useMutation({
+    mutationFn: () => reviewsService.draftWeekly(weekStartDate),
+  });
+
   return {
     saved: savedQuery.data ?? null,
     computed: computedQuery.data ?? null,
     history: historyQuery.data ?? [],
     isLoading: savedQuery.isLoading || computedQuery.isLoading,
     save: save.mutateAsync,
+    generateDraft: generateDraft.mutateAsync,
+    isGeneratingDraft: generateDraft.isPending,
+    draftError: generateDraft.error as ApiError | null,
   };
 }

@@ -62,3 +62,14 @@ export function useGoalDetail(id: string | undefined) {
 
   return { goal: query.data ?? null, isLoading: query.isLoading, addProgress: addProgress.mutateAsync };
 }
+
+/** Previsão matemática (não-IA) de conclusão da meta, calculada a partir do ritmo real de progresso registrado. */
+export function useGoalForecast(id: string | undefined) {
+  const query = useQuery({
+    queryKey: ["goals", "forecast", id],
+    queryFn: () => goalsService.forecast(id as string),
+    enabled: !!id,
+  });
+
+  return { forecast: query.data?.forecast ?? null, reason: query.data?.reason ?? null, isLoading: query.isLoading };
+}

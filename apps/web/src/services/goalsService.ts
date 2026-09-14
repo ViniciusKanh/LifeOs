@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { Goal, GoalDetail, GoalKind, GoalPeriod, GoalStats, GoalStatus } from "@/types";
+import type { Goal, GoalDetail, GoalForecast, GoalKind, GoalPeriod, GoalStats, GoalStatus } from "@/types";
 
 export interface GoalCreateInput {
   parentGoalId?: string | null;
@@ -33,4 +33,5 @@ export const goalsService = {
   remove: (id: string) => api.delete<void>(`/goals/${id}`),
   addProgress: (id: string, value: number, note?: string) => api.post<Goal>(`/goals/${id}/progress`, { value, note }),
   stats: () => api.get<GoalStats>("/goals/stats"),
+  forecast: (id: string) => api.get<GoalForecast>(`/goals/${id}/forecast`),
 };

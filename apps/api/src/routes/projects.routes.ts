@@ -128,3 +128,68 @@ projectsRouter.get("/:id/gantt", async (req, res) => {
 
   return res.json({ project: project.rows[0], tasks: ganttTasks });
 });
+
+/**
+ * GET /api/projects/:id/forecast — projeção matemática (ritmo real de
+ * conclusão de tarefas) de quando o projeto deve terminar. Usa
+ * completed_at quando preenchido; como o fluxo de arrastar no Kanban
+ * (PATCH /tasks/:id/move) não grava completed_at, cai para updated_at
+ * nas tarefas com status "Concluído". Nunca inventa número: sem
+ * histórico suficiente, devolve forecast: null com motivo em PT-BR
+ * (sempre 200 — é um estado normal, não um erro).
+ */
+projectsRouter.get("/:id/forecast", async (req, res) => {
+  const db = getDb();
+  const project = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+
+  const tasksResult = await db.execute({
+    sql: "SELECT id, status, completed_at, updated_at FROM tasks WHERE owner_id = ? AND project_id = ?",
+    args: [req.user!.id, req.params.id],
+  });
+  const tasks = tasksResult.rows as unknown as Array<{
+    id: string; status: string; completed_at: string | null; updated_at: string;
+  }>;
+
+  const completed = tasks.filter((t) => t.status === "Concluído");
+  const open = tasks.filter((t) => t.status !== "Concluído");
+
+  if (open.length === 0) {
+    return res.json({
+      forecast: null,
+      reason: completed.length > 0 ? "Projeto já concluído — nada para projetar." : "Projeto sem tarefas — nada para projetar.",
+    });
+  }
+  if (completed.length === 0) {
+    return res.json({ forecast: null, reason: "Nenhuma tarefa concluída ainda — sem histórico para projetar." });
+  }
+
+  const completionTimes = completed.map((t) => new Date(t.completed_at ?? t.updated_at).getTime());
+  const earliest = Math.min(...completionTimes);
+  const latest = Math.max(...completionTimes);
+  const weeksSpan = (latest - earliest) / (7 * 86_400_000);
+
+  if (weeksSpan < 2) {
+    return res.json({ forecast: null, reason: "Ainda não há pelo menos 2 semanas de histórico de conclusões para projetar." });
+  }
+
+  const completionsPerWeek = completed.length / weeksSpan;
+  if (completionsPerWeek <= 0) {
+    return res.json({ forecast: null, reason: "O ritmo atual não indica avanço — sem projeção possível." });
+  }
+
+  const weeksRemaining = open.length / completionsPerWeek;
+  const forecastDateObj = new Date();
+  forecastDateObj.setUTCHours(0, 0, 0, 0);
+  forecastDateObj.setUTCDate(forecastDateObj.getUTCDate() + Math.ceil(weeksRemaining * 7));
+  const forecastDate = forecastDateObj.toISOString().slice(0, 10);
+
+  return res.json({
+    forecast: {
+      date: forecastDate,
+      completionsPerWeek: Math.round(completionsPerWeek * 100) / 100,
+      remainingTasks: open.length,
+    },
+    reason: null,
+  });
+});

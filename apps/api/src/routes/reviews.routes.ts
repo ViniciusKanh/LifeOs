@@ -2,8 +2,10 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { dailyReviewSchema, weeklyReviewSchema } from "../validators/reviews.schema.js";
 import { changePct, computeLifeScore, computeRangeMetrics } from "../services/metricsService.js";
+import { generateWeeklyReviewDraft } from "../services/copilotService.js";
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -87,6 +89,22 @@ reviewsRouter.get("/weekly/compute", async (req, res) => {
       habits: lifeScore.habits - prevLifeScore.habits,
     },
   });
+});
+
+/**
+ * POST /api/reviews/weekly/draft?weekStartDate=YYYY-MM-DD — pede ao
+ * LifeOS Copilot um rascunho das três reflexões, baseado só nas
+ * métricas reais da semana (mesmas de /weekly/compute). O front nunca
+ * salva isso sozinho: só preenche os campos para o usuário revisar.
+ * Rate limit igual ao dos outros insights do Copilot (custo de API).
+ */
+reviewsRouter.post("/weekly/draft", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), async (req, res) => {
+  const weekStartDate = (req.query.weekStartDate as string) || new Date().toISOString().slice(0, 10);
+  const result = await generateWeeklyReviewDraft(req.user!.id, weekStartDate);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+  return res.json({ draft: result.draft });
 });
 
 /** GET /api/reviews/weekly?weekStartDate=YYYY-MM-DD */

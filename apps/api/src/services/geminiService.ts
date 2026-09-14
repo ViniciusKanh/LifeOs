@@ -93,6 +93,121 @@ export async function generateText(prompt: string, config: GeminiConfig): Promis
 }
 
 /**
+ * Declaração de uma função no formato que a API do Gemini espera em
+ * `tools[0].functionDeclarations` (subset de JSON Schema). Usada pelo
+ * Copilot com ações reais (copilotActionsService.ts) — cada ação
+ * disponível (criar tarefa, marcar hábito etc.) vira uma dessas.
+ */
+export interface GeminiFunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, { type: string; description?: string; enum?: string[] }>;
+    required?: string[];
+  };
+}
+
+export interface GeminiFunctionCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export type GeminiToolCallResult =
+  | { ok: true; text?: string; functionCall?: GeminiFunctionCall }
+  | { ok: false; message: string };
+
+/**
+ * Chamada com function calling (tools): o Gemini pode responder com
+ * texto normal OU pedir para chamar uma das funções declaradas — quem
+ * decide se/como executar essa função é sempre o backend do LifeOS,
+ * nunca o Gemini diretamente (ver copilotActionsService.ts: toda
+ * ação proposta exige confirmação explícita do usuário antes de
+ * gravar qualquer coisa no banco).
+ */
+export async function generateWithTools(
+  prompt: string,
+  tools: GeminiFunctionDeclaration[],
+  config: GeminiConfig
+): Promise<GeminiToolCallResult> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ functionDeclarations: tools }],
+      }),
+    });
+
+    const data = (await res.json().catch(() => null)) as
+      | {
+          candidates?: Array<{
+            content?: { parts?: Array<{ text?: string; functionCall?: { name?: string; args?: Record<string, unknown> } }> };
+          }>;
+          error?: { message?: string };
+        }
+      | null;
+
+    if (!res.ok) {
+      const apiMessage = data?.error?.message ?? `HTTP ${res.status}`;
+      return { ok: false, message: `Gemini recusou a chamada (modelo "${config.model}"): ${apiMessage}` };
+    }
+
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    const functionCallPart = parts.find((p) => p.functionCall?.name);
+    if (functionCallPart?.functionCall?.name) {
+      return {
+        ok: true,
+        functionCall: { name: functionCallPart.functionCall.name, args: functionCallPart.functionCall.args ?? {} },
+      };
+    }
+
+    const text = parts.find((p) => p.text)?.text?.trim();
+    if (!text) {
+      return { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.` };
+    }
+    return { ok: true, text };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? `Falha ao chamar a API do Gemini: ${err.message}` : "Falha ao chamar a API do Gemini." };
+  }
+}
+
+export type EmbeddingResult = { ok: true; vector: number[] } | { ok: false; message: string };
+
+/**
+ * Embedding de texto via `text-embedding-004` — usado pela busca
+ * semântica (searchService.ts). Vetor de 768 dimensões; guardamos
+ * como JSON no banco e comparamos por similaridade de cosseno em
+ * JavaScript (ver embeddingsService.ts) em vez de depender de função
+ * de vetor nativa do SQLite/libSQL local usado nos testes.
+ */
+export async function embedText(text: string, config: GeminiConfig): Promise<EmbeddingResult> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${config.apiKey}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: { parts: [{ text }] } }),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | { embedding?: { values?: number[] }; error?: { message?: string } }
+      | null;
+    if (!res.ok) {
+      return { ok: false, message: data?.error?.message ?? `HTTP ${res.status}` };
+    }
+    const vector = data?.embedding?.values;
+    if (!vector || vector.length === 0) {
+      return { ok: false, message: "Embedding vazio." };
+    }
+    return { ok: true, vector };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Falha ao gerar embedding." };
+  }
+}
+
+/**
  * Testa a chave de verdade: manda um prompt trivial para a API do
  * Gemini e devolve a resposta (ou o erro real da Google, sem
  * mascarar) — assim dá pra saber se a chave, o modelo e a cota

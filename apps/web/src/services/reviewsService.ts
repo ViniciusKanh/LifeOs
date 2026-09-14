@@ -17,4 +17,10 @@ export const reviewsService = {
     whatToImprove?: string;
     nextPriorities?: string;
   }) => api.put<WeeklyReview>("/reviews/weekly", input),
+
+  /** LifeOS Copilot — rascunho das três reflexões da semana, baseado só nas métricas reais já computadas. */
+  draftWeekly: (weekStartDate: string) =>
+    api.post<{ draft: { wentWell: string; toImprove: string; nextWeekFocus: string } }>(
+      `/reviews/weekly/draft?weekStartDate=${weekStartDate}`
+    ),
 };

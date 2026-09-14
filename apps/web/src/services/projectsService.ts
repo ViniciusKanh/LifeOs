@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { GanttData, Project, ProjectKind } from "@/types";
+import type { GanttData, Project, ProjectForecast, ProjectKind } from "@/types";
 
 export interface ProjectCreateInput {
   name: string;
@@ -22,6 +22,7 @@ export const projectsService = {
   update: (id: string, patch: ProjectUpdateInput) => api.patch<Project>(`/projects/${id}`, patch),
   remove: (id: string) => api.delete<void>(`/projects/${id}`),
   gantt: (id: string) => api.get<GanttData>(`/projects/${id}/gantt`),
+  forecast: (id: string) => api.get<ProjectForecast>(`/projects/${id}/forecast`),
 };
 
 export const taskDependenciesService = {
