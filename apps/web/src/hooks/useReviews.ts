@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { reviewsService } from "@/services/reviewsService";
+import { triggerAchievementsCheck } from "@/services/achievementsService";
 
 /** Segunda-feira (00:00) da semana que contém `date` (ou hoje). */
 export function mondayOf(date = new Date()): string {
@@ -34,6 +35,8 @@ export function useWeeklyReview(weekStartDate: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reviews", "weekly", weekStartDate] });
       queryClient.invalidateQueries({ queryKey: ["reviews", "weekly-history"] });
+      // Fechar a Weekly Review é gatilho de conquista (ex.: "Revisor consistente") — antes nunca era checado.
+      triggerAchievementsCheck();
     },
   });
 

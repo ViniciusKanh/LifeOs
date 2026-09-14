@@ -22,30 +22,49 @@ async function scalar(db: Db, sql: string, args: Array<string | number>): Promis
   return Number(value ?? 0);
 }
 
-/** Produtividade: % de tarefas concluídas sobre o total já criado. */
-async function productivityScore(db: Db, ownerId: string): Promise<number> {
-  const total = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ?", [ownerId]);
-  if (total === 0) return 0;
-  const done = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído'", [ownerId]);
-  return clamp((done / total) * 100);
+/**
+ * Uma dimensão do Life Score pode não ter dado nenhum ainda (usuário
+ * nunca criou uma tarefa, nunca vinculou um projeto profissional,
+ * não tem nenhuma meta ativa...). `hasData: false` marca isso — é o
+ * que diferencia "fez 0% do que existe" (conta contra a média) de
+ * "não existe nada aqui pra medir ainda" (não deveria puxar a média
+ * geral pra baixo só porque o módulo nunca foi usado). Ver
+ * computeLifeScore, que usa esse flag pra montar o `overall`.
+ */
+interface DimensionScore {
+  score: number;
+  hasData: boolean;
 }
 
-/** Profissional: mesmo cálculo, restrito a tarefas de projetos "professional"/"workspace". */
-async function professionalScore(db: Db, ownerId: string): Promise<number> {
+/** Produtividade: % de tarefas concluídas sobre o total já criado. */
+async function productivityScore(db: Db, ownerId: string): Promise<DimensionScore> {
+  const total = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ?", [ownerId]);
+  if (total === 0) return { score: 0, hasData: false };
+  const done = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído'", [ownerId]);
+  return { score: clamp((done / total) * 100), hasData: true };
+}
+
+/**
+ * Profissional: mesmo cálculo, restrito a tarefas vinculadas a um
+ * projeto "professional"/"workspace" (ver seletor de projeto no
+ * TaskModal — sem vincular, a tarefa não entra aqui mesmo sendo
+ * trabalho de verdade).
+ */
+async function professionalScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const total = await scalar(
     db,
     `SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id = t.project_id
      WHERE t.owner_id = ? AND p.kind IN ('professional', 'workspace')`,
     [ownerId]
   );
-  if (total === 0) return 0;
+  if (total === 0) return { score: 0, hasData: false };
   const done = await scalar(
     db,
     `SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id = t.project_id
      WHERE t.owner_id = ? AND p.kind IN ('professional', 'workspace') AND t.status = 'Concluído'`,
     [ownerId]
   );
-  return clamp((done / total) * 100);
+  return { score: clamp((done / total) * 100), hasData: true };
 }
 
 /** Saúde: média de água hoje, qualidade do último sono e se houve exercício hoje. */
@@ -79,42 +98,50 @@ async function healthScore(db: Db, ownerId: string, date: string): Promise<numbe
 }
 
 /** Educação: progresso médio das formações ativas (educations.progress_pct). */
-async function educationScore(db: Db, ownerId: string): Promise<number> {
+async function educationScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const result = await db.execute({
-    sql: "SELECT AVG(progress_pct) AS avg_pct FROM educations WHERE owner_id = ?",
+    sql: "SELECT COUNT(*) AS n, AVG(progress_pct) AS avg_pct FROM educations WHERE owner_id = ?",
     args: [ownerId],
   });
-  return clamp(Number(result.rows[0]?.avg_pct ?? 0));
+  const row = result.rows[0] as unknown as { n: number; avg_pct: number | null } | undefined;
+  if (!row || Number(row.n) === 0) return { score: 0, hasData: false };
+  return { score: clamp(Number(row.avg_pct ?? 0)), hasData: true };
 }
 
 /** Leitura: progresso médio (página atual / total) dos livros em leitura. */
-async function readingScore(db: Db, ownerId: string): Promise<number> {
+async function readingScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const result = await db.execute({
     sql: `SELECT current_page, total_pages FROM books
           WHERE owner_id = ? AND status = 'Lendo' AND total_pages IS NOT NULL AND total_pages > 0`,
     args: [ownerId],
   });
   const rows = result.rows as unknown as Array<{ current_page: number; total_pages: number }>;
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return { score: 0, hasData: false };
   const avg = rows.reduce((sum, b) => sum + b.current_page / b.total_pages, 0) / rows.length;
-  return clamp(avg * 100);
+  return { score: clamp(avg * 100), hasData: true };
 }
 
-/** Hábitos: % dos hábitos ativos com check-in registrado hoje. */
-async function habitsScore(db: Db, ownerId: string, date: string): Promise<number> {
+/**
+ * Hábitos: % dos hábitos ativos com check-in registrado hoje. É uma
+ * dimensão "do dia" (diferente de profissional/educação/leitura, que
+ * são acumulados de vida inteira) — 0% aqui significa "não fez os
+ * hábitos hoje", um sinal real, não "módulo nunca usado". Só marca
+ * sem dado quando não existe NENHUM hábito cadastrado.
+ */
+async function habitsScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
   const total = await scalar(db, "SELECT COUNT(*) FROM habits WHERE owner_id = ? AND archived_at IS NULL", [ownerId]);
-  if (total === 0) return 0;
+  if (total === 0) return { score: 0, hasData: false };
   const checkedIn = await scalar(
     db,
     `SELECT COUNT(*) FROM habit_entries he JOIN habits h ON h.id = he.habit_id
      WHERE he.owner_id = ? AND he.entry_date = ? AND h.archived_at IS NULL AND he.count >= h.target_count`,
     [ownerId, date]
   );
-  return clamp((checkedIn / total) * 100);
+  return { score: clamp((checkedIn / total) * 100), hasData: true };
 }
 
 /** Metas: progresso médio das metas ativas, conforme o tipo de cada uma. */
-async function goalsScore(db: Db, ownerId: string): Promise<number> {
+async function goalsScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const result = await db.execute({
     sql: "SELECT kind, status, target_value, current_value FROM goals WHERE owner_id = ? AND status != 'abandoned'",
     args: [ownerId],
@@ -125,7 +152,7 @@ async function goalsScore(db: Db, ownerId: string): Promise<number> {
     target_value: number | null;
     current_value: number;
   }>;
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return { score: 0, hasData: false };
 
   const scores = rows.map((g) => {
     if (g.status === "done") return 100;
@@ -134,7 +161,17 @@ async function goalsScore(db: Db, ownerId: string): Promise<number> {
     if (g.kind === "binary") return 0;
     return 0; // task_based sem submetas resolvidas ainda entra como 0, nunca estimado
   });
-  return clamp(scores.reduce((a, b) => a + b, 0) / scores.length);
+  return { score: clamp(scores.reduce((a, b) => a + b, 0) / scores.length), hasData: true };
+}
+
+/**
+ * Saúde é sempre contabilizada (hasData: true) — assim como hábitos,
+ * é uma dimensão "do dia": 0% significa "não bebeu água/dormiu
+ * mal/não treinou hoje", sinal real que deve pesar na média, não
+ * "módulo nunca usado".
+ */
+function toHealthDimension(score: number): DimensionScore {
+  return { score, hasData: true };
 }
 
 export interface LifeScoreBreakdown {
@@ -153,7 +190,7 @@ export async function computeLifeScore(ownerId: string, date = new Date().toISOS
   const db = getDb();
   const [productivity, health, education, reading, habits, professional, goals] = await Promise.all([
     productivityScore(db, ownerId),
-    healthScore(db, ownerId, date),
+    healthScore(db, ownerId, date).then(toHealthDimension),
     educationScore(db, ownerId),
     readingScore(db, ownerId),
     habitsScore(db, ownerId, date),
@@ -161,10 +198,28 @@ export async function computeLifeScore(ownerId: string, date = new Date().toISOS
     goalsScore(db, ownerId),
   ]);
 
+  // "overall" é a média só das dimensões com dado real (hasData). Uma
+  // dimensão sem nenhum dado (ex.: nunca vinculou tarefa a um projeto
+  // profissional, nunca cadastrou uma formação, nenhuma meta ativa)
+  // antes entrava como 0 na média e derrubava o Life Score mesmo sem
+  // ter nada de fato "errado" — módulo nunca usado não é a mesma
+  // coisa que "fez 0% do que deveria". Health e Hábitos são exceção:
+  // são dimensões "do dia" e sempre contam (0% ali é sinal real).
   const dims = [productivity, health, education, reading, habits, professional, goals];
-  const overall = clamp(dims.reduce((a, b) => a + b, 0) / dims.length);
+  const withData = dims.filter((d) => d.hasData);
+  const overall = withData.length > 0 ? clamp(withData.reduce((a, b) => a + b.score, 0) / withData.length) : 0;
 
-  return { date, overall, productivity, health, education, reading, habits, professional, goals };
+  return {
+    date,
+    overall,
+    productivity: productivity.score,
+    health: health.score,
+    education: education.score,
+    reading: reading.score,
+    habits: habits.score,
+    professional: professional.score,
+    goals: goals.score,
+  };
 }
 
 export interface RangeMetrics {

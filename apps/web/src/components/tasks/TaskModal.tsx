@@ -2,8 +2,23 @@ import { useEffect, useState } from "react";
 import { X, Play, Square, Trash2 } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
 import { useTaskTimer } from "@/hooks/useTasks";
+import { useProjects } from "@/hooks/useProjects";
 import type { Task, TaskPriority } from "@/types";
 import type { TaskInput } from "@/services/taskService";
+
+/**
+ * Rótulo do tipo de projeto no seletor — é o que faz uma tarefa
+ * "contar" como profissional na dimensão Profissional do Life Score
+ * (ver professionalScore em apps/api/src/services/metricsService.ts):
+ * sem vincular a tarefa a um projeto Workspace/Profissional aqui, ela
+ * nunca entra nesse cálculo, mesmo que seja trabalho de verdade.
+ */
+const KIND_LABEL: Record<string, string> = {
+  personal: "Pessoal",
+  workspace: "Workspace",
+  professional: "Profissional",
+  academic: "Acadêmico",
+};
 
 function toDateInput(value: string | null): string {
   if (!value) return "";
@@ -43,8 +58,10 @@ export function TaskModal({
   const [startDate, setStartDate] = useState(toDateInput(task?.start_date ?? null));
   const [dueDate, setDueDate] = useState(toDateInput(task?.due_date ?? null));
   const [estimateMinutes, setEstimateMinutes] = useState(task?.estimate_minutes ? String(task.estimate_minutes) : "");
+  const [projectId, setProjectId] = useState<string>(task?.project_id ?? "");
   const [saving, setSaving] = useState(false);
 
+  const { projects } = useProjects();
   const { activeEntry, start, stop, isStarting, isStopping } = useTaskTimer(task?.id ?? null);
   const [elapsed, setElapsed] = useState(0);
 
@@ -72,6 +89,7 @@ export function TaskModal({
         startDate: startDate || null,
         dueDate: dueDate || null,
         estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
+        projectId: projectId || null,
       });
       onClose();
     } finally {
@@ -131,6 +149,25 @@ export function TaskModal({
                 <option value="Alta">Alta</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-slate">Projeto (opcional)</label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            >
+              <option value="">Sem projeto</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {KIND_LABEL[p.kind] ?? p.kind}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate mt-1">
+              Vincular a um projeto Workspace ou Profissional é o que faz a tarefa contar na dimensão "Profissional" do Life Score.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

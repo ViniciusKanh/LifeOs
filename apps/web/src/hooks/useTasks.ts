@@ -88,7 +88,13 @@ export function useProjectTasks(projectId: string | null) {
 
   const updateTask = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<TaskInput> }) => taskService.update(id, patch),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => {
+      invalidate();
+      // Mesmo gatilho do useTasks — este hook alimenta o Kanban de
+      // projetos (Educação/TCC e Projetos) e antes não disparava a
+      // checagem de conquistas ao concluir uma tarefa por aqui.
+      if (variables.patch.status === "Concluído") triggerAchievementsCheck();
+    },
   });
 
   const removeTask = useMutation({
@@ -107,7 +113,10 @@ export function useProjectTasks(projectId: string | null) {
     onError: (_err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(key, context.previous);
     },
-    onSettled: invalidate,
+    onSettled: (_data, _error, variables) => {
+      invalidate();
+      if (variables.status === "Concluído") triggerAchievementsCheck();
+    },
   });
 
   return {
