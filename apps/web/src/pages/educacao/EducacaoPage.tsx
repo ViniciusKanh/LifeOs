@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { useEducations } from "@/hooks/useEducations";
 import { Button, EmptyState, Field } from "@/components/ui/primitives";
@@ -58,6 +58,16 @@ export function EducacaoPage() {
   );
   const defaultEducation = sortedEducations.find((e) => e.phase !== "concluida") ?? sortedEducations[0];
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Se a formação selecionada foi excluída (ex.: via "Excluir
+  // formação" dentro do painel), volta pra formação em destaque em
+  // vez de tentar renderizar um painel que já não existe mais.
+  useEffect(() => {
+    if (activeId && !isLoading && !educations.some((e) => e.id === activeId)) {
+      setActiveId(null);
+    }
+  }, [activeId, educations, isLoading]);
+
   const activeEducationId = activeId ?? defaultEducation?.id ?? null;
 
   return (

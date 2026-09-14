@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useAcademicProjects, useEducation, useEducationDashboard, useSubjects } from "@/hooks/useEducations";
+import { useAcademicProjects, useEducation, useEducationDashboard, useEducations, useSubjects } from "@/hooks/useEducations";
 import { useEducationInsight } from "@/hooks/useCopilot";
 import { useProjectTasks } from "@/hooks/useTasks";
 import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
@@ -110,11 +110,13 @@ function urgencyInfo(dueDate: string) {
 export function EducationDashboard({ educationId, onBack }: { educationId: string; onBack?: () => void }) {
   const { education, courses, createCourse, removeCourse } = useEducation(educationId);
   const { createProject } = useAcademicProjects();
+  const { removeEducation } = useEducations();
   const dashboard = useEducationDashboard(educationId);
   const insight = useEducationInsight();
   const [newCourseName, setNewCourseName] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [confirmDeleteEducation, setConfirmDeleteEducation] = useState(false);
   const [showAllSubjects, setShowAllSubjects] = useState(false);
   const [showAllDeadlines, setShowAllDeadlines] = useState(false);
   const [showAllChecklist, setShowAllChecklist] = useState(false);
@@ -153,13 +155,29 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
     setAddingStep(false);
   };
 
+  const handleDeleteEducation = async () => {
+    await removeEducation(education.id);
+    setConfirmDeleteEducation(false);
+    onBack?.();
+  };
+
   return (
     <div>
-      {onBack && (
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-slate mb-4">
-          <ArrowLeft size={14} /> Voltar para Educação
+      <div className="flex items-center justify-between mb-4 gap-3">
+        {onBack ? (
+          <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-slate">
+            <ArrowLeft size={14} /> Voltar para Educação
+          </button>
+        ) : (
+          <span />
+        )}
+        <button
+          onClick={() => setConfirmDeleteEducation(true)}
+          className="flex items-center gap-1.5 text-xs text-slate hover:text-drop transition-colors"
+        >
+          <Trash2 size={13} /> Excluir formação
         </button>
-      )}
+      </div>
 
       {/* ===================== Cabeçalho da formação ===================== */}
       <Card className="p-5 md:p-6 mb-4">
@@ -395,38 +413,15 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
         </Card>
       </div>
 
-      {/* ==================== Projetos acadêmicos / Semestre / Insight ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold">Projetos acadêmicos</p>
-            <button onClick={() => setNewProjectOpen(true)} className="text-xs text-brand-600 dark:text-brand-500 font-medium">
-              + Novo projeto
-            </button>
-          </div>
-          {education.academicProjects.length === 0 ? (
-            <p className="text-xs text-slate">Nenhum projeto acadêmico vinculado ainda.</p>
-          ) : (
-            <div className="space-y-2.5">
-              {education.academicProjects.map((p) => (
-                <a key={p.id} href="#projetos-academicos" className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-paper dark:hover:bg-ink-overlay transition-colors">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium truncate">{p.title}</p>
-                    <p className="text-[10px] text-slate truncate">{ACADEMIC_KIND_LABEL[p.kind]} · {education.institution ?? "Pessoal"}</p>
-                  </div>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                      p.progress_pct >= 100 ? "bg-growth/10 text-growth" : "bg-brand-50 text-brand-700 dark:bg-brand-700/20 dark:text-brand-100"
-                    }`}
-                  >
-                    {p.progress_pct >= 100 ? "Concluído" : "Em andamento"}
-                  </span>
-                </a>
-              ))}
-            </div>
-          )}
-        </Card>
-
+      {/* ==================== Semestre / Insight ====================
+          O card "Projetos acadêmicos" que existia aqui foi removido:
+          ele só repetia (título, tipo, progresso) exatamente o que a
+          seção "TCC, dissertação e projetos acadêmicos" mais abaixo já
+          mostra, com um simples link-âncora para rolar até lá. Essa
+          era a redundância da tela de Educação — a lista completa com
+          o Kanban de cada projeto já está mais abaixo, com muito mais
+          informação real (e agora com exclusão). */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold">Meu semestre</p>
@@ -564,6 +559,22 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
       )}
 
       {studyModalOpen && <StudySessionModal onClose={() => setStudyModalOpen(false)} onCreate={dashboard.logStudySession} />}
+
+      {confirmDeleteEducation && (
+        <ModalWrap title={`Excluir "${education.course_name}"?`} onClose={() => setConfirmDeleteEducation(false)}>
+          <p className="text-xs text-slate mb-4">
+            Cursos, disciplinas, prazos e projetos acadêmicos (TCC/dissertação/tese) desta formação serão apagados junto, incluindo o Kanban de cada um. Esta ação não pode ser desfeita.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setConfirmDeleteEducation(false)} className="flex-1">
+              Cancelar
+            </Button>
+            <Button onClick={handleDeleteEducation} className="flex-1 !bg-drop !from-drop !to-drop">
+              Excluir
+            </Button>
+          </div>
+        </ModalWrap>
+      )}
     </div>
   );
 }
@@ -830,7 +841,9 @@ function NovoProjetoAcademicoModal({
  */
 function AcademicProjectKanban({ project }: { project: AcademicProject }) {
   const { tasks, createTask, updateTask, removeTask, moveTask } = useProjectTasks(project.project_id);
+  const { removeProject } = useAcademicProjects();
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const openNew = () => setModalState({ open: true, task: null });
   const openEdit = (task: Task) => setModalState({ open: true, task });
@@ -864,6 +877,13 @@ function AcademicProjectKanban({ project }: { project: AcademicProject }) {
           <Button onClick={openNew}>
             <Plus size={15} /> Nova etapa
           </Button>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            aria-label={`Excluir projeto acadêmico ${project.title}`}
+            className="text-slate/60 hover:text-drop transition-colors shrink-0"
+          >
+            <Trash2 size={15} />
+          </button>
         </div>
       </div>
 
@@ -879,6 +899,22 @@ function AcademicProjectKanban({ project }: { project: AcademicProject }) {
 
       {modalState.open && (
         <TaskModal task={modalState.task} statusOptions={ACADEMIC_COLUMNS} onClose={close} onSave={handleSave} onDelete={removeTask} />
+      )}
+
+      {confirmDelete && (
+        <ModalWrap title={`Excluir "${project.title}"?`} onClose={() => setConfirmDelete(false)}>
+          <p className="text-xs text-slate mb-4">
+            O Kanban e as etapas deste projeto acadêmico serão apagados. As tarefas em si continuam existindo, mas perdem o vínculo com ele.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setConfirmDelete(false)} className="flex-1">
+              Cancelar
+            </Button>
+            <Button onClick={() => removeProject(project.id)} className="flex-1 !bg-drop !from-drop !to-drop">
+              Excluir
+            </Button>
+          </div>
+        </ModalWrap>
       )}
     </div>
   );
