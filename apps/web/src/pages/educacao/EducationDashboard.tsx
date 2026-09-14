@@ -190,7 +190,9 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
             </div>
           </div>
 
-          <div className="flex items-center gap-5 text-xs shrink-0">
+          {/* flex-wrap + gap menor no mobile: em ~360-400px as duas datas
+              lado a lado com shrink-0 podiam empurrar a largura do cartão */}
+          <div className="flex items-center gap-4 sm:gap-5 text-xs shrink-0 flex-wrap">
             <div className="flex items-center gap-2">
               <Calendar size={14} className="text-slate" />
               <div>
@@ -207,14 +209,18 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
             </div>
           </div>
 
-          <div className="rounded-2xl p-4 bg-gradient-to-br from-brand-500 to-cat-purple text-white max-w-[220px] shrink-0">
+          {/* Largura total no mobile (empilhado); volta a ser um cartão
+              lateral compacto a partir de lg, quando fica ao lado do resto */}
+          <div className="rounded-2xl p-4 bg-gradient-to-br from-brand-500 to-cat-purple text-white w-full lg:max-w-[220px] shrink-0">
             <p className="text-xs leading-relaxed">&ldquo;{fallbackQuoteOfTheDay()}&rdquo;</p>
           </div>
         </div>
       </Card>
 
       {/* ========================== Indicadores reais ========================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      {/* 1 coluna em telas muito estreitas, 2 a partir de sm e 4 a partir de
+          lg — evita cartões apertados demais em ~360-400px de largura */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <Card className="p-4">
           <div className="flex items-center gap-2.5 mb-2.5">
             <IconBadge tone="blue" size={34} icon={<BookOpen size={16} />} />
@@ -446,19 +452,21 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
           )}
 
           {(addingStep || dashboard.checklist.length === 0) && (
-            <div className="flex gap-1.5 mt-3">
+            // flex-wrap + data mais estreita: em ~360px os três campos
+            // (texto + data + botão) não cabiam todos numa única linha
+            <div className="flex gap-1.5 mt-3 flex-wrap">
               <input
                 value={checklistTitle}
                 onChange={(e) => setChecklistTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAddChecklistItem()}
                 placeholder="Nome da etapa..."
-                className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500"
+                className="flex-1 min-w-[140px] rounded-lg px-2.5 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500"
               />
               <input
                 type="date"
                 value={checklistDueDate}
                 onChange={(e) => setChecklistDueDate(e.target.value)}
-                className="w-32 rounded-lg px-2 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500"
+                className="w-28 sm:w-32 rounded-lg px-2 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500"
               />
               <button onClick={handleAddChecklistItem} className="rounded-lg px-2.5 border border-paper-border dark:border-ink-border text-slate shrink-0">
                 <Plus size={13} />

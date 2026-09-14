@@ -140,8 +140,8 @@ export function HojePage() {
         prioridades concluídas
       </p>
 
-      {/* Stat tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+      {/* Stat tiles — 2 colunas no celular (mobile-first) para caber bem em telas ~360-400px */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 mb-4">
         <StatTile
           tone="blue"
           icon={<CheckCircle2 size={18} />}
@@ -187,15 +187,16 @@ export function HojePage() {
         {/* Coluna esquerda */}
         <div className="space-y-4">
           <Card className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2.5">
+            {/* Cabeçalho com quebra em telas estreitas: título/legenda encolhem e o botão desce de linha se faltar espaço */}
+            <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <IconBadge tone="amber" size={32} icon={<Star size={15} />} />
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold">Prioridades</p>
                   <p className="text-xs text-slate">Suas tarefas mais importantes para hoje.</p>
                 </div>
               </div>
-              <Button onClick={() => setTaskModalOpen(true)}>
+              <Button onClick={() => setTaskModalOpen(true)} className="shrink-0">
                 <Plus size={14} /> Adicionar tarefa
               </Button>
             </div>
@@ -364,6 +365,8 @@ export function HojePage() {
             {habits.length === 0 ? (
               <p className="text-xs text-slate">Crie seu primeiro hábito para vê-lo aqui.</p>
             ) : (
+              // 2 colunas fixas: já é o ideal tanto no celular quanto na coluna
+              // direita (mais estreita) do layout desktop — evita apertar 3+ cards.
               <div className="grid grid-cols-2 gap-2.5">
                 {habits.slice(0, 4).map((h) => {
                   const done = summaryByHabitId.get(h.id)?.checkedInToday ?? false;

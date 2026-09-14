@@ -214,22 +214,22 @@ export function HabitosPage() {
       ) : (
         <>
           {/* Cartões de estatística */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Flame size={18} />} tone="amber" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{diasLabel(stats?.currentStreakMax ?? 0)}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{diasLabel(stats?.currentStreakMax ?? 0)}</p>
                   <p className="text-xs text-slate leading-tight">Sequência atual</p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Target size={18} />} tone="blue" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xl font-semibold leading-tight">
+                    <p className="text-lg sm:text-xl font-semibold leading-tight">
                       {completedToday} / {totalHabits}
                     </p>
                     {completedDelta !== null && completedDelta !== 0 && (
@@ -245,21 +245,21 @@ export function HabitosPage() {
                 <div className="h-full rounded-full bg-cat-blue" style={{ width: `${totalHabits ? (completedToday / totalHabits) * 100 : 0}%` }} />
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Activity size={18} />} tone="purple" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{totalHabits}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{totalHabits}</p>
                   <p className="text-xs text-slate leading-tight">Hábitos ativos</p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<TrendingUp size={18} />} tone="teal" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xl font-semibold leading-tight">{consistency?.ratePct ?? 0}%</p>
+                    <p className="text-lg sm:text-xl font-semibold leading-tight">{consistency?.ratePct ?? 0}%</p>
                     {consistency?.changePct !== null && consistency?.changePct !== undefined && consistency.changePct !== 0 && (
                       <span className={`text-[11px] font-semibold ${consistency.changePct > 0 ? "text-growth" : "text-drop"}`}>
                         {consistency.changePct > 0 ? "↑" : "↓"}{Math.abs(consistency.changePct)}%
@@ -270,11 +270,11 @@ export function HabitosPage() {
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Sparkles size={18} />} tone="pink" />
                 <div className="min-w-0">
-                  <p className="text-xl font-semibold leading-tight">{diasLabel(stats?.bestStreakMax ?? 0)}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight">{diasLabel(stats?.bestStreakMax ?? 0)}</p>
                   <p className="text-xs text-slate leading-tight">Melhor sequência</p>
                 </div>
               </div>
@@ -473,8 +473,8 @@ export function HabitosPage() {
                   <p className="text-xs text-slate">Sem check-ins registrados ainda.</p>
                 )}
                 <div className="grid grid-cols-2 gap-2 mt-4">
-                  <div className="rounded-xl border border-paper-border dark:border-ink-border p-3">
-                    <p className="text-lg font-semibold">{consistency?.ratePct ?? 0}%</p>
+                  <div className="rounded-xl border border-paper-border dark:border-ink-border p-2.5 sm:p-3 min-w-0">
+                    <p className="text-base sm:text-lg font-semibold">{consistency?.ratePct ?? 0}%</p>
                     <p className="text-[11px] text-slate">dias com hábitos</p>
                     {consistency?.changePct !== null && consistency?.changePct !== undefined && (
                       <p className={`text-[11px] mt-0.5 ${consistency.changePct >= 0 ? "text-growth" : "text-drop"}`}>
@@ -482,8 +482,8 @@ export function HabitosPage() {
                       </p>
                     )}
                   </div>
-                  <div className="rounded-xl border border-paper-border dark:border-ink-border p-3">
-                    <p className="text-lg font-semibold">{consistency?.daysWithAnyHabit ?? 0}</p>
+                  <div className="rounded-xl border border-paper-border dark:border-ink-border p-2.5 sm:p-3 min-w-0">
+                    <p className="text-base sm:text-lg font-semibold">{consistency?.daysWithAnyHabit ?? 0}</p>
                     <p className="text-[11px] text-slate">dias no período de {consistency?.days.length ?? 30}</p>
                   </div>
                 </div>

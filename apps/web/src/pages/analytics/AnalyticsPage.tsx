@@ -255,7 +255,8 @@ export function AnalyticsPage() {
         <p className="text-sm text-slate">Carregando métricas...</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Mobile-first: 1 coluna em telas muito estreitas evita espremer ícone + sparkline no mesmo cartão */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
               icon={<CheckCircle2 size={18} />}
               tone="blue"
@@ -355,7 +356,7 @@ export function AnalyticsPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-            <Card className="p-5 xl:col-span-1">
+            <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
               <p className="text-sm font-semibold mb-1">Evolução da produtividade</p>
               <p className="text-xs text-slate mb-3">Tarefas, foco e estudo ao longo dos últimos {days} dias.</p>
               {productivityEvolution.every((d) => d["Tarefas concluídas"] === 0 && d["Minutos de foco"] === 0 && d["Minutos de estudo"] === 0) ? (
@@ -376,7 +377,7 @@ export function AnalyticsPage() {
               )}
             </Card>
 
-            <Card className="p-5 xl:col-span-1">
+            <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
               <p className="text-sm font-semibold mb-1">Distribuição do tempo</p>
               <p className="text-xs text-slate mb-3">Tempo ativo (média/dia) entre trabalho, estudo, leitura e exercício.</p>
               {timeDistributionData.length === 0 ? (
@@ -412,7 +413,7 @@ export function AnalyticsPage() {
               )}
             </Card>
 
-            <Card className="p-5 xl:col-span-1">
+            <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
               <p className="text-sm font-semibold mb-3">Equilíbrio da rotina (Life Score)</p>
               {!lifeScore || radarData.every((d) => d.value === 0) ? (
                 <p className="text-xs text-slate py-10 text-center">Registre atividades nos módulos para ver seu equilíbrio aqui.</p>
@@ -431,7 +432,7 @@ export function AnalyticsPage() {
               )}
             </Card>
 
-            <Card className="p-5 xl:col-span-1">
+            <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
               <p className="text-sm font-semibold mb-1">Conclusões por dia da semana</p>
               <p className="text-xs text-slate mb-3">Média de tarefas concluídas por dia.</p>
               {weekdayChartData.length === 0 ? (
@@ -451,7 +452,7 @@ export function AnalyticsPage() {
             </Card>
           </div>
 
-          <Card className="p-5 md:p-6">
+          <Card className="p-4 sm:p-5 md:p-6">
             <div className="flex items-center gap-2 mb-1">
               <Trophy size={15} className="text-signal-deep" />
               <p className="text-sm font-semibold">Insights do período</p>
@@ -472,7 +473,7 @@ export function AnalyticsPage() {
           </Card>
 
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-            <Card className="p-5 md:p-6 xl:col-span-2">
+            <Card className="p-4 sm:p-5 md:p-6 xl:col-span-2">
               <p className="text-sm font-semibold mb-1">Correlações</p>
               <p className="text-xs text-slate mb-4">
                 Calculadas a partir dos seus próprios registros — nunca um diagnóstico, apenas um padrão pessoal.
@@ -519,7 +520,7 @@ export function AnalyticsPage() {
               </div>
             </Card>
 
-            <Card className="p-5 md:p-6 xl:col-span-1">
+            <Card className="p-4 sm:p-5 md:p-6 xl:col-span-1">
               <div className="flex items-center gap-2 mb-4">
                 <Briefcase size={15} className="text-brand-600 dark:text-brand-500" />
                 <p className="text-sm font-semibold">Resumo do período</p>
@@ -546,7 +547,7 @@ export function AnalyticsPage() {
               </div>
             </Card>
 
-            <Card className="p-5 md:p-6 xl:col-span-1 bg-brand-50 dark:bg-brand-700/10 border-brand-100 dark:border-brand-700/30">
+            <Card className="p-4 sm:p-5 md:p-6 xl:col-span-1 bg-brand-50 dark:bg-brand-700/10 border-brand-100 dark:border-brand-700/30">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <div className="flex items-center gap-2">
                   <Lightbulb size={15} className="text-brand-600 dark:text-brand-500" />

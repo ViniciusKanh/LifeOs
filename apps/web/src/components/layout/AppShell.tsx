@@ -17,7 +17,6 @@ import {
   X,
   SunMedium,
   Moon,
-  Search,
   CalendarDays,
   Trophy,
   GanttChartSquare,
@@ -28,6 +27,7 @@ import { NotificationsBell } from "./NotificationsBell";
 import { ProfileMenu } from "./ProfileMenu";
 import { AchievementToast } from "./AchievementToast";
 import { OnboardingFlow } from "./OnboardingFlow";
+import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 
 // Frases curtas por área — só decoração de cabeçalho, sem dado
 // nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
@@ -164,15 +164,10 @@ export function AppShell() {
             <span className="text-sm font-bold font-display">LifeOS</span>
           </div>
 
-          <div className="hidden md:flex flex-1 max-w-md relative">
-            <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate" />
-            <input
-              placeholder="Buscar algo no LifeOS..."
-              className="w-full rounded-full pl-10 pr-3 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 focus:shadow-glow-brand transition-all"
-            />
-          </div>
+          <DesktopGlobalSearch />
 
           <div className="flex items-center gap-2">
+            <MobileGlobalSearch />
             <button
               onClick={() => setMode(isDark ? "light" : "dark")}
               className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border"

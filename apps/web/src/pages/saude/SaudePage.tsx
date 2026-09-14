@@ -148,8 +148,8 @@ export function SaudePage() {
       <p className="font-display font-bold text-2xl">Saúde e bem-estar</p>
       <p className="text-sm text-slate mt-0.5 mb-5">Cuide de você hoje para viver um amanhã melhor.</p>
 
-      {/* Resumo do dia */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      {/* Resumo do dia — 2 colunas no celular, 4 a partir de sm (tablets/desktop) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
         <StatSummaryCard
           tone="blue"
           icon={<Droplets size={16} />}
@@ -193,10 +193,10 @@ export function SaudePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Água */}
         <Card className="p-5 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div className="flex items-center gap-2.5 min-w-0">
               <IconBadge tone="blue" size={34} icon={<Droplets size={16} />} />
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold">Água</p>
                 <p className="text-xs text-slate">Hidratação para mais energia e foco.</p>
               </div>
@@ -256,10 +256,10 @@ export function SaudePage() {
 
         {/* Sono */}
         <Card className="p-5 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div className="flex items-center gap-2.5 min-w-0">
               <IconBadge tone="purple" size={34} icon={<Moon size={16} />} />
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold">Sono</p>
                 <p className="text-xs text-slate">Mais descanso, mais produtividade.</p>
               </div>
@@ -270,14 +270,14 @@ export function SaudePage() {
           </div>
 
           <div className="flex items-start justify-between gap-3 mb-4">
-            <div>
+            <div className="min-w-0">
               <div className="flex items-end gap-1.5">
                 <span className="font-display font-bold text-2xl">{lastNightMinutes ? formatHM(lastNightMinutes) : "—"}</span>
                 <span className="text-xs text-slate mb-1">de sono</span>
               </div>
               <p className="text-[11px] text-slate">Última noite {sleep[0]?.quality ? `· Qualidade ${sleep[0].quality}/5` : ""}</p>
             </div>
-            <div className="flex items-end gap-1 h-12">
+            <div className="flex items-end gap-1 h-12 shrink-0">
               {sleepWeekly.map((d) => (
                 <div
                   key={d.label}
@@ -289,7 +289,8 @@ export function SaudePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mb-3">
+          {/* 1 coluna no celular: input datetime-local nativo precisa de mais espaço para não cortar o texto */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
             <Field label="Dormiu às" type="datetime-local" value={sleepForm.wentToBedAt} onChange={(e) => setSleepForm({ ...sleepForm, wentToBedAt: e.target.value })} />
             <Field label="Acordou às" type="datetime-local" value={sleepForm.wokeUpAt} onChange={(e) => setSleepForm({ ...sleepForm, wokeUpAt: e.target.value })} />
           </div>
@@ -305,18 +306,20 @@ export function SaudePage() {
           </Button>
 
           {sleepThisWeek.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-paper-border dark:border-ink-border grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-[10px] text-slate">Média de sono</p>
-                <p className="text-sm font-semibold">{avgSleepMinutes ? formatHM(avgSleepMinutes) : "—"}</p>
+            // Mantém 3 colunas mesmo no celular (valores curtos), só com gap/rótulo
+            // ajustados para não apertar em ~360-400px.
+            <div className="mt-4 pt-4 border-t border-paper-border dark:border-ink-border grid grid-cols-3 gap-1.5 sm:gap-2 text-center">
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate leading-tight">Média de sono</p>
+                <p className="text-sm font-semibold truncate">{avgSleepMinutes ? formatHM(avgSleepMinutes) : "—"}</p>
               </div>
-              <div>
-                <p className="text-[10px] text-slate">Melhor noite</p>
-                <p className="text-sm font-semibold">{bestNightMinutes ? formatHM(bestNightMinutes) : "—"}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate leading-tight">Melhor noite</p>
+                <p className="text-sm font-semibold truncate">{bestNightMinutes ? formatHM(bestNightMinutes) : "—"}</p>
               </div>
-              <div>
-                <p className="text-[10px] text-slate">Qualidade média</p>
-                <p className="text-sm font-semibold">{avgQuality ? `${avgQuality.toFixed(1)}/5` : "—"}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate leading-tight">Qualidade média</p>
+                <p className="text-sm font-semibold truncate">{avgQuality ? `${avgQuality.toFixed(1)}/5` : "—"}</p>
               </div>
             </div>
           )}
@@ -332,7 +335,8 @@ export function SaudePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mb-2">
+          {/* 1 coluna no celular: formulário empilhado para não espremer os 4 campos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
             <Field label="Tipo" placeholder="Corrida, Musculação..." value={workoutForm.kind} onChange={(e) => setWorkoutForm({ ...workoutForm, kind: e.target.value })} />
             <Field label="Duração (min)" type="number" value={workoutForm.durationMinutes} onChange={(e) => setWorkoutForm({ ...workoutForm, durationMinutes: e.target.value })} />
             <Field label="Distância (km)" type="number" value={workoutForm.distanceKm} onChange={(e) => setWorkoutForm({ ...workoutForm, distanceKm: e.target.value })} />

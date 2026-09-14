@@ -218,7 +218,7 @@ export function WeeklyReviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           {score && (
-            <Card className="p-5 md:p-6">
+            <Card className="p-4 sm:p-5 md:p-6">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-sm font-semibold">Resumo da semana</p>
                 <span className="inline-flex items-center gap-1 text-[11px] text-slate rounded-full border border-paper-border dark:border-ink-border px-2.5 py-1">
@@ -301,7 +301,7 @@ export function WeeklyReviewPage() {
             </Card>
           )}
 
-          <Card className="p-5 md:p-6 space-y-4">
+          <Card className="p-4 sm:p-5 md:p-6 space-y-4">
             <div>
               <p className="text-sm font-semibold">Sua reflexão semanal</p>
               <p className="text-xs text-slate mt-0.5">Reserve um momento para revisar honestamente como foi a semana.</p>
@@ -339,7 +339,7 @@ export function WeeklyReviewPage() {
         </div>
 
         <div className="space-y-4">
-          <Card className="p-5 md:p-6 bg-gradient-to-br from-brand-500 to-brand-700 border-transparent text-white">
+          <Card className="p-4 sm:p-5 md:p-6 bg-gradient-to-br from-brand-500 to-brand-700 border-transparent text-white">
             <IconBadge icon={<Sparkles size={16} />} tone="amber" size={32} />
             <p className="text-base font-semibold mt-3">Toda semana é uma nova chance</p>
             <p className="text-xs text-white/85 mt-2 leading-relaxed">
@@ -348,7 +348,7 @@ export function WeeklyReviewPage() {
             </p>
           </Card>
 
-          <Card className="p-5 md:p-6">
+          <Card className="p-4 sm:p-5 md:p-6">
             <p className="text-sm font-semibold mb-3">Dicas para sua revisão</p>
             <div className="space-y-3">
               <TipRow text="Seja honesto(a) — esta revisão é para você, não para impressionar ninguém." />
