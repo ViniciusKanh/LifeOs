@@ -28,4 +28,5 @@ export const healthService = {
   listMood: (limit = 30) => api.get<MoodEntry[]>(`/health/mood?limit=${limit}`),
   addMood: (input: { mood: number; energy: number; stress?: number; note?: string }) =>
     api.post<MoodEntry>("/health/mood", input),
+  removeMood: (id: string) => api.delete<void>(`/health/mood/${id}`),
 };

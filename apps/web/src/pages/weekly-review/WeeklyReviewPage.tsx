@@ -1,13 +1,16 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BookOpen,
   CalendarDays,
+  Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   GraduationCap,
   Heart,
   ListChecks,
+  Pencil,
   Repeat,
   Sparkles,
   Target,
@@ -137,9 +140,23 @@ function ReflectionField({
   );
 }
 
+/** Exibição somente-leitura de uma reflexão já salva — deixa claro que aquele texto ficou registrado para a semana, em vez de um campo editável indistinguível de um formulário vazio. */
+function ReflectionView({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-ink dark:text-paper mb-1.5">{label}</p>
+      <div className="rounded-xl px-3 py-2.5 text-sm bg-black/[0.02] dark:bg-white/[0.03] border border-paper-border dark:border-ink-border min-h-[5.5rem] whitespace-pre-wrap">
+        {value ? value : <span className="text-slate/60 italic">Não preenchido nesta semana.</span>}
+      </div>
+    </div>
+  );
+}
+
 export function WeeklyReviewPage() {
   const [weekStartDate, setWeekStartDate] = useState(mondayOf());
-  const { saved, computed, save, generateDraft, isGeneratingDraft, draftError } = useWeeklyReview(weekStartDate);
+  const { saved, computed, history, save, generateDraft, isGeneratingDraft, draftError } = useWeeklyReview(weekStartDate);
+  const currentMonday = mondayOf();
+  const isCurrentWeek = weekStartDate === currentMonday;
 
   const [whatWorked, setWhatWorked] = useState("");
   const [whatDidntWork, setWhatDidntWork] = useState("");
@@ -147,6 +164,25 @@ export function WeeklyReviewPage() {
   const [nextPriorities, setNextPriorities] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
+  // Quando já existe uma revisão salva para a semana, a tela abre em modo
+  // "leitura" (mostra o que foi registrado, deixa claro que ficou salvo) —
+  // só entra em modo edição se o usuário pedir ou se não houver nada salvo
+  // ainda. Antes os campos ficavam sempre editáveis, indistinguíveis de um
+  // formulário vazio, e dava a impressão de que nada tinha sido registrado.
+  const [mode, setMode] = useState<"view" | "edit">("edit");
+
+  // Últimas 8 semanas (contando a atual) para navegação rápida, marcando
+  // com um check preenchido quais já têm revisão salva de verdade.
+  const recentWeeks = useMemo(() => {
+    const weeks: string[] = [];
+    const d = new Date(`${currentMonday}T00:00:00`);
+    for (let i = 0; i < 8; i++) {
+      weeks.unshift(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() - 7);
+    }
+    return weeks;
+  }, [currentMonday]);
+  const savedWeeks = useMemo(() => new Set(history.map((h) => h.week_start_date)), [history]);
 
   // Sugestões do Copilot ainda não aplicadas — só existem para campos que já
   // tinham texto do usuário no momento em que o rascunho foi gerado (campos
@@ -163,12 +199,19 @@ export function WeeklyReviewPage() {
     setWhatToImprove(saved?.what_to_improve ?? "");
     setNextPriorities(saved?.next_priorities ?? "");
     setPendingSuggestions({});
+    setMode(saved ? "view" : "edit");
   }, [saved]);
 
   const changeWeek = (delta: number) => {
     const d = new Date(`${weekStartDate}T00:00:00`);
     d.setDate(d.getDate() + delta * 7);
     setWeekStartDate(d.toISOString().slice(0, 10));
+    setSavedFeedback(false);
+    setPendingSuggestions({});
+  };
+
+  const goToWeek = (monday: string) => {
+    setWeekStartDate(monday);
     setSavedFeedback(false);
     setPendingSuggestions({});
   };
@@ -205,6 +248,7 @@ export function WeeklyReviewPage() {
         nextPriorities: nextPriorities || undefined,
       });
       setSavedFeedback(true);
+      setMode("view");
       setTimeout(() => setSavedFeedback(false), 2500);
     } finally {
       setSaving(false);
@@ -257,7 +301,12 @@ export function WeeklyReviewPage() {
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-xs font-medium px-2 tabular-nums">{weekLabel(weekStartDate)}</span>
+          <span className="text-sm font-semibold px-2 tabular-nums">{weekLabel(weekStartDate)}</span>
+          {isCurrentWeek && (
+            <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-100 bg-brand-50 dark:bg-brand-700/20 rounded-full px-2 py-0.5">
+              Semana atual
+            </span>
+          )}
           <button
             onClick={() => changeWeek(1)}
             className="p-1.5 rounded-lg text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors"
@@ -267,6 +316,38 @@ export function WeeklyReviewPage() {
           </button>
         </div>
       </div>
+
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        {recentWeeks.map((monday) => {
+          const has = savedWeeks.has(monday);
+          const active = monday === weekStartDate;
+          return (
+            <button
+              key={monday}
+              onClick={() => goToWeek(monday)}
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium border transition-colors ${
+                active
+                  ? "border-brand-500 bg-brand-50 dark:bg-brand-700/20 text-brand-700 dark:text-brand-100"
+                  : "border-paper-border dark:border-ink-border text-slate hover:border-brand-500/40"
+              }`}
+            >
+              {has ? (
+                <CheckCircle2 size={12} className="text-growth" />
+              ) : (
+                <span className="w-3 h-3 rounded-full border border-current opacity-40" />
+              )}
+              {weekLabel(monday)}
+            </button>
+          );
+        })}
+      </div>
+
+      {saved && (
+        <p className="text-xs text-growth inline-flex items-center gap-1.5">
+          <Check size={13} /> Revisão desta semana salva em{" "}
+          {new Date(saved.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "")}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -358,17 +439,32 @@ export function WeeklyReviewPage() {
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <p className="text-sm font-semibold">Sua reflexão semanal</p>
-                <p className="text-xs text-slate mt-0.5">Reserve um momento para revisar honestamente como foi a semana.</p>
+                <p className="text-xs text-slate mt-0.5">
+                  {mode === "view" ? "O que você registrou para esta semana." : "Reserve um momento para revisar honestamente como foi a semana."}
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={handleGenerateDraft}
-                disabled={isGeneratingDraft}
-                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white transition-colors px-3.5 py-2 text-xs font-semibold disabled:opacity-60"
-              >
-                <Wand2 size={14} />
-                {isGeneratingDraft ? "Gerando..." : "Gerar rascunho com IA"}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {mode === "edit" && (
+                  <button
+                    type="button"
+                    onClick={handleGenerateDraft}
+                    disabled={isGeneratingDraft}
+                    className="inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white transition-colors px-3.5 py-2 text-xs font-semibold disabled:opacity-60"
+                  >
+                    <Wand2 size={14} />
+                    {isGeneratingDraft ? "Gerando..." : "Gerar rascunho com IA"}
+                  </button>
+                )}
+                {mode === "view" && (
+                  <button
+                    type="button"
+                    onClick={() => setMode("edit")}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-paper-border dark:border-ink-border px-3 py-2 text-xs font-semibold hover:border-brand-500/40 transition-colors"
+                  >
+                    <Pencil size={13} /> Editar
+                  </button>
+                )}
+              </div>
             </div>
 
             {draftError && (
@@ -377,53 +473,71 @@ export function WeeklyReviewPage() {
               </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ReflectionField
-                label="O que funcionou bem?"
-                placeholder="Ex.: mantive a rotina de exercícios mesmo com a semana cheia..."
-                value={whatWorked}
-                onChange={setWhatWorked}
-                suggestion={pendingSuggestions.whatWorked}
-                onAcceptSuggestion={() => {
-                  setWhatWorked(pendingSuggestions.whatWorked ?? "");
-                  setPendingSuggestions((p) => ({ ...p, whatWorked: undefined }));
-                }}
-                onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, whatWorked: undefined }))}
-              />
-              <ReflectionField
-                label="O que não funcionou?"
-                placeholder="Ex.: deixei o estudo para os últimos dias e não rendeu..."
-                value={whatDidntWork}
-                onChange={setWhatDidntWork}
-              />
-              <ReflectionField
-                label="O que quero melhorar?"
-                placeholder="Ex.: dormir mais cedo para render melhor pela manhã..."
-                value={whatToImprove}
-                onChange={setWhatToImprove}
-                suggestion={pendingSuggestions.whatToImprove}
-                onAcceptSuggestion={() => {
-                  setWhatToImprove(pendingSuggestions.whatToImprove ?? "");
-                  setPendingSuggestions((p) => ({ ...p, whatToImprove: undefined }));
-                }}
-                onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, whatToImprove: undefined }))}
-              />
-              <ReflectionField
-                label="Prioridades da próxima semana"
-                placeholder="Ex.: finalizar o capítulo do TCC e retomar a leitura..."
-                value={nextPriorities}
-                onChange={setNextPriorities}
-                suggestion={pendingSuggestions.nextPriorities}
-                onAcceptSuggestion={() => {
-                  setNextPriorities(pendingSuggestions.nextPriorities ?? "");
-                  setPendingSuggestions((p) => ({ ...p, nextPriorities: undefined }));
-                }}
-                onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, nextPriorities: undefined }))}
-              />
-            </div>
-            <Button onClick={handleSave} disabled={saving} className="w-full">
-              {saving ? "Salvando..." : savedFeedback ? "Revisão salva ✓" : "Salvar revisão semanal"}
-            </Button>
+            {mode === "view" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <ReflectionView label="O que funcionou bem?" value={whatWorked} />
+                <ReflectionView label="O que não funcionou?" value={whatDidntWork} />
+                <ReflectionView label="O que quero melhorar?" value={whatToImprove} />
+                <ReflectionView label="Prioridades da próxima semana" value={nextPriorities} />
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ReflectionField
+                    label="O que funcionou bem?"
+                    placeholder="Ex.: mantive a rotina de exercícios mesmo com a semana cheia..."
+                    value={whatWorked}
+                    onChange={setWhatWorked}
+                    suggestion={pendingSuggestions.whatWorked}
+                    onAcceptSuggestion={() => {
+                      setWhatWorked(pendingSuggestions.whatWorked ?? "");
+                      setPendingSuggestions((p) => ({ ...p, whatWorked: undefined }));
+                    }}
+                    onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, whatWorked: undefined }))}
+                  />
+                  <ReflectionField
+                    label="O que não funcionou?"
+                    placeholder="Ex.: deixei o estudo para os últimos dias e não rendeu..."
+                    value={whatDidntWork}
+                    onChange={setWhatDidntWork}
+                  />
+                  <ReflectionField
+                    label="O que quero melhorar?"
+                    placeholder="Ex.: dormir mais cedo para render melhor pela manhã..."
+                    value={whatToImprove}
+                    onChange={setWhatToImprove}
+                    suggestion={pendingSuggestions.whatToImprove}
+                    onAcceptSuggestion={() => {
+                      setWhatToImprove(pendingSuggestions.whatToImprove ?? "");
+                      setPendingSuggestions((p) => ({ ...p, whatToImprove: undefined }));
+                    }}
+                    onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, whatToImprove: undefined }))}
+                  />
+                  <ReflectionField
+                    label="Prioridades da próxima semana"
+                    placeholder="Ex.: finalizar o capítulo do TCC e retomar a leitura..."
+                    value={nextPriorities}
+                    onChange={setNextPriorities}
+                    suggestion={pendingSuggestions.nextPriorities}
+                    onAcceptSuggestion={() => {
+                      setNextPriorities(pendingSuggestions.nextPriorities ?? "");
+                      setPendingSuggestions((p) => ({ ...p, nextPriorities: undefined }));
+                    }}
+                    onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, nextPriorities: undefined }))}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  {saved && (
+                    <Button variant="secondary" onClick={() => setMode("view")} className="!flex-none px-4">
+                      Cancelar
+                    </Button>
+                  )}
+                  <Button onClick={handleSave} disabled={saving} className="flex-1">
+                    {saving ? "Salvando..." : savedFeedback ? "Revisão salva ✓" : "Salvar revisão semanal"}
+                  </Button>
+                </div>
+              </>
+            )}
           </Card>
         </div>
 

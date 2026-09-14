@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Briefcase, GanttChartSquare, GraduationCap, Home, Plus, Trash2, Users, X } from "lucide-react";
+import { Briefcase, GanttChartSquare, GraduationCap, Home, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { useProjects, useGantt, useProjectForecast } from "@/hooks/useProjects";
 import { taskService } from "@/services/taskService";
 import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
@@ -36,11 +36,12 @@ function ProjectForecastChip({ project }: { project: Project }) {
 
 export function ProjetosPage() {
   const queryClient = useQueryClient();
-  const { projects, isLoading, createProject, removeProject } = useProjects();
+  const { projects, isLoading, createProject, updateProject, removeProject } = useProjects();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<GanttTask | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
 
   useEffect(() => {
     if (!selectedId && projects.length > 0) setSelectedId(projects[0].id);
@@ -113,16 +114,28 @@ export function ProjetosPage() {
                       <ProjectForecastChip project={p} />
                     </Card>
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setProjectToDelete(p);
-                    }}
-                    aria-label={`Excluir projeto ${p.name}`}
-                    className="absolute top-3 right-3 text-slate/60 hover:text-drop transition-colors"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="absolute top-3 right-3 flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProjectToEdit(p);
+                      }}
+                      aria-label={`Editar projeto ${p.name}`}
+                      className="text-slate/60 hover:text-brand-600 transition-colors"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProjectToDelete(p);
+                      }}
+                      aria-label={`Excluir projeto ${p.name}`}
+                      className="text-slate/60 hover:text-drop transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -162,6 +175,17 @@ export function ProjetosPage() {
 
       {projectToDelete && (
         <ConfirmDeleteProjectModal project={projectToDelete} onCancel={() => setProjectToDelete(null)} onConfirm={handleDeleteProject} />
+      )}
+
+      {projectToEdit && (
+        <EditProjectModal
+          project={projectToEdit}
+          onClose={() => setProjectToEdit(null)}
+          onSave={async (patch) => {
+            await updateProject({ id: projectToEdit.id, patch });
+            setProjectToEdit(null);
+          }}
+        />
       )}
     </div>
   );
@@ -211,6 +235,79 @@ function ConfirmDeleteProjectModal({
           </Button>
           <Button onClick={handleConfirm} disabled={deleting} className="flex-1 !bg-drop !from-drop !to-drop">
             {deleting ? "Excluindo..." : "Excluir"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Editar um projeto já existente — hoje só permite renomear e trocar o
+ * tipo (kind), que é o que faz as tarefas dele passarem a contar (ou
+ * pararem de contar) na dimensão Profissional do Life Score.
+ */
+function EditProjectModal({
+  project,
+  onClose,
+  onSave,
+}: {
+  project: Project;
+  onClose: () => void;
+  onSave: (patch: { name: string; kind: ProjectKind }) => Promise<unknown>;
+}) {
+  const [name, setName] = useState(project.name);
+  const [kind, setKind] = useState<ProjectKind>(project.kind);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ name: name.trim(), kind });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar o projeto.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">Editar projeto</p>
+          <button onClick={onClose} className="text-slate">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <Field label="Nome" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Lançamento do site" />
+          <div>
+            <label className="text-xs text-slate">Tipo</label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as ProjectKind)}
+              className="w-full mt-1.5 rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none"
+            >
+              {Object.entries(KIND_META).map(([value, meta]) => (
+                <option key={value} value={value}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate mt-1.5">
+              Projetos do tipo Profissional ou Workspace têm suas tarefas contadas na dimensão Profissional do Life Score.
+            </p>
+          </div>
+          {error && <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5">{error}</p>}
+          <Button onClick={handleSubmit} disabled={saving || !name.trim()} className="w-full">
+            {saving ? "Salvando..." : "Salvar alterações"}
           </Button>
         </div>
       </div>

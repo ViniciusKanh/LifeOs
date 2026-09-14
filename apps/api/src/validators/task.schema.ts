@@ -9,7 +9,7 @@ export const createTaskSchema = z.object({
   priority: z.enum(["Baixa", "Média", "Alta"]).optional().default("Média"),
   dueDate: z.string().optional().nullable(),
   startDate: z.string().optional().nullable(),
-  estimateMinutes: z.number().int().nonnegative().optional(),
+  estimateMinutes: z.number().int().nonnegative().optional().nullable(),
   // Priority Score profissional (Área Profissional): 1-5 cada, usado
   // em (impacto*urgência)/esforço — ver priorityService.ts. Opcionais:
   // a maioria das tarefas do dia a dia nunca precisa disso.

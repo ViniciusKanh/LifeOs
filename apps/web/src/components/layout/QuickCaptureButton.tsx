@@ -13,17 +13,23 @@ export function QuickCaptureButton() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [justCaptured, setJustCaptured] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { capture, isCapturing } = useInbox();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const content = text.trim();
     if (!content || isCapturing) return;
-    await capture(content);
-    setText("");
-    setOpen(false);
-    setJustCaptured(true);
-    setTimeout(() => setJustCaptured(false), 1800);
+    setError(null);
+    try {
+      await capture(content);
+      setText("");
+      setOpen(false);
+      setJustCaptured(true);
+      setTimeout(() => setJustCaptured(false), 1800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível capturar agora. Tente de novo.");
+    }
   };
 
   return (
@@ -56,6 +62,7 @@ export function QuickCaptureButton() {
             <p className="text-[11px] text-slate mt-2">
               Não precisa decidir projeto nem prioridade agora — isso é só pra não perder a ideia. Depois você processa tudo em Inbox.
             </p>
+            {error && <p className="text-xs text-drop mt-2">{error}</p>}
             <div className="flex gap-2 mt-3">
               <button
                 type="button"

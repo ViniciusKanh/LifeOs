@@ -14,7 +14,12 @@ export function useProjects(includeArchived = false) {
 
   const query = useQuery({ queryKey: key, queryFn: () => projectsService.list(includeArchived) });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
+    // Mudar o "kind" de um projeto (ex.: flegar como Profissional) muda
+    // quais tarefas contam na dimensão Profissional do Life Score.
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+  };
 
   const createProject = useMutation({ mutationFn: (input: ProjectCreateInput) => projectsService.create(input), onSuccess: invalidate });
   const updateProject = useMutation({

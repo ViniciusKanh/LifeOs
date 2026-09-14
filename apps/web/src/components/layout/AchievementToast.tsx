@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Trophy, X } from "lucide-react";
 import { ACHIEVEMENT_UNLOCKED_EVENT } from "@/services/achievementsService";
-import type { Achievement } from "@/types";
+import type { Achievement, CustomAchievement } from "@/types";
+
+type UnlockedItem = Achievement | CustomAchievement;
 
 /**
  * Comemoração global de conquista destravada — escuta o evento
@@ -12,11 +14,11 @@ import type { Achievement } from "@/types";
  * hábito, terminar livro...).
  */
 export function AchievementToast() {
-  const [queue, setQueue] = useState<Achievement[]>([]);
+  const [queue, setQueue] = useState<UnlockedItem[]>([]);
 
   useEffect(() => {
     function onUnlocked(e: Event) {
-      const detail = (e as CustomEvent<Achievement[]>).detail;
+      const detail = (e as CustomEvent<UnlockedItem[]>).detail;
       if (detail?.length) setQueue((prev) => [...prev, ...detail]);
     }
     window.addEventListener(ACHIEVEMENT_UNLOCKED_EVENT, onUnlocked);

@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
-import { X, Play, Square, Trash2, Repeat } from "lucide-react";
+import { useState } from "react";
+import { X, Trash2, Repeat } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
-import { useTaskTimer } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, buildRecurrenceRule, parseRecurrenceRule, type RecurrenceFreq } from "@/utils/recurrence";
 import type { Task, TaskPriority } from "@/types";
@@ -48,18 +47,6 @@ function toDateInput(value: string | null): string {
   return value.slice(0, 10);
 }
 
-function formatMinutes(total: number) {
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return h > 0 ? `${h}h${m.toString().padStart(2, "0")}min` : `${m}min`;
-}
-
-function formatClock(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
 export function TaskModal({
   task,
   statusOptions,
@@ -89,28 +76,17 @@ export function TaskModal({
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>(initialRecurrence.freq);
   const [recurrenceByDay, setRecurrenceByDay] = useState<string[]>(initialRecurrence.byDay);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { projects } = useProjects();
   const selectedProject = projects.find((p) => p.id === projectId);
   const isProfessional = selectedProject?.kind === "professional";
-  const { activeEntry, start, stop, isStarting, isStopping } = useTaskTimer(task?.id ?? null);
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    if (!activeEntry) {
-      setElapsed(0);
-      return;
-    }
-    const startedAt = new Date(activeEntry.started_at.replace(" ", "T") + "Z").getTime();
-    const tick = () => setElapsed(Math.max(0, Math.round((Date.now() - startedAt) / 1000)));
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [activeEntry]);
 
   const handleSave = async () => {
     if (!title.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       await onSave({
         title: title.trim(),
@@ -127,8 +103,24 @@ export function TaskModal({
         recurrenceRule: buildRecurrenceRule({ freq: recurrenceFreq, byDay: recurrenceByDay }),
       });
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a tarefa.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!task || !onDelete) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await onDelete(task.id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível excluir a tarefa.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -286,42 +278,14 @@ export function TaskModal({
             </p>
           </div>
 
-          {isEditing && task && (
-            <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">
-              <p className="text-xs font-semibold mb-2">Tempo dedicado</p>
-              <div className="flex items-center justify-between">
-                <p className="text-sm">
-                  Total registrado: <span className="font-semibold">{formatMinutes(task.time_spent_minutes)}</span>
-                </p>
-                {activeEntry ? (
-                  <div className="flex items-center gap-2">
-                    <span className="font-display text-lg tabular-nums">{formatClock(elapsed)}</span>
-                    <Button variant="secondary" onClick={() => stop()} disabled={isStopping}>
-                      <Square size={13} /> Parar
-                    </Button>
-                  </div>
-                ) : (
-                  <Button variant="secondary" onClick={() => start()} disabled={isStarting}>
-                    <Play size={13} /> Iniciar cronômetro
-                  </Button>
-                )}
-              </div>
-              <p className="text-[11px] text-slate mt-2">
-                Inicie o cronômetro enquanto trabalha nesta tarefa — o tempo é somado automaticamente ao total ao parar.
-              </p>
-            </div>
+          {error && (
+            <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5">{error}</p>
           )}
 
           <div className="flex items-center justify-between pt-2">
             {isEditing && onDelete ? (
-              <button
-                onClick={async () => {
-                  await onDelete(task!.id);
-                  onClose();
-                }}
-                className="flex items-center gap-1.5 text-xs text-drop"
-              >
-                <Trash2 size={14} /> Excluir tarefa
+              <button onClick={handleDelete} disabled={deleting} className="flex items-center gap-1.5 text-xs text-drop disabled:opacity-50">
+                <Trash2 size={14} /> {deleting ? "Excluindo..." : "Excluir tarefa"}
               </button>
             ) : (
               <span />

@@ -25,16 +25,23 @@ function formatRelativeTime(value: string) {
  * hora de processar, é que esses detalhes entram (se o usuário quiser).
  */
 export function InboxPage() {
-  const { items, isLoading, capture, isCapturing, process, remove } = useInbox();
+  const [showProcessed, setShowProcessed] = useState(false);
+  const { items, isLoading, capture, isCapturing, process, remove } = useInbox(showProcessed);
   const [text, setText] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   const handleCapture = async (e: FormEvent) => {
     e.preventDefault();
     const content = text.trim();
     if (!content || isCapturing) return;
-    await capture(content);
-    setText("");
+    setCaptureError(null);
+    try {
+      await capture(content);
+      setText("");
+    } catch (err) {
+      setCaptureError(err instanceof Error ? err.message : "Não foi possível capturar agora. Tente de novo.");
+    }
   };
 
   return (
@@ -57,12 +64,25 @@ export function InboxPage() {
             <Plus size={15} /> Capturar
           </Button>
         </form>
+        {captureError && <p className="text-xs text-drop mt-2">{captureError}</p>}
       </Card>
+
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-slate">
+          {showProcessed ? "Todos os itens, incluindo já processados" : "Só os pendentes"}
+        </p>
+        <button
+          onClick={() => setShowProcessed((v) => !v)}
+          className="text-xs font-semibold text-brand-600 dark:text-brand-500"
+        >
+          {showProcessed ? "Mostrar só pendentes" : "Mostrar histórico completo"}
+        </button>
+      </div>
 
       {!isLoading && items.length === 0 ? (
         <EmptyState
-          title="Inbox vazia"
-          description="Tudo que você capturar (aqui ou pelo botão flutuante em qualquer tela) aparece nesta lista até ser processado."
+          title={showProcessed ? "Nada por aqui ainda" : "Inbox vazia"}
+          description="Tudo que você capturar (aqui ou pelo botão flutuante em qualquer tela) aparece nesta lista até ser processado — e continua visível no histórico completo depois disso."
           ctaLabel="Capturar algo"
           onCta={() => document.querySelector<HTMLInputElement>("input[placeholder^='Escreva uma ideia']")?.focus()}
         />
@@ -109,24 +129,37 @@ function InboxRow({
   const [priority, setPriority] = useState<"Baixa" | "Média" | "Alta">("Média");
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isProcessed = !!item.processed_at;
 
   const handleConvert = async () => {
     if (!title.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       await onConvert({ title: title.trim(), projectId: projectId || null, priority, dueDate: dueDate || null });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível criar a tarefa.");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Card className="p-3.5">
+    <Card className={`p-3.5 ${isProcessed ? "opacity-70" : ""}`}>
       <div className="flex items-start gap-2.5">
-        <button onClick={onToggleExpand} className="flex-1 min-w-0 text-left">
-          <p className="text-sm">{item.content}</p>
-          <p className="text-[11px] text-slate mt-1">{formatRelativeTime(item.created_at)}</p>
+        <button onClick={onToggleExpand} className="flex-1 min-w-0 text-left" disabled={isProcessed}>
+          <p className={`text-sm ${isProcessed ? "line-through text-slate" : ""}`}>{item.content}</p>
+          <p className="text-[11px] text-slate mt-1">
+            {formatRelativeTime(item.created_at)}
+            {isProcessed && " · processado"}
+          </p>
         </button>
+        {isProcessed ? (
+          <button onClick={onDelete} aria-label="Excluir" className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-drop shrink-0">
+            <Trash2 size={13} />
+          </button>
+        ) : (
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={onToggleExpand}
@@ -142,9 +175,10 @@ function InboxRow({
             <Trash2 size={13} />
           </button>
         </div>
+        )}
       </div>
 
-      {expanded && (
+      {expanded && !isProcessed && (
         <div className="mt-3.5 pt-3.5 border-t border-paper-border dark:border-ink-border space-y-2.5">
           <Field label="Título da tarefa" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -180,6 +214,7 @@ function InboxRow({
           <Button onClick={handleConvert} disabled={!title.trim() || saving} className="w-full">
             {saving ? "Criando..." : "Criar tarefa"}
           </Button>
+          {error && <p className="text-xs text-drop">{error}</p>}
         </div>
       )}
     </Card>

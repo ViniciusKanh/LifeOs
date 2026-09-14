@@ -15,6 +15,10 @@ export function useGoals(params?: { parentGoalId?: string }) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: GOALS_KEY });
     queryClient.invalidateQueries({ queryKey: STATS_KEY });
+    // Concluir/atualizar progresso de uma meta muda a dimensão Metas
+    // do Life Score — sem isso, o Dashboard só refletia depois de um
+    // reload manual da página.
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
   };
 
   const createGoal = useMutation({ mutationFn: (input: GoalCreateInput) => goalsService.create(input), onSuccess: invalidate });

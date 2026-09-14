@@ -105,7 +105,7 @@ export function useSubjects(courseId: string | undefined) {
     subjects: subjectsQuery.data ?? [],
     isLoading: subjectsQuery.isLoading,
     createSubject: createSubject.mutateAsync,
-    updateSubject: updateSubject.mutate,
+    updateSubject: updateSubject.mutateAsync,
     removeSubject: removeSubject.mutateAsync,
   };
 }

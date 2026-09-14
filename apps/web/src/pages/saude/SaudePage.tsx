@@ -52,13 +52,13 @@ function weeklySeries<T>(entries: T[], getDate: (e: T) => string, getValue: (e: 
 }
 
 export function SaudePage() {
-  const { water, sleep, workouts, mood, addWater, removeWater, addSleep, addWorkout, removeWorkout, addMood } = useHealth();
+  const { water, sleep, workouts, mood, addWater, removeWater, addSleep, addWorkout, removeWorkout, addMood, removeMood } = useHealth();
   const insight = useHealthInsight();
 
   const [sleepForm, setSleepForm] = useState({ wentToBedAt: "", wokeUpAt: "", quality: 3 });
   const [workoutForm, setWorkoutForm] = useState({ kind: "", durationMinutes: "", distanceKm: "", intensity: "moderada" as const });
   const [moodForm, setMoodForm] = useState({ mood: 3, energy: 3, stress: 3 });
-  const [historyOpen, setHistoryOpen] = useState<"water" | "sleep" | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<"water" | "sleep" | "workouts" | "mood" | null>(null);
 
   const today = todayStr();
   const waterToday = useMemo(() => water.filter((w) => dateOnly(w.recorded_at) === today), [water, today]);
@@ -327,12 +327,17 @@ export function SaudePage() {
 
         {/* Exercícios */}
         <Card className="p-5 md:p-6">
-          <div className="flex items-center gap-2.5 mb-4">
-            <IconBadge tone="green" size={34} icon={<Dumbbell size={16} />} />
-            <div>
-              <p className="text-sm font-semibold">Exercícios</p>
-              <p className="text-xs text-slate">Movimento é vida.</p>
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <IconBadge tone="green" size={34} icon={<Dumbbell size={16} />} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Exercícios</p>
+                <p className="text-xs text-slate">Movimento é vida.</p>
+              </div>
             </div>
+            <button onClick={() => setHistoryOpen("workouts")} className="text-xs font-medium text-brand-600 dark:text-brand-500 shrink-0">
+              Ver histórico →
+            </button>
           </div>
 
           {/* 1 coluna no celular: formulário empilhado para não espremer os 4 campos */}
@@ -374,7 +379,8 @@ export function SaudePage() {
             <div className="space-y-1.5">
               {workouts.slice(0, 4).map((w) => (
                 <div key={w.id} className="flex items-center justify-between text-xs">
-                  <span className="truncate">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Dumbbell size={11} className="text-cat-green shrink-0" />
                     <span className="font-medium">{w.kind}</span>
                     <span className="text-slate"> {w.duration_minutes ? `· ${w.duration_minutes}min` : ""}{w.distance_km ? ` · ${w.distance_km}km` : ""}</span>
                   </span>
@@ -392,12 +398,17 @@ export function SaudePage() {
 
         {/* Humor e energia */}
         <Card className="p-5 md:p-6">
-          <div className="flex items-center gap-2.5 mb-4">
-            <IconBadge tone="amber" size={34} icon={<Smile size={16} />} />
-            <div>
-              <p className="text-sm font-semibold">Humor e energia</p>
-              <p className="text-xs text-slate">Acompanhe como você está se sentindo.</p>
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <IconBadge tone="amber" size={34} icon={<Smile size={16} />} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Humor e energia</p>
+                <p className="text-xs text-slate">Acompanhe como você está se sentindo.</p>
+              </div>
             </div>
+            <button onClick={() => setHistoryOpen("mood")} className="text-xs font-medium text-brand-600 dark:text-brand-500 shrink-0">
+              Ver histórico →
+            </button>
           </div>
 
           {(["mood", "energy", "stress"] as const).map((key) => (
@@ -419,8 +430,11 @@ export function SaudePage() {
           </Button>
 
           {mood[0] && (
-            <p className="text-[11px] text-slate mt-3 text-center">
+            <p className="text-[11px] text-slate mt-3 text-center flex items-center justify-center gap-1.5">
+              <Smile size={12} className="text-signal-deep" />
               Último registro: humor {mood[0].mood}/5 · energia {mood[0].energy}/5{mood[0].stress ? ` · estresse ${mood[0].stress}/5` : ""}
+              {" · "}
+              {fmtTime(mood[0].recorded_at)}
             </p>
           )}
 
@@ -490,7 +504,15 @@ export function SaudePage() {
 
       {historyOpen && (
         <HistoryModal
-          title={historyOpen === "water" ? "Histórico de água" : "Histórico de sono"}
+          title={
+            historyOpen === "water"
+              ? "Histórico de água"
+              : historyOpen === "sleep"
+                ? "Histórico de sono"
+                : historyOpen === "workouts"
+                  ? "Histórico de exercícios"
+                  : "Histórico de humor e energia"
+          }
           onClose={() => setHistoryOpen(null)}
         >
           {historyOpen === "water" ? (
@@ -503,22 +525,73 @@ export function SaudePage() {
                     <span className="flex items-center gap-2">
                       <Droplets size={13} className="text-cat-blue" /> {w.amount_ml}ml
                     </span>
-                    <span className="text-slate text-xs">{fmtTime(w.recorded_at)}</span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="text-slate text-xs">{fmtTime(w.recorded_at)}</span>
+                      <button onClick={() => removeWater(w.id)} className="text-slate hover:text-drop transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    </span>
                   </div>
                 ))}
               </div>
             )
-          ) : sleep.length === 0 ? (
-            <p className="text-sm text-slate">Nenhum registro de sono ainda.</p>
+          ) : historyOpen === "sleep" ? (
+            sleep.length === 0 ? (
+              <p className="text-sm text-slate">Nenhum registro de sono ainda.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {sleep.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
+                    <span className="flex items-center gap-2">
+                      <Moon size={13} className="text-cat-purple" /> {s.duration_minutes ? formatHM(s.duration_minutes) : "—"}
+                      {s.quality ? ` · ${s.quality}/5` : ""}
+                    </span>
+                    <span className="text-slate text-xs">{fmtTime(s.went_to_bed_at)}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : historyOpen === "workouts" ? (
+            workouts.length === 0 ? (
+              <p className="text-sm text-slate">Nenhum exercício registrado ainda.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {workouts.map((w) => (
+                  <div key={w.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Dumbbell size={13} className="text-cat-green shrink-0" />
+                      <span className="truncate">
+                        {w.kind}
+                        {w.duration_minutes ? ` · ${w.duration_minutes}min` : ""}
+                        {w.distance_km ? ` · ${w.distance_km}km` : ""}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="text-slate text-xs">{fmtTime(w.performed_at)}</span>
+                      <button onClick={() => removeWorkout(w.id)} className="text-slate hover:text-drop transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : mood.length === 0 ? (
+            <p className="text-sm text-slate">Nenhum registro de humor ainda.</p>
           ) : (
             <div className="space-y-1.5">
-              {sleep.map((s) => (
-                <div key={s.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
+              {mood.map((m) => (
+                <div key={m.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
                   <span className="flex items-center gap-2">
-                    <Moon size={13} className="text-cat-purple" /> {s.duration_minutes ? formatHM(s.duration_minutes) : "—"}
-                    {s.quality ? ` · ${s.quality}/5` : ""}
+                    <Smile size={13} className="text-signal-deep" />
+                    humor {m.mood}/5 · energia {m.energy}/5{m.stress ? ` · estresse ${m.stress}/5` : ""}
                   </span>
-                  <span className="text-slate text-xs">{fmtTime(s.went_to_bed_at)}</span>
+                  <span className="flex items-center gap-2 shrink-0">
+                    <span className="text-slate text-xs">{fmtTime(m.recorded_at)}</span>
+                    <button onClick={() => removeMood(m.id)} className="text-slate hover:text-drop transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
                 </div>
               ))}
             </div>

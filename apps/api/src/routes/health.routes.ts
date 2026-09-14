@@ -187,6 +187,16 @@ healthRouter.post("/mood", async (req, res) => {
   return res.status(201).json(created.rows[0]);
 });
 
+/** DELETE /api/health/mood/:id */
+healthRouter.delete("/mood/:id", async (req, res) => {
+  const db = getDb();
+  await db.execute({
+    sql: "DELETE FROM mood_entries WHERE id = ? AND owner_id = ?",
+    args: [req.params.id, req.user!.id],
+  });
+  return res.status(204).send();
+});
+
 /* ------------------------ Métricas gerais ------------------------ */
 
 /** GET /api/health/metrics?metric=weight&limit=90 */
