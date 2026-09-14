@@ -27,6 +27,7 @@ import {
   Brain,
   Moon,
   Smile,
+  Trophy,
   Wand2,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
@@ -39,6 +40,8 @@ import { useHealth, useHealthSummary } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
 import { useBooks } from "@/hooks/useBooks";
 import { useGoals } from "@/hooks/useGoals";
+import { useAchievements } from "@/hooks/useAchievements";
+import { useCustomAchievements } from "@/hooks/useCustomAchievements";
 import { useDailyInsight } from "@/hooks/useCopilot";
 import { Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import type { TimelineEvent } from "@/types";
@@ -131,6 +134,8 @@ export function DashboardPage() {
   const { stats: goalStats } = useGoals();
   const { overview } = useAnalyticsOverview(14);
   const { history: reviewHistory } = useWeeklyReviewHistory(8);
+  const { achievements, unlocked: unlockedCatalog } = useAchievements();
+  const { trophies } = useCustomAchievements();
   const today = new Date().toISOString().slice(0, 10);
   const { events } = useTimeline({ from: today, to: today });
   const copilot = useDailyInsight();
@@ -171,6 +176,18 @@ export function DashboardPage() {
 
   const weekGoalStat = goalStats?.periods.find((p) => p.period === "semanal") ?? null;
   const nextMilestone = goalStats?.upcomingMilestones[0] ?? null;
+
+  // Conquistas recentes (catálogo + troféus customizados), mais novas
+  // primeiro — junta as duas fontes num único "últimas destravadas".
+  const unlockedCustom = trophies.filter((t) => t.unlockedAt);
+  const totalAchievements = achievements.length + trophies.length;
+  const totalUnlocked = unlockedCatalog.length + unlockedCustom.length;
+  const recentUnlocks = [
+    ...unlockedCatalog.map((a) => ({ id: a.id, title: a.title, icon: null as string | null, unlockedAt: a.unlockedAt! })),
+    ...unlockedCustom.map((t) => ({ id: t.id, title: t.title, icon: t.icon, unlockedAt: t.unlockedAt! })),
+  ]
+    .sort((a, b) => b.unlockedAt.localeCompare(a.unlockedAt))
+    .slice(0, 3);
 
   const toggleTask = (id: string, currentStatus: string) => {
     moveTask({ id, status: currentStatus === "Concluído" ? "A Fazer" : "Concluído" });
@@ -558,7 +575,7 @@ export function DashboardPage() {
       </div>
 
       {/* Linha secundária */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-4">
             <Wrench size={15} className="text-slate" />
@@ -668,6 +685,33 @@ export function DashboardPage() {
           )}
           <Link to="/metas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
             Ver metas →
+          </Link>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy size={15} className="text-signal-deep" />
+            <p className="text-sm font-semibold">Conquistas</p>
+          </div>
+          <p className="text-xs text-slate">
+            {totalUnlocked} de {totalAchievements} destravadas
+          </p>
+          {recentUnlocks.length === 0 ? (
+            <p className="text-xs text-slate mt-3">Nenhuma conquista destravada ainda — crie um troféu ou continue registrando sua rotina.</p>
+          ) : (
+            <div className="space-y-2 mt-3">
+              {recentUnlocks.map((a) => (
+                <div key={a.id} className="flex items-center gap-2.5 text-xs">
+                  <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-signal flex items-center justify-center text-white text-sm shrink-0">
+                    {a.icon ?? <Trophy size={12} />}
+                  </span>
+                  <span className="truncate">{a.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <Link to="/conquistas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
+            Ver conquistas →
           </Link>
         </Card>
       </div>
