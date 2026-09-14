@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Briefcase, GanttChartSquare, GraduationCap, Home, Plus, Users, X } from "lucide-react";
-import { useProjects, useGantt } from "@/hooks/useProjects";
+import { useProjects, useGantt, useProjectForecast } from "@/hooks/useProjects";
 import { taskService } from "@/services/taskService";
 import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { GanttChart } from "@/components/projects/GanttChart";
 import { GanttDatesModal } from "@/components/projects/GanttDatesModal";
-import type { GanttTask, ProjectKind } from "@/types";
+import type { GanttTask, Project, ProjectKind } from "@/types";
 
 const KIND_META: Record<ProjectKind, { label: string; icon: typeof Home; tone: "blue" | "purple" | "green" | "pink" }> = {
   personal: { label: "Pessoal", icon: Home, tone: "pink" },
@@ -14,6 +14,25 @@ const KIND_META: Record<ProjectKind, { label: string; icon: typeof Home; tone: "
   professional: { label: "Profissional", icon: Briefcase, tone: "purple" },
   academic: { label: "Acadêmico", icon: GraduationCap, tone: "green" },
 };
+
+function formatDate(value: string) {
+  const d = new Date(`${value.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+}
+
+/**
+ * Chip de previsão de conclusão do projeto — ritmo real de conclusão de
+ * tarefas (nunca IA, nunca um número inventado). Some silenciosamente
+ * quando não há histórico suficiente ainda.
+ */
+function ProjectForecastChip({ project }: { project: Project }) {
+  const { forecast } = useProjectForecast(project.id);
+  if (!forecast) return null;
+  return (
+    <p className="text-[11px] text-growth mt-1">No ritmo atual, conclusão prevista para {formatDate(forecast.date)}</p>
+  );
+}
 
 export function ProjetosPage() {
   const queryClient = useQueryClient();
@@ -82,6 +101,7 @@ export function ProjetosPage() {
                     <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
                       <div className="h-full rounded-full bg-growth" style={{ width: `${pct}%` }} />
                     </div>
+                    <ProjectForecastChip project={p} />
                   </Card>
                 </button>
               );

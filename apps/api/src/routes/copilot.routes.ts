@@ -9,6 +9,7 @@ import {
   getOrGenerateDailyInsight,
   regenerateDailyInsight,
 } from "../services/copilotService.js";
+import { proposeAction, confirmAction } from "../services/copilotActionsService.js";
 
 export const copilotRouter = Router();
 
@@ -101,4 +102,51 @@ copilotRouter.post("/analytics-insight", rateLimit({ windowMs: 10 * 60 * 1000, m
     return res.status(400).json({ error: result.message });
   }
   return res.json({ text: result.text });
+});
+
+/**
+ * POST /api/copilot/assist — Copilot com ações reais. Recebe uma
+ * mensagem em linguagem natural e SÓ LÊ dados: se a mensagem pedir
+ * uma ação (criar tarefa, concluir tarefa, mover tarefa, marcar
+ * hábito, criar evento), devolve uma PROPOSTA (nunca executa nada
+ * aqui); se for só uma pergunta/comentário, devolve uma resposta em
+ * texto. O frontend mostra a proposta e só chama /assist/confirm se
+ * o usuário confirmar explicitamente.
+ */
+copilotRouter.post("/assist", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), async (req, res) => {
+  const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  if (!message) {
+    return res.status(400).json({ error: "Mensagem vazia." });
+  }
+  const result = await proposeAction(req.user!.id, message);
+  switch (result.type) {
+    case "reply":
+      return res.json({ kind: "reply", text: result.text });
+    case "proposal":
+      return res.json({ kind: "proposal", proposal: result.proposal });
+    case "clarify":
+      return res.json({ kind: "clarify", message: result.message });
+    case "error":
+      return res.status(400).json({ error: result.message });
+  }
+});
+
+/**
+ * POST /api/copilot/assist/confirm — único endpoint que efetivamente
+ * grava algo no banco a partir do Copilot. Body: { action, args }
+ * (exatamente o que veio em `proposal` de /assist) — nunca aceita um
+ * `ownerId`/id de outro usuário: toda ação é revalidada contra
+ * req.user!.id dentro de confirmAction.
+ */
+copilotRouter.post("/assist/confirm", rateLimit({ windowMs: 10 * 60 * 1000, max: 30 }), async (req, res) => {
+  const action = typeof req.body?.action === "string" ? req.body.action : "";
+  const args = req.body?.args && typeof req.body.args === "object" ? req.body.args : {};
+  if (!action) {
+    return res.status(400).json({ error: "Ação inválida." });
+  }
+  const result = await confirmAction(req.user!.id, action, args);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+  return res.json({ message: result.message });
 });

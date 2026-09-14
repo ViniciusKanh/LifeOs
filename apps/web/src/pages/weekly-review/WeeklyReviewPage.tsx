@@ -13,6 +13,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  Wand2,
 } from "lucide-react";
 import { useWeeklyReview, mondayOf } from "@/hooks/useReviews";
 import { Button, Card, IconBadge } from "@/components/ui/primitives";
@@ -86,11 +87,18 @@ function ReflectionField({
   placeholder,
   value,
   onChange,
+  suggestion,
+  onAcceptSuggestion,
+  onDismissSuggestion,
 }: {
   label: string;
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
+  /** Sugestão do Copilot pendente — só aparece quando o campo já tinha texto do usuário (nunca sobrescreve sozinho). */
+  suggestion?: string;
+  onAcceptSuggestion?: () => void;
+  onDismissSuggestion?: () => void;
 }) {
   const id = `reflection-${label}`;
   return (
@@ -112,13 +120,26 @@ function ReflectionField({
         rows={4}
         className="w-full rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500 transition-colors resize-none placeholder:text-slate/70"
       />
+      {suggestion && (
+        <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[11px]">
+          <span className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400">
+            <Sparkles size={11} /> Substituir com sugestão da IA?
+          </span>
+          <button type="button" onClick={onAcceptSuggestion} className="font-semibold text-brand-600 dark:text-brand-400 underline">
+            Substituir
+          </button>
+          <button type="button" onClick={onDismissSuggestion} className="text-slate underline">
+            Ignorar
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 export function WeeklyReviewPage() {
   const [weekStartDate, setWeekStartDate] = useState(mondayOf());
-  const { saved, computed, save } = useWeeklyReview(weekStartDate);
+  const { saved, computed, save, generateDraft, isGeneratingDraft, draftError } = useWeeklyReview(weekStartDate);
 
   const [whatWorked, setWhatWorked] = useState("");
   const [whatDidntWork, setWhatDidntWork] = useState("");
@@ -127,11 +148,21 @@ export function WeeklyReviewPage() {
   const [saving, setSaving] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
+  // Sugestões do Copilot ainda não aplicadas — só existem para campos que já
+  // tinham texto do usuário no momento em que o rascunho foi gerado (campos
+  // vazios são preenchidos direto, nunca perdem texto que o usuário digitou).
+  const [pendingSuggestions, setPendingSuggestions] = useState<{
+    whatWorked?: string;
+    whatToImprove?: string;
+    nextPriorities?: string;
+  }>({});
+
   useEffect(() => {
     setWhatWorked(saved?.what_worked ?? "");
     setWhatDidntWork(saved?.what_didnt_work ?? "");
     setWhatToImprove(saved?.what_to_improve ?? "");
     setNextPriorities(saved?.next_priorities ?? "");
+    setPendingSuggestions({});
   }, [saved]);
 
   const changeWeek = (delta: number) => {
@@ -139,6 +170,28 @@ export function WeeklyReviewPage() {
     d.setDate(d.getDate() + delta * 7);
     setWeekStartDate(d.toISOString().slice(0, 10));
     setSavedFeedback(false);
+    setPendingSuggestions({});
+  };
+
+  const handleGenerateDraft = async () => {
+    setPendingSuggestions({});
+    try {
+      const { draft } = await generateDraft();
+      const next: typeof pendingSuggestions = {};
+
+      if (whatWorked.trim()) next.whatWorked = draft.wentWell;
+      else setWhatWorked(draft.wentWell);
+
+      if (whatToImprove.trim()) next.whatToImprove = draft.toImprove;
+      else setWhatToImprove(draft.toImprove);
+
+      if (nextPriorities.trim()) next.nextPriorities = draft.nextWeekFocus;
+      else setNextPriorities(draft.nextWeekFocus);
+
+      setPendingSuggestions(next);
+    } catch {
+      // erro já fica disponível via draftError, exibido perto do botão
+    }
   };
 
   const handleSave = async () => {
@@ -302,16 +355,40 @@ export function WeeklyReviewPage() {
           )}
 
           <Card className="p-4 sm:p-5 md:p-6 space-y-4">
-            <div>
-              <p className="text-sm font-semibold">Sua reflexão semanal</p>
-              <p className="text-xs text-slate mt-0.5">Reserve um momento para revisar honestamente como foi a semana.</p>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm font-semibold">Sua reflexão semanal</p>
+                <p className="text-xs text-slate mt-0.5">Reserve um momento para revisar honestamente como foi a semana.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGenerateDraft}
+                disabled={isGeneratingDraft}
+                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white transition-colors px-3.5 py-2 text-xs font-semibold disabled:opacity-60"
+              >
+                <Wand2 size={14} />
+                {isGeneratingDraft ? "Gerando..." : "Gerar rascunho com IA"}
+              </button>
             </div>
+
+            {draftError && (
+              <p className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 rounded-xl px-3 py-2.5">
+                {draftError.message}
+              </p>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ReflectionField
                 label="O que funcionou bem?"
                 placeholder="Ex.: mantive a rotina de exercícios mesmo com a semana cheia..."
                 value={whatWorked}
                 onChange={setWhatWorked}
+                suggestion={pendingSuggestions.whatWorked}
+                onAcceptSuggestion={() => {
+                  setWhatWorked(pendingSuggestions.whatWorked ?? "");
+                  setPendingSuggestions((p) => ({ ...p, whatWorked: undefined }));
+                }}
+                onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, whatWorked: undefined }))}
               />
               <ReflectionField
                 label="O que não funcionou?"
@@ -324,12 +401,24 @@ export function WeeklyReviewPage() {
                 placeholder="Ex.: dormir mais cedo para render melhor pela manhã..."
                 value={whatToImprove}
                 onChange={setWhatToImprove}
+                suggestion={pendingSuggestions.whatToImprove}
+                onAcceptSuggestion={() => {
+                  setWhatToImprove(pendingSuggestions.whatToImprove ?? "");
+                  setPendingSuggestions((p) => ({ ...p, whatToImprove: undefined }));
+                }}
+                onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, whatToImprove: undefined }))}
               />
               <ReflectionField
                 label="Prioridades da próxima semana"
                 placeholder="Ex.: finalizar o capítulo do TCC e retomar a leitura..."
                 value={nextPriorities}
                 onChange={setNextPriorities}
+                suggestion={pendingSuggestions.nextPriorities}
+                onAcceptSuggestion={() => {
+                  setNextPriorities(pendingSuggestions.nextPriorities ?? "");
+                  setPendingSuggestions((p) => ({ ...p, nextPriorities: undefined }));
+                }}
+                onDismissSuggestion={() => setPendingSuggestions((p) => ({ ...p, nextPriorities: undefined }))}
               />
             </div>
             <Button onClick={handleSave} disabled={saving} className="w-full">

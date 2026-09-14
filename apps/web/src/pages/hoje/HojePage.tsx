@@ -17,8 +17,9 @@ import {
   Brain,
   GraduationCap,
   Wand2,
+  Flame,
 } from "lucide-react";
-import { useTasks } from "@/hooks/useTasks";
+import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealthSummary, useHealth } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
@@ -99,6 +100,7 @@ function formatTime(at: string) {
 
 export function HojePage() {
   const { tasks, createTask, moveTask } = useTasks();
+  const { focusTasks } = useFocusTasks(5);
   const { habits, summaryByHabitId, checkIn } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
@@ -225,6 +227,62 @@ export function HojePage() {
                       </span>
                     )}
                   </button>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center gap-2.5 mb-1">
+              <IconBadge tone="pink" size={32} icon={<Flame size={15} />} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Foque nisso agora</p>
+                <p className="text-xs text-slate">Priorização automática, calculada por prazo, prioridade e dependências.</p>
+              </div>
+            </div>
+
+            {focusTasks.length === 0 ? (
+              <p className="text-xs text-slate mt-4">
+                Tudo em dia por aqui — nenhuma tarefa pedindo atenção urgente agora.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {focusTasks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="rounded-lg border border-paper-border dark:border-ink-border px-3 py-2.5"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <button
+                        onClick={() => moveTask({ id: t.id, status: "Concluído" })}
+                        aria-label="Marcar como concluída"
+                        className="mt-0.5 shrink-0"
+                      >
+                        <Circle size={17} className="text-slate hover:text-brand-600 dark:hover:text-brand-500" />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm truncate">{t.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {t.dueDate && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate/10 text-slate shrink-0">
+                              {new Date(`${t.dueDate.slice(0, 10)}T00:00:00`).toLocaleDateString("pt-BR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                              })}
+                            </span>
+                          )}
+                          {t.reasons.map((reason) => (
+                            <span
+                              key={reason}
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-signal/15 text-signal-deep dark:text-signal shrink-0"
+                            >
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

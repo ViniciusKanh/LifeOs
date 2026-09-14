@@ -54,6 +54,21 @@ export interface Task {
   updated_at: string;
 }
 
+/**
+ * Item retornado por GET /api/tasks/focus — priorização automática
+ * ("Foque nisso agora"). O score é só para ordenar/depurar; a UI
+ * mostra as razões (`reasons`), que já vêm prontas em PT-BR.
+ */
+export interface FocusTask {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  priority: TaskPriority;
+  status: string;
+  score: number;
+  reasons: string[];
+}
+
 export type ProjectKind = "personal" | "workspace" | "professional" | "academic";
 
 export interface Project {
@@ -85,6 +100,18 @@ export interface GanttTask {
 export interface GanttData {
   project: { id: string; name: string };
   tasks: GanttTask[];
+}
+
+/** Previsão matemática (ritmo real de conclusão de tarefas) de quando um projeto deve terminar. */
+export interface ProjectForecastData {
+  date: string;
+  completionsPerWeek: number;
+  remainingTasks: number;
+}
+
+export interface ProjectForecast {
+  forecast: ProjectForecastData | null;
+  reason: string | null;
 }
 
 export interface TimeEntry {
@@ -441,6 +468,19 @@ export interface GoalProgressEntry {
 export interface GoalDetail extends Goal {
   children: Goal[];
   progress: GoalProgressEntry[];
+}
+
+/** Previsão matemática (tendência linear) de conclusão de uma meta numérica/percentual. */
+export interface GoalForecastData {
+  date: string;
+  ratePerDay: number;
+  daysRemaining: number;
+  aheadOrBehindDays: number | null;
+}
+
+export interface GoalForecast {
+  forecast: GoalForecastData | null;
+  reason: string | null;
 }
 
 /* ---------------------------- Focus Mode ---------------------------- */

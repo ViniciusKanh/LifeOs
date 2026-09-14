@@ -28,6 +28,7 @@ import { ProfileMenu } from "./ProfileMenu";
 import { AchievementToast } from "./AchievementToast";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
+import { CopilotAssistant } from "./CopilotAssistant";
 
 // Frases curtas por área — só decoração de cabeçalho, sem dado
 // nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
@@ -250,6 +251,7 @@ export function AppShell() {
 
         <AchievementToast />
         <OnboardingFlow />
+        <CopilotAssistant />
       </div>
     </div>
   );

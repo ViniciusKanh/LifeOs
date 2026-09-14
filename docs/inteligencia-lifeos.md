@@ -1,5 +1,14 @@
 # LifeOS: como deixar o app mais inteligente
 
+> **Status (14/09/2026): itens 1–6 implementados.** Só ficaram para depois, como já estava marcado abaixo, as conquistas adaptativas e a recomendação de livros (item 7/8) — polimento, não bloqueiam nada. Resumo do que foi feito:
+> - **Copilot com ações reais**: painel de chat (ícone flutuante, ⌘ canto inferior direito) — o Copilot propõe criar/concluir/mover tarefa, marcar hábito ou criar evento via function calling do Gemini, mas **nunca grava nada sem confirmação explícita do usuário** (ver `apps/api/src/services/copilotActionsService.ts` e `apps/web/src/components/layout/CopilotAssistant.tsx`).
+> - **Busca semântica**: `apps/api/src/services/embeddingsService.ts` gera embeddings (Gemini `text-embedding-004`) sob demanda e rankeia por similaridade de cosseno; a busca textual continua sempre disponível mesmo sem Gemini configurado, e os resultados "por significado" aparecem com uma etiqueta própria na busca do topo.
+> - **Priorização automática de tarefas**: `apps/api/src/services/priorityService.ts` + widget "Foque nisso agora" na tela Hoje.
+> - **Correlações reais de saúde/produtividade**: já existiam (`computeInsights`/Pearson) — confirmado, sem mudanças necessárias.
+> - **Weekly Review pré-preenchida**: botão "Gerar rascunho com IA" na Weekly Review, preenchendo os campos de reflexão com base nas métricas reais da semana (o usuário sempre revisa antes de salvar).
+> - **Previsão de conclusão**: `GET /api/goals/:id/forecast` e `GET /api/projects/:id/forecast` — projeção linear simples a partir do ritmo real de progresso, exibida como chip nas telas de Metas e Projetos.
+
+
 Esta é uma segunda passada, mais profunda, focada especificamente em **inteligência** — coisas que usam os dados reais que o app já coleta (ou o Gemini, que já está integrado) para fazer o LifeOS raciocinar sobre a rotina do usuário, e não só exibir números. Complementa o documento anterior (`docs/sugestoes-novas-telas-lifeos.md`), que cobria telas/ferramentas novas de forma mais geral.
 
 ## Achado concreto: a busca do topo não funciona

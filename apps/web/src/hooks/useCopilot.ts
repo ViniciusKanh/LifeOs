@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { copilotService } from "@/services/copilotService";
 import { ApiError } from "@/services/api";
+import { triggerAchievementsCheck } from "@/services/achievementsService";
 
 const DAILY_INSIGHT_KEY = ["copilot", "daily-insight"];
 
@@ -81,5 +82,42 @@ export function useAnalyticsInsight() {
     isGenerating: mutation.isPending,
     text: mutation.data?.text ?? null,
     error: mutation.error as ApiError | null,
+  };
+}
+
+/**
+ * Copilot com ações reais: envia a mensagem do usuário e devolve
+ * texto simples, um pedido de esclarecimento, ou uma proposta de
+ * ação. A proposta fica em memória local (não é gravada em lugar
+ * nenhum) até `confirm()` ser chamado explicitamente — é o próprio
+ * componente de UI que decide quando isso acontece, sempre a partir
+ * de um clique do usuário, nunca automaticamente.
+ */
+export function useCopilotAssistant() {
+  const queryClient = useQueryClient();
+
+  const ask = useMutation({ mutationFn: (message: string) => copilotService.assist(message) });
+  const confirm = useMutation({
+    mutationFn: ({ action, args }: { action: string; args: Record<string, unknown> }) =>
+      copilotService.confirmAssist(action, args),
+    onSuccess: () => {
+      // Uma ação confirmada pode ter mudado tarefas, hábitos ou
+      // eventos — invalida tudo que pode ter sido afetado em vez de
+      // adivinhar qual ação específica rodou, e também dispara a
+      // checagem de conquistas (mesmo gatilho usado em outras telas).
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["habits"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      triggerAchievementsCheck();
+    },
+  });
+
+  return {
+    ask: ask.mutateAsync,
+    isAsking: ask.isPending,
+    askError: ask.error as ApiError | null,
+    confirm: confirm.mutateAsync,
+    isConfirming: confirm.isPending,
+    confirmError: confirm.error as ApiError | null,
   };
 }

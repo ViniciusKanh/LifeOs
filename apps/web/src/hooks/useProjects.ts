@@ -60,3 +60,14 @@ export function useGantt(projectId: string | undefined) {
     removeDependency: removeDependency.mutateAsync,
   };
 }
+
+/** Previsão matemática (não-IA) de conclusão do projeto, calculada a partir do ritmo real de tarefas concluídas. */
+export function useProjectForecast(projectId: string | undefined) {
+  const query = useQuery({
+    queryKey: ["projects", "forecast", projectId],
+    queryFn: () => projectsService.forecast(projectId as string),
+    enabled: !!projectId,
+  });
+
+  return { forecast: query.data?.forecast ?? null, reason: query.data?.reason ?? null, isLoading: query.isLoading };
+}

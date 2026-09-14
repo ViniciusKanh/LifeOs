@@ -15,7 +15,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useGoals } from "@/hooks/useGoals";
+import { useGoalForecast, useGoals } from "@/hooks/useGoals";
 import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/components/ui/primitives";
 import type { Goal, GoalKind, GoalPeriod } from "@/types";
 
@@ -56,6 +56,35 @@ const GOAL_CATEGORIES: Array<{ value: string; label: string; tone: "green" | "bl
 ];
 const GOAL_CATEGORY_BY_VALUE = new Map(GOAL_CATEGORIES.map((c) => [c.value, c]));
 const FALLBACK_GOAL_CATEGORY = { label: "Sem área", tone: "blue" as const, icon: Target };
+
+/**
+ * Chip de previsão de conclusão da meta — regressão linear simples sobre o
+ * histórico real de progresso (nunca IA, nunca um número inventado).
+ * Some silenciosamente quando não há dado suficiente ainda.
+ */
+function GoalForecastChip({ goal }: { goal: Goal }) {
+  const { forecast } = useGoalForecast(goal.id);
+  if (goal.status !== "active" || (goal.kind !== "numeric" && goal.kind !== "percentage")) return null;
+  if (!forecast) return null;
+
+  const dateLabel = formatDate(forecast.date);
+  if (forecast.aheadOrBehindDays == null) {
+    return <span className="text-slate">No ritmo atual, conclusão prevista para {dateLabel}</span>;
+  }
+  if (forecast.aheadOrBehindDays >= 0) {
+    return (
+      <span className="text-growth">
+        No ritmo atual, conclusão prevista para {dateLabel}
+        {forecast.aheadOrBehindDays > 0 ? ` (${diasLabel(forecast.aheadOrBehindDays)} antes do prazo)` : " (no prazo)"}
+      </span>
+    );
+  }
+  return (
+    <span className="text-drop">
+      No ritmo atual, deve atrasar ~{diasLabel(Math.abs(forecast.aheadOrBehindDays))}
+    </span>
+  );
+}
 
 function formatDate(value: string | null) {
   if (!value) return null;
@@ -201,6 +230,9 @@ export function MetasPage() {
                                 </span>
                               )}
                               <span className="capitalize">{goal.status === "active" ? "Ativa" : goal.status === "done" ? "Concluída" : "Abandonada"}</span>
+                            </div>
+                            <div className="mt-1.5 text-[11px]">
+                              <GoalForecastChip goal={goal} />
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">

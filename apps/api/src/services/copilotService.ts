@@ -615,3 +615,130 @@ export async function generateHabitsInsight(ownerId: string): Promise<{ ok: bool
   }
   return { ok: true, text: result.text };
 }
+
+/**
+ * Rascunho de Weekly Review — mesmo princípio dos outros insights,
+ * mas em vez de um texto único, pede ao Gemini 3 reflexões curtas
+ * (o que foi bem / o que pode melhorar / foco da próxima semana)
+ * baseadas SOMENTE nas métricas reais da semana já calculadas por
+ * `/api/reviews/weekly/compute` (mesmas funções de metricsService).
+ * O usuário sempre revisa/edita antes de salvar — isto só preenche
+ * o rascunho, nunca salva a review sozinho.
+ */
+const WEEKLY_DRAFT_FIELD_MAX_CHARS = 350; // deixa folga para o limite de 500 do front (MAX_CHARS em WeeklyReviewPage)
+const WEEKLY_DRAFT_SAFETY_MAX_CHARS = 500; // nunca envia um rascunho acima do limite real do front, mesmo que o Gemini ignore a instrução
+
+async function buildWeeklyReviewContext(ownerId: string, weekStartDate: string) {
+  const weekEndExclusive = addDaysLocal(weekStartDate, 7);
+  const prevWeekStartDate = addDaysLocal(weekStartDate, -7);
+
+  const [metrics, lifeScore, prevMetrics, prevLifeScore] = await Promise.all([
+    computeRangeMetrics(ownerId, weekStartDate, weekEndExclusive),
+    computeLifeScore(ownerId, addDaysLocal(weekEndExclusive, -1)),
+    computeRangeMetrics(ownerId, prevWeekStartDate, weekStartDate),
+    computeLifeScore(ownerId, addDaysLocal(weekStartDate, -1)),
+  ]);
+
+  const db = getDb();
+  const overdueTasks = await scalar(
+    db,
+    "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND date(due_date) < date(?)",
+    [ownerId, weekEndExclusive]
+  );
+
+  return {
+    weekStartDate,
+    metrics,
+    lifeScore,
+    overdueTasks,
+    changePct: {
+      tasksCompleted: changePct(metrics.tasksCompleted, prevMetrics.tasksCompleted),
+      studyMinutes: changePct(metrics.studyMinutes, prevMetrics.studyMinutes),
+      pagesRead: changePct(metrics.pagesRead, prevMetrics.pagesRead),
+      focusMinutes: changePct(metrics.focusMinutes, prevMetrics.focusMinutes),
+      productivity: lifeScore.productivity - prevLifeScore.productivity,
+      health: lifeScore.health - prevLifeScore.health,
+      education: lifeScore.education - prevLifeScore.education,
+      reading: lifeScore.reading - prevLifeScore.reading,
+      habits: lifeScore.habits - prevLifeScore.habits,
+    },
+  };
+}
+
+/** Igual à `addDays` de reviews.routes.ts — duplicada aqui de propósito (não vale importar de uma rota). */
+function addDaysLocal(date: string, days: number) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function buildWeeklyReviewPrompt(ctx: Awaited<ReturnType<typeof buildWeeklyReviewContext>>): string {
+  const { metrics, lifeScore, overdueTasks, changePct: delta } = ctx;
+
+  const fmtPct = (v: number | null) => (v === null ? "sem base de comparação" : `${v >= 0 ? "+" : ""}${v}%`);
+  const fmtPts = (v: number) => `${v >= 0 ? "+" : ""}${v} pontos`;
+
+  const lines = [
+    `Tarefas concluídas na semana: ${metrics.tasksCompleted} de ${metrics.tasksPlanned} planejadas (variação vs. semana anterior: ${fmtPct(delta.tasksCompleted)}).`,
+    `Tarefas atrasadas (em aberto, com prazo já vencido): ${overdueTasks}.`,
+    `Minutos de estudo: ${metrics.studyMinutes} (${fmtPct(delta.studyMinutes)}).`,
+    `Páginas lidas: ${metrics.pagesRead} (${fmtPct(delta.pagesRead)}).`,
+    `Minutos de foco (Pomodoro/timer): ${metrics.focusMinutes} (${fmtPct(delta.focusMinutes)}).`,
+    `Consistência de hábitos na semana: ${metrics.habitsCompletionPct}% (${metrics.habitsDoneCount} de ${metrics.habitsPossibleCount} check-ins possíveis).`,
+    `Life Score ao final da semana — produtividade ${lifeScore.productivity} (${fmtPts(delta.productivity)}), saúde ${lifeScore.health} (${fmtPts(delta.health)}), educação ${lifeScore.education} (${fmtPts(delta.education)}), leitura ${lifeScore.reading} (${fmtPts(delta.reading)}), hábitos ${lifeScore.habits} (${fmtPts(delta.habits)}) — todas 0-100.`,
+  ];
+
+  return [
+    "Você é o LifeOS Copilot, ajudando o usuário a preencher a Revisão Semanal. Com base SOMENTE nos dados reais abaixo (nunca invente números, tarefas ou hábitos que não estejam listados), escreva um RASCUNHO em português do Brasil com três reflexões curtas para o usuário revisar e editar antes de salvar.",
+    "",
+    "Dados reais da semana:",
+    ...lines.map((l) => `- ${l}`),
+    "",
+    "Responda ESTRITAMENTE neste formato, uma linha por campo, sem markdown, sem numeração, sem texto antes ou depois:",
+    "O_QUE_FOI_BEM: <texto>",
+    "O_QUE_PODE_MELHORAR: <texto>",
+    "FOCO_PROXIMA_SEMANA: <texto>",
+    "",
+    `Regras: cada campo com 1-2 frases curtas, no máximo ~${WEEKLY_DRAFT_FIELD_MAX_CHARS} caracteres; "O_QUE_FOI_BEM" deve citar um número/variação real positiva (conclusões, minutos, % de hábitos etc.); "O_QUE_PODE_MELHORAR" deve citar uma lacuna real (tarefas atrasadas, variação negativa, hábito com baixa consistência) — se não houver lacuna clara nos dados, comente honestamente que a semana teve poucos pontos de atenção; "FOCO_PROXIMA_SEMANA" deve ser uma sugestão concreta e específica (não genérica) ligada aos próprios dados; se os números da semana forem todos muito baixos ou zerados, reconheça isso com honestidade em vez de fingir uma conquista; nunca invente um número que não esteja nos dados acima; tom direto e encorajador, sem ser piegas.`,
+  ].join("\n");
+}
+
+/** Extrai os três campos da resposta do Gemini no formato `CHAVE: texto`, tolerando variação de espaço/quebra de linha. */
+function parseWeeklyReviewDraft(text: string): { wentWell: string; toImprove: string; nextWeekFocus: string } | null {
+  const extract = (key: string): string | null => {
+    const re = new RegExp(`${key}\\s*:\\s*(.+)`, "i");
+    const match = text.match(re);
+    return match ? match[1].trim() : null;
+  };
+  const wentWell = extract("O_QUE_FOI_BEM");
+  const toImprove = extract("O_QUE_PODE_MELHORAR");
+  const nextWeekFocus = extract("FOCO_PROXIMA_SEMANA");
+  if (!wentWell || !toImprove || !nextWeekFocus) return null;
+
+  const truncate = (s: string) => (s.length > WEEKLY_DRAFT_SAFETY_MAX_CHARS ? s.slice(0, WEEKLY_DRAFT_SAFETY_MAX_CHARS) : s);
+  return { wentWell: truncate(wentWell), toImprove: truncate(toImprove), nextWeekFocus: truncate(nextWeekFocus) };
+}
+
+export async function generateWeeklyReviewDraft(
+  ownerId: string,
+  weekStartDate: string
+): Promise<{ ok: boolean; draft?: { wentWell: string; toImprove: string; nextWeekFocus: string }; message?: string }> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, message: "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
+  }
+
+  const ctx = await buildWeeklyReviewContext(ownerId, weekStartDate);
+  const prompt = buildWeeklyReviewPrompt(ctx);
+  const result = await generateText(prompt, config);
+
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+
+  const draft = parseWeeklyReviewDraft(result.text ?? "");
+  if (!draft) {
+    return { ok: false, message: "Não foi possível interpretar a resposta da IA. Tente novamente." };
+  }
+  return { ok: true, draft };
+}

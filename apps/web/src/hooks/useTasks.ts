@@ -129,6 +129,26 @@ export function useProjectTasks(projectId: string | null) {
   };
 }
 
+/**
+ * Priorização automática de tarefas ("Foque nisso agora"): busca as
+ * top-N tarefas em aberto por score de foco (calculado no backend a
+ * partir de prazo, prioridade, impacto/urgência/esforço e
+ * dependências). A chave inclui `["tasks", ...]` de propósito, para
+ * que qualquer invalidate genérico de tarefas (criar/mover/concluir)
+ * também refaça esta consulta.
+ */
+export function useFocusTasks(limit = 5) {
+  const query = useQuery({
+    queryKey: ["tasks", "focus", limit],
+    queryFn: () => taskService.focusList(limit),
+  });
+
+  return {
+    focusTasks: query.data?.tasks ?? [],
+    isLoading: query.isLoading,
+  };
+}
+
 export function useTaskTimer(taskId: string | null) {
   const queryClient = useQueryClient();
 
