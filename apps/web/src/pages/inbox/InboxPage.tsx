@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, Inbox as InboxIcon, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { useInbox } from "@/hooks/useInbox";
 import { useProjects } from "@/hooks/useProjects";
@@ -28,10 +28,6 @@ function friendlyErrorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
 }
 
-function isoDay(value: string) {
-  return value.length <= 10 ? value : value.replace(" ", "T").slice(0, 10);
-}
-
 /**
  * Notas rápidas / Inbox — tela onde os itens capturados (pelo botão
  * flutuante disponível em qualquer lugar do app, ou diretamente aqui)
@@ -41,7 +37,7 @@ function isoDay(value: string) {
  */
 export function InboxPage() {
   const [showProcessed, setShowProcessed] = useState(false);
-  const { items, allItems, isLoading, isError, refetch, capture, isCapturing, process, remove } = useInbox(showProcessed);
+  const { items, stats, isLoading, isError, refetch, capture, isCapturing, process, remove } = useInbox(showProcessed);
   const [text, setText] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -58,16 +54,6 @@ export function InboxPage() {
       setCaptureError(friendlyErrorMessage(err, "Não foi possível capturar agora. Tente de novo."));
     }
   };
-
-  // Estatísticas rápidas da caixa de entrada — sempre calculadas sobre
-  // a lista completa (allItems), independente do filtro de exibição.
-  const stats = useMemo(() => {
-    const pending = allItems.filter((i) => !i.processed_at).length;
-    const sevenDaysAgo = Date.now() - 7 * 86_400_000;
-    const processedLast7d = allItems.filter((i) => i.processed_at && new Date(isoDay(i.processed_at) + "T00:00:00").getTime() >= sevenDaysAgo).length;
-    const capturedLast7d = allItems.filter((i) => new Date(isoDay(i.created_at) + "T00:00:00").getTime() >= sevenDaysAgo).length;
-    return { pending, processedLast7d, capturedLast7d };
-  }, [allItems]);
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
@@ -188,8 +174,8 @@ function InboxRow({
   item: InboxItem;
   expanded: boolean;
   onToggleExpand: () => void;
-  onDiscard: () => void;
-  onDelete: () => void;
+  onDiscard: () => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
   onConvert: (input: { title: string; projectId: string | null; priority: "Baixa" | "Média" | "Alta"; dueDate: string | null }) => Promise<void>;
 }) {
   const { projects } = useProjects();
@@ -198,6 +184,7 @@ function InboxRow({
   const [priority, setPriority] = useState<"Baixa" | "Média" | "Alta">("Média");
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [action, setAction] = useState<"discard" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isProcessed = !!item.processed_at;
 
@@ -214,6 +201,18 @@ function InboxRow({
     }
   };
 
+  const runAction = async (kind: "discard" | "delete", fn: () => Promise<unknown>) => {
+    setAction(kind);
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setError(friendlyErrorMessage(err, kind === "discard" ? "Não foi possível descartar o item." : "Não foi possível excluir o item."));
+    } finally {
+      setAction(null);
+    }
+  };
+
   return (
     <Card className={`p-3.5 ${isProcessed ? "opacity-70" : ""}`}>
       <div className="flex items-start gap-2.5">
@@ -225,7 +224,12 @@ function InboxRow({
           </p>
         </button>
         {isProcessed ? (
-          <button onClick={onDelete} aria-label="Excluir" className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-drop shrink-0">
+          <button
+            onClick={() => runAction("delete", onDelete)}
+            aria-label="Excluir"
+            disabled={action !== null}
+            className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-drop shrink-0 disabled:opacity-50"
+          >
             <Trash2 size={13} />
           </button>
         ) : (
@@ -237,10 +241,20 @@ function InboxRow({
           >
             <ChevronDown size={15} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
           </button>
-          <button onClick={onDiscard} aria-label="Descartar" className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-growth">
+          <button
+            onClick={() => runAction("discard", onDiscard)}
+            aria-label="Descartar"
+            disabled={action !== null}
+            className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-growth disabled:opacity-50"
+          >
             <Check size={15} />
           </button>
-          <button onClick={onDelete} aria-label="Excluir" className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-drop">
+          <button
+            onClick={() => runAction("delete", onDelete)}
+            aria-label="Excluir"
+            disabled={action !== null}
+            className="rounded-lg p-1.5 border border-paper-border dark:border-ink-border text-slate hover:text-drop disabled:opacity-50"
+          >
             <Trash2 size={13} />
           </button>
         </div>
@@ -280,12 +294,12 @@ function InboxRow({
             </div>
             <Field label="Prazo" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
-          <Button onClick={handleConvert} disabled={!title.trim() || saving} className="w-full">
+          <Button onClick={handleConvert} disabled={!title.trim() || saving || action !== null} className="w-full">
             {saving ? "Criando..." : "Criar tarefa"}
           </Button>
-          {error && <p className="text-xs text-drop">{error}</p>}
         </div>
       )}
+      {error && <p className="text-xs text-drop mt-2">{error}</p>}
     </Card>
   );
 }

@@ -67,7 +67,6 @@ export function TaskModal({
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "Média");
   const [startDate, setStartDate] = useState(toDateInput(task?.start_date ?? null));
   const [dueDate, setDueDate] = useState(toDateInput(task?.due_date ?? null));
-  const [estimateMinutes, setEstimateMinutes] = useState(task?.estimate_minutes ? String(task.estimate_minutes) : "");
   const [projectId, setProjectId] = useState<string>(task?.project_id ?? "");
   const [impact, setImpact] = useState(task?.impact ?? 0);
   const [urgency, setUrgency] = useState(task?.urgency ?? 0);
@@ -95,7 +94,6 @@ export function TaskModal({
         priority,
         startDate: startDate || null,
         dueDate: dueDate || null,
-        estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
         projectId: projectId || null,
         impact: isProfessional && impact > 0 ? impact : null,
         urgency: isProfessional && urgency > 0 ? urgency : null,
@@ -220,14 +218,6 @@ export function TaskModal({
             <Field label="Data de início" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <Field label="Data de término" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
-
-          <Field
-            label="Estimativa (minutos, opcional)"
-            type="number"
-            min={0}
-            value={estimateMinutes}
-            onChange={(e) => setEstimateMinutes(e.target.value)}
-          />
 
           <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">
             <div className="flex items-center gap-1.5 mb-2">

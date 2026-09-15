@@ -18,12 +18,40 @@ inboxRouter.use(requireAuth);
 inboxRouter.get("/", async (req, res) => {
   const db = getDb();
   const includeProcessed = req.query.includeProcessed === "true";
+  const rawLimit = Number(req.query.limit ?? (includeProcessed ? 200 : 100));
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 500) : 100;
 
   const result = await db.execute({
-    sql: `SELECT * FROM inbox_items WHERE owner_id = ? ${includeProcessed ? "" : "AND processed_at IS NULL"} ORDER BY created_at DESC`,
-    args: [req.user!.id],
+    sql: `SELECT * FROM inbox_items WHERE owner_id = ? ${includeProcessed ? "" : "AND processed_at IS NULL"} ORDER BY created_at DESC LIMIT ?`,
+    args: [req.user!.id, limit],
   });
   return res.json(result.rows);
+});
+
+/** GET /api/inbox/stats — contagens leves para a página de Inbox, sem puxar histórico inteiro. */
+inboxRouter.get("/stats", async (req, res) => {
+  const db = getDb();
+  const [pending, processedLast7d, capturedLast7d] = await Promise.all([
+    db.execute({
+      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND processed_at IS NULL",
+      args: [req.user!.id],
+    }),
+    db.execute({
+      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND processed_at IS NOT NULL AND date(processed_at) >= date('now', '-6 days')",
+      args: [req.user!.id],
+    }),
+    db.execute({
+      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND date(created_at) >= date('now', '-6 days')",
+      args: [req.user!.id],
+    }),
+  ]);
+
+  const n = (row: unknown) => Number((row as { n?: number }).n ?? 0);
+  return res.json({
+    pending: n(pending.rows[0]),
+    processedLast7d: n(processedLast7d.rows[0]),
+    capturedLast7d: n(capturedLast7d.rows[0]),
+  });
 });
 
 /** POST /api/inbox — captura rápida, sem nenhum campo além do texto. */

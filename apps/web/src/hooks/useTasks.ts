@@ -14,6 +14,8 @@ export function useTasks() {
     // sem isso, o Dashboard só atualizava esses números depois de um
     // reload manual da página.
     queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["educations"] });
+    queryClient.invalidateQueries({ queryKey: ["academic-projects"] });
   };
 
   const tasksQuery = useQuery({ queryKey: TASKS_KEY, queryFn: taskService.list });
@@ -83,6 +85,8 @@ export function useProjectTasks(projectId: string | null) {
     // Idem useTasks: o Kanban de projetos (Profissional/Workspace/
     // Acadêmico) também precisa refletir na hora no Life Score.
     queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["educations"] });
+    queryClient.invalidateQueries({ queryKey: ["academic-projects"] });
   };
 
   const tasksQuery = useQuery({

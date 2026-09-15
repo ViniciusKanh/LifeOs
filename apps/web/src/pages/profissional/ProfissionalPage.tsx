@@ -34,15 +34,21 @@ export function ProfissionalPage() {
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [noteDate, setNoteDate] = useState(new Date().toISOString().slice(0, 10));
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   const careerGoals = goals.filter((g) => g.category === "Carreira" && g.status === "active");
 
   const handleAddNote = async (e: FormEvent) => {
     e.preventDefault();
-    if (!noteTitle.trim()) return;
-    await createNote({ title: noteTitle.trim(), content: noteContent.trim() || null, occurredAt: noteDate });
-    setNoteTitle("");
-    setNoteContent("");
+    if (!noteTitle.trim() || isCreating) return;
+    setNoteError(null);
+    try {
+      await createNote({ title: noteTitle.trim(), content: noteContent.trim() || null, occurredAt: noteDate || new Date().toISOString().slice(0, 10) });
+      setNoteTitle("");
+      setNoteContent("");
+    } catch (err) {
+      setNoteError(err instanceof Error ? err.message : "Não foi possível salvar a anotação.");
+    }
   };
 
   return (
@@ -153,6 +159,7 @@ export function ProfissionalPage() {
           placeholder="Notas da conversa (opcional)..."
           className="w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border resize-none mb-4"
         />
+        {noteError && <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5 mb-4">{noteError}</p>}
 
         {!notesLoading && notes.length === 0 ? (
           <p className="text-xs text-slate">Nenhuma anotação registrada ainda.</p>

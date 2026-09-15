@@ -199,20 +199,23 @@ tasksRouter.post("/", async (req, res) => {
   const db = getDb();
   const id = nanoid();
 
+  const status = d.status ?? "Backlog";
+
   await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort, recurrence_rule)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, completed_at, impact, urgency, effort, recurrence_rule)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       req.user!.id,
       d.projectId ?? null,
       d.title,
       d.description ?? null,
-      d.status ?? "Backlog",
+      status,
       d.priority,
       d.dueDate ?? null,
       d.startDate ?? null,
       d.estimateMinutes ?? null,
+      status === "Concluído" ? new Date().toISOString() : null,
       d.impact ?? null,
       d.urgency ?? null,
       d.effort ?? null,
@@ -262,12 +265,17 @@ tasksRouter.patch("/:id", async (req, res) => {
     recurrenceRule: "recurrence_rule",
   };
 
+  const dataForUpdate: Record<string, string | number | null> = { ...(parsed.data as Record<string, string | number | null>) };
+  if ("status" in dataForUpdate && !("completedAt" in dataForUpdate)) {
+    dataForUpdate.completedAt = dataForUpdate.status === "Concluído" ? new Date().toISOString() : null;
+  }
+
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
   for (const [key, column] of Object.entries(fieldMap)) {
-    if (key in parsed.data) {
+    if (key in dataForUpdate) {
       sets.push(`${column} = ?`);
-      args.push((parsed.data as Record<string, string | number | null>)[key]);
+      args.push(dataForUpdate[key]);
     }
   }
   sets.push("updated_at = datetime('now')");
@@ -279,7 +287,7 @@ tasksRouter.patch("/:id", async (req, res) => {
     args,
   });
   await recomputePriorityScore(db, req.params.id, req.user!.id);
-  if (parsed.data.status === "Concluído") {
+  if (dataForUpdate.status === "Concluído") {
     await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
   }
 
@@ -299,9 +307,15 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   }
   const db = getDb();
   const result = await db.execute({
-    sql: `UPDATE tasks SET status = ?, updated_at = datetime('now')
+    sql: `UPDATE tasks
+          SET status = ?,
+              completed_at = CASE
+                WHEN ? = 'Concluído' THEN COALESCE(completed_at, datetime('now'))
+                ELSE NULL
+              END,
+              updated_at = datetime('now')
           WHERE id = ? AND owner_id = ?`,
-    args: [parsed.data.status, req.params.id, req.user!.id],
+    args: [parsed.data.status, parsed.data.status, req.params.id, req.user!.id],
   });
   if (result.rowsAffected === 0) {
     return res.status(404).json({ error: "Tarefa não encontrada." });

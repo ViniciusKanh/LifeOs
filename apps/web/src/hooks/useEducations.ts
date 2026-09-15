@@ -38,7 +38,7 @@ export function useEducations() {
     educations: educationsQuery.data ?? [],
     isLoading: educationsQuery.isLoading,
     createEducation: createEducation.mutateAsync,
-    updateEducation: updateEducation.mutate,
+    updateEducation: updateEducation.mutateAsync,
     removeEducation: removeEducation.mutateAsync,
   };
 }
