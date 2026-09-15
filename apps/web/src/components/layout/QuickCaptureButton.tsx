@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Inbox, Check } from "lucide-react";
-import { useInbox } from "@/hooks/useInbox";
+import { useInboxCapture } from "@/hooks/useInbox";
 
 /**
  * Captura rápida (Inbox/GTD) — botão flutuante disponível em qualquer
@@ -14,7 +14,7 @@ export function QuickCaptureButton() {
   const [text, setText] = useState("");
   const [justCaptured, setJustCaptured] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { capture, isCapturing } = useInbox();
+  const { capture, isCapturing } = useInboxCapture();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

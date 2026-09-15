@@ -16,8 +16,16 @@ export interface ProcessInboxInput {
   dueDate?: string | null;
 }
 
+export interface InboxStats {
+  pending: number;
+  processedLast7d: number;
+  capturedLast7d: number;
+}
+
 export const inboxService = {
-  list: (includeProcessed = false) => api.get<InboxItem[]>(`/inbox?includeProcessed=${includeProcessed}`),
+  list: (includeProcessed = false, limit = includeProcessed ? 200 : 100) =>
+    api.get<InboxItem[]>(`/inbox?includeProcessed=${includeProcessed}&limit=${limit}`),
+  stats: () => api.get<InboxStats>("/inbox/stats"),
   create: (content: string) => api.post<InboxItem>("/inbox", { content }),
   process: (id: string, input: ProcessInboxInput) => api.patch<{ processed: boolean; taskId: string | null }>(`/inbox/${id}/process`, input),
   remove: (id: string) => api.delete<void>(`/inbox/${id}`),

@@ -58,13 +58,15 @@ export async function getVapidKeys(): Promise<{ publicKey: string; privateKey: s
     await writePushSetting(db, "vapid_private_key", privateKey);
   }
 
+  const keys = { publicKey, privateKey };
+
   webpush.setVapidDetails(
     `mailto:${process.env.ADMIN_EMAIL ?? "contato@lifeos.app"}`,
-    publicKey,
-    privateKey
+    keys.publicKey,
+    keys.privateKey
   );
 
-  cachedKeys = { publicKey, privateKey };
+  cachedKeys = keys;
   return cachedKeys;
 }
 

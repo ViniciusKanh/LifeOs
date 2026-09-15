@@ -116,15 +116,27 @@ async function healthScore(db: Db, ownerId: string, date: string): Promise<numbe
   return clamp((waterScore + sleepScore + workoutScore) / 3);
 }
 
-/** Educação: progresso médio das formações ativas (educations.progress_pct). */
+/** Educação: progresso médio das formações a partir das tarefas dos projetos acadêmicos. */
 async function educationScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const result = await db.execute({
-    sql: "SELECT COUNT(*) AS n, AVG(progress_pct) AS avg_pct FROM educations WHERE owner_id = ?",
+    sql: `SELECT e.id,
+                 COUNT(t.id) as total,
+                 SUM(CASE WHEN t.status = 'Concluído' THEN 1 ELSE 0 END) as done
+          FROM educations e
+          LEFT JOIN academic_projects ap ON ap.education_id = e.id AND ap.owner_id = e.owner_id
+          LEFT JOIN tasks t ON t.project_id = ap.project_id AND t.owner_id = e.owner_id
+          WHERE e.owner_id = ?
+          GROUP BY e.id`,
     args: [ownerId],
   });
-  const row = result.rows[0] as unknown as { n: number; avg_pct: number | null } | undefined;
-  if (!row || Number(row.n) === 0) return { score: 0, hasData: false };
-  return { score: clamp(Number(row.avg_pct ?? 0)), hasData: true };
+  const rows = result.rows as unknown as Array<{ total: number; done: number | null }>;
+  if (rows.length === 0) return { score: 0, hasData: false };
+  const scores = rows.map((row) => {
+    const total = Number(row.total ?? 0);
+    const done = Number(row.done ?? 0);
+    return total > 0 ? clamp((done / total) * 100) : 0;
+  });
+  return { score: clamp(scores.reduce((a, b) => a + b, 0) / scores.length), hasData: true };
 }
 
 /** Leitura: progresso médio (página atual / total) dos livros em leitura. */

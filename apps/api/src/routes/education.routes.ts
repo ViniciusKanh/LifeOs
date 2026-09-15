@@ -50,6 +50,82 @@ function parseJson<T>(value: unknown): T | null {
  */
 type EducationPhase = "cursando_disciplinas" | "fase_projeto" | "concluida" | "sem_atividade";
 
+type EducationProgressRow = { id: string; progress_pct: number };
+type AcademicProjectProgressRow = { id: string; project_id: string | null; progress_pct: number };
+
+function percentDone(done: number, total: number) {
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+}
+
+async function taskProgressByProjectId(db: ReturnType<typeof getDb>, ownerId: string, projectIds: string[]) {
+  const ids = [...new Set(projectIds.filter(Boolean))];
+  const progress = new Map<string, { total: number; done: number; pct: number }>();
+  if (ids.length === 0) return progress;
+
+  const placeholders = ids.map(() => "?").join(",");
+  const result = await db.execute({
+    sql: `SELECT project_id, COUNT(*) as total,
+                 SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) as done
+          FROM tasks
+          WHERE owner_id = ? AND project_id IN (${placeholders})
+          GROUP BY project_id`,
+    args: [ownerId, ...ids],
+  });
+
+  for (const row of result.rows as unknown as Array<{ project_id: string; total: number; done: number | null }>) {
+    const total = Number(row.total ?? 0);
+    const done = Number(row.done ?? 0);
+    progress.set(row.project_id, { total, done, pct: percentDone(done, total) });
+  }
+  return progress;
+}
+
+async function withAcademicTaskProgress<T extends AcademicProjectProgressRow>(db: ReturnType<typeof getDb>, ownerId: string, rows: T[]): Promise<T[]> {
+  const progress = await taskProgressByProjectId(
+    db,
+    ownerId,
+    rows.map((row) => row.project_id).filter((id): id is string => !!id)
+  );
+  return rows.map((row) => ({
+    ...row,
+    progress_pct: row.project_id ? progress.get(row.project_id)?.pct ?? 0 : 0,
+  }));
+}
+
+async function educationProgressById(db: ReturnType<typeof getDb>, ownerId: string, educationIds: string[]) {
+  const ids = [...new Set(educationIds.filter(Boolean))];
+  const progress = new Map<string, { total: number; done: number; pct: number }>();
+  if (ids.length === 0) return progress;
+
+  const placeholders = ids.map(() => "?").join(",");
+  const result = await db.execute({
+    sql: `SELECT ap.education_id,
+                 COUNT(t.id) as total,
+                 SUM(CASE WHEN t.status = 'Concluído' THEN 1 ELSE 0 END) as done
+          FROM academic_projects ap
+          LEFT JOIN tasks t ON t.project_id = ap.project_id AND t.owner_id = ap.owner_id
+          WHERE ap.owner_id = ? AND ap.education_id IN (${placeholders})
+          GROUP BY ap.education_id`,
+    args: [ownerId, ...ids],
+  });
+
+  for (const row of result.rows as unknown as Array<{ education_id: string; total: number; done: number | null }>) {
+    const total = Number(row.total ?? 0);
+    const done = Number(row.done ?? 0);
+    progress.set(row.education_id, { total, done, pct: percentDone(done, total) });
+  }
+  return progress;
+}
+
+async function withEducationTaskProgress<T extends EducationProgressRow>(db: ReturnType<typeof getDb>, ownerId: string, rows: T[]): Promise<T[]> {
+  const progress = await educationProgressById(db, ownerId, rows.map((row) => row.id));
+  return rows.map((row) => ({
+    ...row,
+    progress_pct: progress.get(row.id)?.pct ?? 0,
+  }));
+}
+
 async function computePhases(db: ReturnType<typeof getDb>, ownerId: string, educationIds: string[]) {
   if (educationIds.length === 0) return { withActiveCourses: new Set<string>(), withOpenProjects: new Set<string>() };
   const placeholders = educationIds.map(() => "?").join(",");
@@ -62,9 +138,22 @@ async function computePhases(db: ReturnType<typeof getDb>, ownerId: string, educ
       args: [ownerId, ...educationIds],
     }),
     db.execute({
-      sql: `SELECT DISTINCT education_id FROM academic_projects
-            WHERE owner_id = ? AND education_id IN (${placeholders}) AND progress_pct < 100`,
-      args: [ownerId, ...educationIds],
+      sql: `SELECT DISTINCT ap.education_id
+            FROM academic_projects ap
+            LEFT JOIN (
+              SELECT project_id, COUNT(*) as total,
+                     SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) as done
+              FROM tasks
+              WHERE owner_id = ?
+              GROUP BY project_id
+            ) task_progress ON task_progress.project_id = ap.project_id
+            WHERE ap.owner_id = ? AND ap.education_id IN (${placeholders})
+            AND (
+              ap.project_id IS NULL
+              OR COALESCE(task_progress.total, 0) = 0
+              OR COALESCE(task_progress.done, 0) < COALESCE(task_progress.total, 0)
+            )`,
+      args: [ownerId, ownerId, ...educationIds],
     }),
   ]);
 
@@ -92,7 +181,7 @@ educationRouter.get("/educations", async (req, res) => {
     sql: "SELECT * FROM educations WHERE owner_id = ? ORDER BY started_at DESC, created_at DESC",
     args: [req.user!.id],
   });
-  const rows = result.rows as unknown as Array<{ id: string; progress_pct: number }>;
+  const rows = await withEducationTaskProgress(db, req.user!.id, result.rows as unknown as Array<{ id: string; progress_pct: number }>);
   const { withActiveCourses, withOpenProjects } = await computePhases(db, req.user!.id, rows.map((r) => r.id));
 
   return res.json(
@@ -111,17 +200,22 @@ educationRouter.get("/educations/:id", async (req, res) => {
   });
   if (result.rows.length === 0) return res.status(404).json({ error: "Formação não encontrada." });
 
-  const education = result.rows[0] as unknown as { id: string; progress_pct: number };
+  const [education] = await withEducationTaskProgress(db, req.user!.id, result.rows as unknown as Array<{ id: string; progress_pct: number }>);
   const { withActiveCourses, withOpenProjects } = await computePhases(db, req.user!.id, [education.id]);
   const academicProjects = await db.execute({
     sql: "SELECT * FROM academic_projects WHERE education_id = ? AND owner_id = ? ORDER BY created_at DESC",
     args: [req.params.id, req.user!.id],
   });
+  const academicProjectsWithProgress = await withAcademicTaskProgress(
+    db,
+    req.user!.id,
+    academicProjects.rows as unknown as Array<{ id: string; project_id: string | null; progress_pct: number }>
+  );
 
   return res.json({
     ...education,
     phase: resolvePhase(education.id, education.progress_pct, withActiveCourses, withOpenProjects),
-    academicProjects: academicProjects.rows,
+    academicProjects: academicProjectsWithProgress,
   });
 });
 
@@ -138,8 +232,13 @@ educationRouter.post("/educations", async (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [id, req.user!.id, d.kind, d.institution ?? null, d.courseName, d.startedAt ?? null, d.expectedEndAt ?? null, d.progressPct ?? 0, d.notes ?? null],
   });
-  const created = await db.execute({ sql: "SELECT * FROM educations WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await db.execute({ sql: "SELECT * FROM educations WHERE id = ? AND owner_id = ?", args: [id, req.user!.id] });
+  const [row] = await withEducationTaskProgress(db, req.user!.id, created.rows as unknown as Array<{ id: string; progress_pct: number }>);
+  const { withActiveCourses, withOpenProjects } = await computePhases(db, req.user!.id, [row.id]);
+  return res.status(201).json({
+    ...row,
+    phase: resolvePhase(row.id, row.progress_pct, withActiveCourses, withOpenProjects),
+  });
 });
 
 const EDUCATION_FIELD_MAP: Record<string, string> = {
@@ -178,7 +277,12 @@ educationRouter.patch("/educations/:id", async (req, res) => {
 
   await db.execute({ sql: `UPDATE educations SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
   const updated = await db.execute({ sql: "SELECT * FROM educations WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  return res.json(updated.rows[0]);
+  const [row] = await withEducationTaskProgress(db, req.user!.id, updated.rows as unknown as Array<{ id: string; progress_pct: number }>);
+  const { withActiveCourses, withOpenProjects } = await computePhases(db, req.user!.id, [row.id]);
+  return res.json({
+    ...row,
+    phase: resolvePhase(row.id, row.progress_pct, withActiveCourses, withOpenProjects),
+  });
 });
 
 /**
@@ -698,8 +802,22 @@ educationRouter.get("/educations/:id/stats", async (req, res) => {
       args: [req.params.id, req.user!.id],
     }),
     db.execute({
-      sql: `SELECT COUNT(*) as n FROM academic_projects WHERE education_id = ? AND owner_id = ? AND progress_pct < 100`,
-      args: [req.params.id, req.user!.id],
+      sql: `SELECT COUNT(*) as n
+            FROM academic_projects ap
+            LEFT JOIN (
+              SELECT project_id, COUNT(*) as total,
+                     SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) as done
+              FROM tasks
+              WHERE owner_id = ?
+              GROUP BY project_id
+            ) task_progress ON task_progress.project_id = ap.project_id
+            WHERE ap.education_id = ? AND ap.owner_id = ?
+            AND (
+              ap.project_id IS NULL
+              OR COALESCE(task_progress.total, 0) = 0
+              OR COALESCE(task_progress.done, 0) < COALESCE(task_progress.total, 0)
+            )`,
+      args: [req.user!.id, req.params.id, req.user!.id],
     }),
   ]);
 
@@ -778,7 +896,12 @@ educationRouter.get("/academic-projects", async (req, res) => {
     sql: `SELECT * FROM academic_projects WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`,
     args,
   });
-  return res.json(result.rows);
+  const rows = await withAcademicTaskProgress(
+    db,
+    req.user!.id,
+    result.rows as unknown as Array<{ id: string; project_id: string | null; progress_pct: number }>
+  );
+  return res.json(rows);
 });
 
 educationRouter.post("/academic-projects", async (req, res) => {
@@ -839,7 +962,12 @@ educationRouter.post("/academic-projects", async (req, res) => {
     ],
   });
   const created = await db.execute({ sql: "SELECT * FROM academic_projects WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  const [row] = await withAcademicTaskProgress(
+    db,
+    req.user!.id,
+    created.rows as unknown as Array<{ id: string; project_id: string | null; progress_pct: number }>
+  );
+  return res.status(201).json(row);
 });
 
 const ACADEMIC_PROJECT_FIELD_MAP: Record<string, string> = {
@@ -876,7 +1004,12 @@ educationRouter.patch("/academic-projects/:id", async (req, res) => {
 
   await db.execute({ sql: `UPDATE academic_projects SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
   const updated = await db.execute({ sql: "SELECT * FROM academic_projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  return res.json(updated.rows[0]);
+  const [row] = await withAcademicTaskProgress(
+    db,
+    req.user!.id,
+    updated.rows as unknown as Array<{ id: string; project_id: string | null; progress_pct: number }>
+  );
+  return res.json(row);
 });
 
 /**
