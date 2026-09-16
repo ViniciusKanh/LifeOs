@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { beforeAll, afterAll } from "vitest";
+import { closeDb } from "../src/db/client.js";
 
 /**
  * Banco de teste: um arquivo SQLite novo por execução da suite,
@@ -26,6 +27,16 @@ beforeAll(() => {
   execSync("npx tsx src/db/migrate.ts", { cwd: process.cwd(), env: process.env, stdio: "pipe" });
 });
 
-afterAll(() => {
-  rmSync(dbPath, { force: true });
+afterAll(async () => {
+  closeDb();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      rmSync(dbPath, { force: true });
+      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EPERM") throw err;
+      if (attempt === 4) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
 });

@@ -19,3 +19,8 @@ export function getDb(): Client {
   client = createClient({ url, authToken });
   return client;
 }
+
+export function closeDb() {
+  client?.close();
+  client = null;
+}

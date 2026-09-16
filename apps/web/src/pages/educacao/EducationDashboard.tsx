@@ -26,12 +26,13 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PhaseBadge } from "./EducacaoPage";
-import type { AcademicProject, AcademicProjectKind, Course, Subject, Task } from "@/types";
+import type { AcademicProject, AcademicProjectKind, Course, Education, EducationKind, Subject, Task } from "@/types";
 
 const SUBJECT_STATUS: Subject["status"][] = ["Planejada", "Em andamento", "Concluída", "Trancada"];
 const ACADEMIC_COLUMNS = ["Backlog", "A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
 const SUBJECT_TONES: Array<"blue" | "purple" | "green" | "pink" | "teal"> = ["blue", "purple", "green", "pink", "teal"];
 const DEADLINES_LIMIT = 5;
+const COMPLETED_DEADLINES_LIMIT = 5;
 const SUBJECTS_LIMIT = 4;
 const CHECKLIST_LIMIT = 6;
 
@@ -111,12 +112,13 @@ function urgencyInfo(dueDate: string) {
 export function EducationDashboard({ educationId, onBack }: { educationId: string; onBack?: () => void }) {
   const { education, courses, createCourse, removeCourse } = useEducation(educationId);
   const { createProject } = useAcademicProjects();
-  const { removeEducation } = useEducations();
+  const { removeEducation, updateEducation } = useEducations();
   const dashboard = useEducationDashboard(educationId);
   const insight = useEducationInsight();
   const [newCourseName, setNewCourseName] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [educationEditOpen, setEducationEditOpen] = useState(false);
   const [confirmDeleteEducation, setConfirmDeleteEducation] = useState(false);
   const [showAllSubjects, setShowAllSubjects] = useState(false);
   const [showAllDeadlines, setShowAllDeadlines] = useState(false);
@@ -130,7 +132,9 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
 
   const visibleSubjects = showAllSubjects ? dashboard.subjects : dashboard.subjects.slice(0, SUBJECTS_LIMIT);
   const pendingDeadlines = useMemo(() => dashboard.deadlines.filter((d) => !d.done), [dashboard.deadlines]);
+  const completedDeadlines = useMemo(() => dashboard.deadlines.filter((d) => !!d.done), [dashboard.deadlines]);
   const visibleDeadlines = showAllDeadlines ? pendingDeadlines : pendingDeadlines.slice(0, DEADLINES_LIMIT);
+  const visibleCompletedDeadlines = showAllDeadlines ? completedDeadlines : completedDeadlines.slice(0, COMPLETED_DEADLINES_LIMIT);
   const visibleChecklist = showAllChecklist ? dashboard.checklist : dashboard.checklist.slice(0, CHECKLIST_LIMIT);
 
   const weekMax = Math.max(1, ...dashboard.stats?.dailyStudyMinutes.map((d) => d.minutes) ?? [1]);
@@ -172,12 +176,20 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
         ) : (
           <span />
         )}
-        <button
-          onClick={() => setConfirmDeleteEducation(true)}
-          className="flex items-center gap-1.5 text-xs text-slate hover:text-drop transition-colors"
-        >
-          <Trash2 size={13} /> Excluir formação
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setEducationEditOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-slate hover:text-brand-600 transition-colors"
+          >
+            <Pencil size={13} /> Editar formação
+          </button>
+          <button
+            onClick={() => setConfirmDeleteEducation(true)}
+            className="flex items-center gap-1.5 text-xs text-slate hover:text-drop transition-colors"
+          >
+            <Trash2 size={13} /> Excluir formação
+          </button>
+        </div>
       </div>
 
       {/* ===================== Cabeçalho da formação ===================== */}
@@ -196,7 +208,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
               {education.institution && <p className="text-sm text-slate">{education.institution}</p>}
               <div className="mt-3 max-w-sm">
                 <div className="flex items-center justify-between text-xs text-slate mb-1">
-                  <span>Progresso geral</span>
+                  <span>Progresso por tarefas</span>
                   <span className="font-semibold text-inherit">{education.progress_pct}%</span>
                 </div>
                 <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
@@ -344,7 +356,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold">Próximos prazos</p>
-            {pendingDeadlines.length > DEADLINES_LIMIT && (
+            {(pendingDeadlines.length > DEADLINES_LIMIT || completedDeadlines.length > COMPLETED_DEADLINES_LIMIT) && (
               <button onClick={() => setShowAllDeadlines((v) => !v)} className="text-xs text-brand-600 dark:text-brand-500 font-medium">
                 {showAllDeadlines ? "Ver menos" : "Ver todos →"}
               </button>
@@ -374,6 +386,34 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
                   </div>
                 );
               })}
+            </div>
+          )}
+          {completedDeadlines.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-paper-border dark:border-ink-border">
+              <p className="text-xs font-semibold mb-2">Histórico de prazos concluídos</p>
+              <div className="space-y-2.5">
+                {visibleCompletedDeadlines.map((d) => {
+                  const { day, month } = formatDayMonth(d.due_date);
+                  return (
+                    <div key={d.id} className="flex items-center gap-3 opacity-75">
+                      <div className="w-9 text-center shrink-0">
+                        <p className="text-sm font-bold leading-none">{day}</p>
+                        <p className="text-[10px] text-slate">{month}</p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium truncate line-through">{d.title}</p>
+                        {d.subject_name && <p className="text-[10px] text-slate truncate">{d.subject_name}</p>}
+                      </div>
+                      <button
+                        onClick={() => dashboard.updateDeadline({ deadlineId: d.id, patch: { done: false } })}
+                        className="text-[10px] font-semibold text-brand-600 dark:text-brand-500 shrink-0"
+                      >
+                        Reabrir
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           <button
@@ -561,6 +601,14 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
 
       {studyModalOpen && <StudySessionModal onClose={() => setStudyModalOpen(false)} onCreate={dashboard.logStudySession} />}
 
+      {educationEditOpen && (
+        <EducationEditModal
+          education={education}
+          onClose={() => setEducationEditOpen(false)}
+          onSave={(patch) => updateEducation({ id: education.id, patch })}
+        />
+      )}
+
       {confirmDeleteEducation && (
         <ModalWrap title={`Excluir "${education.course_name}"?`} onClose={() => setConfirmDeleteEducation(false)}>
           <p className="text-xs text-slate mb-4">
@@ -648,6 +696,86 @@ function ModalWrap({ title, onClose, children }: { title: string; onClose: () =>
         {children}
       </div>
     </div>
+  );
+}
+
+function EducationEditModal({
+  education,
+  onClose,
+  onSave,
+}: {
+  education: Education;
+  onClose: () => void;
+  onSave: (patch: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [kind, setKind] = useState<EducationKind>(education.kind);
+  const [courseName, setCourseName] = useState(education.course_name);
+  const [institution, setInstitution] = useState(education.institution ?? "");
+  const [startedAt, setStartedAt] = useState(education.started_at?.slice(0, 10) ?? "");
+  const [expectedEndAt, setExpectedEndAt] = useState(education.expected_end_at?.slice(0, 10) ?? "");
+  const [notes, setNotes] = useState(education.notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!courseName.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        kind,
+        courseName: courseName.trim(),
+        institution: institution.trim() || null,
+        startedAt: startedAt || null,
+        expectedEndAt: expectedEndAt || null,
+        notes: notes.trim() || null,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a formação.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalWrap title="Editar formação" onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-slate">Tipo</label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as EducationKind)}
+            className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border"
+          >
+            {Object.entries(EDUCATION_KIND_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Field label="Nome do curso/formação" value={courseName} onChange={(e) => setCourseName(e.target.value)} />
+        <Field label="Instituição" value={institution} onChange={(e) => setInstitution(e.target.value)} />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Início" type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+          <Field label="Previsão" type="date" value={expectedEndAt} onChange={(e) => setExpectedEndAt(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-slate">Anotações</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            className="w-full mt-1.5 rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none resize-none"
+          />
+        </div>
+        {error && <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5">{error}</p>}
+        <Button onClick={handleSubmit} disabled={!courseName.trim() || saving} className="w-full">
+          {saving ? "Salvando..." : "Salvar formação"}
+        </Button>
+      </div>
+    </ModalWrap>
   );
 }
 
@@ -868,7 +996,7 @@ function AcademicProjectKanban({ project }: { project: AcademicProject }) {
         <div className="flex items-center gap-3">
           <div className="w-32">
             <div className="flex items-center justify-between text-[11px] text-slate mb-1">
-              <span>Progresso</span>
+              <span>Tarefas concluídas</span>
               <span>{project.progress_pct}%</span>
             </div>
             <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">

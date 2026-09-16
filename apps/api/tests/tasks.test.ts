@@ -27,9 +27,33 @@ describe("Tarefas", () => {
     const patch = await agent.patch(`/api/tasks/${created.body.id}`).send({ status: "Concluído" });
     expect(patch.status).toBe(200);
     expect(patch.body.status).toBe("Concluído");
+    expect(patch.body.completed_at).not.toBeNull();
+
+    const reopened = await agent.patch(`/api/tasks/${created.body.id}`).send({ status: "Em Andamento" });
+    expect(reopened.status).toBe(200);
+    expect(reopened.body.completed_at).toBeNull();
 
     const removed = await agent.delete(`/api/tasks/${created.body.id}`);
     expect(removed.status).toBe(204);
+  });
+
+  it("mover no Kanban para Concluído grava completed_at e reabrir limpa a conclusão", async () => {
+    const { agent } = await createAuthenticatedAgent();
+
+    const created = await agent.post("/api/tasks").send({ title: "Mover pelo Kanban" });
+    const doneMove = await agent.patch(`/api/tasks/${created.body.id}/move`).send({ status: "Concluído" });
+    expect(doneMove.status).toBe(204);
+
+    const done = await agent.get(`/api/tasks/${created.body.id}`);
+    expect(done.body.status).toBe("Concluído");
+    expect(done.body.completed_at).not.toBeNull();
+
+    const reopenMove = await agent.patch(`/api/tasks/${created.body.id}/move`).send({ status: "A Fazer" });
+    expect(reopenMove.status).toBe(204);
+
+    const reopened = await agent.get(`/api/tasks/${created.body.id}`);
+    expect(reopened.body.status).toBe("A Fazer");
+    expect(reopened.body.completed_at).toBeNull();
   });
 
   it("recusa criar tarefa sem título", async () => {
