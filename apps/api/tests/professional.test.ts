@@ -75,4 +75,23 @@ describe("Área Profissional — Priority Score e anotações de trabalho", () =
     const del = await agent.delete(`/api/work-notes/${created.body.id}`);
     expect(del.status).toBe(204);
   });
+
+  it("inclui anotações de reunião profissional na timeline do usuário", async () => {
+    const { agent } = await createAuthenticatedAgent();
+
+    const created = await agent.post("/api/work-notes").send({
+      title: "Entrega da Qualificação",
+      content: "Definimos próximos passos.",
+      occurredAt: "2026-09-16",
+    });
+    expect(created.status).toBe(201);
+
+    const timeline = await agent.get("/api/analytics/timeline?from=2026-09-16&to=2026-09-16");
+    expect(timeline.status).toBe(200);
+    expect(
+      timeline.body.events.some((event: { type: string; id: string; label: string }) => (
+        event.type === "work_note" && event.id === created.body.id && event.label === "Entrega da Qualificação"
+      ))
+    ).toBe(true);
+  });
 });

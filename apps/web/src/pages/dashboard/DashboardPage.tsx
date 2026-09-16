@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend } from "recharts";
 import {
@@ -29,6 +29,7 @@ import {
   Smile,
   Trophy,
   Wand2,
+  Users,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
 import { useLifeScore, useAnalyticsOverview, useTimeline } from "@/hooks/useAnalytics";
@@ -83,6 +84,7 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   sleep: Moon,
   mood: Smile,
   water: Droplets,
+  work_note: Users,
 };
 
 function timelineLabel(e: TimelineEvent): string {
@@ -99,6 +101,8 @@ function timelineLabel(e: TimelineEvent): string {
       return "Sessão de foco";
     case "education":
       return `Disciplina concluída: ${e.label}`;
+    case "work_note":
+      return `Reunião/anotação: ${e.label}`;
     default:
       return e.label;
   }
@@ -174,7 +178,10 @@ export function DashboardPage() {
   const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
   const currentBook = books[0];
 
-  const weekGoalStat = goalStats?.periods.find((p) => p.period === "semanal") ?? null;
+  const goalPeriods = goalStats?.periods ?? [];
+  const goalPeriodsDone = goalPeriods.reduce((sum, period) => sum + period.doneCount, 0);
+  const goalPeriodsTotal = goalPeriods.reduce((sum, period) => sum + period.totalCount, 0);
+  const goalPeriodsPct = goalPeriodsTotal > 0 ? Math.round((goalPeriodsDone / goalPeriodsTotal) * 100) : 0;
   const nextMilestone = goalStats?.upcomingMilestones[0] ?? null;
 
   // Conquistas recentes (catálogo + troféus customizados), mais novas
@@ -237,12 +244,38 @@ export function DashboardPage() {
       });
   }, [reviewHistory]);
 
+  const scoreInsights = useMemo(() => {
+    const sorted = [...dims].sort((a, b) => a.value - b.value);
+    const weakest = sorted[0];
+    const strongest = sorted[sorted.length - 1];
+    const pagesPerDay = overview ? Math.round((overview.pagesRead / 14) * 10) / 10 : 0;
+    return { weakest, strongest, pagesPerDay };
+  }, [dims, overview]);
+
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto">
-      <div className="mb-6 flex items-center gap-2 flex-wrap">
-        <p className="font-display font-bold text-2xl">Olá, {user?.name?.split(" ")[0] ?? ""} 👋</p>
+    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+      <div className="mb-6 overflow-hidden rounded-2xl border border-brand-500/15 bg-gradient-to-br from-paper-raised via-brand-50 to-signal/10 p-5 shadow-card dark:border-ink-border dark:from-ink-raised dark:via-brand-700/10 dark:to-signal/10">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-display text-3xl font-bold tracking-tight">Olá, {user?.name?.split(" ")[0] ?? ""}</p>
+            <p className="mt-1 text-sm text-slate">Aqui está o retrato atual da sua rotina, com alertas práticos para o próximo movimento.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-white/70 px-3 py-2 dark:bg-white/10">
+              <p className="text-xl font-bold">{overall}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate">score</p>
+            </div>
+            <div className="rounded-xl bg-white/70 px-3 py-2 dark:bg-white/10">
+              <p className="text-xl font-bold">{tasksTodayDone}/{tasksToday.length}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate">hoje</p>
+            </div>
+            <div className="rounded-xl bg-white/70 px-3 py-2 dark:bg-white/10">
+              <p className="text-xl font-bold">{goalPeriodsDone}/{goalPeriodsTotal}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate">metas</p>
+            </div>
+          </div>
+        </div>
       </div>
-      <p className="text-sm text-slate -mt-4 mb-6">Aqui está o retrato atual da sua rotina. Continue evoluindo!</p>
 
       {/* Linha de stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
@@ -272,9 +305,27 @@ export function DashboardPage() {
         <StatTile
           tone="amber"
           icon={<Flag size={18} />}
-          label="Metas na semana"
-          value={weekGoalStat ? `${weekGoalStat.doneCount} / ${weekGoalStat.totalCount}` : "0 / 0"}
-          progressPct={weekGoalStat?.pct ?? 0}
+          label="Metas por período"
+          value={`${goalPeriodsDone} / ${goalPeriodsTotal}`}
+          progressPct={goalPeriodsPct}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 mb-4 lg:grid-cols-3">
+        <DashboardInsight
+          icon={<Sparkles size={15} />}
+          title="O score pede atenção"
+          description={`${scoreInsights.weakest?.dim ?? "Dimensão"} está com ${scoreInsights.weakest?.value ?? 0}/100. Um registro pequeno hoje já ajuda a puxar essa dimensão.`}
+        />
+        <DashboardInsight
+          icon={<TrendingUp size={15} />}
+          title="Seu ponto forte"
+          description={`${scoreInsights.strongest?.dim ?? "Dimensão"} está liderando com ${scoreInsights.strongest?.value ?? 0}/100. Mantenha o que já está funcionando.`}
+        />
+        <DashboardInsight
+          icon={<BookOpen size={15} />}
+          title="Leitura diária"
+          description={`Média dos últimos 14 dias: ${scoreInsights.pagesPerDay} páginas/dia. Se sua meta é 20 páginas, o score agora usa esse alvo diário.`}
         />
       </div>
 
@@ -337,9 +388,9 @@ export function DashboardPage() {
               title="Educação"
               description="Progresso médio das suas formações."
             />
-            <ExplainRow tone="pink" icon={<BookOpen size={14} />} title="Leitura" description="Progresso dos livros que você está lendo." />
+            <ExplainRow tone="pink" icon={<BookOpen size={14} />} title="Leitura" description="Meta diária de páginas quando cadastrada; senão progresso dos livros em leitura." />
             <ExplainRow tone="green" icon={<Repeat size={14} />} title="Hábitos" description="% de hábitos cumpridos hoje." />
-            <ExplainRow tone="teal" icon={<Flag size={14} />} title="Metas" description="Progresso médio das metas ativas." />
+            <ExplainRow tone="teal" icon={<Flag size={14} />} title="Metas" description="Progresso equilibrado entre metas semanais, mensais, semestrais e anuais." />
           </div>
           <p className="text-[11px] text-slate mt-4 pt-3 border-t border-paper-border dark:border-ink-border">
             💡 Todas as dimensões vêm de dados reais registrados no LifeOS — nada aqui é estimado.
@@ -726,7 +777,7 @@ function ExplainRow({
   description,
 }: {
   tone: "blue" | "purple" | "green" | "pink" | "teal" | "amber";
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
 }) {
@@ -741,3 +792,14 @@ function ExplainRow({
   );
 }
 
+function DashboardInsight({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <Card className="p-4">
+      <div className="mb-2 flex items-center gap-2 text-brand-600 dark:text-brand-400">
+        {icon}
+        <p className="text-sm font-semibold text-inherit">{title}</p>
+      </div>
+      <p className="text-xs leading-relaxed text-slate">{description}</p>
+    </Card>
+  );
+}

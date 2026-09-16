@@ -139,8 +139,50 @@ async function educationScore(db: Db, ownerId: string): Promise<DimensionScore> 
   return { score: clamp(scores.reduce((a, b) => a + b, 0) / scores.length), hasData: true };
 }
 
-/** Leitura: progresso médio (página atual / total) dos livros em leitura. */
-async function readingScore(db: Db, ownerId: string): Promise<DimensionScore> {
+function goalProgressScore(goal: { kind: string; status: string; target_value: number | null; current_value: number }) {
+  if (goal.status === "done") return 100;
+  if (goal.kind === "percentage") return clamp(goal.current_value);
+  if (goal.kind === "numeric" && goal.target_value) return clamp((goal.current_value / goal.target_value) * 100);
+  if (goal.kind === "binary") return 0;
+  return 0;
+}
+
+/**
+ * Leitura: se houver uma meta ativa de páginas/leitura (ex.: 20 páginas
+ * por dia), a nota usa páginas lidas hoje contra essa meta. Sem essa
+ * meta cadastrada, cai para o progresso real dos livros em leitura.
+ */
+async function readingScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
+  const readingGoal = await db.execute({
+    sql: `SELECT target_value FROM goals
+          WHERE owner_id = ?
+            AND status = 'active'
+            AND kind = 'numeric'
+            AND target_value IS NOT NULL
+            AND (
+              lower(COALESCE(unit, '')) LIKE '%pag%'
+              OR lower(COALESCE(unit, '')) LIKE '%pág%'
+              OR lower(title) LIKE '%leitura%'
+              OR lower(title) LIKE '%pagina%'
+              OR lower(title) LIKE '%página%'
+              OR lower(COALESCE(category, '')) LIKE '%leitura%'
+            )
+          ORDER BY
+            CASE WHEN lower(COALESCE(unit, '')) LIKE '%pag%' OR lower(COALESCE(unit, '')) LIKE '%pág%' THEN 0 ELSE 1 END,
+            target_value ASC
+          LIMIT 1`,
+    args: [ownerId],
+  });
+  const dailyTarget = Number((readingGoal.rows[0] as { target_value?: number } | undefined)?.target_value ?? 0);
+  if (dailyTarget > 0) {
+    const pagesToday = await scalar(
+      db,
+      "SELECT COALESCE(SUM(pages_read), 0) FROM reading_sessions WHERE owner_id = ? AND date(started_at) = date(?)",
+      [ownerId, date]
+    );
+    return { score: clamp((pagesToday / dailyTarget) * 100), hasData: true };
+  }
+
   const result = await db.execute({
     sql: `SELECT current_page, total_pages FROM books
           WHERE owner_id = ? AND status = 'Lendo' AND total_pages IS NOT NULL AND total_pages > 0`,
@@ -171,28 +213,63 @@ async function habitsScore(db: Db, ownerId: string, date: string): Promise<Dimen
   return { score: clamp((checkedIn / total) * 100), hasData: true };
 }
 
-/** Metas: progresso médio das metas ativas, conforme o tipo de cada uma. */
+/**
+ * Metas: calcula cada meta com sua lógica real e depois equilibra por
+ * período (semanal/mensal/semestral/anual). Assim uma meta semanal
+ * concluída e uma anual concluída contam como períodos vencidos, sem
+ * uma pilha de metas de um período diluir todos os outros.
+ */
 async function goalsScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const result = await db.execute({
-    sql: "SELECT kind, status, target_value, current_value FROM goals WHERE owner_id = ? AND status != 'abandoned'",
+    sql: "SELECT id, parent_goal_id, kind, status, target_value, current_value, period FROM goals WHERE owner_id = ? AND status != 'abandoned'",
     args: [ownerId],
   });
   const rows = result.rows as unknown as Array<{
+    id: string;
+    parent_goal_id: string | null;
     kind: string;
     status: string;
     target_value: number | null;
     current_value: number;
+    period: string | null;
   }>;
   if (rows.length === 0) return { score: 0, hasData: false };
 
-  const scores = rows.map((g) => {
-    if (g.status === "done") return 100;
-    if (g.kind === "percentage") return clamp(g.current_value);
-    if (g.kind === "numeric" && g.target_value) return clamp((g.current_value / g.target_value) * 100);
-    if (g.kind === "binary") return 0;
-    return 0; // task_based sem submetas resolvidas ainda entra como 0, nunca estimado
-  });
-  return { score: clamp(scores.reduce((a, b) => a + b, 0) / scores.length), hasData: true };
+  const childrenByParent = new Map<string, typeof rows>();
+  for (const goal of rows) {
+    if (!goal.parent_goal_id) continue;
+    const children = childrenByParent.get(goal.parent_goal_id) ?? [];
+    children.push(goal);
+    childrenByParent.set(goal.parent_goal_id, children);
+  }
+
+  const scoreCache = new Map<string, number>();
+  const scoreGoal = (goal: (typeof rows)[number]): number => {
+    if (scoreCache.has(goal.id)) return scoreCache.get(goal.id)!;
+    const children = childrenByParent.get(goal.id) ?? [];
+    const score =
+      goal.status === "done"
+        ? 100
+        : goal.kind === "task_based" && children.length > 0
+          ? clamp(children.reduce((sum, child) => sum + scoreGoal(child), 0) / children.length)
+          : goalProgressScore(goal);
+    scoreCache.set(goal.id, score);
+    return score;
+  };
+
+  const periodBuckets = new Map<string, number[]>();
+  for (const goal of rows) {
+    // Submetas alimentam a meta pai e não devem contar duas vezes no
+    // Life Score global, a menos que sejam metas soltas sem pai.
+    if (goal.parent_goal_id) continue;
+    const period = goal.period ?? "sem_periodo";
+    const bucket = periodBuckets.get(period) ?? [];
+    bucket.push(scoreGoal(goal));
+    periodBuckets.set(period, bucket);
+  }
+
+  const periodScores = [...periodBuckets.values()].map((scores) => scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  return { score: clamp(periodScores.reduce((sum, score) => sum + score, 0) / periodScores.length), hasData: true };
 }
 
 /**
@@ -223,7 +300,7 @@ export async function computeLifeScore(ownerId: string, date = new Date().toISOS
     productivityScore(db, ownerId),
     healthScore(db, ownerId, date).then(toHealthDimension),
     educationScore(db, ownerId),
-    readingScore(db, ownerId),
+    readingScore(db, ownerId, date),
     habitsScore(db, ownerId, date),
     professionalScore(db, ownerId),
     goalsScore(db, ownerId),

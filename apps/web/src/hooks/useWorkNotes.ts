@@ -8,7 +8,10 @@ export function useWorkNotes(limit = 30) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: [...WORK_NOTES_KEY, limit], queryFn: () => workNotesService.list(limit) });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: WORK_NOTES_KEY });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: WORK_NOTES_KEY });
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+  };
 
   const createNote = useMutation({ mutationFn: (input: WorkNoteInput) => workNotesService.create(input), onSuccess: invalidate });
   const removeNote = useMutation({ mutationFn: (id: string) => workNotesService.remove(id), onSuccess: invalidate });

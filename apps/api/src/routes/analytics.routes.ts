@@ -201,7 +201,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
 
-  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries, moodEntries, waterEntries] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes] = await Promise.all([
     // LEFT JOIN com projects: deixa claro a que projeto (profissional,
     // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
@@ -244,6 +244,10 @@ analyticsRouter.get("/timeline", async (req, res) => {
       sql: "SELECT id, amount_ml, recorded_at AS at FROM water_entries WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) <= date(?)",
       args: [ownerId, from, to],
     }),
+    db.execute({
+      sql: "SELECT id, title AS label, content, COALESCE(created_at, occurred_at) AS at, occurred_at FROM work_notes WHERE owner_id = ? AND date(occurred_at) >= date(?) AND date(occurred_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
   ]);
 
   type TimelineRow = Record<string, unknown> & { at: string };
@@ -259,6 +263,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(sleepEntries.rows).map((r) => ({ type: "sleep", icon: "🌙", label: "Dormir", ...r })),
     ...asRows(moodEntries.rows).map((r) => ({ type: "mood", icon: "🙂", label: "Humor e energia", ...r })),
     ...asRows(waterEntries.rows).map((r) => ({ type: "water", icon: "💧", label: "Água", ...r })),
+    ...asRows(workNotes.rows).map((r) => ({ type: "work_note", icon: "💼", ...r })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
   return res.json({ from, to, events });

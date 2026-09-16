@@ -26,6 +26,7 @@ export const achievementsService = {
 
 /** Nome do evento global disparado no window quando uma nova conquista é destravada — ver AchievementToast.tsx. */
 export const ACHIEVEMENT_UNLOCKED_EVENT = "lifeos:achievement-unlocked";
+export const ACHIEVEMENT_CREATED_EVENT = "lifeos:achievement-created";
 
 /**
  * Dispara a checagem de conquistas sem bloquear a ação que a chamou

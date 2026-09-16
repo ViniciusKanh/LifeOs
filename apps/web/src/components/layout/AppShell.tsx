@@ -32,6 +32,7 @@ import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
 import { QuickCaptureButton } from "./QuickCaptureButton";
+import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 
 // Frases curtas por área — só decoração de cabeçalho, sem dado
 // nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
@@ -176,6 +177,7 @@ export function AppShell() {
 
           <div className="flex items-center gap-2">
             <MobileGlobalSearch />
+            <AchievementHeaderPulse />
             <button
               onClick={() => setMode(isDark ? "light" : "dark")}
               className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border"
