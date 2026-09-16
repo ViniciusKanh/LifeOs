@@ -3,10 +3,15 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
+  createCustomNotificationTrigger,
+  deleteCustomNotificationTrigger,
   getNotificationTrigger,
   isNotificationTriggerEvent,
+  listCustomNotificationTriggers,
   listNotificationTriggers,
+  matchingCustomTasks,
   runTaskDeadlineTriggers,
+  updateCustomNotificationTrigger,
   updateNotificationTrigger,
 } from "../services/notificationTriggersService.js";
 
@@ -15,7 +20,7 @@ notificationsRouter.use(requireAuth);
 
 interface LiveNotification {
   id: string;
-  kind: "task_overdue" | "task_due_today" | "daily_insight" | "habit_pending" | "weekly_review_pending";
+  kind: "task_overdue" | "task_due_today" | "daily_insight" | "custom_trigger" | "habit_pending" | "weekly_review_pending";
   title: string;
   body: string;
   link: string;
@@ -28,6 +33,42 @@ const triggerPatchSchema = z.object({
   channelInApp: z.boolean().optional(),
   alertLevel: z.enum(["soft", "medium", "critical"]).optional(),
   active: z.boolean().optional(),
+});
+
+const customTriggerBaseSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  conditionType: z.enum(["task_due_in", "task_overdue_by"]),
+  days: z.number().int().min(0).max(365),
+  priority: z.enum(["Baixa", "Média", "Alta"]).nullable(),
+  channelEmail: z.boolean(),
+  channelPush: z.boolean(),
+  channelInApp: z.boolean(),
+  active: z.boolean(),
+});
+const customTriggerSchema = customTriggerBaseSchema.refine((rule) => rule.channelEmail || rule.channelPush || rule.channelInApp, {
+  message: "Escolha pelo menos um canal de aviso.",
+});
+
+notificationsRouter.get("/triggers/custom", async (req, res) => {
+  return res.json(await listCustomNotificationTriggers(req.user!.id));
+});
+
+notificationsRouter.post("/triggers/custom", async (req, res) => {
+  const parsed = customTriggerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Gatilho inválido." });
+  return res.status(201).json(await createCustomNotificationTrigger(req.user!.id, parsed.data));
+});
+
+notificationsRouter.patch("/triggers/custom/:id", async (req, res) => {
+  const parsed = customTriggerBaseSchema.partial().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Gatilho inválido." });
+  const updated = await updateCustomNotificationTrigger(req.user!.id, req.params.id, parsed.data);
+  return updated ? res.json(updated) : res.status(404).json({ error: "Gatilho não encontrado." });
+});
+
+notificationsRouter.delete("/triggers/custom/:id", async (req, res) => {
+  const deleted = await deleteCustomNotificationTrigger(req.user!.id, req.params.id);
+  return deleted ? res.status(204).send() : res.status(404).json({ error: "Gatilho não encontrado." });
 });
 
 function mondayOf(date = new Date()): string {
@@ -144,6 +185,19 @@ notificationsRouter.get("/live", async (req, res) => {
       body: insight.text,
       link: "/dashboard",
       severity: severityFromAlertLevel(dailyInsightRule.alertLevel),
+    });
+  }
+  const customRules = await listCustomNotificationTriggers(ownerId);
+  for (const rule of customRules.filter((item) => item.active && item.channelInApp)) {
+    const tasks = await matchingCustomTasks(ownerId, rule, today);
+    if (tasks.length === 0) continue;
+    notifications.push({
+      id: `custom_${rule.id}_${today}`,
+      kind: "custom_trigger",
+      title: rule.name,
+      body: tasks.slice(0, 3).map((task) => task.title).join(", "),
+      link: "/tarefas",
+      severity: rule.conditionType === "task_overdue_by" ? "alta" : "media",
     });
   }
   if ((pendingHabits.rows as unknown[]).length > 0) {

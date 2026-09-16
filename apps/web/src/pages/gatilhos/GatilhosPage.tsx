@@ -7,15 +7,29 @@ import {
   Mail,
   Mails,
   Play,
+  Plus,
   Smartphone,
   Sparkles,
+  Trash2,
   Trophy,
   Zap,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useNotificationTriggers } from "@/hooks/useNotifications";
 import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
-import type { NotificationAlertLevel, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
+import { Switch } from "@/components/ui/Switch";
+import type { CustomNotificationTrigger, NotificationAlertLevel, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
+
+const emptyCustomTrigger: Omit<CustomNotificationTrigger, "id"> = {
+  name: "",
+  conditionType: "task_due_in",
+  days: 1,
+  priority: null,
+  channelEmail: false,
+  channelPush: false,
+  channelInApp: true,
+  active: true,
+};
 
 const EVENT_ICON: Record<NotificationTriggerEvent, typeof BellRing> = {
   task_overdue: AlertTriangle,
@@ -40,8 +54,11 @@ const ALERT_LABEL: Record<NotificationAlertLevel, string> = {
 };
 
 export function GatilhosPage() {
-  const { triggers, isLoading, updateTrigger, isUpdating, runTriggers, isRunning } = useNotificationTriggers();
+  const { triggers, customTriggers, isLoading, updateTrigger, isUpdating, runTriggers, isRunning, createCustomTrigger, updateCustomTrigger, deleteCustomTrigger } = useNotificationTriggers();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [customForm, setCustomForm] = useState(emptyCustomTrigger);
+  const [savingCustom, setSavingCustom] = useState(false);
 
   const activeCount = triggers.filter((trigger) => trigger.active).length;
   const emailCount = triggers.filter((trigger) => trigger.active && trigger.channelEmail).length;
@@ -68,6 +85,37 @@ export function GatilhosPage() {
       });
     } catch (err) {
       setMessage({ ok: false, text: err instanceof Error ? err.message : "Não foi possível testar os gatilhos." });
+    }
+  }
+
+  async function saveCustom() {
+    setMessage(null);
+    setSavingCustom(true);
+    try {
+      await createCustomTrigger({ ...customForm, name: customForm.name.trim() });
+      setCustomForm(emptyCustomTrigger);
+      setCreating(false);
+      setMessage({ ok: true, text: "Gatilho criado." });
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof Error ? err.message : "Não foi possível criar o gatilho." });
+    } finally {
+      setSavingCustom(false);
+    }
+  }
+
+  async function toggleCustom(rule: CustomNotificationTrigger) {
+    try {
+      await updateCustomTrigger({ id: rule.id, patch: { active: !rule.active } });
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof Error ? err.message : "Não foi possível atualizar o gatilho." });
+    }
+  }
+
+  async function removeCustom(rule: CustomNotificationTrigger) {
+    try {
+      await deleteCustomTrigger(rule.id);
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof Error ? err.message : "Não foi possível excluir o gatilho." });
     }
   }
 
@@ -119,6 +167,52 @@ export function GatilhosPage() {
           : triggers.map((trigger) => <TriggerCard key={trigger.id} trigger={trigger} disabled={isUpdating} onPatch={(patchData) => patch(trigger, patchData)} />)}
       </div>
 
+      <section className="mt-8 border-t border-paper-border pt-6 dark:border-ink-border">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Meus gatilhos condicionais</h2>
+            <p className="text-xs text-slate">Avisos para tarefas conforme prazo e prioridade.</p>
+          </div>
+          <Button onClick={() => setCreating((value) => !value)}><Plus size={15} /> Novo gatilho</Button>
+        </div>
+
+        {creating && <div className="mb-4 grid gap-4 rounded-lg border border-paper-border bg-paper-raised p-4 dark:border-ink-border dark:bg-ink-raised md:grid-cols-2">
+          <label className="text-xs font-semibold">Nome do alerta
+            <input value={customForm.name} onChange={(event) => setCustomForm({ ...customForm, name: event.target.value })} maxLength={80} placeholder="Ex.: Entrega importante amanhã" className="mt-1 block w-full rounded-lg border border-paper-border bg-paper px-3 py-2 text-sm dark:border-ink-border dark:bg-ink" />
+          </label>
+          <label className="text-xs font-semibold">Condição
+            <select value={customForm.conditionType} onChange={(event) => setCustomForm({ ...customForm, conditionType: event.target.value as CustomNotificationTrigger["conditionType"] })} className="mt-1 block w-full rounded-lg border border-paper-border bg-paper px-3 py-2 text-sm dark:border-ink-border dark:bg-ink">
+              <option value="task_due_in">Tarefa vence em</option>
+              <option value="task_overdue_by">Tarefa atrasada há</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold">Dias
+            <input type="number" min={0} max={365} value={customForm.days} onChange={(event) => setCustomForm({ ...customForm, days: Number(event.target.value) })} className="mt-1 block w-full rounded-lg border border-paper-border bg-paper px-3 py-2 text-sm dark:border-ink-border dark:bg-ink" />
+          </label>
+          <label className="text-xs font-semibold">Prioridade
+            <select value={customForm.priority ?? ""} onChange={(event) => setCustomForm({ ...customForm, priority: (event.target.value || null) as CustomNotificationTrigger["priority"] })} className="mt-1 block w-full rounded-lg border border-paper-border bg-paper px-3 py-2 text-sm dark:border-ink-border dark:bg-ink">
+              <option value="">Todas</option><option value="Alta">Alta</option><option value="Média">Média</option><option value="Baixa">Baixa</option>
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-2 md:col-span-2">
+            <ChannelButton icon={<Mail size={14} />} label="E-mail" active={customForm.channelEmail} disabled={false} onClick={() => setCustomForm({ ...customForm, channelEmail: !customForm.channelEmail })} />
+            <ChannelButton icon={<Smartphone size={14} />} label="Push" active={customForm.channelPush} disabled={false} onClick={() => setCustomForm({ ...customForm, channelPush: !customForm.channelPush })} />
+            <ChannelButton icon={<BellRing size={14} />} label="App" active={customForm.channelInApp} disabled={false} onClick={() => setCustomForm({ ...customForm, channelInApp: !customForm.channelInApp })} />
+          </div>
+          <div className="flex justify-end gap-2 md:col-span-2"><Button variant="secondary" onClick={() => setCreating(false)}>Cancelar</Button><Button onClick={saveCustom} disabled={savingCustom || customForm.name.trim().length < 2 || !Number.isInteger(customForm.days) || customForm.days < 0 || customForm.days > 365 || !(customForm.channelEmail || customForm.channelPush || customForm.channelInApp)}>Salvar gatilho</Button></div>
+        </div>}
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {customTriggers.map((rule) => <div key={rule.id} className="flex items-center gap-3 rounded-lg border border-paper-border bg-paper-raised p-4 dark:border-ink-border dark:bg-ink-raised">
+            <IconBadge tone={rule.conditionType === "task_due_in" ? "blue" : "amber"} icon={rule.conditionType === "task_due_in" ? <Clock3 size={16} /> : <AlertTriangle size={16} />} size={36} />
+            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{rule.name}</p><p className="text-xs text-slate">{rule.conditionType === "task_due_in" ? "Vence em" : "Atrasada há"} {rule.days} dia(s){rule.priority ? ` · ${rule.priority}` : ""} · {[rule.channelEmail && "E-mail", rule.channelPush && "Push", rule.channelInApp && "App"].filter(Boolean).join(", ")}</p></div>
+            <Switch checked={rule.active} onChange={() => toggleCustom(rule)} label={`${rule.active ? "Desativar" : "Ativar"} ${rule.name}`} />
+            <button onClick={() => removeCustom(rule)} title={`Excluir ${rule.name}`} className="rounded-md p-2 text-slate hover:bg-drop/10 hover:text-drop"><Trash2 size={16} /></button>
+          </div>)}
+          {customTriggers.length === 0 && <p className="text-sm text-slate">Nenhum gatilho condicional cadastrado.</p>}
+        </div>
+      </section>
+
       <Card className="mt-4 p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -159,17 +253,7 @@ function TriggerCard({
             <p className="mt-0.5 text-xs leading-relaxed text-slate">{trigger.description}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => onPatch({ active: !trigger.active })}
-          disabled={disabled}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-            trigger.active ? "bg-growth" : "bg-paper-border dark:bg-ink-border"
-          }`}
-          title={trigger.active ? "Desativar gatilho" : "Ativar gatilho"}
-        >
-          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${trigger.active ? "translate-x-5" : "translate-x-0.5"}`} />
-        </button>
+        <Switch checked={trigger.active} onChange={() => onPatch({ active: !trigger.active })} disabled={disabled} label={`${trigger.active ? "Desativar" : "Ativar"} ${trigger.label}`} />
       </div>
 
       <div className={`mt-4 grid gap-2 ${trigger.eventType === "weekly_summary" ? "grid-cols-1" : "grid-cols-3"}`}>

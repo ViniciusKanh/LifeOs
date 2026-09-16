@@ -77,6 +77,73 @@ export interface TriggerDeliveryInput {
   ctaLabel?: string;
 }
 
+export interface CustomNotificationTrigger {
+  id: string;
+  name: string;
+  conditionType: "task_due_in" | "task_overdue_by";
+  days: number;
+  priority: "Baixa" | "Média" | "Alta" | null;
+  channelEmail: boolean;
+  channelPush: boolean;
+  channelInApp: boolean;
+  active: boolean;
+}
+
+function customRow(row: Record<string, unknown>): CustomNotificationTrigger {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    conditionType: row.condition_type as CustomNotificationTrigger["conditionType"],
+    days: Number(row.days),
+    priority: (row.priority as CustomNotificationTrigger["priority"]) ?? null,
+    channelEmail: Number(row.channel_email) === 1,
+    channelPush: Number(row.channel_push) === 1,
+    channelInApp: Number(row.channel_in_app) === 1,
+    active: Number(row.active) === 1,
+  };
+}
+
+export async function listCustomNotificationTriggers(ownerId: string): Promise<CustomNotificationTrigger[]> {
+  const result = await getDb().execute({
+    sql: "SELECT * FROM custom_notification_triggers WHERE owner_id = ? ORDER BY created_at DESC",
+    args: [ownerId],
+  });
+  return result.rows.map((row) => customRow(row as Record<string, unknown>));
+}
+
+export async function createCustomNotificationTrigger(ownerId: string, input: Omit<CustomNotificationTrigger, "id">) {
+  const id = nanoid();
+  await getDb().execute({
+    sql: `INSERT INTO custom_notification_triggers
+          (id, owner_id, name, condition_type, days, priority, channel_email, channel_push, channel_in_app, active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, ownerId, input.name, input.conditionType, input.days, input.priority,
+      input.channelEmail ? 1 : 0, input.channelPush ? 1 : 0, input.channelInApp ? 1 : 0, input.active ? 1 : 0],
+  });
+  return { id, ...input };
+}
+
+export async function updateCustomNotificationTrigger(ownerId: string, id: string, patch: Partial<Omit<CustomNotificationTrigger, "id">>) {
+  const existing = (await listCustomNotificationTriggers(ownerId)).find((item) => item.id === id);
+  if (!existing) return null;
+  const next = { ...existing, ...patch };
+  await getDb().execute({
+    sql: `UPDATE custom_notification_triggers SET name = ?, condition_type = ?, days = ?, priority = ?,
+          channel_email = ?, channel_push = ?, channel_in_app = ?, active = ? WHERE id = ? AND owner_id = ?`,
+    args: [next.name, next.conditionType, next.days, next.priority,
+      next.channelEmail ? 1 : 0, next.channelPush ? 1 : 0, next.channelInApp ? 1 : 0, next.active ? 1 : 0, id, ownerId],
+  });
+  return next;
+}
+
+export async function deleteCustomNotificationTrigger(ownerId: string, id: string) {
+  const result = await getDb().execute({
+    sql: "DELETE FROM custom_notification_triggers WHERE id = ? AND owner_id = ?",
+    args: [id, ownerId],
+  });
+  return result.rowsAffected > 0;
+}
+
 function rowToTrigger(row: {
   id: string;
   event_type: NotificationTriggerEvent;
@@ -193,7 +260,7 @@ export async function updateNotificationTrigger(
   return updated;
 }
 
-async function markDelivered(db: Db, ownerId: string, eventType: NotificationTriggerEvent, sourceId: string, channel: "email" | "push" | "in_app", date: string): Promise<string | null> {
+async function markDelivered(db: Db, ownerId: string, eventType: string, sourceId: string, channel: "email" | "push" | "in_app", date: string): Promise<string | null> {
   const id = nanoid();
   const result = await db.execute({
     sql: `INSERT OR IGNORE INTO notification_delivery_log (id, owner_id, event_type, source_id, channel, delivered_on)
@@ -201,6 +268,57 @@ async function markDelivered(db: Db, ownerId: string, eventType: NotificationTri
     args: [id, ownerId, eventType, sourceId, channel, date],
   });
   return result.rowsAffected > 0 ? id : null;
+}
+
+export async function matchingCustomTasks(ownerId: string, rule: CustomNotificationTrigger, date: string) {
+  const db = getDb();
+  const dueExpression = rule.conditionType === "task_due_in"
+    ? "date(due_date) = date(?, '+' || ? || ' days')"
+    : rule.days === 0
+      ? "date(due_date) < date(?)"
+      : "date(due_date) = date(?, '-' || ? || ' days')";
+  const args: Array<string | number | null> = [ownerId, date];
+  if (rule.conditionType === "task_due_in" || rule.days > 0) args.push(rule.days);
+  args.push(rule.priority);
+  const result = await db.execute({
+    sql: `SELECT id, title, due_date FROM tasks WHERE owner_id = ? AND status != 'Concluído'
+          AND due_date IS NOT NULL AND ${dueExpression} AND (? IS NULL OR priority = ?)
+          ORDER BY due_date ASC LIMIT 10`,
+    args: [...args, rule.priority],
+  });
+  return result.rows as unknown as Array<{ id: string; title: string; due_date: string }>;
+}
+
+async function dispatchCustomTaskTrigger(ownerId: string, rule: CustomNotificationTrigger, tasks: Array<{ id: string; title: string }>, date: string) {
+  const db = getDb();
+  const event = `custom_${rule.id}`;
+  const source = `${rule.id}_${date}`;
+  const body = tasks.slice(0, 4).map((task) => task.title).join(", ");
+  const user = await db.execute({ sql: "SELECT email, email_verified FROM users WHERE id = ?", args: [ownerId] });
+  const recipient = user.rows[0] as { email?: string; email_verified?: number } | undefined;
+  let emailSent = false;
+  let pushSent = 0;
+  if (rule.channelEmail && recipient?.email && Number(recipient.email_verified) === 1) {
+    const id = await markDelivered(db, ownerId, event, source, "email", date);
+    if (id) {
+      const email = notificationTriggerEmail({ title: rule.name, body, path: "/tarefas", ctaLabel: "Ver tarefas" });
+      emailSent = await sendMail({ to: recipient.email, ...email });
+      if (!emailSent) await releaseFailedDelivery(db, id);
+    }
+  }
+  if (rule.channelPush) {
+    const id = await markDelivered(db, ownerId, event, source, "push", date);
+    if (id) {
+      try {
+        pushSent = (await sendPushToUser(ownerId, { title: rule.name, body, url: "/tarefas" })).sent;
+        if (pushSent === 0) await releaseFailedDelivery(db, id);
+      } catch (err) {
+        console.error("[trigger] falha ao enviar push customizado:", err);
+        await releaseFailedDelivery(db, id);
+      }
+    }
+  }
+  return { emailSent, pushSent };
 }
 
 async function releaseFailedDelivery(db: Db, id: string) {
@@ -298,6 +416,14 @@ export async function runTaskDeadlineTriggers(ownerId: string, date = new Date()
       ctaLabel: "Planejar agora",
     });
     results.push({ eventType: "task_due_today", count: dueRows.length, emailSent: delivered.emailSent, pushSent: delivered.pushSent });
+  }
+
+  const customRules = await listCustomNotificationTriggers(ownerId);
+  for (const rule of customRules.filter((item) => item.active)) {
+    const tasks = await matchingCustomTasks(ownerId, rule, date);
+    if (tasks.length === 0) continue;
+    const delivered = await dispatchCustomTaskTrigger(ownerId, rule, tasks, date);
+    results.push({ eventType: rule.conditionType === "task_due_in" ? "task_due_today" : "task_overdue", count: tasks.length, ...delivered });
   }
 
   return { date, results };
