@@ -703,6 +703,17 @@ export interface CustomAchievementMetricOption {
 }
 
 export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight";
+export interface CustomNotificationTrigger {
+  id: string;
+  name: string;
+  conditionType: "task_due_in" | "task_overdue_by";
+  days: number;
+  priority: "Baixa" | "Média" | "Alta" | null;
+  channelEmail: boolean;
+  channelPush: boolean;
+  channelInApp: boolean;
+  active: boolean;
+}
 export type NotificationAlertLevel = "soft" | "medium" | "critical";
 
 export interface NotificationTriggerRule {

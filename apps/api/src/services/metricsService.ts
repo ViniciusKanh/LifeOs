@@ -86,25 +86,26 @@ async function professionalScore(db: Db, ownerId: string): Promise<DimensionScor
   return { score: clamp((done / total) * 100), hasData: true };
 }
 
-/** Saúde: média de água hoje, qualidade do último sono e se houve exercício hoje. */
+/** Saúde diária: quatro registros verificáveis, com os mesmos alvos exibidos na tela. */
 async function healthScore(db: Db, ownerId: string, date: string): Promise<number> {
   const waterMl = await scalar(
     db,
     "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
     [ownerId, date]
   );
-  const waterScore = clamp((waterMl / 2000) * 100);
+  const waterScore = clamp((waterMl / 2500) * 100);
 
   const sleepRow = await db.execute({
-    sql: "SELECT quality, duration_minutes FROM sleep_entries WHERE owner_id = ? ORDER BY went_to_bed_at DESC LIMIT 1",
-    args: [ownerId],
+    sql: `SELECT quality, duration_minutes FROM sleep_entries
+          WHERE owner_id = ? AND date(went_to_bed_at) BETWEEN date(?, '-1 day') AND date(?)
+          ORDER BY went_to_bed_at DESC LIMIT 1`,
+    args: [ownerId, date, date],
   });
   const sleep = sleepRow.rows[0] as { quality?: number; duration_minutes?: number } | undefined;
-  const sleepScore = sleep?.quality
-    ? clamp(sleep.quality * 20)
-    : sleep?.duration_minutes
-      ? clamp((sleep.duration_minutes / 480) * 100)
-      : 0;
+  const sleepScore = sleep ? Math.max(
+    clamp((Number(sleep.duration_minutes ?? 0) / 480) * 100),
+    clamp(Number(sleep.quality ?? 0) * 20)
+  ) : 0;
 
   const workouts = await scalar(
     db,
@@ -112,8 +113,14 @@ async function healthScore(db: Db, ownerId: string, date: string): Promise<numbe
     [ownerId, date]
   );
   const workoutScore = workouts > 0 ? 100 : 0;
+  const moodCheckIns = await scalar(
+    db,
+    "SELECT COUNT(*) FROM mood_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
+    [ownerId, date]
+  );
+  const moodScore = moodCheckIns > 0 ? 100 : 0;
 
-  return clamp((waterScore + sleepScore + workoutScore) / 3);
+  return clamp((waterScore + sleepScore + workoutScore + moodScore) / 4);
 }
 
 /** Educação: progresso médio das formações a partir das tarefas dos projetos acadêmicos. */
@@ -141,7 +148,7 @@ async function educationScore(db: Db, ownerId: string): Promise<DimensionScore> 
 
 function goalProgressScore(goal: { kind: string; status: string; target_value: number | null; current_value: number }) {
   if (goal.status === "done") return 100;
-  if (goal.kind === "percentage") return clamp(goal.current_value);
+  if (goal.kind === "percentage" || goal.kind === "task_based") return clamp(goal.current_value);
   if (goal.kind === "numeric" && goal.target_value) return clamp((goal.current_value / goal.target_value) * 100);
   if (goal.kind === "binary") return 0;
   return 0;
@@ -219,12 +226,22 @@ async function habitsScore(db: Db, ownerId: string, date: string): Promise<Dimen
  * concluída e uma anual concluída contam como períodos vencidos, sem
  * uma pilha de metas de um período diluir todos os outros.
  */
-async function goalsScore(db: Db, ownerId: string): Promise<DimensionScore> {
+function goalPeriodStart(period: string | null, date: string) {
+  const year = date.slice(0, 4);
+  if (period === "anual") return `${year}-01-01`;
+  if (period === "semestral") return `${year}-${date.slice(5, 7) <= "06" ? "01" : "07"}-01`;
+  if (period === "mensal") return `${date.slice(0, 7)}-01`;
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() - (period === "semanal" ? (day.getUTCDay() + 6) % 7 : 29));
+  return day.toISOString().slice(0, 10);
+}
+
+async function goalsScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
   const result = await db.execute({
-    sql: "SELECT id, parent_goal_id, kind, status, target_value, current_value, period FROM goals WHERE owner_id = ? AND status != 'abandoned'",
+    sql: "SELECT id, parent_goal_id, kind, status, target_value, current_value, period, completed_at FROM goals WHERE owner_id = ? AND status != 'abandoned'",
     args: [ownerId],
   });
-  const rows = result.rows as unknown as Array<{
+  const rows = (result.rows as unknown as Array<{
     id: string;
     parent_goal_id: string | null;
     kind: string;
@@ -232,7 +249,8 @@ async function goalsScore(db: Db, ownerId: string): Promise<DimensionScore> {
     target_value: number | null;
     current_value: number;
     period: string | null;
-  }>;
+    completed_at: string | null;
+  }>).filter((goal) => goal.status !== "done" || (goal.completed_at && goal.completed_at.slice(0, 10) >= goalPeriodStart(goal.period, date) && goal.completed_at.slice(0, 10) <= date));
   if (rows.length === 0) return { score: 0, hasData: false };
 
   const childrenByParent = new Map<string, typeof rows>();
@@ -303,7 +321,7 @@ export async function computeLifeScore(ownerId: string, date = new Date().toISOS
     readingScore(db, ownerId, date),
     habitsScore(db, ownerId, date),
     professionalScore(db, ownerId),
-    goalsScore(db, ownerId),
+    goalsScore(db, ownerId, date),
   ]);
 
   // "overall" é a média só das dimensões com dado real (hasData). Uma

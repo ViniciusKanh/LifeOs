@@ -27,6 +27,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { usePush } from "@/hooks/usePush";
 import { useWeeklyEmail } from "@/hooks/useReviews";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
+import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { api } from "@/services/api";
 
@@ -450,16 +451,7 @@ function PushNotificationsCard() {
               <p className="text-sm font-medium">{isSubscribed ? "Ativadas neste dispositivo" : "Desativadas neste dispositivo"}</p>
               {permission === "denied" && <p className="text-[11px] text-drop mt-0.5">Bloqueadas nas configurações do navegador.</p>}
             </div>
-            <button
-              type="button"
-              onClick={handleToggle}
-              disabled={loading || permission === "denied"}
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
-                isSubscribed ? "bg-growth" : "bg-paper-border dark:bg-ink-border"
-              }`}
-            >
-              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${isSubscribed ? "translate-x-5" : "translate-x-0.5"}`} />
-            </button>
+            <Switch checked={isSubscribed} onChange={handleToggle} disabled={loading || permission === "denied"} label="Notificações push neste dispositivo" />
           </div>
 
           {error && <p className="text-xs text-drop mt-2">{error}</p>}
@@ -519,16 +511,7 @@ function WeeklyEmailCard() {
         <div className="min-w-0">
           <p className="text-sm font-medium">{enabled ? "Ativado" : "Desativado"}</p>
         </div>
-        <button
-          type="button"
-          onClick={handleToggle}
-          disabled={isLoading}
-          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
-            enabled ? "bg-growth" : "bg-paper-border dark:bg-ink-border"
-          }`}
-        >
-          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-        </button>
+        <Switch checked={enabled} onChange={handleToggle} disabled={isLoading} label="Resumo semanal por e-mail" />
       </div>
 
       <Button variant="secondary" className="w-full mt-3" onClick={handleSendNow} disabled={isSending}>

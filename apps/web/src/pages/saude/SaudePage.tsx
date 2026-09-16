@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Activity, Dumbbell, Droplets, HeartPulse, Loader2, Moon, ShieldCheck, Sun } from "lucide-react";
+import { Activity, Dumbbell, Droplets, HeartPulse, Loader2, Moon, Sun } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
 import { useHealthInsight } from "@/hooks/useCopilot";
@@ -94,13 +94,11 @@ export function SaudePage() {
 
   const workoutsThisWeek = useMemo(() => workouts.filter((entry) => parseHealthDate(entry.performed_at) >= weekStart), [workouts, weekStart]);
   const workoutsThisWeekMinutes = workoutsThisWeek.reduce((sum, entry) => sum + (entry.duration_minutes ?? 0), 0);
-  const workoutsPct = Math.round((workoutsThisWeekMinutes / 150) * 100);
   const workoutsWeekly = useMemo(() => weeklySeries(workouts, (entry) => entry.performed_at, () => 1, weekStart), [workouts, weekStart]);
 
   const moodThisWeek = useMemo(() => mood.filter((entry) => parseHealthDate(entry.recorded_at) >= weekStart), [mood, weekStart]);
   const moodWeekly = useMemo(() => weeklySeries(mood, (entry) => entry.recorded_at, (entry) => entry.mood, weekStart), [mood, weekStart]);
   const avgMoodWeek = average(moodThisWeek.map((entry) => entry.mood));
-  const moodPct = avgMoodWeek === null ? 0 : Math.round((avgMoodWeek / 5) * 100);
 
   const waterGoalDays = waterWeekly.filter((day) => day.value * 1000 >= WATER_GOAL_ML).length;
   const exerciseEnergyTrend = useMemo(() => {
@@ -123,16 +121,18 @@ export function SaudePage() {
   const moodBadge: HealthBadge =
     avgMoodWeek === null ? { label: "Sem registro", tone: "slate" } : avgMoodWeek >= 4 ? { label: "Bem hoje", tone: "green" } : avgMoodWeek >= 2.5 ? { label: "Estavel", tone: "amber" } : { label: "Atencao", tone: "slate" };
 
-  const vitalityScore = useMemo(() => {
-    const scores = [
-      waterToday.length > 0 ? boundedPct(waterPct) : null,
-      lastNightMinutes ? boundedPct(sleepPct) : null,
-      workoutsThisWeek.length > 0 ? boundedPct(workoutsPct) : null,
-      avgMoodWeek !== null ? boundedPct(moodPct) : null,
-    ].filter((score): score is number => score !== null);
-    if (scores.length === 0) return 0;
-    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
-  }, [avgMoodWeek, lastNightMinutes, moodPct, sleepPct, waterPct, waterToday.length, workoutsPct, workoutsThisWeek.length]);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const recentSleep = sleep.find((entry) => {
+    const key = localDateKey(entry.went_to_bed_at);
+    return key === today || key === yesterday;
+  });
+  const dailySleepPct = recentSleep ? Math.max(
+    boundedPct(((recentSleep.duration_minutes ?? 0) / SLEEP_GOAL_MINUTES) * 100),
+    boundedPct((recentSleep.quality ?? 0) * 20)
+  ) : 0;
+  const movedToday = workouts.some((entry) => localDateKey(entry.performed_at) === today);
+  const moodLoggedToday = mood.some((entry) => localDateKey(entry.recorded_at) === today);
+  const vitalityScore = Math.round((boundedPct(waterPct) + dailySleepPct + (movedToday ? 100 : 0) + (moodLoggedToday ? 100 : 0)) / 4);
 
   const healthPulse = useMemo(
     () =>
@@ -145,29 +145,6 @@ export function SaudePage() {
       })),
     [moodWeekly, sleepWeekly, waterWeekly, workoutsWeekly]
   );
-
-  const careSteps = [
-    {
-      icon: <Droplets size={14} />,
-      label: waterPct >= 100 ? "Água em dia" : `Faltam ${Math.max(0, WATER_GOAL_ML - waterTotal)}ml de água`,
-      done: waterPct >= 100,
-    },
-    {
-      icon: <Moon size={14} />,
-      label: lastNightMinutes ? `Sono: ${formatHM(lastNightMinutes)}` : "Registre sua última noite",
-      done: Boolean(lastNightMinutes && sleepPct >= 85),
-    },
-    {
-      icon: <Dumbbell size={14} />,
-      label: workoutsThisWeek.length > 0 ? `${workoutsThisWeek.length} treino(s) na semana` : "Movimente o corpo hoje",
-      done: workoutsThisWeek.length >= 3,
-    },
-    {
-      icon: <Sun size={14} />,
-      label: avgMoodWeek !== null ? `Humor médio ${avgMoodWeek.toFixed(1)}/5` : "Faça um check-in emocional",
-      done: Boolean(avgMoodWeek !== null && avgMoodWeek >= 4),
-    },
-  ];
 
   function openEdit(target: HealthEditTarget) {
     setHistoryOpen(null);
@@ -210,9 +187,9 @@ export function SaudePage() {
         <HealthHero
           vitalityScore={vitalityScore}
           waterPct={boundedPct(waterPct)}
-          sleepPct={boundedPct(sleepPct)}
-          workoutsPct={boundedPct(workoutsPct)}
-          moodPct={boundedPct(moodPct)}
+          sleepPct={dailySleepPct}
+          workoutsPct={movedToday ? 100 : 0}
+          moodPct={moodLoggedToday ? 100 : 0}
         />
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -258,12 +235,6 @@ export function SaudePage() {
             <LegendDot color="bg-signal" label="Humor" />
           </div>
         </Card>
-      </div>
-
-      <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
-        {careSteps.map((step) => (
-          <CareStep key={step.label} {...step} />
-        ))}
       </div>
 
       <div className="-mx-4 mb-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
@@ -413,64 +384,44 @@ function HealthHero({
   moodPct: number;
 }) {
   return (
-    <Card className="overflow-hidden border-0 bg-gradient-to-br from-[#19223A] via-[#2F416E] to-[#0D9488] p-6 text-white shadow-card">
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-center">
-        <div className="relative mx-auto flex h-48 w-48 items-center justify-center rounded-full border border-white/15 bg-white/10">
+    <section className="grid gap-6 border-y border-paper-border bg-paper py-6 dark:border-ink-border dark:bg-ink lg:grid-cols-[210px_1fr] lg:items-center">
+        <div className="relative mx-auto flex h-44 w-44 items-center justify-center rounded-full bg-paper-raised dark:bg-ink-raised">
           <div
             className="absolute inset-3 rounded-full"
-            style={{ background: `conic-gradient(#22B573 ${vitalityScore * 3.6}deg, rgba(255,255,255,.16) 0deg)` }}
+            style={{ background: `conic-gradient(#16a34a ${vitalityScore * 3.6}deg, #dce4e8 0deg)` }}
           />
-          <div className="relative flex h-36 w-36 flex-col items-center justify-center rounded-full bg-[#18213A]/92 text-center">
-            <HeartPulse size={24} className="mb-2 text-[#63E6BE]" />
+          <div className="relative flex h-32 w-32 flex-col items-center justify-center rounded-full bg-paper dark:bg-ink text-center">
+            <HeartPulse size={21} className="mb-1 text-growth" />
             <p className="font-display text-4xl font-bold leading-none">{vitalityScore}</p>
-            <p className="mt-1 text-xs text-white/70">vitalidade</p>
+            <p className="mt-1 text-xs text-slate">score de hoje</p>
           </div>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/65">Mapa de bem-estar</p>
-          <p className="mt-2 font-display text-2xl font-bold leading-tight">Sua saúde em uma leitura rápida.</p>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/82">
-            O índice mistura água de hoje, última noite de sono, movimento semanal e humor médio. Quanto mais registros, mais fiel ele fica.
-          </p>
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <p className="text-xs font-semibold uppercase text-growth">Bem-estar diário</p>
+          <p className="mt-1 font-display text-xl font-bold leading-tight">Quatro cuidados, um dia mais completo</p>
+          <p className="mt-1 text-xs text-slate">Água 2,5 L · sono 8 h ou qualidade 5/5 · movimento · registro de humor</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
             <HeroMetric icon={<Droplets size={14} />} label="Água" value={waterPct} />
             <HeroMetric icon={<Moon size={14} />} label="Sono" value={sleepPct} />
             <HeroMetric icon={<Dumbbell size={14} />} label="Movimento" value={workoutsPct} />
-            <HeroMetric icon={<Sun size={14} />} label="Humor" value={moodPct} />
+            <HeroMetric icon={<Sun size={14} />} label="Check-in" value={moodPct} />
           </div>
         </div>
-      </div>
-    </Card>
+    </section>
   );
 }
 
 function HeroMetric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
-    <div className="rounded-2xl bg-white/10 p-3">
+    <div className="rounded-md border border-paper-border bg-paper-raised p-3 dark:border-ink-border dark:bg-ink-raised">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold">
-        <span className="flex items-center gap-1.5 text-white/85">{icon}{label}</span>
+        <span className="flex items-center gap-1.5 text-slate">{icon}{label}</span>
         <span>{boundedPct(value)}%</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/16">
-        <div className="h-full rounded-full bg-white" style={{ width: `${boundedPct(value)}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-paper-border dark:bg-ink-border">
+        <div className="h-full rounded-full bg-growth" style={{ width: `${boundedPct(value)}%` }} />
       </div>
     </div>
-  );
-}
-
-function CareStep({ icon, label, done }: { icon: ReactNode; label: string; done: boolean }) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-start gap-3">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${done ? "bg-growth/10 text-growth" : "bg-signal/10 text-signal-deep"}`}>
-          {done ? <ShieldCheck size={15} /> : icon}
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">{done ? "Em dia" : "Próximo cuidado"}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-slate">{label}</p>
-        </div>
-      </div>
-    </Card>
   );
 }
 

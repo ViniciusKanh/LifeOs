@@ -40,4 +40,11 @@ describe("Push notifications (Web Push/VAPID)", () => {
     const afterRemove = await agent.get("/api/push/subscribe");
     expect(afterRemove.body.subscribed).toBe(false);
   });
+
+  it("explica quando o teste é pedido sem inscrição sincronizada", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const result = await agent.post("/api/push/test");
+    expect(result.status).toBe(409);
+    expect(result.body.error).toContain("ainda não foi inscrito");
+  });
 });

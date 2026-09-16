@@ -285,6 +285,15 @@ export function WeeklyReviewPage() {
   // (calculada em tempo real) — uma revisão já salva é um retrato fixo do
   // que foi registrado no momento do salvamento, sem trend para exibir.
   const changePct = !saved ? computed?.changePct : undefined;
+  const dimensionSignals = score ? [
+    { label: "Produtividade", value: score.productivity },
+    { label: "Saúde", value: score.health },
+    { label: "Educação", value: score.education },
+    { label: "Leitura", value: score.reading },
+    { label: "Hábitos", value: score.habits },
+  ].sort((a, b) => b.value - a.value) : [];
+  const strongest = dimensionSignals[0];
+  const weakest = dimensionSignals[dimensionSignals.length - 1];
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-4">
@@ -348,6 +357,11 @@ export function WeeklyReviewPage() {
           {new Date(saved.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "")}
         </p>
       )}
+
+      {score && <section className="grid gap-4 border-y border-paper-border py-5 dark:border-ink-border lg:grid-cols-2">
+        <div><p className="text-xs font-semibold text-brand-600">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold">{score.tasksCompleted} tarefas concluídas · {score.focusMinutes} min de foco</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para mostrar um ponto forte."} {weakest && weakest.label !== strongest?.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
+        <div className="space-y-2">{dimensionSignals.map((signal) => <div key={signal.label} className="grid grid-cols-[90px_1fr_34px] items-center gap-2 text-xs"><span className="text-slate">{signal.label}</span><div className="h-2 rounded-full bg-paper-border dark:bg-ink-border"><div className="h-full rounded-full bg-brand-500" style={{ width: `${signal.value}%` }} /></div><span className="text-right font-semibold">{signal.value}%</span></div>)}</div>
+      </section>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -542,35 +556,15 @@ export function WeeklyReviewPage() {
         </div>
 
         <div className="space-y-4">
-          <Card className="p-4 sm:p-5 md:p-6 bg-gradient-to-br from-brand-500 to-brand-700 border-transparent text-white">
-            <IconBadge icon={<Sparkles size={16} />} tone="amber" size={32} />
-            <p className="text-base font-semibold mt-3">Toda semana é uma nova chance</p>
-            <p className="text-xs text-white/85 mt-2 leading-relaxed">
-              Progresso não é sobre ser perfeito todos os dias — é sobre olhar para trás, aprender com o que aconteceu e ajustar o rumo. Cada
-              revisão semanal é um passo a mais na direção de onde você quer chegar.
-            </p>
-          </Card>
-
           <Card className="p-4 sm:p-5 md:p-6">
-            <p className="text-sm font-semibold mb-3">Dicas para sua revisão</p>
-            <div className="space-y-3">
-              <TipRow text="Seja honesto(a) — esta revisão é para você, não para impressionar ninguém." />
-              <TipRow text="Celebre pequenas vitórias: todo progresso conta, mesmo o que parece pequeno." />
-              <TipRow text="Foque em padrões, não em dias isolados — uma semana ruim não apaga o progresso." />
-              <TipRow text="Defina 2 ou 3 prioridades reais para a próxima semana em vez de uma lista longa." />
-            </div>
+            <div className="flex items-center gap-2"><IconBadge icon={<Sparkles size={16} />} tone="amber" size={32} /><p className="text-sm font-semibold">Copilot da revisão</p></div>
+            <p className="mt-3 text-xs leading-relaxed text-slate">O Gemini usa seus registros da semana para sugerir uma reflexão e prioridades. Você revisa antes de salvar.</p>
+            <Button className="mt-4 w-full" onClick={() => { setMode("edit"); void handleGenerateDraft(); }} disabled={isGeneratingDraft}><Wand2 size={14} /> {isGeneratingDraft ? "Analisando..." : "Analisar minha semana"}</Button>
+            {draftError && <p className="mt-2 text-xs text-drop">{draftError.message}</p>}
+            {changePct && <div className="mt-4 border-t border-paper-border pt-3 text-xs dark:border-ink-border"><p className="font-semibold">Comparado à semana anterior</p><p className="mt-1 text-slate">Tarefas: {changePct.tasksCompleted === null ? "sem base" : `${changePct.tasksCompleted > 0 ? "+" : ""}${changePct.tasksCompleted}%`} · Foco: {changePct.focusMinutes === null ? "sem base" : `${changePct.focusMinutes > 0 ? "+" : ""}${changePct.focusMinutes}%`}</p></div>}
           </Card>
         </div>
       </div>
-    </div>
-  );
-}
-
-function TipRow({ text }: { text: string }) {
-  return (
-    <div className="flex items-start gap-2.5 text-xs">
-      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
-      <p className="text-slate leading-relaxed">{text}</p>
     </div>
   );
 }

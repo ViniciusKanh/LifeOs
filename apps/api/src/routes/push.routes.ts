@@ -79,6 +79,14 @@ pushRouter.get("/subscribe", async (req, res) => {
 
 /** POST /api/push/test — envia um push de teste de verdade para todos os dispositivos inscritos do usuário logado. */
 pushRouter.post("/test", async (req, res) => {
+  const db = getDb();
+  const subscriptions = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM push_subscriptions WHERE owner_id = ?",
+    args: [req.user!.id],
+  });
+  if (Number(subscriptions.rows[0]?.n ?? 0) === 0) {
+    return res.status(409).json({ error: "Este navegador ainda não foi inscrito. Ative as notificações no Perfil e tente novamente." });
+  }
   let result: Awaited<ReturnType<typeof sendPushToUser>>;
   try {
     result = await sendPushToUser(req.user!.id, {
@@ -90,7 +98,7 @@ pushRouter.post("/test", async (req, res) => {
     return res.status(400).json({ error: message });
   }
   if (result.sent === 0) {
-    return res.status(400).json({ error: "Nenhuma inscrição ativa encontrada, ou o envio falhou. Ative as notificações primeiro." });
+    return res.status(502).json({ error: "A inscrição existe, mas o serviço de push não conseguiu entregar. Reative as notificações neste navegador e tente novamente." });
   }
   return res.json({ ok: true, ...result });
 });

@@ -1,9 +1,9 @@
 import { api } from "./api";
-import type { NotificationAlertLevel, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
+import type { CustomNotificationTrigger, NotificationAlertLevel, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
 
 export interface LiveNotification {
   id: string;
-  kind: "task_overdue" | "task_due_today" | "habit_pending" | "weekly_review_pending";
+  kind: "task_overdue" | "task_due_today" | "daily_insight" | "custom_trigger" | "habit_pending" | "weekly_review_pending";
   title: string;
   body: string;
   link: string;
@@ -13,6 +13,10 @@ export interface LiveNotification {
 export const notificationsService = {
   live: () => api.get<LiveNotification[]>("/notifications/live"),
   triggers: () => api.get<NotificationTriggerRule[]>("/notifications/triggers"),
+  customTriggers: () => api.get<CustomNotificationTrigger[]>("/notifications/triggers/custom"),
+  createCustomTrigger: (input: Omit<CustomNotificationTrigger, "id">) => api.post<CustomNotificationTrigger>("/notifications/triggers/custom", input),
+  updateCustomTrigger: (id: string, patch: Partial<Omit<CustomNotificationTrigger, "id">>) => api.patch<CustomNotificationTrigger>(`/notifications/triggers/custom/${id}`, patch),
+  deleteCustomTrigger: (id: string) => api.delete(`/notifications/triggers/custom/${id}`),
   updateTrigger: (
     eventType: NotificationTriggerEvent,
     patch: Partial<Pick<NotificationTriggerRule, "channelEmail" | "channelPush" | "channelInApp" | "active">> & {
