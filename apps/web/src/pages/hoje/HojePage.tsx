@@ -14,6 +14,7 @@ import {
   Repeat,
   Dumbbell,
   BookOpen,
+  Briefcase,
   Brain,
   GraduationCap,
   Wand2,
@@ -77,6 +78,7 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   sleep: Moon,
   mood: Smile,
   water: Droplets,
+  work_note: Briefcase,
 };
 
 function timelineLabel(e: TimelineEvent): string {
@@ -93,6 +95,8 @@ function timelineLabel(e: TimelineEvent): string {
       return "Sessão de foco";
     case "education":
       return `Disciplina concluída: ${e.label}`;
+    case "work_note":
+      return `Reunião/anotação: ${e.label}`;
     default:
       return e.label;
   }
@@ -539,4 +543,3 @@ const PRIORITY_TONE: Record<Task["priority"], string> = {
 function PriorityBadge({ priority }: { priority: Task["priority"] }) {
   return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${PRIORITY_TONE[priority]}`}>{priority}</span>;
 }
-

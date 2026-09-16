@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BookOpen,
+  Briefcase,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -37,6 +38,7 @@ const TYPE_CONFIG: Record<EventType, { tab: string; tag: string; tone: Tone; ico
   sleep: { tab: "Sono", tag: "Sono", tone: "purple", icon: Moon },
   mood: { tab: "Humor", tag: "Humor", tone: "amber", icon: Smile },
   water: { tab: "Água", tag: "Água", tone: "blue", icon: Droplets },
+  work_note: { tab: "Profissional", tag: "Profissional", tone: "purple", icon: Briefcase },
 };
 
 const TAG_PILL: Record<Tone, string> = {
@@ -62,6 +64,7 @@ const TABS: Array<{ value: EventType | "todos"; label: string }> = [
   { value: "task", label: "Tarefas" },
   { value: "habit", label: "Hábitos" },
   { value: "education", label: "Estudo" },
+  { value: "work_note", label: "Profissional" },
   { value: "workout", label: "Saúde" },
   { value: "focus", label: "Foco" },
   { value: "reading", label: "Leitura" },
@@ -110,6 +113,8 @@ function eventContent(e: TimelineEvent): { title: string; detail: string | null 
       return { title: "Sessão de foco", detail: e.actual_minutes ? `${e.actual_minutes} minutos` : null };
     case "education":
       return { title: "Disciplina concluída", detail: e.label };
+    case "work_note":
+      return { title: "Reunião/anotação profissional", detail: e.label };
     case "sleep":
       return { title: "Dormir", detail: e.duration_minutes ? `${formatMinutes(Number(e.duration_minutes))} de sono` : "Boa noite!" };
     default:
