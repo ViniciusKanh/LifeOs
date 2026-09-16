@@ -1,6 +1,14 @@
 import { Router } from "express";
+import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import {
+  getNotificationTrigger,
+  isNotificationTriggerEvent,
+  listNotificationTriggers,
+  runTaskDeadlineTriggers,
+  updateNotificationTrigger,
+} from "../services/notificationTriggersService.js";
 
 export const notificationsRouter = Router();
 notificationsRouter.use(requireAuth);
@@ -14,6 +22,14 @@ interface LiveNotification {
   severity: "alta" | "media" | "baixa";
 }
 
+const triggerPatchSchema = z.object({
+  channelEmail: z.boolean().optional(),
+  channelPush: z.boolean().optional(),
+  channelInApp: z.boolean().optional(),
+  alertLevel: z.enum(["soft", "medium", "critical"]).optional(),
+  active: z.boolean().optional(),
+});
+
 function mondayOf(date = new Date()): string {
   const d = new Date(date);
   const day = d.getUTCDay();
@@ -21,6 +37,34 @@ function mondayOf(date = new Date()): string {
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().slice(0, 10);
 }
+
+function severityFromAlertLevel(alertLevel: "soft" | "medium" | "critical"): "alta" | "media" | "baixa" {
+  if (alertLevel === "critical") return "alta";
+  if (alertLevel === "medium") return "media";
+  return "baixa";
+}
+
+notificationsRouter.get("/triggers", async (req, res) => {
+  const triggers = await listNotificationTriggers(req.user!.id);
+  return res.json(triggers);
+});
+
+notificationsRouter.patch("/triggers/:eventType", async (req, res) => {
+  if (!isNotificationTriggerEvent(req.params.eventType)) {
+    return res.status(404).json({ error: "Gatilho não encontrado." });
+  }
+  const parsed = triggerPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const updated = await updateNotificationTrigger(req.user!.id, req.params.eventType, parsed.data);
+  return res.json(updated);
+});
+
+notificationsRouter.post("/triggers/run", async (req, res) => {
+  const result = await runTaskDeadlineTriggers(req.user!.id);
+  return res.json(result);
+});
 
 /**
  * GET /api/notifications/live — notificações calculadas na hora a
@@ -33,6 +77,10 @@ notificationsRouter.get("/live", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
   const today = new Date().toISOString().slice(0, 10);
+  const [overdueRule, dueTodayRule] = await Promise.all([
+    getNotificationTrigger(ownerId, "task_overdue"),
+    getNotificationTrigger(ownerId, "task_due_today"),
+  ]);
 
   const [overdueTasks, dueTodayTasks, pendingHabits, weeklyReview] = await Promise.all([
     db.execute({
@@ -61,23 +109,25 @@ notificationsRouter.get("/live", async (req, res) => {
   const notifications: LiveNotification[] = [];
 
   for (const t of overdueTasks.rows as unknown as Array<{ id: string; title: string }>) {
+    if (!overdueRule.active || !overdueRule.channelInApp) continue;
     notifications.push({
       id: `task_overdue_${t.id}`,
       kind: "task_overdue",
       title: "Tarefa atrasada",
       body: t.title,
       link: "/tarefas",
-      severity: "alta",
+      severity: severityFromAlertLevel(overdueRule.alertLevel),
     });
   }
   for (const t of dueTodayTasks.rows as unknown as Array<{ id: string; title: string }>) {
+    if (!dueTodayRule.active || !dueTodayRule.channelInApp) continue;
     notifications.push({
       id: `task_due_${t.id}`,
       kind: "task_due_today",
       title: "Vence hoje",
       body: t.title,
       link: "/tarefas",
-      severity: "media",
+      severity: severityFromAlertLevel(dueTodayRule.alertLevel),
     });
   }
   if ((pendingHabits.rows as unknown[]).length > 0) {

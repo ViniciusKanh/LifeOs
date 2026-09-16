@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
-import { sendMail } from "./emailService.js";
+import { lifeOsEmailShell, sendMail } from "./emailService.js";
 import { changePct, computeLifeScore, computeRangeMetrics } from "./metricsService.js";
 
 /**
@@ -67,31 +67,30 @@ export function weeklySummaryEmail(input: {
 
   return {
     subject: `Seu resumo semanal — ${periodLabel}`,
-    html: `
-      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-        <h2 style="color:#1E2537;">Resumo da sua semana</h2>
-        <p style="color:#6B7280;font-size:13px;">${periodLabel}</p>
-
-        <div style="background:#F4F1EA;border-radius:12px;padding:16px 18px;margin:16px 0;">
-          <p style="margin:0;color:#6B7280;font-size:12px;">Life Score</p>
-          <p style="margin:2px 0 0;font-size:28px;font-weight:700;color:#1E2537;">${lifeScore.overall}</p>
+    html: lifeOsEmailShell({
+      preheader: `Seu Life Score da semana foi ${lifeScore.overall}/100.`,
+      eyebrow: periodLabel,
+      title: "Resumo da sua semana",
+      bodyHtml: `
+        <div style="background:linear-gradient(135deg,#F8F6FF,#FFF2E9);border:1px solid #EEE6DA;border-radius:18px;padding:18px;margin:4px 0 18px;">
+          <p style="margin:0;color:#6B7280;font-size:12px;font-weight:700;">Life Score</p>
+          <p style="margin:4px 0 0;font-size:34px;font-weight:800;color:#1E2537;letter-spacing:-.04em;">${lifeScore.overall}<span style="font-size:15px;color:#6B7280;font-weight:600;"> / 100</span></p>
         </div>
-
         <table style="width:100%;border-collapse:collapse;">
           ${row("Tarefas concluídas", `${metrics.tasksCompleted}`, fmtChange(changePctByMetric.tasksCompleted))}
           ${row("Minutos de estudo", `${metrics.studyMinutes}min`, fmtChange(changePctByMetric.studyMinutes))}
           ${row("Páginas lidas", `${metrics.pagesRead}`, fmtChange(changePctByMetric.pagesRead))}
-          ${row("Minutos de foco (Pomodoro)", `${metrics.focusMinutes}min`, fmtChange(changePctByMetric.focusMinutes))}
+          ${row("Minutos de foco", `${metrics.focusMinutes}min`, fmtChange(changePctByMetric.focusMinutes))}
           ${row("Hábitos concluídos", `${metrics.habitsDoneCount}/${metrics.habitsPossibleCount}`)}
           ${row("Produtividade", `${lifeScore.productivity}%`)}
           ${row("Saúde", `${lifeScore.health}%`)}
         </table>
-
-        <p style="color:#6B7280;font-size:12px;margin-top:20px;">
-          Continue registrando seus dados no LifeOS pra esse resumo ficar cada vez mais completo.
-          Você pode desativar esse e-mail a qualquer momento em Perfil → Resumo semanal por e-mail.
-        </p>
-      </div>`,
+        <p style="color:#6B7280;font-size:12px;margin:20px 0 0;">
+          Continue registrando seus dados para esse resumo ficar cada vez mais preciso.
+        </p>`,
+      ctaLabel: "Abrir Weekly Review",
+      ctaUrl: process.env.WEB_ORIGIN ? `${process.env.WEB_ORIGIN.replace(/\/$/, "")}/weekly-review` : undefined,
+    }),
   };
 }
 

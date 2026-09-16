@@ -59,6 +59,7 @@ const TimelinePage = lazy(() => import("@/pages/timeline/TimelinePage").then((m)
 const WeeklyReviewPage = lazy(() =>
   import("@/pages/weekly-review/WeeklyReviewPage").then((m) => ({ default: m.WeeklyReviewPage }))
 );
+const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
 
 function PageFallback() {
   return (
@@ -125,6 +126,7 @@ export default function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
+          <Route path="/gatilhos" element={<GatilhosPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route
             path="/configuracoes"

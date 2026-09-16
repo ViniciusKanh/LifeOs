@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { mondayOf, sendWeeklySummariesToAllOptedIn } from "../services/weeklyEmailService.js";
+import { runTaskDeadlineTriggersForAll } from "../services/notificationTriggersService.js";
 
 /**
  * Endpoints de cron — chamados por um agendador externo (Vercel Cron,
@@ -35,4 +36,12 @@ cronRouter.get("/weekly-emails", async (req, res) => {
 
   const result = await sendWeeklySummariesToAllOptedIn(weekStartDate);
   return res.json({ weekStartDate, ...result });
+});
+
+cronRouter.get("/notification-triggers", async (req, res) => {
+  if (!isAuthorized(req)) {
+    return res.status(401).json({ error: "Não autorizado." });
+  }
+  const result = await runTaskDeadlineTriggersForAll();
+  return res.json(result);
 });

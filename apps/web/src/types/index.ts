@@ -21,7 +21,7 @@ export interface AdminUser {
   updated_at: string;
 }
 
-export type AdminIntegration = "gemini" | "turso" | "smtp";
+export type AdminIntegration = "gemini" | "turso" | "smtp" | "push";
 
 export interface AdminSetting {
   id: string;
@@ -700,4 +700,20 @@ export interface CustomAchievement {
 export interface CustomAchievementMetricOption {
   value: string;
   label: string;
+}
+
+export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight";
+export type NotificationAlertLevel = "soft" | "medium" | "critical";
+
+export interface NotificationTriggerRule {
+  id: string;
+  eventType: NotificationTriggerEvent;
+  label: string;
+  description: string;
+  channelEmail: boolean;
+  channelPush: boolean;
+  channelInApp: boolean;
+  alertLevel: NotificationAlertLevel;
+  active: boolean;
+  updatedAt: string;
 }

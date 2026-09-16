@@ -22,8 +22,13 @@ const subscribeSchema = z.object({
  * faz sentido, mas mantemos a rota simples e sem fricção).
  */
 pushRouter.get("/vapid-public-key", async (_req, res) => {
-  const publicKey = await getVapidPublicKey();
-  return res.json({ publicKey });
+  try {
+    const publicKey = await getVapidPublicKey();
+    return res.json({ publicKey });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Não foi possível preparar as notificações push.";
+    return res.status(400).json({ error: message });
+  }
 });
 
 pushRouter.use(requireAuth);
@@ -74,12 +79,18 @@ pushRouter.get("/subscribe", async (req, res) => {
 
 /** POST /api/push/test — envia um push de teste de verdade para todos os dispositivos inscritos do usuário logado. */
 pushRouter.post("/test", async (req, res) => {
-  const result = await sendPushToUser(req.user!.id, {
-    title: "LifeOS",
-    body: "Notificações push estão funcionando! 🎉",
-  });
+  let result: Awaited<ReturnType<typeof sendPushToUser>>;
+  try {
+    result = await sendPushToUser(req.user!.id, {
+      title: "LifeOS",
+      body: "Notificações push estão funcionando!",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Não foi possível enviar a notificação de teste.";
+    return res.status(400).json({ error: message });
+  }
   if (result.sent === 0) {
-    return res.status(400).json({ error: "Nenhuma inscrição ativa encontrada (ou o envio falhou). Ative as notificações primeiro." });
+    return res.status(400).json({ error: "Nenhuma inscrição ativa encontrada, ou o envio falhou. Ative as notificações primeiro." });
   }
   return res.json({ ok: true, ...result });
 });

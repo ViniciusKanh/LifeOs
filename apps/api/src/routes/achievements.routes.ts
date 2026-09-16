@@ -11,7 +11,7 @@ import {
   type CustomAchievementMetric,
 } from "../services/achievementsService.js";
 import { createCustomAchievementSchema } from "../validators/custom-achievement.schema.js";
-import { sendPushToUser } from "../services/pushService.js";
+import { dispatchTriggerNotification } from "../services/notificationTriggersService.js";
 
 export const achievementsRouter = Router();
 achievementsRouter.use(requireAuth);
@@ -43,6 +43,15 @@ achievementsRouter.post("/custom", async (req, res) => {
     ...parsed.data,
     metric: parsed.data.metric as CustomAchievementMetric,
   });
+  if (created.unlockedAt) {
+    dispatchTriggerNotification(req.user!.id, "achievement_unlocked", {
+      title: "Conquista desbloqueada!",
+      body: created.title,
+      url: "/conquistas",
+      sourceId: `achievement_${created.id}`,
+      ctaLabel: "Ver conquista",
+    }).catch((err) => console.error("[trigger] falha ao notificar conquista customizada:", err));
+  }
   return res.status(201).json(created);
 });
 
@@ -67,14 +76,16 @@ achievementsRouter.post("/check", async (req, res) => {
   ]);
   const newlyUnlocked = [...newlyUnlockedCatalog, ...newlyUnlockedCustom];
 
-  // Push é "melhor esforço": nunca deve atrasar nem quebrar a resposta
+  // Gatilhos são "melhor esforço": nunca devem atrasar nem quebrar a resposta
   // do /check (o desbloqueio em si já foi gravado no banco acima).
   for (const achievement of newlyUnlocked) {
-    sendPushToUser(req.user!.id, {
-      title: "Conquista desbloqueada! 🏆",
+    dispatchTriggerNotification(req.user!.id, "achievement_unlocked", {
+      title: "Conquista desbloqueada!",
       body: achievement.title,
       url: "/conquistas",
-    }).catch((err) => console.error("[push] falha ao notificar conquista:", err));
+      sourceId: `achievement_${achievement.id}`,
+      ctaLabel: "Ver conquista",
+    }).catch((err) => console.error("[trigger] falha ao notificar conquista:", err));
   }
 
   return res.json({ newlyUnlocked });
