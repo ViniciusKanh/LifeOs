@@ -22,6 +22,7 @@ import {
   GanttChartSquare,
   Inbox,
   Briefcase,
+  BellRing,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -53,6 +54,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/analytics": "Dados transformam esforço em clareza.",
   "/timeline": "Disciplina de hoje, liberdade de amanhã.",
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
+  "/gatilhos": "O alerta certo na hora certa.",
 };
 const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 
@@ -77,6 +79,7 @@ const SECONDARY_NAV = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/timeline", label: "Timeline", icon: History },
   { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
+  { to: "/gatilhos", label: "Gatilhos", icon: BellRing },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {

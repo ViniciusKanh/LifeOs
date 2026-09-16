@@ -22,6 +22,7 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const hasHighAlert = notifications.some((n) => n.severity === "alta");
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -35,7 +36,11 @@ export function NotificationsBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+        className={`relative w-9 h-9 rounded-full flex items-center justify-center border transition-colors ${
+          hasHighAlert
+            ? "border-drop/40 bg-drop/10 text-drop shadow-[0_0_0_4px_rgba(240,68,94,.08)] animate-pulse"
+            : "border-paper-border dark:border-ink-border hover:bg-black/5 dark:hover:bg-white/10"
+        }`}
         title="Notificações"
       >
         <Bell size={16} />
@@ -64,7 +69,9 @@ export function NotificationsBell() {
                       setOpen(false);
                       navigate(n.link);
                     }}
-                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-black/5 dark:hover:bg-white/5 border-b border-paper-border/60 dark:border-ink-border/60 last:border-0"
+                    className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-black/5 dark:hover:bg-white/5 border-b border-paper-border/60 dark:border-ink-border/60 last:border-0 ${
+                      n.severity === "alta" ? "bg-drop/5" : ""
+                    }`}
                   >
                     <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${SEVERITY_DOT[n.severity]}`} />
                     <Icon size={15} className="text-slate shrink-0 mt-0.5" />

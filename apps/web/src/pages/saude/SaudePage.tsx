@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
-import { Dumbbell, Droplets, HeartPulse, Loader2, Moon, Sun } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Activity, Dumbbell, Droplets, HeartPulse, Loader2, Moon, ShieldCheck, Sun } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
 import { useHealthInsight } from "@/hooks/useCopilot";
-import { PageHeader } from "@/components/ui/primitives";
+import { Card, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { HealthEditModal, type HealthUpdatePatch } from "@/components/health/HealthEditModal";
 import { HealthStatCard, type HealthBadge } from "@/components/health/HealthStatCard";
 import { HealthHistoryModal, type HealthEditTarget, type HealthHistoryKind } from "@/components/health/HealthHistoryModal";
@@ -93,11 +94,13 @@ export function SaudePage() {
 
   const workoutsThisWeek = useMemo(() => workouts.filter((entry) => parseHealthDate(entry.performed_at) >= weekStart), [workouts, weekStart]);
   const workoutsThisWeekMinutes = workoutsThisWeek.reduce((sum, entry) => sum + (entry.duration_minutes ?? 0), 0);
+  const workoutsPct = Math.round((workoutsThisWeekMinutes / 150) * 100);
   const workoutsWeekly = useMemo(() => weeklySeries(workouts, (entry) => entry.performed_at, () => 1, weekStart), [workouts, weekStart]);
 
   const moodThisWeek = useMemo(() => mood.filter((entry) => parseHealthDate(entry.recorded_at) >= weekStart), [mood, weekStart]);
   const moodWeekly = useMemo(() => weeklySeries(mood, (entry) => entry.recorded_at, (entry) => entry.mood, weekStart), [mood, weekStart]);
   const avgMoodWeek = average(moodThisWeek.map((entry) => entry.mood));
+  const moodPct = avgMoodWeek === null ? 0 : Math.round((avgMoodWeek / 5) * 100);
 
   const waterGoalDays = waterWeekly.filter((day) => day.value * 1000 >= WATER_GOAL_ML).length;
   const exerciseEnergyTrend = useMemo(() => {
@@ -119,6 +122,52 @@ export function SaudePage() {
     workoutsThisWeek.length >= 3 ? { label: "Boa semana", tone: "green" } : workoutsThisWeek.length >= 1 ? { label: "Continue assim", tone: "amber" } : { label: "Bora se mexer", tone: "slate" };
   const moodBadge: HealthBadge =
     avgMoodWeek === null ? { label: "Sem registro", tone: "slate" } : avgMoodWeek >= 4 ? { label: "Bem hoje", tone: "green" } : avgMoodWeek >= 2.5 ? { label: "Estavel", tone: "amber" } : { label: "Atencao", tone: "slate" };
+
+  const vitalityScore = useMemo(() => {
+    const scores = [
+      waterToday.length > 0 ? boundedPct(waterPct) : null,
+      lastNightMinutes ? boundedPct(sleepPct) : null,
+      workoutsThisWeek.length > 0 ? boundedPct(workoutsPct) : null,
+      avgMoodWeek !== null ? boundedPct(moodPct) : null,
+    ].filter((score): score is number => score !== null);
+    if (scores.length === 0) return 0;
+    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  }, [avgMoodWeek, lastNightMinutes, moodPct, sleepPct, waterPct, waterToday.length, workoutsPct, workoutsThisWeek.length]);
+
+  const healthPulse = useMemo(
+    () =>
+      waterWeekly.map((day, index) => ({
+        label: day.label,
+        Agua: boundedPct((day.value * 1000 / WATER_GOAL_ML) * 100),
+        Sono: boundedPct((((sleepWeekly[index]?.value ?? 0) * 60) / SLEEP_GOAL_MINUTES) * 100),
+        Movimento: (workoutsWeekly[index]?.value ?? 0) > 0 ? 100 : 0,
+        Humor: boundedPct(((moodWeekly[index]?.value ?? 0) / 5) * 100),
+      })),
+    [moodWeekly, sleepWeekly, waterWeekly, workoutsWeekly]
+  );
+
+  const careSteps = [
+    {
+      icon: <Droplets size={14} />,
+      label: waterPct >= 100 ? "Água em dia" : `Faltam ${Math.max(0, WATER_GOAL_ML - waterTotal)}ml de água`,
+      done: waterPct >= 100,
+    },
+    {
+      icon: <Moon size={14} />,
+      label: lastNightMinutes ? `Sono: ${formatHM(lastNightMinutes)}` : "Registre sua última noite",
+      done: Boolean(lastNightMinutes && sleepPct >= 85),
+    },
+    {
+      icon: <Dumbbell size={14} />,
+      label: workoutsThisWeek.length > 0 ? `${workoutsThisWeek.length} treino(s) na semana` : "Movimente o corpo hoje",
+      done: workoutsThisWeek.length >= 3,
+    },
+    {
+      icon: <Sun size={14} />,
+      label: avgMoodWeek !== null ? `Humor médio ${avgMoodWeek.toFixed(1)}/5` : "Faça um check-in emocional",
+      done: Boolean(avgMoodWeek !== null && avgMoodWeek >= 4),
+    },
+  ];
 
   function openEdit(target: HealthEditTarget) {
     setHistoryOpen(null);
@@ -156,6 +205,66 @@ export function SaudePage() {
           Carregando seus registros de bem-estar...
         </div>
       )}
+
+      <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <HealthHero
+          vitalityScore={vitalityScore}
+          waterPct={boundedPct(waterPct)}
+          sleepPct={boundedPct(sleepPct)}
+          workoutsPct={boundedPct(workoutsPct)}
+          moodPct={boundedPct(moodPct)}
+        />
+        <Card className="p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <IconBadge tone="teal" size={34} icon={<Activity size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">Pulso da semana</p>
+                <p className="text-xs text-slate">Cada linha está normalizada de 0 a 100.</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-growth/10 px-2.5 py-1 text-[11px] font-semibold text-growth">
+              {waterGoalDays}/7 dias com água
+            </span>
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={healthPulse} margin={{ top: 10, right: 8, bottom: 0, left: -20 }}>
+                <defs>
+                  <linearGradient id="healthWater" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3478F6" stopOpacity={0.24} />
+                    <stop offset="95%" stopColor="#3478F6" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="healthMood" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F5A31A" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#F5A31A" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="#E5EAF2" strokeDasharray="3 3" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                <YAxis hide domain={[0, 100]} />
+                <Tooltip contentStyle={{ borderRadius: 14, border: "1px solid rgba(148,163,184,.35)", fontSize: 12 }} formatter={(value) => [`${Math.round(Number(value))}%`, ""]} />
+                <Area type="monotone" dataKey="Agua" stroke="#3478F6" strokeWidth={2} fill="url(#healthWater)" />
+                <Area type="monotone" dataKey="Sono" stroke="#7C4DFF" strokeWidth={2} fill="transparent" />
+                <Area type="monotone" dataKey="Movimento" stroke="#22B573" strokeWidth={2} fill="transparent" />
+                <Area type="monotone" dataKey="Humor" stroke="#F5A31A" strokeWidth={2} fill="url(#healthMood)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate sm:grid-cols-4">
+            <LegendDot color="bg-cat-blue" label="Água" />
+            <LegendDot color="bg-cat-purple" label="Sono" />
+            <LegendDot color="bg-growth" label="Movimento" />
+            <LegendDot color="bg-signal" label="Humor" />
+          </div>
+        </Card>
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
+        {careSteps.map((step) => (
+          <CareStep key={step.label} {...step} />
+        ))}
+      </div>
 
       <div className="-mx-4 mb-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
         <HealthStatCard
@@ -287,5 +396,89 @@ export function SaudePage() {
         </button>
       )}
     </div>
+  );
+}
+
+function HealthHero({
+  vitalityScore,
+  waterPct,
+  sleepPct,
+  workoutsPct,
+  moodPct,
+}: {
+  vitalityScore: number;
+  waterPct: number;
+  sleepPct: number;
+  workoutsPct: number;
+  moodPct: number;
+}) {
+  return (
+    <Card className="overflow-hidden border-0 bg-gradient-to-br from-[#19223A] via-[#2F416E] to-[#0D9488] p-6 text-white shadow-card">
+      <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-center">
+        <div className="relative mx-auto flex h-48 w-48 items-center justify-center rounded-full border border-white/15 bg-white/10">
+          <div
+            className="absolute inset-3 rounded-full"
+            style={{ background: `conic-gradient(#22B573 ${vitalityScore * 3.6}deg, rgba(255,255,255,.16) 0deg)` }}
+          />
+          <div className="relative flex h-36 w-36 flex-col items-center justify-center rounded-full bg-[#18213A]/92 text-center">
+            <HeartPulse size={24} className="mb-2 text-[#63E6BE]" />
+            <p className="font-display text-4xl font-bold leading-none">{vitalityScore}</p>
+            <p className="mt-1 text-xs text-white/70">vitalidade</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/65">Mapa de bem-estar</p>
+          <p className="mt-2 font-display text-2xl font-bold leading-tight">Sua saúde em uma leitura rápida.</p>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/82">
+            O índice mistura água de hoje, última noite de sono, movimento semanal e humor médio. Quanto mais registros, mais fiel ele fica.
+          </p>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <HeroMetric icon={<Droplets size={14} />} label="Água" value={waterPct} />
+            <HeroMetric icon={<Moon size={14} />} label="Sono" value={sleepPct} />
+            <HeroMetric icon={<Dumbbell size={14} />} label="Movimento" value={workoutsPct} />
+            <HeroMetric icon={<Sun size={14} />} label="Humor" value={moodPct} />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function HeroMetric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-white/10 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold">
+        <span className="flex items-center gap-1.5 text-white/85">{icon}{label}</span>
+        <span>{boundedPct(value)}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/16">
+        <div className="h-full rounded-full bg-white" style={{ width: `${boundedPct(value)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function CareStep({ icon, label, done }: { icon: ReactNode; label: string; done: boolean }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${done ? "bg-growth/10 text-growth" : "bg-signal/10 text-signal-deep"}`}>
+          {done ? <ShieldCheck size={15} /> : icon}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{done ? "Em dia" : "Próximo cuidado"}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate">{label}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`h-2 w-2 rounded-full ${color}`} />
+      {label}
+    </span>
   );
 }

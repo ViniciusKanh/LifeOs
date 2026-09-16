@@ -7,6 +7,7 @@ import { dailyReviewSchema, weeklyReviewSchema } from "../validators/reviews.sch
 import { changePct, computeLifeScore, computeRangeMetrics } from "../services/metricsService.js";
 import { generateWeeklyReviewDraft } from "../services/copilotService.js";
 import { mondayOf, sendWeeklySummaryForUser } from "../services/weeklyEmailService.js";
+import { updateNotificationTrigger } from "../services/notificationTriggersService.js";
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -202,9 +203,12 @@ reviewsRouter.patch("/weekly/email-settings", async (req, res) => {
   const enabled = req.body?.enabled === true;
   const db = getDb();
   await db.execute({
-    sql: "UPDATE user_settings SET weekly_email_enabled = ?, updated_at = datetime('now') WHERE user_id = ?",
-    args: [enabled ? 1 : 0, req.user!.id],
+    sql: `INSERT INTO user_settings (user_id, weekly_email_enabled)
+          VALUES (?, ?)
+          ON CONFLICT (user_id) DO UPDATE SET weekly_email_enabled = excluded.weekly_email_enabled, updated_at = datetime('now')`,
+    args: [req.user!.id, enabled ? 1 : 0],
   });
+  await updateNotificationTrigger(req.user!.id, "weekly_summary", { active: enabled, channelEmail: enabled });
   return res.json({ enabled });
 });
 

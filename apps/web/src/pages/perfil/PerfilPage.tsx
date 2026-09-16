@@ -18,6 +18,7 @@ import {
   BellOff,
   Send,
   Mails,
+  BellRing,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -347,6 +348,20 @@ export function PerfilPage() {
 
           <Card className="p-5">
             <div className="flex items-center gap-2.5 mb-3">
+              <IconBadge tone="amber" size={32} icon={<BellRing size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">Gatilhos e alertas</p>
+                <p className="text-xs text-slate">Controle tarefas vencidas, conquistas, resumo semanal, push e e-mail em um só lugar.</p>
+              </div>
+            </div>
+            <Link to="/gatilhos" className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm">
+              <span className="font-semibold">Abrir central de gatilhos</span>
+              <ChevronRight size={14} className="text-slate shrink-0" />
+            </Link>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center gap-2.5 mb-3">
               <IconBadge tone="green" size={32} icon={<Download size={15} />} />
               <div>
                 <p className="text-sm font-semibold">Exportar meus dados</p>
@@ -469,7 +484,12 @@ function WeeklyEmailCard() {
 
   const handleToggle = async () => {
     setSendState(null);
-    await setEnabled(!enabled);
+    try {
+      await setEnabled(!enabled);
+      setSendState({ ok: true, message: !enabled ? "Resumo semanal ativado." : "Resumo semanal desativado." });
+    } catch (err) {
+      setSendState({ ok: false, message: err instanceof Error ? err.message : "Não foi possível salvar sua preferência." });
+    }
   };
 
   const handleSendNow = async () => {

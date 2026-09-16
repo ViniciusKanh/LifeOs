@@ -32,16 +32,21 @@ async function readSetting(db: Db, keyName: string): Promise<string | null> {
 
 /** Lê e descriptografa a configuração SMTP completa; null se algo essencial faltar. */
 export async function getSmtpConfig(): Promise<SmtpConfig | null> {
-  const db = getDb();
-  const [host, port, user, appPassword] = await Promise.all([
-    readSetting(db, "host"),
-    readSetting(db, "port"),
-    readSetting(db, "user"),
-    readSetting(db, "app_password"),
-  ]);
-  if (!host || !user || !appPassword) return null;
-  const portNum = Number(port) || 587;
-  return { host, port: portNum, secure: portNum === 465, user, appPassword };
+  try {
+    const db = getDb();
+    const [host, port, user, appPassword] = await Promise.all([
+      readSetting(db, "host"),
+      readSetting(db, "port"),
+      readSetting(db, "user"),
+      readSetting(db, "app_password"),
+    ]);
+    if (!host || !user || !appPassword) return null;
+    const portNum = Number(port) || 587;
+    return { host, port: portNum, secure: portNum === 465, user, appPassword };
+  } catch (err) {
+    console.error("[email] configuração SMTP indisponível:", err);
+    return null;
+  }
 }
 
 function buildTransport(config: SmtpConfig) {
@@ -58,15 +63,20 @@ export async function sendMail(input: { to: string; subject: string; html: strin
   const config = await getSmtpConfig();
   if (!config) return false;
 
-  const transport = buildTransport(config);
-  await transport.sendMail({
-    from: `"LifeOS" <${config.user}>`,
-    to: input.to,
-    subject: input.subject,
-    html: input.html,
-    text: input.text ?? input.html.replace(/<[^>]+>/g, " "),
-  });
-  return true;
+  try {
+    const transport = buildTransport(config);
+    await transport.sendMail({
+      from: `"LifeOS" <${config.user}>`,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text ?? input.html.replace(/<[^>]+>/g, " "),
+    });
+    return true;
+  } catch (err) {
+    console.error("[email] falha ao enviar:", err);
+    return false;
+  }
 }
 
 /** Testa a conexão SMTP (usado pelo botão "Testar conexão" em Configurações). */
@@ -119,6 +129,81 @@ export function welcomeEmail(name: string) {
         <p>Sua conta no LifeOS foi criada com sucesso. Planeje, execute, registre, meça e melhore sua rotina — tudo em um só lugar.</p>
         <p style="color:#6B7280;font-size:12px;">Transforme sua rotina em progresso.</p>
       </div>`,
+  };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+export function lifeOsEmailShell(input: {
+  preheader: string;
+  eyebrow?: string;
+  title: string;
+  bodyHtml: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}) {
+  const webOrigin = process.env.WEB_ORIGIN ?? "";
+  const logoUrl = webOrigin ? `${webOrigin.replace(/\/$/, "")}/logo/icon-64.png` : "";
+  const logo = logoUrl
+    ? `<img src="${logoUrl}" width="42" height="42" alt="LifeOS" style="display:block;border-radius:14px;background:#fff;" />`
+    : `<span style="display:inline-flex;width:42px;height:42px;border-radius:14px;background:#5B6EF5;color:#fff;align-items:center;justify-content:center;font-weight:800;">L</span>`;
+  const cta = input.ctaLabel && input.ctaUrl
+    ? `<p style="margin:24px 0 4px;"><a href="${escapeHtml(input.ctaUrl)}" style="display:inline-block;background:linear-gradient(135deg,#FF8A3D,#F4522B);color:#fff;text-decoration:none;font-weight:700;border-radius:14px;padding:12px 18px;">${escapeHtml(input.ctaLabel)}</a></p>`
+    : "";
+
+  return `
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(input.preheader)}</div>
+    <div style="margin:0;background:#F4F1EA;padding:28px 12px;font-family:Inter,Segoe UI,Arial,sans-serif;color:#1E2537;">
+      <div style="max-width:620px;margin:0 auto;background:#FFFFFF;border:1px solid #E8E2D6;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(30,37,55,.08);">
+        <div style="padding:22px 24px;background:linear-gradient(135deg,#F8F6FF,#FFF3EA);border-bottom:1px solid #E8E2D6;">
+          <table role="presentation" width="100%" style="border-collapse:collapse;">
+            <tr>
+              <td style="width:50px;">${logo}</td>
+              <td>
+                <p style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;">LifeOS</p>
+                <p style="margin:2px 0 0;color:#6B7280;font-size:12px;">progresso em movimento</p>
+              </td>
+            </tr>
+          </table>
+        </div>
+        <div style="padding:26px 24px 28px;">
+          ${input.eyebrow ? `<p style="margin:0 0 8px;color:#6D5DF6;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">${escapeHtml(input.eyebrow)}</p>` : ""}
+          <h1 style="margin:0;color:#1E2537;font-size:26px;line-height:1.15;letter-spacing:-.03em;">${escapeHtml(input.title)}</h1>
+          <div style="margin-top:16px;color:#4B5563;font-size:14px;line-height:1.65;">${input.bodyHtml}</div>
+          ${cta}
+        </div>
+      </div>
+      <p style="max-width:620px;margin:14px auto 0;color:#8A91A5;font-size:11px;text-align:center;">
+        Você recebeu este aviso porque ativou gatilhos no LifeOS. Ajuste em Perfil → Gatilhos.
+      </p>
+    </div>`;
+}
+
+export function notificationTriggerEmail(input: {
+  title: string;
+  body: string;
+  ctaLabel?: string;
+  path?: string;
+}) {
+  const webOrigin = process.env.WEB_ORIGIN ?? "";
+  const ctaUrl = input.path && webOrigin ? `${webOrigin.replace(/\/$/, "")}${input.path}` : undefined;
+  return {
+    subject: input.title,
+    html: lifeOsEmailShell({
+      preheader: input.body,
+      eyebrow: "Gatilho LifeOS",
+      title: input.title,
+      bodyHtml: `<p style="margin:0;">${escapeHtml(input.body)}</p>`,
+      ctaLabel: input.ctaLabel,
+      ctaUrl,
+    }),
   };
 }
 
