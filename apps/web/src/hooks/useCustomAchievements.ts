@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { achievementsService, type CustomAchievementInput } from "@/services/achievementsService";
+import {
+  ACHIEVEMENT_CREATED_EVENT,
+  ACHIEVEMENT_UNLOCKED_EVENT,
+  achievementsService,
+  type CustomAchievementInput,
+} from "@/services/achievementsService";
 
 const KEY = ["achievements", "custom"];
 const METRICS_KEY = ["achievements", "custom-metrics"];
@@ -14,9 +19,21 @@ export function useCustomAchievements() {
   const query = useQuery({ queryKey: KEY, queryFn: achievementsService.listCustom });
   const metricsQuery = useQuery({ queryKey: METRICS_KEY, queryFn: achievementsService.metrics, staleTime: Infinity });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: KEY });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: KEY });
+    queryClient.invalidateQueries({ queryKey: ["achievements"] });
+  };
 
-  const create = useMutation({ mutationFn: (input: CustomAchievementInput) => achievementsService.createCustom(input), onSuccess: invalidate });
+  const create = useMutation({
+    mutationFn: (input: CustomAchievementInput) => achievementsService.createCustom(input),
+    onSuccess: (created) => {
+      invalidate();
+      window.dispatchEvent(new CustomEvent(ACHIEVEMENT_CREATED_EVENT, { detail: created }));
+      if (created.unlockedAt) {
+        window.dispatchEvent(new CustomEvent(ACHIEVEMENT_UNLOCKED_EVENT, { detail: [created] }));
+      }
+    },
+  });
   const remove = useMutation({ mutationFn: (id: string) => achievementsService.removeCustom(id), onSuccess: invalidate });
 
   const trophies = query.data ?? [];

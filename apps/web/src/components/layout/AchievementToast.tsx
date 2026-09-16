@@ -36,9 +36,10 @@ export function AchievementToast() {
   if (!current) return null;
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 max-w-xs transition-all">
-      <div className="rounded-2xl border border-brand-500/30 bg-paper-raised dark:bg-ink-raised shadow-glow-brand p-4 flex items-start gap-3">
-        <span className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-signal flex items-center justify-center text-white">
+    <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 max-w-xs animate-pulse transition-all">
+      <div className="relative overflow-hidden rounded-2xl border border-brand-500/30 bg-paper-raised p-4 shadow-glow-brand dark:bg-ink-raised flex items-start gap-3">
+        <span className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-signal/20 blur-xl" />
+        <span className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-signal flex items-center justify-center text-white animate-bounce">
           <Trophy size={18} />
         </span>
         <div className="flex-1 min-w-0">

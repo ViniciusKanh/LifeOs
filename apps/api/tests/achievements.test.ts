@@ -116,4 +116,24 @@ describe("Conquistas (gamificação real)", () => {
     const removed = await other.agent.delete(`/api/achievements/custom/${mine.body.id}`);
     expect(removed.status).toBe(404);
   });
+
+  it("cria um troféu customizado já destravado quando a métrica atual já bateu o limite", async () => {
+    const { agent } = await createAuthenticatedAgent();
+
+    const task = await agent.post("/api/tasks").send({ title: "Entrega importante" });
+    await agent.patch(`/api/tasks/${task.body.id}`).send({ status: "Concluído" });
+
+    const created = await agent.post("/api/achievements/custom").send({
+      title: "Primeira entrega do dia",
+      metric: "tasks_completed_in_day",
+      threshold: 1,
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.progress).toBe(100);
+    expect(created.body.unlockedAt).not.toBeNull();
+
+    const check = await agent.post("/api/achievements/check");
+    expect(check.body.newlyUnlocked.some((achievement: { id: string }) => achievement.id === created.body.id)).toBe(false);
+  });
 });

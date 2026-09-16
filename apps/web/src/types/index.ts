@@ -606,7 +606,7 @@ export interface LifeInsights {
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water";
+  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water" | "work_note";
   icon: string;
   id: string;
   label: string;

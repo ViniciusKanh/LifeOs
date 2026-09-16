@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { achievementsService } from "@/services/achievementsService";
+import { ACHIEVEMENT_UNLOCKED_EVENT, achievementsService } from "@/services/achievementsService";
 
 const KEY = ["achievements"];
 
@@ -17,7 +17,11 @@ export function useAchievements() {
 
   useEffect(() => {
     achievementsService.check().then(({ newlyUnlocked }) => {
-      if (newlyUnlocked.length > 0) queryClient.invalidateQueries({ queryKey: KEY });
+      if (newlyUnlocked.length > 0) {
+        queryClient.invalidateQueries({ queryKey: KEY });
+        queryClient.invalidateQueries({ queryKey: ["achievements", "custom"] });
+        window.dispatchEvent(new CustomEvent(ACHIEVEMENT_UNLOCKED_EVENT, { detail: newlyUnlocked }));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
