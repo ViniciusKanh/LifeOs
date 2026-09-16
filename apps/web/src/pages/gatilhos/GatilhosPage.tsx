@@ -172,13 +172,13 @@ function TriggerCard({
         </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className={`mt-4 grid gap-2 ${trigger.eventType === "weekly_summary" ? "grid-cols-1" : "grid-cols-3"}`}>
         <ChannelButton icon={<Mail size={14} />} label="E-mail" active={trigger.channelEmail} disabled={disabled} onClick={() => onPatch({ channelEmail: !trigger.channelEmail })} />
-        <ChannelButton icon={<Smartphone size={14} />} label="Push" active={trigger.channelPush} disabled={disabled} onClick={() => onPatch({ channelPush: !trigger.channelPush })} />
-        <ChannelButton icon={<BellRing size={14} />} label="App" active={trigger.channelInApp} disabled={disabled} onClick={() => onPatch({ channelInApp: !trigger.channelInApp })} />
+        {trigger.eventType !== "weekly_summary" && <ChannelButton icon={<Smartphone size={14} />} label="Push" active={trigger.channelPush} disabled={disabled} onClick={() => onPatch({ channelPush: !trigger.channelPush })} />}
+        {trigger.eventType !== "weekly_summary" && <ChannelButton icon={<BellRing size={14} />} label="App" active={trigger.channelInApp} disabled={disabled} onClick={() => onPatch({ channelInApp: !trigger.channelInApp })} />}
       </div>
 
-      <div className="mt-4 rounded-2xl bg-paper p-2 dark:bg-ink">
+      {trigger.eventType !== "weekly_summary" && <div className="mt-4 rounded-2xl bg-paper p-2 dark:bg-ink">
         <p className="px-2 pb-2 text-[11px] font-semibold text-slate">Intensidade do alerta</p>
         <div className="grid grid-cols-3 gap-1">
           {(["soft", "medium", "critical"] as NotificationAlertLevel[]).map((level) => (
@@ -201,7 +201,7 @@ function TriggerCard({
             </button>
           ))}
         </div>
-      </div>
+      </div>}
     </Card>
   );
 }

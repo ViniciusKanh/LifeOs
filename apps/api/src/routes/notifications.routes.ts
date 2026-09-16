@@ -15,7 +15,7 @@ notificationsRouter.use(requireAuth);
 
 interface LiveNotification {
   id: string;
-  kind: "task_overdue" | "task_due_today" | "habit_pending" | "weekly_review_pending";
+  kind: "task_overdue" | "task_due_today" | "daily_insight" | "habit_pending" | "weekly_review_pending";
   title: string;
   body: string;
   link: string;
@@ -77,12 +77,13 @@ notificationsRouter.get("/live", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
   const today = new Date().toISOString().slice(0, 10);
-  const [overdueRule, dueTodayRule] = await Promise.all([
+  const [overdueRule, dueTodayRule, dailyInsightRule] = await Promise.all([
     getNotificationTrigger(ownerId, "task_overdue"),
     getNotificationTrigger(ownerId, "task_due_today"),
+    getNotificationTrigger(ownerId, "daily_insight"),
   ]);
 
-  const [overdueTasks, dueTodayTasks, pendingHabits, weeklyReview] = await Promise.all([
+  const [overdueTasks, dueTodayTasks, pendingHabits, weeklyReview, dailyInsight] = await Promise.all([
     db.execute({
       sql: `SELECT id, title FROM tasks WHERE owner_id = ? AND status != 'Concluído'
             AND due_date IS NOT NULL AND date(due_date) < date(?) ORDER BY due_date ASC LIMIT 5`,
@@ -103,6 +104,10 @@ notificationsRouter.get("/live", async (req, res) => {
     db.execute({
       sql: "SELECT id FROM weekly_reviews WHERE owner_id = ? AND week_start_date = ?",
       args: [ownerId, mondayOf()],
+    }),
+    db.execute({
+      sql: "SELECT text FROM daily_insights WHERE owner_id = ? AND insight_date = ? LIMIT 1",
+      args: [ownerId, today],
     }),
   ]);
 
@@ -128,6 +133,17 @@ notificationsRouter.get("/live", async (req, res) => {
       body: t.title,
       link: "/tarefas",
       severity: severityFromAlertLevel(dueTodayRule.alertLevel),
+    });
+  }
+  if (dailyInsightRule.active && dailyInsightRule.channelInApp && dailyInsight.rows[0]) {
+    const insight = dailyInsight.rows[0] as unknown as { text: string };
+    notifications.push({
+      id: `daily_insight_${today}`,
+      kind: "daily_insight",
+      title: "Insight do dia",
+      body: insight.text,
+      link: "/dashboard",
+      severity: severityFromAlertLevel(dailyInsightRule.alertLevel),
     });
   }
   if ((pendingHabits.rows as unknown[]).length > 0) {

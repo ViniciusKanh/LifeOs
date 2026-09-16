@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { computeLifeScore, computeRangeMetrics, computeInsights, changePct } from "./metricsService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
-import { sendPushToUser } from "./pushService.js";
+import { dispatchTriggerNotification } from "./notificationTriggersService.js";
 
 /**
  * LifeOS Copilot — insight gerado por IA no Dashboard. O prompt é
@@ -579,11 +579,16 @@ export async function getOrGenerateDailyInsight(
 
   // Só neste caminho (primeira geração do dia) faz sentido notificar —
   // uma releitura do cache não deve gerar push de novo no mesmo dia.
-  sendPushToUser(ownerId, {
-    title: "Seu insight do dia está pronto ✨",
-    body: result.text!.length > 120 ? `${result.text!.slice(0, 117)}...` : result.text!,
-    url: "/dashboard",
-  }).catch((err) => console.error("[push] falha ao notificar insight diário:", err));
+  try {
+    await dispatchTriggerNotification(ownerId, "daily_insight", {
+      title: "Seu insight do dia está pronto",
+      body: result.text!.length > 120 ? `${result.text!.slice(0, 117)}...` : result.text!,
+      url: "/dashboard",
+      sourceId: today,
+    });
+  } catch (err) {
+    console.error("[trigger] falha ao notificar insight diário:", err);
+  }
 
   return { ok: true, text: result.text, generatedAt: new Date().toISOString() };
 }

@@ -109,6 +109,11 @@ export function isNotificationTriggerEvent(value: string): value is Notification
 }
 
 export async function ensureNotificationTriggers(ownerId: string, db = getDb()) {
+  const settings = await db.execute({
+    sql: "SELECT weekly_email_enabled FROM user_settings WHERE user_id = ?",
+    args: [ownerId],
+  });
+  const weeklyEmailEnabled = Number(settings.rows[0]?.weekly_email_enabled ?? 0) === 1;
   for (const [eventType, def] of Object.entries(NOTIFICATION_TRIGGER_DEFS) as Array<[NotificationTriggerEvent, typeof NOTIFICATION_TRIGGER_DEFS[NotificationTriggerEvent]]>) {
     await db.execute({
       sql: `INSERT INTO notification_triggers (
@@ -121,9 +126,9 @@ export async function ensureNotificationTriggers(ownerId: string, db = getDb()) 
         eventType,
         def.label,
         def.description,
-        def.defaultEmail ? 1 : 0,
-        def.defaultPush ? 1 : 0,
-        def.defaultInApp ? 1 : 0,
+        eventType === "weekly_summary" ? (weeklyEmailEnabled ? 1 : 0) : (def.defaultEmail ? 1 : 0),
+        eventType === "weekly_summary" ? 0 : (def.defaultPush ? 1 : 0),
+        eventType === "weekly_summary" ? 0 : (def.defaultInApp ? 1 : 0),
         def.defaultAlertLevel,
       ],
     });
@@ -188,13 +193,18 @@ export async function updateNotificationTrigger(
   return updated;
 }
 
-async function markDelivered(db: Db, ownerId: string, eventType: NotificationTriggerEvent, sourceId: string, channel: "email" | "push" | "in_app", date: string) {
+async function markDelivered(db: Db, ownerId: string, eventType: NotificationTriggerEvent, sourceId: string, channel: "email" | "push" | "in_app", date: string): Promise<string | null> {
+  const id = nanoid();
   const result = await db.execute({
     sql: `INSERT OR IGNORE INTO notification_delivery_log (id, owner_id, event_type, source_id, channel, delivered_on)
           VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [nanoid(), ownerId, eventType, sourceId, channel, date],
+    args: [id, ownerId, eventType, sourceId, channel, date],
   });
-  return result.rowsAffected > 0;
+  return result.rowsAffected > 0 ? id : null;
+}
+
+async function releaseFailedDelivery(db: Db, id: string) {
+  await db.execute({ sql: "DELETE FROM notification_delivery_log WHERE id = ?", args: [id] });
 }
 
 export async function dispatchTriggerNotification(
@@ -214,8 +224,8 @@ export async function dispatchTriggerNotification(
   let pushSent = 0;
 
   if (rule.channelEmail && userRow?.email && Number(userRow.email_verified) === 1) {
-    const canSend = await markDelivered(db, ownerId, eventType, sourceId, "email", today);
-    if (canSend) {
+    const deliveryId = await markDelivered(db, ownerId, eventType, sourceId, "email", today);
+    if (deliveryId) {
       const email = notificationTriggerEmail({
         title: input.title,
         body: input.body,
@@ -223,17 +233,20 @@ export async function dispatchTriggerNotification(
         ctaLabel: input.ctaLabel ?? "Abrir no LifeOS",
       });
       emailSent = await sendMail({ to: userRow.email, ...email });
+      if (!emailSent) await releaseFailedDelivery(db, deliveryId);
     }
   }
 
   if (rule.channelPush) {
-    const canSend = await markDelivered(db, ownerId, eventType, sourceId, "push", today);
-    if (canSend) {
+    const deliveryId = await markDelivered(db, ownerId, eventType, sourceId, "push", today);
+    if (deliveryId) {
       try {
         const result = await sendPushToUser(ownerId, { title: input.title, body: input.body, url: input.url ?? NOTIFICATION_TRIGGER_DEFS[eventType].link });
         pushSent = result.sent;
+        if (pushSent === 0) await releaseFailedDelivery(db, deliveryId);
       } catch (err) {
         console.error("[trigger] falha ao enviar push:", err);
+        await releaseFailedDelivery(db, deliveryId);
       }
     }
   }

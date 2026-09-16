@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getDb } from "../src/db/client.js";
 import { createAuthenticatedAgent } from "./helpers.js";
 
 describe("Gatilhos de notificação", () => {
@@ -34,7 +35,7 @@ describe("Gatilhos de notificação", () => {
   });
 
   it("executa checagem manual de tarefas vencidas sem exigir SMTP/push configurado", async () => {
-    const { agent } = await createAuthenticatedAgent();
+    const { agent, userId } = await createAuthenticatedAgent();
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
     await agent.post("/api/tasks").send({ title: "Contrato vencido", dueDate: yesterday });
@@ -42,5 +43,14 @@ describe("Gatilhos de notificação", () => {
     const result = await agent.post("/api/notifications/triggers/run");
     expect(result.status).toBe(200);
     expect(result.body.results.some((item: { eventType: string; count: number }) => item.eventType === "task_overdue" && item.count >= 1)).toBe(true);
+
+    const deliveryLog = await getDb().execute({
+      sql: "SELECT channel FROM notification_delivery_log WHERE owner_id = ? AND event_type = 'task_overdue'",
+      args: [userId],
+    });
+    expect(deliveryLog.rows).toHaveLength(0);
+
+    const retry = await agent.post("/api/notifications/triggers/run");
+    expect(retry.status).toBe(200);
   });
 });
