@@ -29,24 +29,10 @@ import { useHealthSummary, useHealth } from "@/hooks/useHealth";
 import { useFocus } from "@/hooks/useFocus";
 import { useEvents } from "@/hooks/useEvents";
 import { useTimeline } from "@/hooks/useAnalytics";
-import { useCopilotInsight } from "@/hooks/useCopilot";
+import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import type { Task, TimelineEvent } from "@/types";
-
-// Frases de abertura variadas para o card do Copilot antes do primeiro
-// insight gerado no dia — trocam por dia (não por render) para não
-// parecerem aleatórias a cada F5, e nunca fingem ser um insight real.
-const FALLBACK_QUOTES = [
-  "Pequenas ações consistentes hoje constroem a vida que você deseja amanhã.",
-  "Você não precisa de um dia perfeito — precisa de um dia que some com os outros.",
-  "O progresso de hoje é a base do resultado de amanhã. Um passo de cada vez.",
-  "Feito é melhor que perfeito. Avance no que dá para avançar agora.",
-];
-function fallbackQuoteOfTheDay() {
-  const dayIndex = Math.floor(Date.now() / 86_400_000);
-  return FALLBACK_QUOTES[dayIndex % FALLBACK_QUOTES.length];
-}
 
 // Metas de referência usadas só para calcular "% da meta" nos
 // indicadores — ainda não são configuráveis por usuário no backend
@@ -118,7 +104,7 @@ export function HojePage() {
   const today = todayStr();
   const { events } = useTimeline({ from: today, to: today });
   const { items: calendarItems } = useEvents(today, today);
-  const copilot = useCopilotInsight();
+  const copilot = useDailyInsight();
   const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const priorities = useMemo(() => {
@@ -131,6 +117,8 @@ export function HojePage() {
   const prioritiesDone = tasks.filter((t) => t.status === "Concluído" && t.due_date?.slice(0, 10) === today).length;
   const prioritiesTotal = priorities.length + prioritiesDone;
   const prioritiesPct = prioritiesTotal > 0 ? Math.round((prioritiesDone / prioritiesTotal) * 100) : 0;
+  const overdueCount = tasks.filter((task) => task.status !== "Concluído" && task.due_date && task.due_date.slice(0, 10) < today).length;
+  const dueTodayCount = tasks.filter((task) => task.status !== "Concluído" && task.due_date?.slice(0, 10) === today).length;
 
   const habitsDone = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
   const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
@@ -156,6 +144,18 @@ export function HojePage() {
         {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {prioritiesPct}% das
         prioridades concluídas
       </p>
+
+      <section className="mb-5 grid gap-3 border-y border-paper-border py-4 dark:border-ink-border sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
+        <div className="min-w-0"><p className="text-xs font-semibold text-brand-600">Seu próximo movimento</p><p className="mt-1 truncate text-base font-semibold">{focusTasks[0]?.title ?? priorities[0]?.title ?? "Tudo em dia"}</p><p className="mt-1 text-xs text-slate">{focusTasks[0]?.reasons.join(" · ") || "Escolha uma tarefa para começar"}</p></div>
+        <DaySignal label="Vencidas" value={overdueCount} tone={overdueCount > 0 ? "text-drop" : "text-growth"} />
+        <DaySignal label="Vencem hoje" value={dueTodayCount} tone="text-signal-deep" />
+        <DaySignal label="Agenda" value={todaysAgenda.length} tone="text-brand-600" />
+      </section>
+
+      <section className="mb-5 flex flex-col gap-3 border-l-4 border-teal-500 bg-teal-500/5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+        <div><p className="flex items-center gap-2 text-xs font-semibold text-teal-700 dark:text-teal-300"><Sparkles size={14} /> Insight do dia</p><p className="mt-1 text-sm leading-relaxed">{copilot.text ?? (copilot.isLoading ? "Analisando seus registros..." : "Registre suas ações para gerar um insight pessoal.")}</p>{copilot.error && <p className="mt-1 text-xs text-drop">{copilot.error.message}</p>}</div>
+        <button onClick={() => copilot.regenerate()} disabled={copilot.isRegenerating} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-teal-500/30 px-3 py-1.5 text-xs font-semibold text-teal-700 disabled:opacity-50 dark:text-teal-300"><Wand2 size={14} /> {copilot.isRegenerating ? "Gerando..." : "Novo insight"}</button>
+      </section>
 
       {activeSession && (
         <Link
@@ -441,44 +441,6 @@ export function HojePage() {
             )}
           </Card>
 
-          <Card className="p-6 bg-gradient-to-br from-brand-600 to-cat-purple text-white border-0 shadow-card">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 mb-3">
-                  <Sparkles size={18} />
-                </span>
-                <p className="font-display font-bold text-lg leading-snug">Copilot do dia</p>
-              </div>
-            </div>
-
-            <p className="text-sm leading-relaxed mt-3 bg-white/10 rounded-xl px-4 py-3">
-              {copilot.text && !copilot.error ? copilot.text : fallbackQuoteOfTheDay()}
-            </p>
-
-            {copilot.error && (
-              <p className="text-xs mt-2.5 opacity-90">
-                {copilot.error.message}
-                {copilot.error.status === 400 && (
-                  <>
-                    {" "}
-                    <Link to="/configuracoes" className="underline font-semibold">
-                      Ir para Configurações
-                    </Link>
-                  </>
-                )}
-              </p>
-            )}
-
-            <button
-              onClick={() => copilot.generate()}
-              disabled={copilot.isGenerating}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
-            >
-              <Wand2 size={15} />
-              {copilot.isGenerating ? "Gerando..." : copilot.text ? "Gerar outro insight" : "Gerar insight do dia com IA"}
-            </button>
-          </Card>
-
           <Card className="p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold">Hábitos rápidos</p>
@@ -532,6 +494,10 @@ export function HojePage() {
       )}
     </div>
   );
+}
+
+function DaySignal({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return <div className="border-l border-paper-border pl-3 dark:border-ink-border"><p className="text-xs text-slate">{label}</p><p className={`mt-1 font-display text-2xl font-bold ${tone}`}>{value}</p></div>;
 }
 
 const PRIORITY_TONE: Record<Task["priority"], string> = {

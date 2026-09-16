@@ -96,6 +96,25 @@ export function usePush() {
   }, []);
 
   const sendTest = useCallback(async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      throw new Error("Este navegador não oferece notificações push.");
+    }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (Notification.permission !== "granted") {
+      const granted = await Notification.requestPermission();
+      setPermission(granted);
+      if (granted !== "granted") throw new Error("Permita notificações para este site nas configurações do navegador.");
+    }
+    if (!sub) {
+      const { publicKey } = await pushService.getVapidPublicKey();
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+    await pushService.subscribe(sub.toJSON() as PushSubscriptionJSON);
+    setIsSubscribed(true);
     return pushService.sendTest();
   }, []);
 

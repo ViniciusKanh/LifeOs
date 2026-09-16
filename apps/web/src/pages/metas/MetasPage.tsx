@@ -21,7 +21,7 @@ import type { Goal, GoalKind, GoalPeriod } from "@/types";
 
 function goalProgressPct(goal: Goal): number {
   if (goal.status === "done") return 100;
-  if (goal.kind === "percentage") return Math.min(100, Math.max(0, Math.round(goal.current_value)));
+  if (goal.kind === "percentage" || goal.kind === "task_based") return Math.min(100, Math.max(0, Math.round(goal.current_value)));
   if (goal.kind === "numeric" && goal.target_value) {
     return Math.min(100, Math.max(0, Math.round((goal.current_value / goal.target_value) * 100)));
   }
@@ -99,14 +99,18 @@ export function MetasPage() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
   const [periodTab, setPeriodTab] = useState<GoalPeriod | "todas">("todas");
+  const [statusTab, setStatusTab] = useState<"ativas" | "concluidas" | "todas">("ativas");
 
   const activeGoals = goals.filter((g) => g.status === "active");
   const overallProgressPct = activeGoals.length > 0 ? Math.round(activeGoals.reduce((sum, g) => sum + goalProgressPct(g), 0) / activeGoals.length) : 0;
 
   const visibleGoals = useMemo(() => {
-    const list = periodTab === "todas" ? goals : goals.filter((g) => g.period === periodTab);
-    return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }, [goals, periodTab]);
+    const list = goals.filter((goal) =>
+      (periodTab === "todas" || goal.period === periodTab) &&
+      (statusTab === "todas" || (statusTab === "ativas" ? goal.status === "active" : goal.status === "done"))
+    );
+    return [...list].sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999") || b.created_at.localeCompare(a.created_at));
+  }, [goals, periodTab, statusTab]);
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
@@ -179,8 +183,11 @@ export function MetasPage() {
             {/* Coluna principal: lista de metas */}
             <div className="space-y-4 min-w-0">
               <Card className="p-5">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <p className="text-sm font-semibold">Minhas metas</p>
+                  <div className="flex rounded-md border border-paper-border p-0.5 dark:border-ink-border">
+                    {([['ativas', 'Ativas'], ['concluidas', 'Concluídas'], ['todas', 'Todas']] as const).map(([value, label]) => <button key={value} onClick={() => setStatusTab(value)} className={`rounded px-2.5 py-1 text-xs font-semibold ${statusTab === value ? "bg-brand-500 text-white" : "text-slate hover:bg-paper dark:hover:bg-ink"}`}>{label}</button>)}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {PERIOD_TABS.filter((t) => t.value === "todas" || goals.some((g) => g.period === t.value)).map((t) => {
@@ -234,6 +241,7 @@ export function MetasPage() {
                             <div className="mt-1.5 text-[11px]">
                               <GoalForecastChip goal={goal} />
                             </div>
+                            {goal.next_action && <p className="mt-2 flex items-start gap-1.5 rounded-md bg-brand-500/5 px-2 py-1.5 text-xs"><ListChecks size={13} className="mt-0.5 shrink-0 text-brand-500" /><span>Próximo passo: {goal.next_action}{goal.next_action_due ? ` · ${formatDate(goal.next_action_due)}` : ""}</span></p>}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {goal.status === "active" && (
@@ -354,9 +362,10 @@ export function MetasPage() {
                 )}
               </Card>
 
-              <Card className="p-5 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-0">
-                <p className="font-display font-semibold text-lg">Grandes conquistas começam com pequenos passos.</p>
-                <p className="text-xs text-brand-100 mt-2">Mantenha o foco. Você está mais perto do que imagina.</p>
+              <Card className="p-5">
+                <p className="text-sm font-semibold">Metas no Life Score</p>
+                <p className="mt-2 text-xs leading-relaxed text-slate">Cada meta contribui pelo seu avanço registrado. O Life Score calcula a média dentro de cada período e depois equilibra os períodos, para semanais, mensais e anuais terem peso semelhante.</p>
+                <div className="mt-3 flex items-center justify-between border-t border-paper-border pt-3 text-xs dark:border-ink-border"><span>Períodos com metas</span><span className="font-semibold">{stats?.periods.length ?? 0}</span></div>
               </Card>
             </div>
           </div>
@@ -501,7 +510,7 @@ function MetaModal({
               <option value="percentage">Percentual (0-100%)</option>
               <option value="numeric">Numérico (com meta e unidade)</option>
               <option value="binary">Sim/Não</option>
-              <option value="task_based">Baseada em tarefas</option>
+              <option value="task_based">Etapas (progresso manual)</option>
             </select>
           </div>
           {kind === "numeric" && (

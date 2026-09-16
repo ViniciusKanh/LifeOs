@@ -3,6 +3,21 @@ import { createAuthenticatedAgent } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 
 describe("Life Score (GET /api/analytics/life-score)", () => {
+  it("atinge 100 em saúde quando água, sono, movimento e humor estão registrados no dia", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+    expect((await agent.post("/api/health/water").send({ amountMl: 2500, recordedAt: `${today}T12:00:00.000Z` })).status).toBe(201);
+    expect((await agent.post("/api/health/sleep").send({ wentToBedAt: `${yesterday}T22:00:00.000Z`, wokeUpAt: `${today}T06:00:00.000Z`, quality: 3 })).status).toBe(201);
+    expect((await agent.post("/api/health/workouts").send({ kind: "Caminhada", durationMinutes: 20, performedAt: `${today}T12:30:00.000Z` })).status).toBe(201);
+    expect((await agent.post("/api/health/mood").send({ mood: 3, energy: 3, recordedAt: `${today}T13:00:00.000Z` })).status).toBe(201);
+
+    const score = await agent.get(`/api/analytics/life-score?date=${today}`);
+    expect(score.status).toBe(200);
+    expect(score.body.health).toBe(100);
+  });
+
   it("não deixa dimensões sem nenhum dado (profissional, educação, leitura, metas) derrubarem a nota geral", async () => {
     const { agent } = await createAuthenticatedAgent();
 
@@ -145,5 +160,18 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
     expect(weeklyA.status).toBe(201);
     expect(weeklyB.status).toBe(201);
     expect(weeklyC.status).toBe(201);
+  });
+
+  it("não carrega uma meta semanal concluída em semana antiga para o score atual", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const goal = await agent.post("/api/goals").send({ title: "Meta da semana passada", kind: "binary", period: "semanal" });
+    await agent.patch(`/api/goals/${goal.body.id}`).send({ status: "done" });
+    await getDb().execute({
+      sql: "UPDATE goals SET completed_at = date('now', '-14 days') WHERE id = ?",
+      args: [goal.body.id],
+    });
+    const score = await agent.get("/api/analytics/life-score");
+    expect(score.status).toBe(200);
+    expect(score.body.goals).toBe(0);
   });
 });

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, AlertTriangle, Clock, Repeat, ClipboardList } from "lucide-react";
+import { Bell, AlertTriangle, Clock, Repeat, ClipboardList, Sparkles, Zap } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import type { LiveNotification } from "@/services/notificationsService";
 
 const KIND_ICON: Record<LiveNotification["kind"], typeof Bell> = {
   task_overdue: AlertTriangle,
   task_due_today: Clock,
+  daily_insight: Sparkles,
+  custom_trigger: Zap,
   habit_pending: Repeat,
   weekly_review_pending: ClipboardList,
 };
