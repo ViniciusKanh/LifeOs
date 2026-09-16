@@ -1,176 +1,184 @@
 import { useMemo, useState } from "react";
-import { Droplets, Moon, Dumbbell, Smile, Trash2, ChevronDown, Sun, Sparkles, Wand2, X, LineChart } from "lucide-react";
+import { Dumbbell, Droplets, HeartPulse, Loader2, Moon, Sun } from "lucide-react";
 import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
 import { useHealthInsight } from "@/hooks/useCopilot";
-import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
-import { Link } from "react-router-dom";
+import { PageHeader } from "@/components/ui/primitives";
+import { HealthEditModal, type HealthUpdatePatch } from "@/components/health/HealthEditModal";
+import { HealthStatCard, type HealthBadge } from "@/components/health/HealthStatCard";
+import { HealthHistoryModal, type HealthEditTarget, type HealthHistoryKind } from "@/components/health/HealthHistoryModal";
+import {
+  HealthCorrelationsCard,
+  MoodCard,
+  SleepCard,
+  WaterCard,
+  WellnessIllustrationCard,
+  WellnessInsightCard,
+  WorkoutCard,
+} from "@/components/health/HealthCards";
+import {
+  SLEEP_GOAL_MINUTES,
+  WATER_GOAL_ML,
+  formatHM,
+  localDateKey,
+  parseHealthDate,
+  startOfWeek,
+  todayKey,
+  weeklySeries,
+} from "@/components/health/healthUtils";
+import type { MoodEntryInput, SleepEntryInput, WaterEntryInput, WorkoutInput } from "@/services/healthService";
 
-const WATER_QUICK_ADD = [200, 300, 500];
-const WATER_GOAL_ML = 2500; // meta fixa documentada (LifeOS ainda não tem meta de água configurável por usuário)
-const SLEEP_GOAL_MINUTES = 8 * 60;
-const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-function fmtTime(iso: string) {
-  return new Date(iso.replace(" ", "T")).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+function boundedPct(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+function statusBadge(value: number | null, highLabel: string, middleLabel: string, emptyLabel = "Sem registro"): HealthBadge {
+  if (value === null) return { label: emptyLabel, tone: "slate" };
+  if (value >= 90) return { label: highLabel, tone: "green" };
+  if (value >= 60) return { label: middleLabel, tone: "amber" };
+  return { label: "Atenção", tone: "slate" };
 }
 
-function dateOnly(iso: string) {
-  return iso.slice(0, 10);
-}
-
-function startOfWeek(d: Date) {
-  const day = d.getDay();
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
-function formatHM(minutes: number) {
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  if (h <= 0) return `${m}min`;
-  return m > 0 ? `${h}h${m.toString().padStart(2, "0")}` : `${h}h`;
-}
-
-/** Série de 7 dias (segunda a domingo) a partir de uma lista de registros com data + valor — usada nos mini gráficos dos cards do topo e no gráfico semanal de sono. */
-function weeklySeries<T>(entries: T[], getDate: (e: T) => string, getValue: (e: T) => number, weekStart: Date) {
-  const byDay = new Map<number, number>();
-  for (const e of entries) {
-    const d = new Date(getDate(e).replace(" ", "T"));
-    if (d < weekStart) continue;
-    byDay.set(d.getDay(), (byDay.get(d.getDay()) ?? 0) + getValue(e));
-  }
-  return Array.from({ length: 7 }, (_, i) => {
-    const dow = (weekStart.getDay() + i) % 7;
-    return { label: WEEKDAY_LABELS[dow], value: byDay.get(dow) ?? 0 };
-  });
+function average(values: number[]) {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 export function SaudePage() {
-  const { water, sleep, workouts, mood, addWater, removeWater, addSleep, addWorkout, removeWorkout, addMood, removeMood } = useHealth();
+  const {
+    water,
+    sleep,
+    workouts,
+    mood,
+    isLoading,
+    addWater,
+    updateWater,
+    removeWater,
+    addSleep,
+    updateSleep,
+    removeSleep,
+    addWorkout,
+    updateWorkout,
+    removeWorkout,
+    addMood,
+    updateMood,
+    removeMood,
+  } = useHealth();
+  const { correlations, isLoading: correlationsLoading } = useHealthCorrelations();
   const insight = useHealthInsight();
 
-  const [sleepForm, setSleepForm] = useState({ wentToBedAt: "", wokeUpAt: "", quality: 3 });
-  const [workoutForm, setWorkoutForm] = useState({ kind: "", durationMinutes: "", distanceKm: "", intensity: "moderada" as const });
-  const [moodForm, setMoodForm] = useState({ mood: 3, energy: 3, stress: 3 });
-  const [historyOpen, setHistoryOpen] = useState<"water" | "sleep" | "workouts" | "mood" | null>(null);
-
-  const today = todayStr();
-  const waterToday = useMemo(() => water.filter((w) => dateOnly(w.recorded_at) === today), [water, today]);
-  const waterTotal = waterToday.reduce((sum, w) => sum + w.amount_ml, 0);
-  const waterPct = Math.round((waterTotal / WATER_GOAL_ML) * 100);
+  const [historyOpen, setHistoryOpen] = useState<HealthHistoryKind | null>(null);
+  const [editTarget, setEditTarget] = useState<HealthEditTarget | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const weekStart = useMemo(() => startOfWeek(new Date()), []);
+  const today = todayKey();
+
+  const waterToday = useMemo(() => water.filter((entry) => localDateKey(entry.recorded_at) === today), [water, today]);
+  const waterTotal = waterToday.reduce((sum, entry) => sum + entry.amount_ml, 0);
+  const waterPct = Math.round((waterTotal / WATER_GOAL_ML) * 100);
+  const waterWeekly = useMemo(() => weeklySeries(water, (entry) => entry.recorded_at, (entry) => entry.amount_ml / 1000, weekStart), [water, weekStart]);
+
   const sleepThisWeek = useMemo(
-    () => sleep.filter((s) => new Date(s.went_to_bed_at.replace(" ", "T")) >= weekStart && s.duration_minutes),
+    () => sleep.filter((entry) => parseHealthDate(entry.went_to_bed_at) >= weekStart && entry.duration_minutes),
     [sleep, weekStart]
   );
   const sleepWeekly = useMemo(
-    () => weeklySeries(sleepThisWeek, (s) => s.went_to_bed_at, (s) => (s.duration_minutes ?? 0) / 60, weekStart),
-    [sleepThisWeek, weekStart]
+    () => weeklySeries(sleep, (entry) => entry.went_to_bed_at, (entry) => (entry.duration_minutes ?? 0) / 60, weekStart),
+    [sleep, weekStart]
   );
-  const avgSleepMinutes = sleepThisWeek.length > 0 ? sleepThisWeek.reduce((s, x) => s + (x.duration_minutes ?? 0), 0) / sleepThisWeek.length : null;
-  const bestNightMinutes = sleepThisWeek.length > 0 ? Math.max(...sleepThisWeek.map((s) => s.duration_minutes ?? 0)) : null;
-  const avgQuality =
-    sleepThisWeek.filter((s) => s.quality).length > 0
-      ? sleepThisWeek.filter((s) => s.quality).reduce((s, x) => s + (x.quality ?? 0), 0) / sleepThisWeek.filter((s) => s.quality).length
-      : null;
-  const weekMaxHours = Math.max(1, ...sleepWeekly.map((d) => d.value));
   const lastNightMinutes = sleep[0]?.duration_minutes ?? null;
   const sleepPct = lastNightMinutes ? Math.round((lastNightMinutes / SLEEP_GOAL_MINUTES) * 100) : 0;
+  const avgSleepMinutes = average(sleepThisWeek.map((entry) => entry.duration_minutes ?? 0));
+  const avgQuality = average(sleepThisWeek.map((entry) => entry.quality).filter((value): value is number => value !== null));
 
-  const workoutsThisWeek = useMemo(
-    () => workouts.filter((w) => new Date(w.performed_at.replace(" ", "T")) >= weekStart),
-    [workouts, weekStart]
-  );
-  const workoutsThisWeekMinutes = workoutsThisWeek.reduce((s, w) => s + (w.duration_minutes ?? 0), 0);
-  const workoutsWeekly = useMemo(
-    () => weeklySeries(workoutsThisWeek, (w) => w.performed_at, () => 1, weekStart),
-    [workoutsThisWeek, weekStart]
-  );
+  const workoutsThisWeek = useMemo(() => workouts.filter((entry) => parseHealthDate(entry.performed_at) >= weekStart), [workouts, weekStart]);
+  const workoutsThisWeekMinutes = workoutsThisWeek.reduce((sum, entry) => sum + (entry.duration_minutes ?? 0), 0);
+  const workoutsWeekly = useMemo(() => weeklySeries(workouts, (entry) => entry.performed_at, () => 1, weekStart), [workouts, weekStart]);
 
-  const moodThisWeek = useMemo(() => mood.filter((m) => new Date(m.recorded_at.replace(" ", "T")) >= weekStart), [mood, weekStart]);
-  const moodWeekly = useMemo(
-    () => weeklySeries(moodThisWeek, (m) => m.recorded_at, (m) => m.mood, weekStart),
-    [moodThisWeek, weekStart]
-  );
-  const avgMoodWeek = moodThisWeek.length > 0 ? moodThisWeek.reduce((s, m) => s + m.mood, 0) / moodThisWeek.length : null;
+  const moodThisWeek = useMemo(() => mood.filter((entry) => parseHealthDate(entry.recorded_at) >= weekStart), [mood, weekStart]);
+  const moodWeekly = useMemo(() => weeklySeries(mood, (entry) => entry.recorded_at, (entry) => entry.mood, weekStart), [mood, weekStart]);
+  const avgMoodWeek = average(moodThisWeek.map((entry) => entry.mood));
 
-  const submitSleep = async () => {
-    if (!sleepForm.wentToBedAt || !sleepForm.wokeUpAt) return;
-    await addSleep({
-      wentToBedAt: new Date(sleepForm.wentToBedAt).toISOString(),
-      wokeUpAt: new Date(sleepForm.wokeUpAt).toISOString(),
-      quality: sleepForm.quality,
-    });
-    setSleepForm({ wentToBedAt: "", wokeUpAt: "", quality: 3 });
-  };
+  const waterGoalDays = waterWeekly.filter((day) => day.value * 1000 >= WATER_GOAL_ML).length;
+  const exerciseEnergyTrend = useMemo(() => {
+    const workoutDays = new Set(workouts.map((entry) => localDateKey(entry.performed_at)));
+    const withExercise = mood.filter((entry) => workoutDays.has(localDateKey(entry.recorded_at))).map((entry) => entry.energy);
+    const withoutExercise = mood.filter((entry) => !workoutDays.has(localDateKey(entry.recorded_at))).map((entry) => entry.energy);
+    const avgWith = average(withExercise);
+    const avgWithout = average(withoutExercise);
+    if (avgWith === null || avgWithout === null || withExercise.length < 2 || withoutExercise.length < 2) return null;
+    if (avgWith > avgWithout + 0.4) return "Seus registros mostram tendencia de energia maior nos dias com exercicio.";
+    if (avgWithout > avgWith + 0.4) return "Seus registros mostram tendencia de energia menor nos dias com exercicio.";
+    return "Seus registros de energia estao estaveis entre dias com e sem exercicio.";
+  }, [mood, workouts]);
 
-  const submitWorkout = async () => {
-    if (!workoutForm.kind.trim()) return;
-    await addWorkout({
-      kind: workoutForm.kind.trim(),
-      durationMinutes: workoutForm.durationMinutes ? Number(workoutForm.durationMinutes) : undefined,
-      distanceKm: workoutForm.distanceKm ? Number(workoutForm.distanceKm) : undefined,
-      intensity: workoutForm.intensity,
-    });
-    setWorkoutForm({ kind: "", durationMinutes: "", distanceKm: "", intensity: "moderada" });
-  };
+  const waterBadge: HealthBadge =
+    waterPct >= 100 ? { label: "Otimo!", tone: "green" } : waterPct >= 50 ? { label: "Quase la", tone: "amber" } : { label: "Beba mais agua", tone: "slate" };
+  const sleepBadge = statusBadge(lastNightMinutes ? (lastNightMinutes / SLEEP_GOAL_MINUTES) * 100 : null, "Otima noite", "Quase la");
+  const workoutsBadge: HealthBadge =
+    workoutsThisWeek.length >= 3 ? { label: "Boa semana", tone: "green" } : workoutsThisWeek.length >= 1 ? { label: "Continue assim", tone: "amber" } : { label: "Bora se mexer", tone: "slate" };
+  const moodBadge: HealthBadge =
+    avgMoodWeek === null ? { label: "Sem registro", tone: "slate" } : avgMoodWeek >= 4 ? { label: "Bem hoje", tone: "green" } : avgMoodWeek >= 2.5 ? { label: "Estavel", tone: "amber" } : { label: "Atencao", tone: "slate" };
 
-  const submitMood = async () => {
-    await addMood(moodForm);
-  };
+  function openEdit(target: HealthEditTarget) {
+    setHistoryOpen(null);
+    setEditTarget(target);
+  }
 
-  // Selos de status dos cards do topo — sempre derivados dos dados
-  // reais (nunca um texto fixo), para refletir o dia de fato.
-  const waterBadge =
-    waterPct >= 100 ? { label: "Ótimo!", tone: "green" as const } : waterPct >= 50 ? { label: "Quase lá!", tone: "amber" as const } : { label: "Beba mais água", tone: "slate" as const };
-  const sleepBadge =
-    !lastNightMinutes
-      ? { label: "Sem registro", tone: "slate" as const }
-      : sleepPct >= 90
-      ? { label: "Ótima noite!", tone: "green" as const }
-      : sleepPct >= 70
-      ? { label: "Quase lá!", tone: "amber" as const }
-      : { label: "Durma mais", tone: "slate" as const };
-  const workoutsBadge =
-    workoutsThisWeek.length >= 3 ? { label: "Boa semana!", tone: "green" as const } : workoutsThisWeek.length >= 1 ? { label: "Continue assim", tone: "amber" as const } : { label: "Bora se mexer", tone: "slate" as const };
-  const moodBadge =
-    avgMoodWeek === null ? { label: "Sem registro", tone: "slate" as const } : avgMoodWeek >= 4 ? { label: "Ótimo humor!", tone: "green" as const } : avgMoodWeek >= 2.5 ? { label: "Estável", tone: "amber" as const } : { label: "Atenção", tone: "slate" as const };
+  async function deleteByKind(kind: HealthHistoryKind, id: string) {
+    if (kind === "water") await removeWater(id);
+    if (kind === "sleep") await removeSleep(id);
+    if (kind === "workouts") await removeWorkout(id);
+    if (kind === "mood") await removeMood(id);
+    setToast("Registro excluido.");
+  }
+
+  async function saveEdit(target: HealthEditTarget, patch: HealthUpdatePatch) {
+    if (target.kind === "water") await updateWater({ id: target.entry.id, patch: patch as Partial<WaterEntryInput> });
+    if (target.kind === "sleep") await updateSleep({ id: target.entry.id, patch: patch as Partial<SleepEntryInput> });
+    if (target.kind === "workouts") await updateWorkout({ id: target.entry.id, patch: patch as Partial<WorkoutInput> });
+    if (target.kind === "mood") await updateMood({ id: target.entry.id, patch: patch as Partial<MoodEntryInput> });
+    setToast("Registro atualizado.");
+  }
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8">
-      <p className="font-display font-bold text-2xl">Saúde e bem-estar</p>
-      <p className="text-sm text-slate mt-0.5 mb-5">Cuide de você hoje para viver um amanhã melhor.</p>
+    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+      <PageHeader
+        icon={<HeartPulse size={21} />}
+        title="Saúde e bem-estar"
+        subtitle="Cuide de você hoje para viver um amanhã melhor."
+        actions={<p className="text-xs italic text-slate">Corpo saudável, mente mais forte.</p>}
+      />
 
-      {/* Resumo do dia — 2 colunas no celular, 4 a partir de sm (tablets/desktop) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
-        <StatSummaryCard
+      {isLoading && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-sm text-slate dark:border-ink-border dark:bg-ink-raised">
+          <Loader2 size={16} className="animate-spin" />
+          Carregando seus registros de bem-estar...
+        </div>
+      )}
+
+      <div className="-mx-4 mb-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
+        <HealthStatCard
           tone="blue"
           icon={<Droplets size={16} />}
           label="Água"
           value={`${(waterTotal / 1000).toFixed(1)} / ${(WATER_GOAL_ML / 1000).toFixed(1)} L`}
           badge={waterBadge}
-          progressPct={Math.min(100, waterPct)}
+          progressPct={boundedPct(waterPct)}
           caption={`${waterPct}% da meta`}
-          weekly={weeklySeries(water, (w) => w.recorded_at, (w) => w.amount_ml / 1000, weekStart)}
+          weekly={waterWeekly}
         />
-        <StatSummaryCard
+        <HealthStatCard
           tone="purple"
           icon={<Moon size={16} />}
           label="Sono"
-          value={lastNightMinutes ? formatHM(lastNightMinutes) : "—"}
+          value={lastNightMinutes ? formatHM(lastNightMinutes) : "--"}
           badge={sleepBadge}
-          progressPct={Math.min(100, sleepPct)}
+          progressPct={boundedPct(sleepPct)}
           caption={lastNightMinutes ? `${sleepPct}% da meta` : "sem registro"}
           weekly={sleepWeekly}
         />
-        <StatSummaryCard
+        <HealthStatCard
           tone="green"
           icon={<Dumbbell size={16} />}
           label="Exercícios"
@@ -179,590 +187,105 @@ export function SaudePage() {
           caption={`${workoutsThisWeekMinutes} min no total`}
           weekly={workoutsWeekly}
         />
-        <StatSummaryCard
+        <HealthStatCard
           tone="amber"
-          icon={<Smile size={16} />}
+          icon={<Sun size={16} />}
           label="Humor & energia"
-          value={mood[0] ? `${mood[0].mood} / 5` : avgMoodWeek !== null ? `${avgMoodWeek.toFixed(1)} / 5` : "— / 5"}
+          value={mood[0] ? `${mood[0].mood} / 5` : avgMoodWeek !== null ? `${avgMoodWeek.toFixed(1)} / 5` : "-- / 5"}
           badge={moodBadge}
-          caption={mood[0] ? `energia ${mood[0].energy}/5` : "Sem registro"}
+          caption={mood[0] ? `energia ${mood[0].energy}/5` : "sem registro"}
           weekly={moodWeekly}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Água */}
-        <Card className="p-5 md:p-6">
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <IconBadge tone="blue" size={34} icon={<Droplets size={16} />} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Água</p>
-                <p className="text-xs text-slate">Hidratação para mais energia e foco.</p>
-              </div>
-            </div>
-            <button onClick={() => setHistoryOpen("water")} className="text-xs font-medium text-brand-600 dark:text-brand-500 shrink-0">
-              Ver histórico →
-            </button>
-          </div>
-
-          <div className="flex items-center gap-5">
-            <WaterRing pct={Math.min(100, waterPct)} />
-            <div>
-              <p className="font-display font-bold text-3xl leading-none">
-                {(waterTotal / 1000).toFixed(1)}
-                <span className="text-sm font-normal text-slate"> L</span>
-              </p>
-              <p className="text-xs text-slate mt-1">de {(WATER_GOAL_ML / 1000).toFixed(1)} L hoje</p>
-              <p className={`text-xs font-semibold mt-2 ${waterPct >= 100 ? "text-growth" : "text-slate"}`}>{waterPct}% da meta</p>
-            </div>
-          </div>
-
-          <p className="text-xs font-semibold mt-5 mb-2">Adicionar rapidamente</p>
-          <div className="flex gap-2 mb-4">
-            {WATER_QUICK_ADD.map((ml) => (
-              <Button key={ml} variant="secondary" className="flex-1" onClick={() => addWater(ml)}>
-                +{ml}ml
-              </Button>
-            ))}
-          </div>
-
-          <p className="text-xs font-semibold mb-2">Registros de hoje</p>
-          {waterToday.length === 0 ? (
-            <p className="text-xs text-slate">Nenhum registro ainda hoje.</p>
-          ) : (
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-              {waterToday.map((w) => (
-                <div key={w.id} className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 text-slate">
-                    <Droplets size={11} className="text-cat-blue" /> {w.amount_ml}ml · {fmtTime(w.recorded_at)}
-                  </span>
-                  <button onClick={() => removeWater(w.id)} className="text-slate hover:text-drop transition-colors">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="rounded-xl p-3 mt-4 bg-cat-blue/5 border border-cat-blue/15 flex items-start gap-2.5">
-            <Droplets size={14} className="text-cat-blue mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold">Dica de hoje</p>
-              <p className="text-[11px] text-slate mt-0.5">Manter-se hidratado melhora seu foco, humor e desempenho cognitivo.</p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Sono */}
-        <Card className="p-5 md:p-6">
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <IconBadge tone="purple" size={34} icon={<Moon size={16} />} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Sono</p>
-                <p className="text-xs text-slate">Mais descanso, mais produtividade.</p>
-              </div>
-            </div>
-            <button onClick={() => setHistoryOpen("sleep")} className="text-xs font-medium text-brand-600 dark:text-brand-500 shrink-0">
-              Ver histórico →
-            </button>
-          </div>
-
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="min-w-0">
-              <div className="flex items-end gap-1.5">
-                <span className="font-display font-bold text-2xl">{lastNightMinutes ? formatHM(lastNightMinutes) : "—"}</span>
-                <span className="text-xs text-slate mb-1">de sono</span>
-              </div>
-              <p className="text-[11px] text-slate">Última noite {sleep[0]?.quality ? `· Qualidade ${sleep[0].quality}/5` : ""}</p>
-            </div>
-            <div className="flex items-end gap-1 h-12 shrink-0">
-              {sleepWeekly.map((d) => (
-                <div
-                  key={d.label}
-                  className={`w-2.5 rounded-t-sm ${d.value > 0 ? "bg-cat-purple dark:bg-cat-purple-dark" : "bg-paper-border dark:bg-ink-border"}`}
-                  style={{ height: `${Math.max(3, (d.value / weekMaxHours) * 44)}px` }}
-                  title={`${d.label}: ${d.value.toFixed(1)}h`}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* 1 coluna no celular: input datetime-local nativo precisa de mais espaço para não cortar o texto */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-            <Field label="Dormiu às" type="datetime-local" value={sleepForm.wentToBedAt} onChange={(e) => setSleepForm({ ...sleepForm, wentToBedAt: e.target.value })} />
-            <Field label="Acordou às" type="datetime-local" value={sleepForm.wokeUpAt} onChange={(e) => setSleepForm({ ...sleepForm, wokeUpAt: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-xs text-slate">Qualidade do sono</label>
-            <div className="flex items-center gap-2 mt-1">
-              <input type="range" min={1} max={5} value={sleepForm.quality} onChange={(e) => setSleepForm({ ...sleepForm, quality: Number(e.target.value) })} className="flex-1" />
-              <span className="text-xs w-10 text-right">{sleepForm.quality}/5</span>
-            </div>
-          </div>
-          <Button className="mt-3 w-full" onClick={submitSleep}>
-            <Moon size={14} /> Registrar noite
-          </Button>
-
-          {sleepThisWeek.length > 0 && (
-            // Mantém 3 colunas mesmo no celular (valores curtos), só com gap/rótulo
-            // ajustados para não apertar em ~360-400px.
-            <div className="mt-4 pt-4 border-t border-paper-border dark:border-ink-border grid grid-cols-3 gap-1.5 sm:gap-2 text-center">
-              <div className="min-w-0">
-                <p className="text-[10px] text-slate leading-tight">Média de sono</p>
-                <p className="text-sm font-semibold truncate">{avgSleepMinutes ? formatHM(avgSleepMinutes) : "—"}</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] text-slate leading-tight">Melhor noite</p>
-                <p className="text-sm font-semibold truncate">{bestNightMinutes ? formatHM(bestNightMinutes) : "—"}</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] text-slate leading-tight">Qualidade média</p>
-                <p className="text-sm font-semibold truncate">{avgQuality ? `${avgQuality.toFixed(1)}/5` : "—"}</p>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* Exercícios */}
-        <Card className="p-5 md:p-6">
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <IconBadge tone="green" size={34} icon={<Dumbbell size={16} />} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Exercícios</p>
-                <p className="text-xs text-slate">Movimento é vida.</p>
-              </div>
-            </div>
-            <button onClick={() => setHistoryOpen("workouts")} className="text-xs font-medium text-brand-600 dark:text-brand-500 shrink-0">
-              Ver histórico →
-            </button>
-          </div>
-
-          {/* 1 coluna no celular: formulário empilhado para não espremer os 4 campos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-            <Field label="Tipo" placeholder="Corrida, Musculação..." value={workoutForm.kind} onChange={(e) => setWorkoutForm({ ...workoutForm, kind: e.target.value })} />
-            <Field label="Duração (min)" type="number" value={workoutForm.durationMinutes} onChange={(e) => setWorkoutForm({ ...workoutForm, durationMinutes: e.target.value })} />
-            <Field label="Distância (km)" type="number" value={workoutForm.distanceKm} onChange={(e) => setWorkoutForm({ ...workoutForm, distanceKm: e.target.value })} />
-            <div className="relative">
-              <label className="text-xs text-slate">Intensidade</label>
-              <select
-                value={workoutForm.intensity}
-                onChange={(e) => setWorkoutForm({ ...workoutForm, intensity: e.target.value as typeof workoutForm.intensity })}
-                className="mt-1.5 w-full appearance-none rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border"
-              >
-                <option value="leve">Leve</option>
-                <option value="moderada">Moderada</option>
-                <option value="intensa">Intensa</option>
-              </select>
-              <ChevronDown size={12} className="absolute right-3 top-[34px] text-slate pointer-events-none" />
-            </div>
-          </div>
-          <Button className="w-full" onClick={submitWorkout}>
-            <Dumbbell size={14} /> Registrar exercício
-          </Button>
-
-          <div className="rounded-xl p-3 mt-4 bg-growth/5 border border-growth/15 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] text-slate">Esta semana</p>
-              <p className="font-display font-bold text-xl">{workoutsThisWeek.length}</p>
-              <p className="text-[10px] text-slate">{workoutsThisWeek.length === 1 ? "atividade" : "atividades"} · {formatHM(workoutsThisWeekMinutes)} no total</p>
-            </div>
-            <Dumbbell size={22} className="text-growth" />
-          </div>
-
-          <p className="text-xs font-semibold mt-4 mb-2">Últimos registros</p>
-          {workouts.length === 0 ? (
-            <p className="text-xs text-slate">Nenhum exercício registrado ainda.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {workouts.slice(0, 4).map((w) => (
-                <div key={w.id} className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 truncate">
-                    <Dumbbell size={11} className="text-cat-green shrink-0" />
-                    <span className="font-medium">{w.kind}</span>
-                    <span className="text-slate"> {w.duration_minutes ? `· ${w.duration_minutes}min` : ""}{w.distance_km ? ` · ${w.distance_km}km` : ""}</span>
-                  </span>
-                  <span className="flex items-center gap-2 shrink-0">
-                    <span className="text-slate">{fmtTime(w.performed_at)}</span>
-                    <button onClick={() => removeWorkout(w.id)} className="text-slate hover:text-drop transition-colors">
-                      <Trash2 size={11} />
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Humor e energia */}
-        <Card className="p-5 md:p-6">
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <IconBadge tone="amber" size={34} icon={<Smile size={16} />} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Humor e energia</p>
-                <p className="text-xs text-slate">Acompanhe como você está se sentindo.</p>
-              </div>
-            </div>
-            <button onClick={() => setHistoryOpen("mood")} className="text-xs font-medium text-brand-600 dark:text-brand-500 shrink-0">
-              Ver histórico →
-            </button>
-          </div>
-
-          {(["mood", "energy", "stress"] as const).map((key) => (
-            <div key={key} className="flex items-center gap-3 mb-3">
-              <label className="w-16 text-xs text-slate shrink-0">{key === "mood" ? "Humor" : key === "energy" ? "Energia" : "Estresse"}</label>
-              <input
-                type="range"
-                min={1}
-                max={5}
-                value={moodForm[key]}
-                onChange={(e) => setMoodForm({ ...moodForm, [key]: Number(e.target.value) })}
-                className={`flex-1 accent-current ${key === "mood" ? "text-signal" : key === "energy" ? "text-cat-blue" : "text-drop"}`}
-              />
-              <span className="text-xs w-8 text-right shrink-0">{moodForm[key]}/5</span>
-            </div>
-          ))}
-          <Button className="w-full mt-1" onClick={submitMood}>
-            <Smile size={14} /> Registrar
-          </Button>
-
-          {mood[0] && (
-            <p className="text-[11px] text-slate mt-3 text-center flex items-center justify-center gap-1.5">
-              <Smile size={12} className="text-signal-deep" />
-              Último registro: humor {mood[0].mood}/5 · energia {mood[0].energy}/5{mood[0].stress ? ` · estresse ${mood[0].stress}/5` : ""}
-              {" · "}
-              {fmtTime(mood[0].recorded_at)}
-            </p>
-          )}
-
-          <div className="rounded-xl p-3 mt-4 bg-gradient-to-br from-signal/10 to-cat-pink/10 border border-signal/15 flex items-start gap-2.5">
-            <Sun size={14} className="text-signal-deep mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold">Pequenas ações, grandes mudanças</p>
-              <p className="text-[11px] text-slate mt-0.5">Registrar como você se sente ajuda a identificar padrões e construir uma rotina mais equilibrada.</p>
-            </div>
-          </div>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <WaterCard
+          waterToday={waterToday}
+          waterTotal={waterTotal}
+          waterPct={waterPct}
+          onQuickAdd={async (amountMl) => {
+            await addWater(amountMl);
+            setToast(`+${amountMl} ml registrados.`);
+          }}
+          onDelete={(id) => deleteByKind("water", id)}
+          onEdit={openEdit}
+          onOpenHistory={() => setHistoryOpen("water")}
+        />
+        <SleepCard
+          sleep={sleep}
+          sleepWeekly={sleepWeekly}
+          lastNightMinutes={lastNightMinutes}
+          avgSleepMinutes={avgSleepMinutes}
+          avgQuality={avgQuality}
+          onAddSleep={async (input) => {
+            await addSleep(input);
+            setToast("Noite registrada.");
+          }}
+          onDelete={(id) => deleteByKind("sleep", id)}
+          onEdit={openEdit}
+          onOpenHistory={() => setHistoryOpen("sleep")}
+        />
+        <WorkoutCard
+          workouts={workouts}
+          workoutsWeekly={workoutsWeekly}
+          workoutsThisWeekMinutes={workoutsThisWeekMinutes}
+          onAddWorkout={async (input) => {
+            await addWorkout(input);
+            setToast("Exercicio registrado.");
+          }}
+          onDelete={(id) => deleteByKind("workouts", id)}
+          onEdit={openEdit}
+          onOpenHistory={() => setHistoryOpen("workouts")}
+        />
+        <MoodCard
+          mood={mood}
+          onAddMood={async (input) => {
+            await addMood(input);
+            setToast("Check-in de bem-estar salvo.");
+          }}
+          onDelete={(id) => deleteByKind("mood", id)}
+          onEdit={openEdit}
+          onOpenHistory={() => setHistoryOpen("mood")}
+        />
       </div>
 
-      {/* Insight de bem-estar (Gemini) + card motivacional */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <Card className="p-5 md:p-6">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2.5">
-              <IconBadge tone="pink" size={34} icon={<Sparkles size={15} />} />
-              <div>
-                <p className="text-sm font-semibold">Insight de bem-estar</p>
-                <p className="text-xs text-slate">Análise da IA sobre água, sono, exercício e humor dos últimos 7 dias.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => insight.generate()}
-              disabled={insight.isGenerating}
-              className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-paper-border dark:border-ink-border px-3.5 py-2 text-xs font-semibold hover:bg-paper dark:hover:bg-ink-overlay disabled:opacity-60 transition-colors"
-            >
-              <Wand2 size={13} />
-              {insight.isGenerating ? "Analisando..." : insight.text ? "Gerar outra análise" : "Analisar com IA"}
-            </button>
-          </div>
-
-          {insight.error ? (
-            <p className="text-xs mt-4 bg-drop/10 text-drop rounded-xl px-4 py-3">
-              {insight.error.message}
-              {insight.error.status === 400 && (
-                <>
-                  {" "}
-                  <Link to="/configuracoes" className="underline font-semibold">
-                    Ir para Configurações
-                  </Link>
-                </>
-              )}
-            </p>
-          ) : insight.text ? (
-            <p className="text-sm leading-relaxed mt-4 bg-cat-pink/5 border border-cat-pink/15 rounded-xl px-4 py-3">{insight.text}</p>
-          ) : (
-            <p className="text-xs text-slate mt-4">
-              Peça uma análise para o Copilot cruzar seus próprios números de água, sono, exercício e humor e apontar um padrão real — não um texto genérico.
-            </p>
-          )}
-        </Card>
-
-        <Card className="p-6 bg-gradient-to-br from-brand-600 to-cat-purple text-white border-0 shadow-card">
-          <Sparkles size={22} className="mb-3 opacity-90" />
-          <p className="font-display font-bold text-lg leading-snug">Um novo dia, novas oportunidades</p>
-          <p className="text-sm opacity-90 mt-2 leading-relaxed">Continue cuidando de você. Seu bem-estar de hoje constrói o seu melhor amanhã.</p>
-          <p className="text-xs italic opacity-80 mt-4 pt-4 border-t border-white/20">
-            &ldquo;Corpo saudável, mente mais forte.&rdquo;
-          </p>
-        </Card>
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <WellnessInsightCard
+          waterGoalDays={waterGoalDays}
+          exerciseEnergyTrend={exerciseEnergyTrend}
+          insightText={insight.text}
+          insightError={insight.error}
+          isGenerating={insight.isGenerating}
+          onGenerate={() => insight.generate()}
+        />
+        <WellnessIllustrationCard />
       </div>
 
-      <CorrelationsCard />
+      <HealthCorrelationsCard correlations={correlations} isLoading={correlationsLoading} />
 
       {historyOpen && (
-        <HistoryModal
-          title={
-            historyOpen === "water"
-              ? "Histórico de água"
-              : historyOpen === "sleep"
-                ? "Histórico de sono"
-                : historyOpen === "workouts"
-                  ? "Histórico de exercícios"
-                  : "Histórico de humor e energia"
-          }
+        <HealthHistoryModal
+          kind={historyOpen}
+          water={water}
+          sleep={sleep}
+          workouts={workouts}
+          mood={mood}
           onClose={() => setHistoryOpen(null)}
+          onEdit={openEdit}
+          onDelete={(kind, id) => void deleteByKind(kind, id)}
+        />
+      )}
+
+      {editTarget && <HealthEditModal target={editTarget} onClose={() => setEditTarget(null)} onSave={saveEdit} />}
+
+      {toast && (
+        <button
+          className="fixed bottom-5 right-5 z-[70] rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-left text-sm font-semibold shadow-card dark:border-ink-border dark:bg-ink-raised"
+          onClick={() => setToast(null)}
         >
-          {historyOpen === "water" ? (
-            water.length === 0 ? (
-              <p className="text-sm text-slate">Nenhum registro de água ainda.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {water.map((w) => (
-                  <div key={w.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
-                    <span className="flex items-center gap-2">
-                      <Droplets size={13} className="text-cat-blue" /> {w.amount_ml}ml
-                    </span>
-                    <span className="flex items-center gap-2 shrink-0">
-                      <span className="text-slate text-xs">{fmtTime(w.recorded_at)}</span>
-                      <button onClick={() => removeWater(w.id)} className="text-slate hover:text-drop transition-colors">
-                        <Trash2 size={12} />
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )
-          ) : historyOpen === "sleep" ? (
-            sleep.length === 0 ? (
-              <p className="text-sm text-slate">Nenhum registro de sono ainda.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {sleep.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
-                    <span className="flex items-center gap-2">
-                      <Moon size={13} className="text-cat-purple" /> {s.duration_minutes ? formatHM(s.duration_minutes) : "—"}
-                      {s.quality ? ` · ${s.quality}/5` : ""}
-                    </span>
-                    <span className="text-slate text-xs">{fmtTime(s.went_to_bed_at)}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          ) : historyOpen === "workouts" ? (
-            workouts.length === 0 ? (
-              <p className="text-sm text-slate">Nenhum exercício registrado ainda.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {workouts.map((w) => (
-                  <div key={w.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
-                    <span className="flex items-center gap-2 min-w-0">
-                      <Dumbbell size={13} className="text-cat-green shrink-0" />
-                      <span className="truncate">
-                        {w.kind}
-                        {w.duration_minutes ? ` · ${w.duration_minutes}min` : ""}
-                        {w.distance_km ? ` · ${w.distance_km}km` : ""}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-2 shrink-0">
-                      <span className="text-slate text-xs">{fmtTime(w.performed_at)}</span>
-                      <button onClick={() => removeWorkout(w.id)} className="text-slate hover:text-drop transition-colors">
-                        <Trash2 size={12} />
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )
-          ) : mood.length === 0 ? (
-            <p className="text-sm text-slate">Nenhum registro de humor ainda.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {mood.map((m) => (
-                <div key={m.id} className="flex items-center justify-between text-sm py-1.5 border-b border-paper-border dark:border-ink-border last:border-0">
-                  <span className="flex items-center gap-2">
-                    <Smile size={13} className="text-signal-deep" />
-                    humor {m.mood}/5 · energia {m.energy}/5{m.stress ? ` · estresse ${m.stress}/5` : ""}
-                  </span>
-                  <span className="flex items-center gap-2 shrink-0">
-                    <span className="text-slate text-xs">{fmtTime(m.recorded_at)}</span>
-                    <button onClick={() => removeMood(m.id)} className="text-slate hover:text-drop transition-colors">
-                      <Trash2 size={12} />
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </HistoryModal>
+          {toast}
+        </button>
       )}
-    </div>
-  );
-}
-
-/** Anel de progresso circular (SVG) usado no card de água — mesmo raciocínio de um medidor físico de hidratação, mais legível de relance que uma barra linear. */
-function WaterRing({ pct }: { pct: number }) {
-  const size = 96;
-  const stroke = 9;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - pct / 100);
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={radius} strokeWidth={stroke} className="stroke-paper-border dark:stroke-ink-border" fill="none" />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        className="stroke-cat-blue transition-[stroke-dashoffset] duration-500"
-        fill="none"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-      />
-    </svg>
-  );
-}
-
-const TONE_BAR: Record<string, string> = {
-  blue: "bg-cat-blue dark:bg-cat-blue-dark",
-  purple: "bg-cat-purple dark:bg-cat-purple-dark",
-  green: "bg-cat-green dark:bg-cat-green-dark",
-  amber: "bg-signal",
-};
-
-const BADGE_TONE: Record<string, string> = {
-  green: "bg-growth/10 text-growth",
-  amber: "bg-signal/15 text-signal-deep dark:text-signal",
-  slate: "bg-slate/10 text-slate",
-};
-
-function StatSummaryCard({
-  tone,
-  icon,
-  label,
-  value,
-  badge,
-  progressPct,
-  caption,
-  weekly,
-}: {
-  tone: "blue" | "purple" | "green" | "amber";
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  badge: { label: string; tone: "green" | "amber" | "slate" };
-  progressPct?: number;
-  caption: string;
-  weekly: { label: string; value: number }[];
-}) {
-  const maxVal = Math.max(1, ...weekly.map((d) => d.value));
-  return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <IconBadge tone={tone} icon={icon} size={32} />
-          <span className="text-xs text-slate truncate">{label}</span>
-        </div>
-        <span className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full whitespace-nowrap ${BADGE_TONE[badge.tone]}`}>{badge.label}</span>
-      </div>
-      <div className="flex items-end justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-display font-bold text-lg leading-none truncate">{value}</p>
-          <p className="text-[11px] text-slate mt-1.5 truncate">{caption}</p>
-        </div>
-        <div className="hidden sm:flex items-end gap-[3px] h-7 shrink-0">
-          {weekly.map((d, i) => (
-            <div
-              key={i}
-              className={`w-1.5 rounded-t-sm ${d.value > 0 ? TONE_BAR[tone] : "bg-paper-border dark:bg-ink-border"}`}
-              style={{ height: `${Math.max(2, (d.value / maxVal) * 28)}px` }}
-              title={`${d.label}: ${d.value.toFixed(1)}`}
-            />
-          ))}
-        </div>
-      </div>
-      {progressPct !== undefined && (
-        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
-          <div className={`h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${progressPct}%` }} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-const STRENGTH_TONE: Record<string, string> = {
-  fraca: "bg-slate/10 text-slate",
-  moderada: "bg-signal/15 text-signal-deep dark:text-signal",
-  forte: "bg-growth/10 text-growth",
-  "muito forte": "bg-brand-500/10 text-brand-600 dark:text-brand-400",
-};
-
-/**
- * Correlações automáticas: cruza sono, exercício, água e humor/energia/
- * estresse dos próprios dados (ver GET /api/health/correlations) e só
- * mostra padrões com amostra suficiente (mín. 7 dias) — é uma
- * observação estatística sobre os próprios números, não um diagnóstico.
- */
-function CorrelationsCard() {
-  const { correlations, isLoading } = useHealthCorrelations();
-
-  return (
-    <Card className="p-5 md:p-6 mt-4">
-      <div className="flex items-center gap-2.5">
-        <IconBadge tone="green" size={34} icon={<LineChart size={15} />} />
-        <div>
-          <p className="text-sm font-semibold">Correlações de saúde</p>
-          <p className="text-xs text-slate">Padrões encontrados nos seus próprios registros de sono, exercício, água e humor.</p>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <p className="text-xs text-slate mt-4">Calculando...</p>
-      ) : correlations.length === 0 ? (
-        <p className="text-xs text-slate mt-4">
-          Ainda não há dados suficientes (pelo menos 7 dias com os dois registros no mesmo dia) para calcular uma correlação confiável. Continue registrando sono, exercício, água e humor.
-        </p>
-      ) : (
-        <div className="space-y-2.5 mt-4">
-          {correlations.map((c) => (
-            <div key={c.pair} className="rounded-xl border border-paper-border dark:border-ink-border px-4 py-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-sm font-medium">{c.label}</p>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${STRENGTH_TONE[c.strength]}`}>
-                  {c.strength} · r={c.r.toFixed(2)}
-                </span>
-              </div>
-              <p className="text-xs text-slate mt-1.5">{c.description}</p>
-            </div>
-          ))}
-          <p className="text-[11px] text-slate pt-1">
-            Correlação não implica causalidade — são padrões observados nos seus próprios dados, não um diagnóstico.
-          </p>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function HistoryModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-5 shadow-card-dark"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <p className="font-display font-semibold text-base">{title}</p>
-          <button onClick={onClose} className="text-slate hover:text-inherit transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
     </div>
   );
 }
