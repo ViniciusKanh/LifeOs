@@ -4,9 +4,13 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
   waterEntrySchema,
+  waterEntryUpdateSchema,
   sleepEntrySchema,
+  sleepEntryUpdateSchema,
   workoutSchema,
+  workoutUpdateSchema,
   moodEntrySchema,
+  moodEntryUpdateSchema,
   healthMetricEntrySchema,
 } from "../validators/health.schema.js";
 import { computeHealthCorrelations } from "../services/correlationService.js";
@@ -17,6 +21,10 @@ healthRouter.use(requireAuth);
 function minutesBetween(a: string, b: string) {
   const diff = new Date(b).getTime() - new Date(a).getTime();
   return diff > 0 ? Math.round(diff / 60000) : null;
+}
+
+function firstValidationMessage(error: { issues: Array<{ message: string }> }) {
+  return error.issues[0]?.message ?? "Dados inválidos.";
 }
 
 /* ---------------------------- Água ---------------------------- */
@@ -40,7 +48,7 @@ healthRouter.get("/water", async (req, res) => {
 healthRouter.post("/water", async (req, res) => {
   const parsed = waterEntrySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
   const db = getDb();
   const id = nanoid();
@@ -51,6 +59,40 @@ healthRouter.post("/water", async (req, res) => {
   });
   const created = await db.execute({ sql: "SELECT * FROM water_entries WHERE id = ?", args: [id] });
   return res.status(201).json(created.rows[0]);
+});
+
+/** PATCH /api/health/water/:id */
+healthRouter.patch("/water/:id", async (req, res) => {
+  const parsed = waterEntryUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
+  }
+
+  const fieldMap: Record<string, string> = {
+    amountMl: "amount_ml",
+    recordedAt: "recorded_at",
+  };
+  const data = parsed.data as Record<string, string | number | undefined>;
+  const sets: string[] = [];
+  const args: Array<string | number> = [];
+  for (const [key, column] of Object.entries(fieldMap)) {
+    const value = data[key];
+    if (value !== undefined) {
+      sets.push(`${column} = ?`);
+      args.push(value);
+    }
+  }
+  args.push(req.params.id, req.user!.id);
+
+  const db = getDb();
+  const result = await db.execute({
+    sql: `UPDATE water_entries SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`,
+    args,
+  });
+  if (result.rowsAffected === 0) return res.status(404).json({ error: "Registro de água não encontrado." });
+
+  const updated = await db.execute({ sql: "SELECT * FROM water_entries WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  return res.json(updated.rows[0]);
 });
 
 /** DELETE /api/health/water/:id */
@@ -80,12 +122,15 @@ healthRouter.get("/sleep", async (req, res) => {
 healthRouter.post("/sleep", async (req, res) => {
   const parsed = sleepEntrySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
   const d = parsed.data;
   const db = getDb();
   const id = nanoid();
   const duration = minutesBetween(d.wentToBedAt, d.wokeUpAt);
+  if (duration === null) {
+    return res.status(400).json({ error: "O horário de acordar precisa ser depois do horário em que você dormiu." });
+  }
   await db.execute({
     sql: `INSERT INTO sleep_entries (id, owner_id, went_to_bed_at, woke_up_at, duration_minutes, quality, notes)
           VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -93,6 +138,56 @@ healthRouter.post("/sleep", async (req, res) => {
   });
   const created = await db.execute({ sql: "SELECT * FROM sleep_entries WHERE id = ?", args: [id] });
   return res.status(201).json(created.rows[0]);
+});
+
+/** PATCH /api/health/sleep/:id */
+healthRouter.patch("/sleep/:id", async (req, res) => {
+  const parsed = sleepEntryUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
+  }
+
+  const db = getDb();
+  const existing = await db.execute({
+    sql: "SELECT * FROM sleep_entries WHERE id = ? AND owner_id = ?",
+    args: [req.params.id, req.user!.id],
+  });
+  if (existing.rows.length === 0) return res.status(404).json({ error: "Registro de sono não encontrado." });
+
+  const row = existing.rows[0] as unknown as { went_to_bed_at: string; woke_up_at: string };
+  const d = parsed.data;
+  const nextWentToBedAt = d.wentToBedAt ?? row.went_to_bed_at;
+  const nextWokeUpAt = d.wokeUpAt ?? row.woke_up_at;
+  const nextDuration = minutesBetween(nextWentToBedAt, nextWokeUpAt);
+  if (nextDuration === null) {
+    return res.status(400).json({ error: "O horário de acordar precisa ser depois do horário em que você dormiu." });
+  }
+
+  const fieldMap: Record<string, string> = {
+    wentToBedAt: "went_to_bed_at",
+    wokeUpAt: "woke_up_at",
+    quality: "quality",
+    notes: "notes",
+  };
+  const data = d as Record<string, string | number | null | undefined>;
+  const sets: string[] = [];
+  const args: Array<string | number | null> = [];
+  for (const [key, column] of Object.entries(fieldMap)) {
+    const value = data[key];
+    if (value !== undefined) {
+      sets.push(`${column} = ?`);
+      args.push(value ?? null);
+    }
+  }
+  if (d.wentToBedAt !== undefined || d.wokeUpAt !== undefined) {
+    sets.push("duration_minutes = ?");
+    args.push(nextDuration);
+  }
+  args.push(req.params.id, req.user!.id);
+
+  await db.execute({ sql: `UPDATE sleep_entries SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
+  const updated = await db.execute({ sql: "SELECT * FROM sleep_entries WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  return res.json(updated.rows[0]);
 });
 
 /** DELETE /api/health/sleep/:id */
@@ -122,7 +217,7 @@ healthRouter.get("/workouts", async (req, res) => {
 healthRouter.post("/workouts", async (req, res) => {
   const parsed = workoutSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
   const d = parsed.data;
   const db = getDb();
@@ -144,6 +239,42 @@ healthRouter.post("/workouts", async (req, res) => {
   });
   const created = await db.execute({ sql: "SELECT * FROM workouts WHERE id = ?", args: [id] });
   return res.status(201).json(created.rows[0]);
+});
+
+/** PATCH /api/health/workouts/:id */
+healthRouter.patch("/workouts/:id", async (req, res) => {
+  const parsed = workoutUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
+  }
+
+  const fieldMap: Record<string, string> = {
+    kind: "kind",
+    durationMinutes: "duration_minutes",
+    distanceKm: "distance_km",
+    calories: "calories",
+    intensity: "intensity",
+    notes: "notes",
+    performedAt: "performed_at",
+  };
+  const data = parsed.data as Record<string, string | number | null | undefined>;
+  const sets: string[] = [];
+  const args: Array<string | number | null> = [];
+  for (const [key, column] of Object.entries(fieldMap)) {
+    const value = data[key];
+    if (value !== undefined) {
+      sets.push(`${column} = ?`);
+      args.push(value ?? null);
+    }
+  }
+  args.push(req.params.id, req.user!.id);
+
+  const db = getDb();
+  const result = await db.execute({ sql: `UPDATE workouts SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
+  if (result.rowsAffected === 0) return res.status(404).json({ error: "Exercício não encontrado." });
+
+  const updated = await db.execute({ sql: "SELECT * FROM workouts WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  return res.json(updated.rows[0]);
 });
 
 /** DELETE /api/health/workouts/:id */
@@ -173,7 +304,7 @@ healthRouter.get("/mood", async (req, res) => {
 healthRouter.post("/mood", async (req, res) => {
   const parsed = moodEntrySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
   const d = parsed.data;
   const db = getDb();
@@ -185,6 +316,40 @@ healthRouter.post("/mood", async (req, res) => {
   });
   const created = await db.execute({ sql: "SELECT * FROM mood_entries WHERE id = ?", args: [id] });
   return res.status(201).json(created.rows[0]);
+});
+
+/** PATCH /api/health/mood/:id */
+healthRouter.patch("/mood/:id", async (req, res) => {
+  const parsed = moodEntryUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
+  }
+
+  const fieldMap: Record<string, string> = {
+    mood: "mood",
+    energy: "energy",
+    stress: "stress",
+    note: "note",
+    recordedAt: "recorded_at",
+  };
+  const data = parsed.data as Record<string, string | number | null | undefined>;
+  const sets: string[] = [];
+  const args: Array<string | number | null> = [];
+  for (const [key, column] of Object.entries(fieldMap)) {
+    const value = data[key];
+    if (value !== undefined) {
+      sets.push(`${column} = ?`);
+      args.push(value ?? null);
+    }
+  }
+  args.push(req.params.id, req.user!.id);
+
+  const db = getDb();
+  const result = await db.execute({ sql: `UPDATE mood_entries SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
+  if (result.rowsAffected === 0) return res.status(404).json({ error: "Registro de humor não encontrado." });
+
+  const updated = await db.execute({ sql: "SELECT * FROM mood_entries WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  return res.json(updated.rows[0]);
 });
 
 /** DELETE /api/health/mood/:id */
@@ -220,7 +385,7 @@ healthRouter.get("/metrics", async (req, res) => {
 healthRouter.post("/metrics", async (req, res) => {
   const parsed = healthMetricEntrySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+    return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
   const d = parsed.data;
   const db = getDb();
