@@ -211,7 +211,6 @@ export async function removeCustomAchievement(ownerId: string, id: string): Prom
  */
 export async function evaluateCustomAchievements(ownerId: string): Promise<CustomAchievementView[]> {
   const db = getDb();
-  const metrics = await computeMetrics(db, ownerId);
   const rows = await db.execute({
     sql: "SELECT * FROM custom_achievements WHERE owner_id = ? AND unlocked_at IS NULL",
     args: [ownerId],
@@ -298,7 +297,8 @@ export async function evaluateAchievements(ownerId: string): Promise<Achievement
   const already = await db.execute({ sql: "SELECT achievement_id FROM user_achievements WHERE owner_id = ?", args: [ownerId] });
   const alreadySet = new Set((already.rows as unknown as Array<{ achievement_id: string }>).map((r) => r.achievement_id));
   const pendingRows = (catalog.rows as unknown as Array<{ id: string; metric: string | null; threshold: number | null }>).filter(
-    (row) => !alreadySet.has(row.id) && row.metric && row.threshold !== null
+    (row): row is { id: string; metric: string; threshold: number } =>
+      !alreadySet.has(row.id) && typeof row.metric === "string" && row.metric.length > 0 && typeof row.threshold === "number"
   );
   if (pendingRows.length === 0) return [];
   const metrics = await computeMetrics(db, ownerId, pendingRows.map((row) => row.metric).filter((metric): metric is string => !!metric));
