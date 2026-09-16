@@ -57,6 +57,23 @@ describe("Inbox (notas rápidas)", () => {
     expect(pending.body.some((i: { id: string }) => i.id === created.body.id)).toBe(false);
   });
 
+  it("retorna estatísticas sem carregar o histórico inteiro e respeita limit na listagem", async () => {
+    const { agent } = await createAuthenticatedAgent();
+
+    const first = await agent.post("/api/inbox").send({ content: "Primeira ideia" });
+    await agent.post("/api/inbox").send({ content: "Segunda ideia" });
+    await agent.post("/api/inbox").send({ content: "Terceira ideia" });
+    await agent.patch(`/api/inbox/${first.body.id}/process`).send({ action: "discard" });
+
+    const stats = await agent.get("/api/inbox/stats");
+    expect(stats.status).toBe(200);
+    expect(stats.body).toEqual({ pending: 2, processedLast7d: 1, capturedLast7d: 3 });
+
+    const limited = await agent.get("/api/inbox?includeProcessed=true&limit=2");
+    expect(limited.status).toBe(200);
+    expect(limited.body).toHaveLength(2);
+  });
+
   it("exclui um item sem processar e nunca deixa apagar item de outro usuário", async () => {
     const { agent } = await createAuthenticatedAgent();
     const other = await createAuthenticatedAgent();

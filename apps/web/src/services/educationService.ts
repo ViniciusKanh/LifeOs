@@ -14,7 +14,15 @@ import type {
 export const educationService = {
   list: () => api.get<Education[]>("/educations"),
   get: (id: string) => api.get<EducationDetail>(`/educations/${id}`),
-  create: (input: Partial<Education> & { kind: Education["kind"]; course_name?: string; courseName?: string }) =>
+  create: (
+    input: Partial<Education> & {
+      kind: Education["kind"];
+      course_name?: string;
+      courseName?: string;
+      startedAt?: string | null;
+      expectedEndAt?: string | null;
+    }
+  ) =>
     api.post<Education>("/educations", input),
   update: (id: string, patch: Record<string, unknown>) => api.patch<Education>(`/educations/${id}`, patch),
   remove: (id: string) => api.delete<void>(`/educations/${id}`),

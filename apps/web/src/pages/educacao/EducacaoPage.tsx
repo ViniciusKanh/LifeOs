@@ -140,16 +140,40 @@ function NovaFormacaoModal({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (input: { kind: EducationKind; courseName: string; institution?: string | null }) => Promise<unknown>;
+  onCreate: (input: {
+    kind: EducationKind;
+    courseName: string;
+    institution?: string | null;
+    startedAt?: string | null;
+    expectedEndAt?: string | null;
+  }) => Promise<unknown>;
 }) {
   const [kind, setKind] = useState<EducationKind>("mestrado");
   const [courseName, setCourseName] = useState("");
   const [institution, setInstitution] = useState("");
+  const [startedAt, setStartedAt] = useState("");
+  const [expectedEndAt, setExpectedEndAt] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!courseName.trim()) return;
-    await onCreate({ kind, courseName: courseName.trim(), institution: institution.trim() || null });
-    onClose();
+    if (!courseName.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate({
+        kind,
+        courseName: courseName.trim(),
+        institution: institution.trim() || null,
+        startedAt: startedAt || null,
+        expectedEndAt: expectedEndAt || null,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível criar a formação.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -171,8 +195,13 @@ function NovaFormacaoModal({
         </div>
         <Field label="Nome do curso/formação" value={courseName} onChange={(e) => setCourseName(e.target.value)} />
         <Field label="Instituição" value={institution} onChange={(e) => setInstitution(e.target.value)} />
-        <Button onClick={handleSubmit} disabled={!courseName.trim()} className="w-full">
-          Adicionar
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Início" type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+          <Field label="Previsão de conclusão" type="date" value={expectedEndAt} onChange={(e) => setExpectedEndAt(e.target.value)} />
+        </div>
+        {error && <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5">{error}</p>}
+        <Button onClick={handleSubmit} disabled={!courseName.trim() || saving} className="w-full">
+          {saving ? "Adicionando..." : "Adicionar"}
         </Button>
       </div>
     </ModalShell>
