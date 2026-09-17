@@ -98,8 +98,12 @@ registrado no servidor, visível apenas em ambiente de desenvolvimento).
 ## 5. CI/CD
 
 Cada `git push` no branch conectado já dispara um novo deploy automático
-(front + back juntos, mesmo projeto). Rode as migrations manualmente
-sempre que adicionar uma nova em `apps/api/src/db/migrations/`.
+(front + back juntos, mesmo projeto). As migrations em
+`apps/api/src/db/migrations/` são aplicadas automaticamente: a function
+da API roda `runMigrations()` (idempotente, cada arquivo só aplica uma
+vez) no primeiro request de cada cold start, então não é mais preciso
+rodar `npm run migrate` manualmente contra produção depois de um deploy.
+Continue usando `npm run migrate` normalmente em desenvolvimento local.
 
 ## 6. Alternativa: dois projetos separados
 

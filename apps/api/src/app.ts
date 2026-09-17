@@ -1,4 +1,12 @@
 import "dotenv/config";
+// Precisa vir logo no início, antes de qualquer rota: faz o Express
+// encaminhar automaticamente uma rejeição de promise dentro de uma
+// rota "async (req, res) => {...}" para o error handler central
+// abaixo. Sem isso, um erro assíncrono (ex.: tabela ausente no banco)
+// nunca chama res.json/res.status — a requisição fica pendurada até
+// a function da Vercel bater o timeout (maxDuration) e virar 504,
+// em vez de responder 500 na hora.
+import "express-async-errors";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -25,6 +33,7 @@ import { inboxRouter } from "./routes/inbox.routes.js";
 import { workNotesRouter } from "./routes/work-notes.routes.js";
 import { lifemapRouter } from "./routes/lifemap.routes.js";
 import { cronRouter } from "./routes/cron.routes.js";
+import { runMigrations } from "./db/migrate.js";
 
 /**
  * Configuração do Express extraída para um módulo próprio (sem
@@ -34,6 +43,26 @@ import { cronRouter } from "./routes/cron.routes.js";
  * pacote) — ver DEPLOY.md na raiz do monorepo.
  */
 export const app = express();
+
+// Aplica migrations pendentes automaticamente no primeiro request de
+// cada cold start (na Vercel não há como rodar "npm run migrate" à
+// mão contra o banco de produção). runMigrations() é idempotente —
+// cada migration só roda uma vez, registrada em schema_migrations —
+// então isso é seguro mesmo com várias instâncias da function
+// subindo ao mesmo tempo. Se falhar, a promise é descartada para a
+// próxima requisição tentar de novo, em vez de travar o servidor
+// permanentemente com um erro de conexão passageiro.
+let migrationsReady: Promise<void> | null = null;
+function ensureMigrations(): Promise<void> {
+  if (!migrationsReady) {
+    migrationsReady = runMigrations().catch((err) => {
+      console.error("✗ falha ao aplicar migrations automaticamente:", err);
+      migrationsReady = null;
+      throw err;
+    });
+  }
+  return migrationsReady;
+}
 
 // Em produção na Vercel, front e back normalmente rodam em domínios
 // diferentes; o proxy documentado em DEPLOY.md faz as chamadas do
@@ -49,6 +78,11 @@ app.use(express.json({ limit: "3mb" }));
 app.use(cookieParser());
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+
+app.use(async (_req, _res, next) => {
+  await ensureMigrations();
+  next();
+});
 
 app.use("/api/auth", authRouter);
 app.use("/api/tasks", tasksRouter);
