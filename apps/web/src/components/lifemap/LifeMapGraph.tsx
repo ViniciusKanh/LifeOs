@@ -20,6 +20,7 @@ export const AREA_COLOR: Record<LifeMapAreaId, string> = {
   educacao: "#08B6A6",
   leitura: "#FF3D93",
   saude: "#FF7A45",
+  profissional: "#7C4DFF",
 };
 
 const VIEW = 760;

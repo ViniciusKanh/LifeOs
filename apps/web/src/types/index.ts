@@ -704,11 +704,18 @@ export interface CustomAchievementMetricOption {
 
 /* ------------------------------ Life Map ------------------------------ */
 
-export type LifeMapAreaId = "metas" | "projetos" | "habitos" | "educacao" | "leitura" | "saude";
+export type LifeMapAreaId = "metas" | "projetos" | "habitos" | "educacao" | "leitura" | "saude" | "profissional";
+
+export type LifeMapNodeKind = "center" | "area" | "goal" | "project" | "habit" | "education" | "academic_project" | "book" | "health";
+
+/** Tipos de entidade que podem ser origem/destino de um vínculo manual criado no Life Map. */
+export type LifeMapLinkableType = "goal" | "project" | "habit" | "education" | "academic_project" | "book";
+
+export type LifeMapRelationshipType = "supports" | "belongs_to" | "related_to" | "contributes_to";
 
 export interface LifeMapNode {
   id: string;
-  kind: "center" | "area" | "goal" | "project" | "habit" | "education" | "academic_project" | "book" | "health";
+  kind: LifeMapNodeKind;
   area: LifeMapAreaId | null;
   label: string;
   sublabel: string | null;
@@ -721,7 +728,9 @@ export interface LifeMapNode {
 export interface LifeMapEdge {
   from: string;
   to: string;
-  kind: "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health";
+  kind: "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health" | "manual";
+  linkId?: string;
+  relationshipType?: LifeMapRelationshipType;
 }
 
 export interface LifeMapOrphans {
@@ -743,10 +752,26 @@ export interface LifeMapSummary {
   structuralScorePct: number;
 }
 
+export interface LifeMapDistributionItem {
+  area: LifeMapAreaId;
+  label: string;
+  count: number;
+  pct: number;
+}
+
 export interface LifeMapData {
   summary: LifeMapSummary;
   nodes: LifeMapNode[];
   edges: LifeMapEdge[];
   orphans: LifeMapOrphans;
   suggestions: LifeMapSuggestion[];
+  distribution: LifeMapDistributionItem[];
+}
+
+export interface CreateLifeMapLinkInput {
+  sourceType: LifeMapLinkableType;
+  sourceId: string;
+  targetType: LifeMapLinkableType;
+  targetId: string;
+  relationshipType?: LifeMapRelationshipType;
 }
