@@ -22,7 +22,8 @@ import {
   GanttChartSquare,
   Inbox,
   Briefcase,
-  BellRing,
+  CalendarRange,
+  Share2,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,7 +34,6 @@ import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
 import { QuickCaptureButton } from "./QuickCaptureButton";
-import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 
 // Frases curtas por área — só decoração de cabeçalho, sem dado
 // nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
@@ -43,6 +43,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/tarefas": "Disciplina de hoje, liberdade de amanhã.",
   "/inbox": "Capture agora, decida depois.",
   "/profissional": "Foco no que move os ponteiros.",
+  "/semana": "Uma semana bem planejada se vive melhor.",
   "/foco": "Foco é a ponte entre onde você está e onde quer chegar.",
   "/biblioteca": "Livros constroem a melhor versão de nós.",
   "/educacao": "Estudo hoje, liberdade amanhã.",
@@ -54,7 +55,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/analytics": "Dados transformam esforço em clareza.",
   "/timeline": "Disciplina de hoje, liberdade de amanhã.",
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
-  "/gatilhos": "O alerta certo na hora certa.",
+  "/life-map": "Clareza nasce quando você enxerga as conexões.",
 };
 const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 
@@ -69,6 +70,7 @@ const NAV = [
 const SECONDARY_NAV = [
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/profissional", label: "Profissional", icon: Briefcase },
+  { to: "/semana", label: "Semana", icon: CalendarRange },
   { to: "/calendario", label: "Calendário", icon: CalendarDays },
   { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
   { to: "/educacao", label: "Educação", icon: GraduationCap },
@@ -79,7 +81,7 @@ const SECONDARY_NAV = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/timeline", label: "Timeline", icon: History },
   { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
-  { to: "/gatilhos", label: "Gatilhos", icon: BellRing },
+  { to: "/life-map", label: "Life Map", icon: Share2 },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
@@ -180,7 +182,6 @@ export function AppShell() {
 
           <div className="flex items-center gap-2">
             <MobileGlobalSearch />
-            <AchievementHeaderPulse />
             <button
               onClick={() => setMode(isDark ? "light" : "dark")}
               className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border"

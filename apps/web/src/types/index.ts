@@ -21,7 +21,7 @@ export interface AdminUser {
   updated_at: string;
 }
 
-export type AdminIntegration = "gemini" | "turso" | "smtp" | "push";
+export type AdminIntegration = "gemini" | "turso" | "smtp";
 
 export interface AdminSetting {
   id: string;
@@ -426,7 +426,6 @@ export interface Goal {
   kind: GoalKind;
   target_value: number | null;
   current_value: number;
-  progress_source?: "reading_today";
   unit: string | null;
   due_date: string | null;
   status: GoalStatus;
@@ -607,7 +606,7 @@ export interface LifeInsights {
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water" | "work_note";
+  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water";
   icon: string;
   id: string;
   label: string;
@@ -703,29 +702,51 @@ export interface CustomAchievementMetricOption {
   label: string;
 }
 
-export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight";
-export interface CustomNotificationTrigger {
-  id: string;
-  name: string;
-  conditionType: "task_due_in" | "task_overdue_by";
-  days: number;
-  priority: "Baixa" | "Média" | "Alta" | null;
-  channelEmail: boolean;
-  channelPush: boolean;
-  channelInApp: boolean;
-  active: boolean;
-}
-export type NotificationAlertLevel = "soft" | "medium" | "critical";
+/* ------------------------------ Life Map ------------------------------ */
 
-export interface NotificationTriggerRule {
+export type LifeMapAreaId = "metas" | "projetos" | "habitos" | "educacao" | "leitura" | "saude";
+
+export interface LifeMapNode {
   id: string;
-  eventType: NotificationTriggerEvent;
+  kind: "center" | "area" | "goal" | "project" | "habit" | "education" | "academic_project" | "book" | "health";
+  area: LifeMapAreaId | null;
   label: string;
-  description: string;
-  channelEmail: boolean;
-  channelPush: boolean;
-  channelInApp: boolean;
-  alertLevel: NotificationAlertLevel;
-  active: boolean;
-  updatedAt: string;
+  sublabel: string | null;
+  progressPct: number | null;
+  lastActivityAt: string | null;
+  linkedCount: number;
+  openPath: string | null;
+}
+
+export interface LifeMapEdge {
+  from: string;
+  to: string;
+  kind: "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health";
+}
+
+export interface LifeMapOrphans {
+  tasksWithoutProject: number;
+  goalsWithoutHabit: number;
+  projectsWithoutDeadline: number;
+  habitsUnlinked: number;
+}
+
+export interface LifeMapSuggestion {
+  text: string;
+}
+
+export interface LifeMapSummary {
+  areasCount: number;
+  areasActiveCount: number;
+  goalsConnectedCount: number;
+  orphanItemsCount: number;
+  structuralScorePct: number;
+}
+
+export interface LifeMapData {
+  summary: LifeMapSummary;
+  nodes: LifeMapNode[];
+  edges: LifeMapEdge[];
+  orphans: LifeMapOrphans;
+  suggestions: LifeMapSuggestion[];
 }
