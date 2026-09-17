@@ -435,6 +435,8 @@ export interface Goal {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Presente só quando a API substitui current_value pela leitura de hoje (meta de páginas lidas). */
+  progress_source?: "reading_today";
 }
 
 export interface GoalPeriodStat {
@@ -606,7 +608,7 @@ export interface LifeInsights {
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water";
+  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water" | "work_note";
   icon: string;
   id: string;
   label: string;
@@ -700,6 +702,37 @@ export interface CustomAchievement {
 export interface CustomAchievementMetricOption {
   value: string;
   label: string;
+}
+
+/* -------------------------- Notificações / Gatilhos -------------------------- */
+
+export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight";
+
+export type NotificationAlertLevel = "soft" | "medium" | "critical";
+
+export interface NotificationTriggerRule {
+  id: string;
+  eventType: NotificationTriggerEvent;
+  label: string;
+  description: string;
+  channelEmail: boolean;
+  channelPush: boolean;
+  channelInApp: boolean;
+  alertLevel: NotificationAlertLevel;
+  active: boolean;
+  updatedAt: string;
+}
+
+export interface CustomNotificationTrigger {
+  id: string;
+  name: string;
+  conditionType: "task_due_in" | "task_overdue_by";
+  days: number;
+  priority: "Baixa" | "Média" | "Alta" | null;
+  channelEmail: boolean;
+  channelPush: boolean;
+  channelInApp: boolean;
+  active: boolean;
 }
 
 /* ------------------------------ Life Map ------------------------------ */
