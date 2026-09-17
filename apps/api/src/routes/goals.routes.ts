@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createGoalSchema, updateGoalSchema, goalProgressSchema } from "../validators/goals.schema.js";
+import { isDailyReadingGoal, pagesReadOn } from "../services/dailyReadingGoalService.js";
 
 export const goalsRouter = Router();
 goalsRouter.use(requireAuth);
@@ -52,7 +53,11 @@ goalsRouter.get("/", async (req, res) => {
     sql: `SELECT * FROM goals WHERE ${conditions.join(" AND ")} ORDER BY due_date ASC, created_at ASC`,
     args,
   });
-  return res.json(result.rows);
+  const rows = result.rows as unknown as Array<{ title: string; kind: string; unit: string | null; status: string; current_value: number }>;
+  const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, req.user!.id, new Date().toISOString().slice(0, 10)) : 0;
+  return res.json(rows.map((goal) => isDailyReadingGoal(goal)
+    ? { ...goal, current_value: pagesToday, progress_source: "reading_today" }
+    : goal));
 });
 
 /**
@@ -190,7 +195,9 @@ goalsRouter.get("/:id", async (req, res) => {
     }),
   ]);
 
-  return res.json({ ...goal, children: children.rows, progress: progress.rows });
+  const dailyReading = isDailyReadingGoal(goal as unknown as { title: string; kind: string; unit: string | null; status: string });
+  const pagesToday = dailyReading ? await pagesReadOn(db, req.user!.id, new Date().toISOString().slice(0, 10)) : 0;
+  return res.json({ ...goal, ...(dailyReading ? { current_value: pagesToday, progress_source: "reading_today" } : {}), children: children.rows, progress: progress.rows });
 });
 
 /** POST /api/goals */

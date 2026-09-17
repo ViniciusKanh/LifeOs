@@ -426,6 +426,7 @@ export interface Goal {
   kind: GoalKind;
   target_value: number | null;
   current_value: number;
+  progress_source?: "reading_today";
   unit: string | null;
   due_date: string | null;
   status: GoalStatus;

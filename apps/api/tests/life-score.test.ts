@@ -129,6 +129,7 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
     const before = await agent.get(`/api/analytics/life-score?date=${today}`);
     expect(before.status).toBe(200);
     expect(before.body.reading).toBe(50);
+    expect(before.body.goals).toBe(50);
 
     const full = await agent.post(`/api/books/${book.body.id}/sessions`).send({
       startedAt: `${today}T13:00:00.000Z`,
@@ -139,6 +140,9 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
 
     const after = await agent.get(`/api/analytics/life-score?date=${today}`);
     expect(after.body.reading).toBe(100);
+    expect(after.body.goals).toBe(100);
+    const visibleGoals = await agent.get("/api/goals");
+    expect(visibleGoals.body[0]).toMatchObject({ current_value: 20, progress_source: "reading_today" });
   });
 
   it("equilibra metas por período no Life Score em vez de diluir tudo em uma média única", async () => {

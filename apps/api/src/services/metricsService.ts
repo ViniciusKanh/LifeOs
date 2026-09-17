@@ -1,4 +1,5 @@
 import { getDb } from "../db/client.js";
+import { isDailyReadingGoal, pagesReadOn } from "./dailyReadingGoalService.js";
 
 /**
  * Cálculo do Life Score e das métricas agregadas (Analytics, Hoje,
@@ -160,33 +161,14 @@ function goalProgressScore(goal: { kind: string; status: string; target_value: n
  * meta cadastrada, cai para o progresso real dos livros em leitura.
  */
 async function readingScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
-  const readingGoal = await db.execute({
-    sql: `SELECT target_value FROM goals
-          WHERE owner_id = ?
-            AND status = 'active'
-            AND kind = 'numeric'
-            AND target_value IS NOT NULL
-            AND (
-              lower(COALESCE(unit, '')) LIKE '%pag%'
-              OR lower(COALESCE(unit, '')) LIKE '%pág%'
-              OR lower(title) LIKE '%leitura%'
-              OR lower(title) LIKE '%pagina%'
-              OR lower(title) LIKE '%página%'
-              OR lower(COALESCE(category, '')) LIKE '%leitura%'
-            )
-          ORDER BY
-            CASE WHEN lower(COALESCE(unit, '')) LIKE '%pag%' OR lower(COALESCE(unit, '')) LIKE '%pág%' THEN 0 ELSE 1 END,
-            target_value ASC
-          LIMIT 1`,
+  const readingGoals = await db.execute({
+    sql: "SELECT title, kind, unit, status, target_value FROM goals WHERE owner_id = ? AND status = 'active' AND kind = 'numeric' AND target_value > 0",
     args: [ownerId],
   });
-  const dailyTarget = Number((readingGoal.rows[0] as { target_value?: number } | undefined)?.target_value ?? 0);
-  if (dailyTarget > 0) {
-    const pagesToday = await scalar(
-      db,
-      "SELECT COALESCE(SUM(pages_read), 0) FROM reading_sessions WHERE owner_id = ? AND date(started_at) = date(?)",
-      [ownerId, date]
-    );
+  const dailyTarget = Math.min(...(readingGoals.rows as unknown as Array<{ title: string; kind: string; unit: string | null; status: string; target_value: number }>)
+    .filter(isDailyReadingGoal).map((goal) => Number(goal.target_value)));
+  if (Number.isFinite(dailyTarget) && dailyTarget > 0) {
+    const pagesToday = await pagesReadOn(db, ownerId, date);
     return { score: clamp((pagesToday / dailyTarget) * 100), hasData: true };
   }
 
@@ -238,13 +220,15 @@ function goalPeriodStart(period: string | null, date: string) {
 
 async function goalsScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
   const result = await db.execute({
-    sql: "SELECT id, parent_goal_id, kind, status, target_value, current_value, period, completed_at FROM goals WHERE owner_id = ? AND status != 'abandoned'",
+    sql: "SELECT id, parent_goal_id, title, kind, unit, status, target_value, current_value, period, completed_at FROM goals WHERE owner_id = ? AND status != 'abandoned'",
     args: [ownerId],
   });
   const rows = (result.rows as unknown as Array<{
     id: string;
     parent_goal_id: string | null;
+    title: string;
     kind: string;
+    unit: string | null;
     status: string;
     target_value: number | null;
     current_value: number;
@@ -252,6 +236,7 @@ async function goalsScore(db: Db, ownerId: string, date: string): Promise<Dimens
     completed_at: string | null;
   }>).filter((goal) => goal.status !== "done" || (goal.completed_at && goal.completed_at.slice(0, 10) >= goalPeriodStart(goal.period, date) && goal.completed_at.slice(0, 10) <= date));
   if (rows.length === 0) return { score: 0, hasData: false };
+  const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, ownerId, date) : 0;
 
   const childrenByParent = new Map<string, typeof rows>();
   for (const goal of rows) {
@@ -270,7 +255,7 @@ async function goalsScore(db: Db, ownerId: string, date: string): Promise<Dimens
         ? 100
         : goal.kind === "task_based" && children.length > 0
           ? clamp(children.reduce((sum, child) => sum + scoreGoal(child), 0) / children.length)
-          : goalProgressScore(goal);
+          : goalProgressScore(isDailyReadingGoal(goal) ? { ...goal, current_value: pagesToday } : goal);
     scoreCache.set(goal.id, score);
     return score;
   };
