@@ -2,10 +2,10 @@ import { useState } from "react";
 import {
   AlertTriangle,
   BellRing,
-  CheckCircle2,
   Clock3,
   Mail,
   Mails,
+  Pencil,
   Play,
   Plus,
   Smartphone,
@@ -57,12 +57,14 @@ export function GatilhosPage() {
   const { triggers, customTriggers, isLoading, updateTrigger, isUpdating, runTriggers, isRunning, createCustomTrigger, updateCustomTrigger, deleteCustomTrigger } = useNotificationTriggers();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [customForm, setCustomForm] = useState(emptyCustomTrigger);
   const [savingCustom, setSavingCustom] = useState(false);
 
-  const activeCount = triggers.filter((trigger) => trigger.active).length;
-  const emailCount = triggers.filter((trigger) => trigger.active && trigger.channelEmail).length;
-  const pushCount = triggers.filter((trigger) => trigger.active && trigger.channelPush).length;
+  const allTriggers = [...triggers, ...customTriggers];
+  const activeCount = allTriggers.filter((trigger) => trigger.active).length;
+  const emailCount = allTriggers.filter((trigger) => trigger.active && trigger.channelEmail).length;
+  const pushCount = allTriggers.filter((trigger) => trigger.active && trigger.channelPush).length;
 
   async function patch(trigger: NotificationTriggerRule, patchData: Partial<NotificationTriggerRule>) {
     setMessage(null);
@@ -81,7 +83,7 @@ export function GatilhosPage() {
       const total = result.results.reduce((sum, item) => sum + item.count, 0);
       setMessage({
         ok: true,
-        text: total > 0 ? `Checagem feita: ${total} tarefa(s) acionaram gatilhos.` : "Checagem feita: nenhuma tarefa vencida ou vencendo hoje.",
+        text: total > 0 ? `Checagem feita: ${total} ocorrência(s) de gatilho encontrada(s).` : "Checagem feita: nenhum gatilho de tarefa disparou agora.",
       });
     } catch (err) {
       setMessage({ ok: false, text: err instanceof Error ? err.message : "Não foi possível testar os gatilhos." });
@@ -92,10 +94,15 @@ export function GatilhosPage() {
     setMessage(null);
     setSavingCustom(true);
     try {
-      await createCustomTrigger({ ...customForm, name: customForm.name.trim() });
+      if (editingId) {
+        await updateCustomTrigger({ id: editingId, patch: { ...customForm, name: customForm.name.trim() } });
+      } else {
+        await createCustomTrigger({ ...customForm, name: customForm.name.trim() });
+      }
       setCustomForm(emptyCustomTrigger);
       setCreating(false);
-      setMessage({ ok: true, text: "Gatilho criado." });
+      setEditingId(null);
+      setMessage({ ok: true, text: editingId ? "Gatilho atualizado." : "Gatilho criado." });
     } catch (err) {
       setMessage({ ok: false, text: err instanceof Error ? err.message : "Não foi possível criar o gatilho." });
     } finally {
@@ -119,6 +126,19 @@ export function GatilhosPage() {
     }
   }
 
+  function startNewCustom() {
+    setEditingId(null);
+    setCustomForm(emptyCustomTrigger);
+    setCreating(true);
+  }
+
+  function startEditCustom(rule: CustomNotificationTrigger) {
+    const { id, ...form } = rule;
+    setEditingId(id);
+    setCustomForm(form);
+    setCreating(true);
+  }
+
   return (
     <div className="mx-auto max-w-[1280px] px-4 py-6 md:px-8 md:py-8">
       <PageHeader
@@ -133,7 +153,7 @@ export function GatilhosPage() {
       />
 
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <SummaryTile icon={<Zap size={16} />} label="Gatilhos ativos" value={`${activeCount}/${triggers.length || 5}`} tone="purple" />
+        <SummaryTile icon={<Zap size={16} />} label="Gatilhos ativos" value={`${activeCount}/${allTriggers.length}`} tone="purple" />
         <SummaryTile icon={<Mail size={16} />} label="Com e-mail" value={`${emailCount}`} tone="teal" />
         <SummaryTile icon={<Smartphone size={16} />} label="Com push" value={`${pushCount}`} tone="blue" />
       </div>
@@ -143,23 +163,6 @@ export function GatilhosPage() {
           {message.text}
         </div>
       )}
-
-      <Card className="mb-4 overflow-hidden border-0 bg-gradient-to-br from-[#251f44] via-[#33406f] to-[#0d9488] p-5 text-white shadow-card">
-        <div className="grid gap-4 lg:grid-cols-[1fr_360px] lg:items-center">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/70">Central de alertas</p>
-            <p className="mt-2 font-display text-2xl font-bold leading-tight">Quando algo importante acontecer, o LifeOS fala do jeito certo.</p>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/82">
-              Use e-mail para registros importantes, push para avisos rápidos e alerta no app para deixar o sino mais incisivo.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/15 bg-white/10 p-3">
-            <MiniSignal icon={<Mail size={15} />} label="E-mail" />
-            <MiniSignal icon={<Smartphone size={15} />} label="Push" />
-            <MiniSignal icon={<BellRing size={15} />} label="App" />
-          </div>
-        </div>
-      </Card>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {isLoading
@@ -173,7 +176,7 @@ export function GatilhosPage() {
             <h2 className="font-display text-lg font-semibold">Meus gatilhos condicionais</h2>
             <p className="text-xs text-slate">Avisos para tarefas conforme prazo e prioridade.</p>
           </div>
-          <Button onClick={() => setCreating((value) => !value)}><Plus size={15} /> Novo gatilho</Button>
+          <Button onClick={startNewCustom}><Plus size={15} /> Novo gatilho</Button>
         </div>
 
         {creating && <div className="mb-4 grid gap-4 rounded-lg border border-paper-border bg-paper-raised p-4 dark:border-ink-border dark:bg-ink-raised md:grid-cols-2">
@@ -199,15 +202,18 @@ export function GatilhosPage() {
             <ChannelButton icon={<Smartphone size={14} />} label="Push" active={customForm.channelPush} disabled={false} onClick={() => setCustomForm({ ...customForm, channelPush: !customForm.channelPush })} />
             <ChannelButton icon={<BellRing size={14} />} label="App" active={customForm.channelInApp} disabled={false} onClick={() => setCustomForm({ ...customForm, channelInApp: !customForm.channelInApp })} />
           </div>
-          <div className="flex justify-end gap-2 md:col-span-2"><Button variant="secondary" onClick={() => setCreating(false)}>Cancelar</Button><Button onClick={saveCustom} disabled={savingCustom || customForm.name.trim().length < 2 || !Number.isInteger(customForm.days) || customForm.days < 0 || customForm.days > 365 || !(customForm.channelEmail || customForm.channelPush || customForm.channelInApp)}>Salvar gatilho</Button></div>
+          <div className="flex justify-end gap-2 md:col-span-2"><Button variant="secondary" onClick={() => { setCreating(false); setEditingId(null); }}>Cancelar</Button><Button onClick={saveCustom} disabled={savingCustom || customForm.name.trim().length < 2 || !Number.isInteger(customForm.days) || customForm.days < 0 || customForm.days > 365 || !(customForm.channelEmail || customForm.channelPush || customForm.channelInApp)}>{editingId ? "Salvar alterações" : "Salvar gatilho"}</Button></div>
         </div>}
 
         <div className="grid gap-2 md:grid-cols-2">
-          {customTriggers.map((rule) => <div key={rule.id} className="flex items-center gap-3 rounded-lg border border-paper-border bg-paper-raised p-4 dark:border-ink-border dark:bg-ink-raised">
+          {customTriggers.map((rule) => <div key={rule.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-paper-border bg-paper-raised p-4 dark:border-ink-border dark:bg-ink-raised">
             <IconBadge tone={rule.conditionType === "task_due_in" ? "blue" : "amber"} icon={rule.conditionType === "task_due_in" ? <Clock3 size={16} /> : <AlertTriangle size={16} />} size={36} />
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{rule.name}</p><p className="text-xs text-slate">{rule.conditionType === "task_due_in" ? "Vence em" : "Atrasada há"} {rule.days} dia(s){rule.priority ? ` · ${rule.priority}` : ""} · {[rule.channelEmail && "E-mail", rule.channelPush && "Push", rule.channelInApp && "App"].filter(Boolean).join(", ")}</p></div>
-            <Switch checked={rule.active} onChange={() => toggleCustom(rule)} label={`${rule.active ? "Desativar" : "Ativar"} ${rule.name}`} />
-            <button onClick={() => removeCustom(rule)} title={`Excluir ${rule.name}`} className="rounded-md p-2 text-slate hover:bg-drop/10 hover:text-drop"><Trash2 size={16} /></button>
+            <div className="min-w-0 flex-[1_1_180px]"><p className="truncate text-sm font-semibold">{rule.name}</p><p className="text-xs text-slate">{rule.conditionType === "task_due_in" ? "Vence em" : "Atrasada há"} {rule.days} dia(s){rule.priority ? ` · ${rule.priority}` : ""} · {[rule.channelEmail && "E-mail", rule.channelPush && "Push", rule.channelInApp && "App"].filter(Boolean).join(", ")}</p></div>
+            <div className="ml-auto flex items-center gap-1">
+              <Switch checked={rule.active} onChange={() => toggleCustom(rule)} label={`${rule.active ? "Desativar" : "Ativar"} ${rule.name}`} />
+              <button onClick={() => startEditCustom(rule)} aria-label={`Editar ${rule.name}`} title={`Editar ${rule.name}`} className="rounded-md p-2 text-slate hover:bg-brand-500/10 hover:text-brand-600"><Pencil size={16} /></button>
+              <button onClick={() => removeCustom(rule)} aria-label={`Excluir ${rule.name}`} title={`Excluir ${rule.name}`} className="rounded-md p-2 text-slate hover:bg-drop/10 hover:text-drop"><Trash2 size={16} /></button>
+            </div>
           </div>)}
           {customTriggers.length === 0 && <p className="text-sm text-slate">Nenhum gatilho condicional cadastrado.</p>}
         </div>
@@ -294,15 +300,16 @@ function ChannelButton({ icon, label, active, disabled, onClick }: { icon: React
   return (
     <button
       type="button"
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border text-xs font-semibold transition-all disabled:opacity-50 ${
+      className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold transition-colors disabled:opacity-50 ${
         active
-          ? "border-brand-500/30 bg-brand-500/10 text-brand-700 dark:text-brand-200"
+          ? "border-brand-500 bg-brand-500/10 text-brand-700 dark:text-brand-200"
           : "border-paper-border text-slate hover:bg-paper dark:border-ink-border dark:hover:bg-ink-overlay"
       }`}
     >
-      {active ? <CheckCircle2 size={15} /> : icon}
+      {icon}
       {label}
     </button>
   );
@@ -319,14 +326,5 @@ function SummaryTile({ icon, label, value, tone }: { icon: React.ReactNode; labe
         </div>
       </div>
     </Card>
-  );
-}
-
-function MiniSignal({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <div className="rounded-xl bg-white/12 p-3 text-center">
-      <span className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-white/18">{icon}</span>
-      <p className="mt-1 text-[11px] font-semibold">{label}</p>
-    </div>
   );
 }

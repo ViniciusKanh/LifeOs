@@ -174,4 +174,13 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
     expect(score.status).toBe(200);
     expect(score.body.goals).toBe(0);
   });
+
+  it("usa avanço registrado de meta por etapas no Life Score", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const goal = await agent.post("/api/goals").send({ title: "Preparar apresentação", kind: "task_based", period: "mensal" });
+    expect(goal.status).toBe(201);
+    expect((await agent.post(`/api/goals/${goal.body.id}/progress`).send({ value: 60 })).status).toBe(201);
+    const score = await agent.get("/api/analytics/life-score");
+    expect(score.body.goals).toBe(60);
+  });
 });

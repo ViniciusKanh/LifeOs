@@ -74,6 +74,10 @@ describe("Gatilhos de notificação", () => {
     expect(notification?.body).not.toContain("Entrega baixa");
 
     expect((await other.agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ active: false })).status).toBe(404);
+    const edited = await agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ name: "Entrega crítica amanhã", days: 2 });
+    expect(edited.status).toBe(200);
+    expect(edited.body.name).toBe("Entrega crítica amanhã");
+    expect((await agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ channelInApp: false })).status).toBe(400);
     expect((await agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ active: false })).status).toBe(200);
     const after = await agent.get("/api/notifications/live");
     expect(after.body.some((item: { kind: string }) => item.kind === "custom_trigger")).toBe(false);

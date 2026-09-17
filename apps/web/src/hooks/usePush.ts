@@ -12,6 +12,26 @@ function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+function subscriptionUsesKey(sub: PushSubscription, key: Uint8Array<ArrayBuffer>) {
+  const saved = sub.options.applicationServerKey;
+  if (!saved) return false;
+  const bytes = new Uint8Array(saved);
+  return bytes.length === key.length && bytes.every((value, index) => value === key[index]);
+}
+
+async function currentSubscription(reg: ServiceWorkerRegistration) {
+  const { publicKey } = await pushService.getVapidPublicKey();
+  const key = urlBase64ToUint8Array(publicKey);
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && !subscriptionUsesKey(sub, key)) {
+    await sub.unsubscribe();
+    sub = null;
+  }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  await pushService.subscribe(sub.toJSON() as PushSubscriptionJSON);
+  return sub;
+}
+
 type PushSupport = "checking" | "unsupported" | "supported";
 
 /**
@@ -40,9 +60,13 @@ export function usePush() {
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      setIsSubscribed(!!sub);
-    } catch {
+      setIsSubscribed(!!sub && Notification.permission === "granted");
+      if (sub && Notification.permission === "granted") {
+        await pushService.subscribe(sub.toJSON() as PushSubscriptionJSON);
+      }
+    } catch (err) {
       setIsSubscribed(false);
+      setError(err instanceof Error ? err.message : "Não foi possível sincronizar as notificações.");
     }
   }, []);
 
@@ -62,13 +86,7 @@ export function usePush() {
         return;
       }
 
-      const { publicKey } = await pushService.getVapidPublicKey();
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-
-      await pushService.subscribe(sub.toJSON() as PushSubscriptionJSON);
+      await currentSubscription(reg);
       setIsSubscribed(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível ativar as notificações.");
@@ -100,20 +118,12 @@ export function usePush() {
       throw new Error("Este navegador não oferece notificações push.");
     }
     const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
     if (Notification.permission !== "granted") {
       const granted = await Notification.requestPermission();
       setPermission(granted);
       if (granted !== "granted") throw new Error("Permita notificações para este site nas configurações do navegador.");
     }
-    if (!sub) {
-      const { publicKey } = await pushService.getVapidPublicKey();
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-    }
-    await pushService.subscribe(sub.toJSON() as PushSubscriptionJSON);
+    await currentSubscription(reg);
     setIsSubscribed(true);
     return pushService.sendTest();
   }, []);

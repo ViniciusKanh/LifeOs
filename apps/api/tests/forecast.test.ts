@@ -19,8 +19,8 @@ async function setTaskCompletedAt(taskId: string, daysAgo: number) {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - daysAgo);
   await db.execute({
-    sql: "UPDATE tasks SET updated_at = ? WHERE id = ?",
-    args: [date.toISOString(), taskId],
+    sql: "UPDATE tasks SET completed_at = ?, updated_at = ? WHERE id = ?",
+    args: [date.toISOString(), date.toISOString(), taskId],
   });
 }
 

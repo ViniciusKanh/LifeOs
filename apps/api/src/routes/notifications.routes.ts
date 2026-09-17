@@ -62,6 +62,10 @@ notificationsRouter.post("/triggers/custom", async (req, res) => {
 notificationsRouter.patch("/triggers/custom/:id", async (req, res) => {
   const parsed = customTriggerBaseSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Gatilho inválido." });
+  const existing = (await listCustomNotificationTriggers(req.user!.id)).find((rule) => rule.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Gatilho não encontrado." });
+  const validMerged = customTriggerSchema.safeParse({ ...existing, ...parsed.data });
+  if (!validMerged.success) return res.status(400).json({ error: validMerged.error.issues[0]?.message ?? "Gatilho inválido." });
   const updated = await updateCustomNotificationTrigger(req.user!.id, req.params.id, parsed.data);
   return updated ? res.json(updated) : res.status(404).json({ error: "Gatilho não encontrado." });
 });
