@@ -359,7 +359,7 @@ export function WeeklyReviewPage() {
       )}
 
       {score && <section className="grid gap-4 border-y border-paper-border py-5 dark:border-ink-border lg:grid-cols-2">
-        <div><p className="text-xs font-semibold text-brand-600">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold">{score.tasksCompleted} tarefas concluídas · {score.focusMinutes} min de foco</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para mostrar um ponto forte."} {weakest && weakest.label !== strongest?.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
+        <div><p className="text-xs font-semibold text-brand-600">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold">{score.tasksCompleted} tarefas concluídas · {score.focusMinutes} min de foco</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para comparar as dimensões."} {strongest && strongest.value > 0 && weakest && weakest.label !== strongest.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
         <div className="space-y-2">{dimensionSignals.map((signal) => <div key={signal.label} className="grid grid-cols-[90px_1fr_34px] items-center gap-2 text-xs"><span className="text-slate">{signal.label}</span><div className="h-2 rounded-full bg-paper-border dark:bg-ink-border"><div className="h-full rounded-full bg-brand-500" style={{ width: `${signal.value}%` }} /></div><span className="text-right font-semibold">{signal.value}%</span></div>)}</div>
       </section>}
 
