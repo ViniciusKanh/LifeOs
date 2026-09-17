@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Info } from "lucide-react";
-import { Card } from "@/components/ui/primitives";
-import type { LifeMapData, LifeMapNode } from "@/types";
+import { ArrowUpRight, Info, Link2, Loader2, X } from "lucide-react";
+import { Button, Card } from "@/components/ui/primitives";
+import type { LifeMapData, LifeMapLinkableType, LifeMapNode } from "@/types";
 import { AREA_COLOR } from "./LifeMapGraph";
 
 const KIND_LABEL: Record<LifeMapNode["kind"], string> = {
@@ -16,6 +17,15 @@ const KIND_LABEL: Record<LifeMapNode["kind"], string> = {
   health: "Resumo de saúde",
 };
 
+// Kinds que correspondem a uma entidade real (podem ser origem/destino
+// de um vínculo manual) — "area", "center" e "health" são agregados,
+// não linhas do banco, então nunca entram aqui.
+const LINKABLE_KINDS = new Set<LifeMapNode["kind"]>(["goal", "project", "habit", "education", "academic_project", "book"]);
+
+function entityIdFromNodeId(nodeId: string): string {
+  return nodeId.slice(nodeId.indexOf(":") + 1);
+}
+
 function formatRelative(value: string | null) {
   if (!value) return null;
   const d = new Date(value.includes("T") ? value : value.replace(" ", "T") + "Z");
@@ -26,9 +36,20 @@ function formatRelative(value: string | null) {
   return `há ${diffDays} dias`;
 }
 
-/** Card "Detalhe do nó" — mostra o que foi clicado no grafo, ou uma dica quando nada foi selecionado ainda. */
-export function LifeMapDetailPanel({ data, selectedId }: { data: LifeMapData; selectedId: string | null }) {
+interface LifeMapDetailPanelProps {
+  data: LifeMapData;
+  selectedId: string | null;
+  onCreateLink?: (input: { sourceType: LifeMapLinkableType; sourceId: string; targetType: LifeMapLinkableType; targetId: string }) => Promise<unknown>;
+  onDeleteLink?: (linkId: string) => Promise<unknown>;
+  isMutatingLink?: boolean;
+}
+
+/** Card "Detalhe do nó" — mostra o que foi clicado no grafo, permite criar/remover vínculos manuais, ou uma dica quando nada foi selecionado ainda. */
+export function LifeMapDetailPanel({ data, selectedId, onCreateLink, onDeleteLink, isMutatingLink }: LifeMapDetailPanelProps) {
   const node = data.nodes.find((n) => n.id === selectedId) ?? null;
+  const [targetId, setTargetId] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!node || node.kind === "center") {
     return (
@@ -43,8 +64,38 @@ export function LifeMapDetailPanel({ data, selectedId }: { data: LifeMapData; se
   }
 
   const connections = data.edges.filter((e) => e.from === node.id || e.to === node.id);
+  const manualConnections = connections.filter((e) => e.kind === "manual" && e.linkId);
   const color = node.area ? AREA_COLOR[node.area] : "#7C4DFF";
   const relative = formatRelative(node.lastActivityAt);
+  const canLink = LINKABLE_KINDS.has(node.kind) && !!onCreateLink;
+
+  const candidates = canLink
+    ? data.nodes.filter(
+        (n) =>
+          n.id !== node.id &&
+          LINKABLE_KINDS.has(n.kind) &&
+          !manualConnections.some((e) => e.from === n.id || e.to === n.id)
+      )
+    : [];
+
+  const targetNode = candidates.find((n) => n.id === targetId) ?? null;
+
+  async function handleConfirmLink() {
+    if (!onCreateLink || !targetNode || !node) return;
+    setError(null);
+    try {
+      await onCreateLink({
+        sourceType: node.kind as LifeMapLinkableType,
+        sourceId: entityIdFromNodeId(node.id),
+        targetType: targetNode.kind as LifeMapLinkableType,
+        targetId: entityIdFromNodeId(targetNode.id),
+      });
+      setConfirming(false);
+      setTargetId("");
+    } catch {
+      setError("Não foi possível criar o vínculo. Tente novamente.");
+    }
+  }
 
   return (
     <Card className="p-5">
@@ -70,8 +121,74 @@ export function LifeMapDetailPanel({ data, selectedId }: { data: LifeMapData; se
           to={node.openPath}
           className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-paper-border dark:border-ink-border px-3 py-2 hover:bg-paper dark:hover:bg-ink"
         >
-          Abrir <ArrowUpRight size={13} />
+          Ver no módulo <ArrowUpRight size={13} />
         </Link>
+      )}
+
+      {manualConnections.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-paper-border dark:border-ink-border">
+          <p className="text-[11px] font-semibold text-slate mb-2">Vínculos manuais</p>
+          <ul className="space-y-1.5">
+            {manualConnections.map((e) => {
+              const otherId = e.from === node.id ? e.to : e.from;
+              const other = data.nodes.find((n) => n.id === otherId);
+              if (!other) return null;
+              return (
+                <li key={e.linkId} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate">{other.label}</span>
+                  <button
+                    onClick={() => e.linkId && onDeleteLink?.(e.linkId)}
+                    disabled={isMutatingLink}
+                    aria-label={`Remover vínculo com ${other.label}`}
+                    className="text-slate hover:text-drop shrink-0 disabled:opacity-50"
+                  >
+                    <X size={13} />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {canLink && (
+        <div className="mt-4 pt-4 border-t border-paper-border dark:border-ink-border">
+          <p className="text-[11px] font-semibold text-slate mb-2">Conectar a outro item</p>
+          {!confirming ? (
+            <div className="flex flex-col gap-2">
+              <select
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                className="text-xs rounded-lg border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised px-2.5 py-2"
+              >
+                <option value="">Selecione um item…</option>
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {KIND_LABEL[c.kind]} — {c.label}
+                  </option>
+                ))}
+              </select>
+              <Button variant="secondary" onClick={() => setConfirming(true)} disabled={!targetId}>
+                <Link2 size={13} /> Conectar
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-paper-border dark:border-ink-border p-3 space-y-2.5">
+              <p className="text-xs">
+                Confirma vincular <strong>{node.label}</strong> a <strong>{targetNode?.label}</strong>?
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={handleConfirmLink} disabled={isMutatingLink}>
+                  {isMutatingLink ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />} Confirmar
+                </Button>
+                <Button variant="secondary" onClick={() => setConfirming(false)} disabled={isMutatingLink}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+          {error && <p className="text-[11px] text-drop mt-2">{error}</p>}
+        </div>
       )}
     </Card>
   );

@@ -11,11 +11,13 @@ import {
   AlertTriangle,
   Lightbulb,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { useLifeMap } from "@/hooks/useLifeMap";
 import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { LifeMapGraph, AREA_COLOR } from "@/components/lifemap/LifeMapGraph";
 import { LifeMapDetailPanel } from "@/components/lifemap/LifeMapDetailPanel";
+import { LifeMapAreaDistribution } from "@/components/lifemap/LifeMapAreaDistribution";
 import type { LifeMapAreaId } from "@/types";
 
 const AREA_LABEL: Record<LifeMapAreaId, string> = {
@@ -25,6 +27,7 @@ const AREA_LABEL: Record<LifeMapAreaId, string> = {
   educacao: "Educação",
   leitura: "Leitura",
   saude: "Saúde e bem-estar",
+  profissional: "Profissional",
 };
 
 interface ViewOption {
@@ -39,17 +42,20 @@ const VIEWS: ViewOption[] = [
   { id: "habitos_objetivos", label: "Hábitos → Objetivos", areas: ["habitos", "metas"] },
   { id: "educacao", label: "Educação", areas: ["educacao"] },
   { id: "saude", label: "Saúde e bem-estar", areas: ["saude"] },
+  { id: "profissional", label: "Profissional", areas: ["profissional"] },
   { id: "conhecimento", label: "Conhecimento", areas: ["educacao", "leitura"] },
 ];
 
 export function LifeMapPage() {
-  const { data, isLoading, isError, refetch } = useLifeMap();
+  const { data, isLoading, isError, refetch, createLink, isCreatingLink, deleteLink, isDeletingLink } = useLifeMap();
   const [viewId, setViewId] = useState("geral");
   const [customAreas, setCustomAreas] = useState<LifeMapAreaId[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState(0);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const filterMenuRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +72,14 @@ export function LifeMapPage() {
   const visibleAreas = customAreas ?? activeView.areas;
 
   const allAreaIds = Object.keys(AREA_LABEL) as LifeMapAreaId[];
+
+  const searchResults = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term || !data) return [];
+    return data.nodes
+      .filter((n) => n.kind !== "center" && n.kind !== "area" && n.label.toLowerCase().includes(term))
+      .slice(0, 8);
+  }, [data, searchTerm]);
 
   if (isLoading) {
     return (
@@ -209,10 +223,45 @@ export function LifeMapPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4">
         <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
             <div>
               <p className="text-sm font-semibold">Mapa da sua vida</p>
               <p className="text-xs text-slate">Clique em um nó para ver detalhes, arraste para explorar e use o scroll para zoom.</p>
+            </div>
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate" />
+              <input
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                placeholder="Buscar no mapa…"
+                className="text-xs rounded-lg border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised pl-7 pr-2.5 py-1.5 w-44 sm:w-56"
+              />
+              {searchOpen && searchTerm.trim().length > 0 && (
+                <div className="absolute right-0 mt-1 w-64 max-h-64 overflow-y-auto rounded-xl shadow-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised z-30">
+                  {searchResults.length === 0 ? (
+                    <p className="text-xs text-slate p-3">Nenhum item encontrado.</p>
+                  ) : (
+                    searchResults.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => {
+                          setSelectedId(n.id);
+                          setSearchTerm(n.label);
+                          setSearchOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-black/5 dark:hover:bg-white/5 truncate"
+                      >
+                        {n.label}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-3 h-[420px] sm:h-[520px] rounded-xl bg-paper dark:bg-ink">
@@ -236,7 +285,13 @@ export function LifeMapPage() {
         </Card>
 
         <div className="space-y-4">
-          <LifeMapDetailPanel data={data} selectedId={selectedId} />
+          <LifeMapDetailPanel
+            data={data}
+            selectedId={selectedId}
+            onCreateLink={createLink}
+            onDeleteLink={deleteLink}
+            isMutatingLink={isCreatingLink || isDeletingLink}
+          />
 
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -280,27 +335,31 @@ export function LifeMapPage() {
         </div>
       </div>
 
-      <Card className="p-4 mt-4">
-        <p className="text-xs text-slate mb-3">Visões do mapa — explore diferentes perspectivas das suas conexões.</p>
-        <div className="flex flex-wrap gap-2">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              onClick={() => {
-                setViewId(v.id);
-                setCustomAreas(null);
-              }}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold border transition-colors ${
-                v.id === viewId && !customAreas
-                  ? "bg-brand-500 border-brand-500 text-white"
-                  : "border-paper-border dark:border-ink-border text-slate hover:bg-paper dark:hover:bg-ink"
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 mt-4">
+        <Card className="p-4">
+          <p className="text-xs text-slate mb-3">Visões do mapa — explore diferentes perspectivas das suas conexões.</p>
+          <div className="flex flex-wrap gap-2">
+            {VIEWS.map((v) => (
+              <button
+                key={v.id}
+                onClick={() => {
+                  setViewId(v.id);
+                  setCustomAreas(null);
+                }}
+                className={`rounded-xl px-3.5 py-2 text-xs font-semibold border transition-colors ${
+                  v.id === viewId && !customAreas
+                    ? "bg-brand-500 border-brand-500 text-white"
+                    : "border-paper-border dark:border-ink-border text-slate hover:bg-paper dark:hover:bg-ink"
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        <LifeMapAreaDistribution distribution={data.distribution} />
+      </div>
     </div>
   );
 }
