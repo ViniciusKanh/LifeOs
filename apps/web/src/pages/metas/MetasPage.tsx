@@ -64,7 +64,7 @@ const FALLBACK_GOAL_CATEGORY = { label: "Sem área", tone: "blue" as const, icon
  */
 function GoalForecastChip({ goal }: { goal: Goal }) {
   const { forecast } = useGoalForecast(goal.id);
-  if (goal.status !== "active" || (goal.kind !== "numeric" && goal.kind !== "percentage")) return null;
+  if (goal.status !== "active" || goal.progress_source === "reading_today" || (goal.kind !== "numeric" && goal.kind !== "percentage")) return null;
   if (!forecast) return null;
 
   const dateLabel = formatDate(forecast.date);
@@ -230,6 +230,7 @@ export function MetasPage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-slate">
                               {label && <span>{label}</span>}
+                              {goal.progress_source === "reading_today" && <span>Atualizado pela leitura de hoje</span>}
                               {goal.due_date && (
                                 <span>
                                   {formatDate(goal.due_date)}
@@ -246,9 +247,9 @@ export function MetasPage() {
                           <div className="flex items-center gap-1.5 shrink-0">
                             {goal.status === "active" && (
                               <>
-                                <Button variant="secondary" onClick={() => setProgressGoal(goal)}>
+                                {goal.progress_source !== "reading_today" && <Button variant="secondary" onClick={() => setProgressGoal(goal)}>
                                   Atualizar
-                                </Button>
+                                </Button>}
                                 <Button variant="ghost" onClick={() => updateGoal({ id: goal.id, patch: { status: "done" } })}>
                                   Concluir
                                 </Button>
