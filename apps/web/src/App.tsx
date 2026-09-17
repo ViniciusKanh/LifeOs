@@ -32,6 +32,7 @@ const ProfissionalPage = lazy(() => import("@/pages/profissional/ProfissionalPag
 const CalendarioPage = lazy(() =>
   import("@/pages/calendario/CalendarioPage").then((m) => ({ default: m.CalendarioPage }))
 );
+const SemanaPage = lazy(() => import("@/pages/semana/SemanaPage").then((m) => ({ default: m.SemanaPage })));
 const BibliotecaPage = lazy(() => import("@/pages/biblioteca/BibliotecaPage").then((m) => ({ default: m.BibliotecaPage })));
 const LivroDetalhePage = lazy(() =>
   import("@/pages/biblioteca/LivroDetalhePage").then((m) => ({ default: m.LivroDetalhePage }))
@@ -59,7 +60,7 @@ const TimelinePage = lazy(() => import("@/pages/timeline/TimelinePage").then((m)
 const WeeklyReviewPage = lazy(() =>
   import("@/pages/weekly-review/WeeklyReviewPage").then((m) => ({ default: m.WeeklyReviewPage }))
 );
-const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
+const LifeMapPage = lazy(() => import("@/pages/lifemap/LifeMapPage").then((m) => ({ default: m.LifeMapPage })));
 
 function PageFallback() {
   return (
@@ -114,6 +115,7 @@ export default function App() {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/profissional" element={<ProfissionalPage />} />
           <Route path="/calendario" element={<CalendarioPage />} />
+          <Route path="/semana" element={<SemanaPage />} />
           <Route path="/foco" element={<FocoPage />} />
           <Route path="/biblioteca" element={<BibliotecaPage />} />
           <Route path="/biblioteca/:id" element={<LivroDetalhePage />} />
@@ -126,7 +128,7 @@ export default function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
-          <Route path="/gatilhos" element={<GatilhosPage />} />
+          <Route path="/life-map" element={<LifeMapPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route
             path="/configuracoes"
