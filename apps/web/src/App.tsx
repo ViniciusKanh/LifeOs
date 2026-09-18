@@ -54,6 +54,7 @@ const MetasPage = lazy(() => import("@/pages/metas/MetasPage").then((m) => ({ de
 const ExperimentsPage = lazy(() => import("@/pages/experimentos/ExperimentsPage").then((m) => ({ default: m.ExperimentsPage })));
 const ExperimentDetailPage = lazy(() => import("@/pages/experimentos/ExperimentDetailPage").then((m) => ({ default: m.ExperimentDetailPage })));
 const SignalsPage = lazy(() => import("@/pages/signals/SignalsPage").then((m) => ({ default: m.SignalsPage })));
+const ContextoDoDiaPage = lazy(() => import("@/pages/contexto-do-dia/ContextoDoDiaPage").then((m) => ({ default: m.ContextoDoDiaPage })));
 const FocoPage = lazy(() => import("@/pages/foco/FocoPage").then((m) => ({ default: m.FocoPage })));
 const ConquistasPage = lazy(() =>
   import("@/pages/conquistas/ConquistasPage").then((m) => ({ default: m.ConquistasPage }))
@@ -131,6 +132,7 @@ export default function App() {
           <Route path="/experimentos" element={<ExperimentsPage />} />
           <Route path="/experimentos/:id" element={<ExperimentDetailPage />} />
           <Route path="/signals" element={<SignalsPage />} />
+          <Route path="/contexto-do-dia" element={<ContextoDoDiaPage />} />
           <Route path="/conquistas" element={<ConquistasPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/timeline" element={<TimelinePage />} />

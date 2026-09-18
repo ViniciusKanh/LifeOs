@@ -25,6 +25,7 @@ import {
 } from "./signalsScoreService.js";
 import { detectPatterns, type DetectedPattern } from "./signalsPatternService.js";
 import { buildRecommendation, type SignalsRecommendation } from "./signalsRecommendationService.js";
+import { getWeatherSignalForSignals } from "./contextService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -237,28 +238,6 @@ function buildSignalCards(current: Aggregates, prior: Aggregates): SignalCard[] 
     comparisonLabel: comparisonLabel(pctChange(current.agendaEventsToday, prior.agendaEventsToday), false),
   });
 
-  // Sinais sem coletor real no LifeOS hoje — nunca fabricamos valor.
-  cards.push({
-    key: "weather",
-    label: "Clima",
-    value: null,
-    unit: null,
-    status: "not_connected",
-    description: "Collector de clima não conectado neste ambiente do LifeOS.",
-    comparisonPct: null,
-    comparisonLabel: null,
-  });
-
-  cards.push({
-    key: "screen_time",
-    label: "Uso de tela",
-    value: null,
-    unit: null,
-    status: "not_connected",
-    description: "Collector de tempo de tela (Digital Wellbeing) não conectado neste ambiente do LifeOS.",
-    comparisonPct: null,
-    comparisonLabel: null,
-  });
 
   return cards;
 }
@@ -266,13 +245,26 @@ function buildSignalCards(current: Aggregates, prior: Aggregates): SignalCard[] 
 export async function getSignalsDashboard(db: Db, ownerId: string, period: SignalPeriod): Promise<SignalsDashboard> {
   const { from, to, priorFrom, priorTo, days } = periodRange(period);
 
-  const [current, prior, patterns] = await Promise.all([
+  const [current, prior, patterns, weatherSignal] = await Promise.all([
     fetchAggregates(db, ownerId, from, to, days),
     fetchAggregates(db, ownerId, priorFrom, priorTo, days),
     detectPatterns(db, ownerId, from, to),
+    // Signals nunca chama a Open-Meteo direto — sempre via WeatherSignalProvider
+    // do Contexto do Dia (fonte única de dado ambiental, regra 46 do briefing).
+    getWeatherSignalForSignals(db, ownerId),
   ]);
 
   const signals = buildSignalCards(current, prior);
+  signals.push({
+    key: "weather",
+    label: "Clima",
+    value: weatherSignal.value,
+    unit: weatherSignal.unit,
+    status: weatherSignal.status,
+    description: weatherSignal.description,
+    comparisonPct: null,
+    comparisonLabel: null,
+  });
 
   const sleepScore = scoreSleep(current.sleepMinutesAvg);
   const radar = buildRadar({

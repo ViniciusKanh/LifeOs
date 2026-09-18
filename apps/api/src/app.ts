@@ -35,6 +35,7 @@ import { lifemapRouter } from "./routes/lifemap.routes.js";
 import { experimentsRouter } from "./routes/experiments.routes.js";
 import { cronRouter } from "./routes/cron.routes.js";
 import { signalsRouter } from "./routes/signals.routes.js";
+import { contextRouter } from "./routes/context.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -117,6 +118,7 @@ app.use("/api/work-notes", workNotesRouter);
 app.use("/api/lifemap", lifemapRouter);
 app.use("/api/experiments", experimentsRouter);
 app.use("/api/signals", signalsRouter);
+app.use("/api/context", contextRouter);
 // Sem requireAuth — protegido por segredo próprio (ver cron.routes.ts),
 // chamado por um agendador externo, nunca por um usuário logado.
 app.use("/api/cron", cronRouter);
