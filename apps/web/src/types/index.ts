@@ -674,6 +674,8 @@ export interface CalendarItem {
 }
 
 /** Uma conquista do catálogo (`achievements`) — se `unlockedAt` existir, o usuário já destravou. */
+export type AchievementTier = "bronze" | "silver" | "gold" | "platinum";
+
 export interface Achievement {
   id: string;
   code: string;
@@ -682,6 +684,7 @@ export interface Achievement {
   icon: string | null;
   metric: string | null;
   threshold: number | null;
+  tier: AchievementTier;
   progress: number;
   unlockedAt: string | null;
 }
