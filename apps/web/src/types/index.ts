@@ -1269,7 +1269,7 @@ export interface CapacityPlanningSuggestion {
 /* ===================== Deadline Radar ===================== */
 
 export type DeadlineStatus = "atrasado" | "vence_hoje" | "vence_7d" | "vence_30d" | "no_prazo" | "concluido";
-export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Saúde" | "Outros";
+export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Outros";
 export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment";
 export type DeadlineRisk = "low" | "medium" | "high" | "critical";
 export type DeadlinePeriodFilter = "today" | "7d" | "30d" | "all";
@@ -1320,6 +1320,8 @@ export interface ProjectRiskItem {
   dueDate: string | null;
   riskScore: number;
   risk: DeadlineRisk;
+  kind: "project" | "academic";
+  sourceModule: string;
 }
 
 export interface DeadlineStatusBars {
@@ -1329,8 +1331,12 @@ export interface DeadlineStatusBars {
   noPrazo: number;
 }
 
+export type DeadlineDayStatus = "critico" | "atencao" | "tranquilo";
+
 export interface DeadlineRadarDashboard {
   summary: DeadlineSummary;
+  dayStatus: DeadlineDayStatus;
+  focusItem: DeadlineItem | null;
   items: DeadlineItem[];
   critical: DeadlineItem[];
   areas: DeadlineAreaBucket[];

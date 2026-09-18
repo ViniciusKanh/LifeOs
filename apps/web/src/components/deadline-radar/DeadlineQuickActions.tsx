@@ -12,7 +12,7 @@ const ACTIONS = [
 export function DeadlineQuickActions() {
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold mb-1">Ações rápidas</p>
+      <p className="text-sm font-semibold mb-1">⚡ Ações rápidas</p>
       <p className="text-xs text-slate mb-3">Organize seus prazos com um clique.</p>
       <ul className="space-y-1">
         {ACTIONS.map((a) => (

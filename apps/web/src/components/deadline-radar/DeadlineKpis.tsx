@@ -3,32 +3,34 @@ import { Card, IconBadge } from "@/components/ui/primitives";
 import type { DeadlineSummary } from "@/types";
 
 export function DeadlineKpis({ summary }: { summary: DeadlineSummary }) {
+  const overdueHot = summary.overdue > 0;
+  const dueTodayHot = summary.dueToday > 0;
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      <Card className="p-4">
+      <Card className="p-4" style={overdueHot ? { borderColor: "rgba(214,69,69,0.4)", background: "rgba(214,69,69,0.06)" } : undefined}>
         <IconBadge tone="amber" icon={<AlertTriangle size={18} />} size={36} />
-        <p className="font-display font-bold text-2xl mt-2.5 leading-none">{summary.overdue}</p>
-        <p className="text-xs text-slate mt-1">Atrasados</p>
+        <p className={`font-display font-bold text-2xl mt-2.5 leading-none ${overdueHot ? "text-drop" : ""}`}>{summary.overdue}</p>
+        <p className="text-xs text-slate mt-1">🔴 Atrasados</p>
       </Card>
-      <Card className="p-4">
+      <Card className="p-4" style={dueTodayHot ? { borderColor: "rgba(201,130,30,0.4)", background: "rgba(201,130,30,0.08)" } : undefined}>
         <IconBadge tone="pink" icon={<Clock size={18} />} size={36} />
         <p className="font-display font-bold text-2xl mt-2.5 leading-none">{summary.dueToday + summary.due7d}</p>
-        <p className="text-xs text-slate mt-1">Vencem em 7 dias</p>
+        <p className="text-xs text-slate mt-1">🟡 Vencem em 7 dias</p>
       </Card>
       <Card className="p-4">
         <IconBadge tone="blue" icon={<CalendarClock size={18} />} size={36} />
         <p className="font-display font-bold text-2xl mt-2.5 leading-none">{summary.due8to30}</p>
-        <p className="text-xs text-slate mt-1">Em 8–30 dias</p>
+        <p className="text-xs text-slate mt-1">🔵 Em 8–30 dias</p>
       </Card>
       <Card className="p-4">
         <IconBadge tone="green" icon={<CheckCircle2 size={18} />} size={36} />
         <p className="font-display font-bold text-2xl mt-2.5 leading-none">{summary.onTrack}</p>
-        <p className="text-xs text-slate mt-1">No prazo</p>
+        <p className="text-xs text-slate mt-1">🟢 No prazo</p>
       </Card>
       <Card className="p-4">
         {summary.onTimeRate ? (
           <>
-            <p className="font-display font-bold text-2xl leading-none text-cat-purple">{summary.onTimeRate.pct}%</p>
+            <p className="font-display font-bold text-2xl leading-none text-cat-purple">🎯 {summary.onTimeRate.pct}%</p>
             <p className="text-xs text-slate mt-1">
               Taxa de prazos em dia · {summary.onTimeRate.completedOnTime} de {summary.onTimeRate.completedWithDeadline}
             </p>

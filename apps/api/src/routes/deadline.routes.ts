@@ -9,7 +9,7 @@ import {
   computeOnTimeRate,
   computeAreaDistribution,
   computeTrend,
-  getProjectRisks,
+  getAllRisks,
   type DeadlinePeriodFilter,
   type DeadlineItem,
 } from "../services/deadlineRadarService.js";
@@ -48,14 +48,19 @@ deadlineRouter.get("/", async (req, res) => {
   const [items, onTimeRate, risks] = await Promise.all([
     getAllDeadlineItems(db, ownerId, parsed.today),
     computeOnTimeRate(db, ownerId),
-    getProjectRisks(db, ownerId, parsed.today),
+    getAllRisks(db, ownerId, parsed.today),
   ]);
 
   const filtered = filterByPeriod(items, parsed.period as DeadlinePeriodFilter);
   const summary = computeSummary(items, onTimeRate);
+  const dayStatus: "critico" | "atencao" | "tranquilo" =
+    summary.overdue > 0 ? "critico" : summary.dueToday > 0 || summary.due7d >= 3 ? "atencao" : "tranquilo";
   const areas = computeAreaDistribution(items);
   const trend = computeTrend(items, parsed.today);
-  const critical = sortCritical(filtered).slice(0, 8);
+  const criticalSorted = sortCritical(filtered);
+  const critical = criticalSorted.slice(0, 8);
+  // Recomendação de "por onde começar": o item mais urgente entre os críticos (mesma ordenação, nunca aleatório).
+  const focusItem = criticalSorted[0] ?? null;
   const upcomingMilestones = [...items]
     .filter((i) => !i.done && i.daysRemaining >= 0)
     .sort((a, b) => a.daysRemaining - b.daysRemaining)
@@ -81,6 +86,8 @@ deadlineRouter.get("/", async (req, res) => {
 
   res.json({
     summary,
+    dayStatus,
+    focusItem,
     items: filtered,
     critical,
     areas,
