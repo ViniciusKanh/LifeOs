@@ -6,7 +6,7 @@
  * automática").
  */
 import type { getDb } from "../db/client.js";
-import { getDayTasks, getFreeWindows, getFocusForecast, type DayTask, type FreeWindow, type EffortType } from "./capacityPlannerService.js";
+import { getDayTasks, getFreeWindows, getFocusForecast, classifyEffort, type DayTask, type FreeWindow, type EffortType } from "./capacityPlannerService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -35,12 +35,6 @@ export interface PlanningSuggestion {
   overloadAfterMinutes: number;
 }
 
-function effortType(task: DayTask): EffortType {
-  if ((task.estimateMinutes ?? 0) >= 60 && task.priority === "Alta") return "deep_work";
-  if ((task.estimateMinutes ?? 0) <= 20) return "light";
-  return "normal";
-}
-
 /** Ordena: sem estimativa fica de fora (nunca inventa duração); prazo mais próximo primeiro; depois prioridade. */
 function sortTasks(tasks: DayTask[]): DayTask[] {
   const priorityRank: Record<DayTask["priority"], number> = { Alta: 0, Média: 1, Baixa: 2 };
@@ -64,8 +58,8 @@ export async function buildPlanningSuggestion(db: Db, ownerId: string, date: str
 
   const sorted = sortTasks(tasks).sort((a, b) => {
     // Trabalho profundo primeiro para poder ocupar a melhor janela de Focus quando ela existir.
-    const aDeep = effortType(a) === "deep_work" ? 0 : 1;
-    const bDeep = effortType(b) === "deep_work" ? 0 : 1;
+    const aDeep = classifyEffort(a.estimateMinutes, a.priority) === "deep_work" ? 0 : 1;
+    const bDeep = classifyEffort(b.estimateMinutes, b.priority) === "deep_work" ? 0 : 1;
     return aDeep - bDeep;
   });
 
@@ -78,7 +72,7 @@ export async function buildPlanningSuggestion(db: Db, ownerId: string, date: str
 
   for (const task of sorted) {
     const duration = task.estimateMinutes as number;
-    const type = effortType(task);
+    const type = classifyEffort(task.estimateMinutes, task.priority);
     let target: FreeWindow | undefined;
 
     if (type === "deep_work" && bestFocusStart != null) {

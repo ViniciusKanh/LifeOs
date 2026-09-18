@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Clock, X } from "lucide-react";
 import { Card, Button } from "@/components/ui/primitives";
+import { EFFORT_EMOJI, EFFORT_LABEL } from "./capacityColors";
 import type { CapacityDayTask, CapacityPlannedBlock } from "@/types";
 
 const FILTERS: Array<{ value: "Todas" | "Alta" | "Média" | "Baixa" }> = [
@@ -10,23 +11,29 @@ const FILTERS: Array<{ value: "Todas" | "Alta" | "Média" | "Baixa" }> = [
   { value: "Baixa" },
 ];
 
-function suggestTimes(estimateMinutes: number | null): { start: string; end: string } {
-  const start = "09:00";
+const PRIORITY_EMOJI: Record<string, string> = { Alta: "🔥", Média: "⭐", Baixa: "🌱" };
+
+/** Sugere horário inicial no melhor período de foco conhecido (fallback 09:00) — nunca inventa duração. */
+function suggestTimes(estimateMinutes: number | null, bestFocusStart: string | null): { start: string; end: string } {
+  const start = bestFocusStart ?? "09:00";
   const dur = estimateMinutes ?? 30;
-  const endMinutes = 9 * 60 + dur;
-  const end = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
+  const startMinutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5));
+  const endMinutes = startMinutes + dur;
+  const end = `${String(Math.floor(endMinutes / 60) % 24).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
   return { start, end };
 }
 
 export function DayTasksCard({
   tasks,
   blocks,
+  bestFocusStart,
   onToggleDone,
   onSchedule,
   onRemoveSchedule,
 }: {
   tasks: CapacityDayTask[];
   blocks: CapacityPlannedBlock[];
+  bestFocusStart?: string | null;
   onToggleDone: (taskId: string) => void;
   onSchedule: (taskId: string, startTime: string, endTime: string) => void;
   onRemoveSchedule: (blockId: string) => void;
@@ -39,7 +46,7 @@ export function DayTasksCard({
   const blockByTaskId = useMemo(() => new Map(blocks.filter((b) => b.entityType === "task" && b.entityId).map((b) => [b.entityId as string, b])), [blocks]);
 
   function startEditing(task: CapacityDayTask) {
-    setDraft(suggestTimes(task.estimateMinutes));
+    setDraft(suggestTimes(task.estimateMinutes, bestFocusStart ?? null));
     setEditingTaskId(task.id);
   }
 
@@ -51,7 +58,7 @@ export function DayTasksCard({
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-        <p className="text-sm font-semibold">Tarefas do dia</p>
+        <p className="text-sm font-semibold">📋 Tarefas do dia</p>
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map((f) => (
             <Button
@@ -66,7 +73,7 @@ export function DayTasksCard({
         </div>
       </div>
       {filtered.length === 0 ? (
-        <p className="text-sm text-slate py-6 text-center">Nenhuma tarefa para hoje.</p>
+        <p className="text-sm text-slate py-6 text-center">Nenhuma tarefa para hoje. 🎉</p>
       ) : (
         <ul className="space-y-2">
           {filtered.map((t) => {
@@ -82,14 +89,7 @@ export function DayTasksCard({
                     className="w-4 h-4 rounded accent-brand-600 shrink-0 cursor-pointer"
                     aria-label={`Marcar "${t.title}" como concluída`}
                   />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{t.title}</p>
-                    <p className="text-[11px] text-slate truncate">
-                      {t.estimateMinutes != null ? `${t.estimateMinutes}min` : "Sem estimativa"}
-                      {t.projectName ? ` · ${t.projectName}` : ""}
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-semibold text-slate shrink-0">{t.priority}</span>
+                  <p className="text-sm font-medium truncate min-w-0 flex-1">{t.title}</p>
                   {block ? (
                     <button
                       onClick={() => onRemoveSchedule(block.id)}
@@ -109,8 +109,18 @@ export function DayTasksCard({
                     </button>
                   )}
                 </div>
+                <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5 pl-7 text-[11px] text-slate">
+                  <span>{t.estimateMinutes != null ? `⏱️ ${t.estimateMinutes}min` : "⚠️ Sem estimativa"}</span>
+                  {t.projectName && <span className="truncate max-w-[9rem]">📁 {t.projectName}</span>}
+                  <span title={EFFORT_LABEL[t.effortType]}>
+                    {EFFORT_EMOJI[t.effortType]} {EFFORT_LABEL[t.effortType]}
+                  </span>
+                  <span className="font-semibold ml-auto">
+                    {PRIORITY_EMOJI[t.priority]} {t.priority}
+                  </span>
+                </div>
                 {isEditing && (
-                  <div className="flex items-center gap-2 mt-2.5 pl-7">
+                  <div className="flex items-center gap-2 mt-2.5 pl-7 flex-wrap">
                     <input
                       type="time"
                       value={draft.start}

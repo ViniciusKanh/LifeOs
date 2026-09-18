@@ -15,7 +15,7 @@ export function AreaDistributionCard({ areas }: { areas: CapacityArea[] }) {
   const data = areas.map((a, i) => ({ ...a, color: AREA_PALETTE[i % AREA_PALETTE.length] }));
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold mb-4">Carga por área</p>
+      <p className="text-sm font-semibold mb-4">🥧 Carga por área</p>
       {data.length === 0 ? (
         <p className="text-sm text-slate py-6 text-center">Sem carga planejada para calcular a distribuição.</p>
       ) : (

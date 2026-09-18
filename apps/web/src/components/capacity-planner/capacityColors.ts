@@ -26,3 +26,22 @@ export const STATUS_BAR_COLOR: Record<string, string> = {
   alta: "#C9821E",
   sobrecarga: "#D64545",
 };
+
+/** Emoji por tipo de esforço — reforço visual rápido nas listas de tarefas/plano. */
+export const EFFORT_EMOJI: Record<string, string> = {
+  deep_work: "🧠",
+  normal: "⚙️",
+  light: "🪶",
+};
+
+/** Emoji por nível de ocupação do dia. */
+export const WORKLOAD_EMOJI: Record<string, string> = {
+  leve: "🌿",
+  equilibrada: "🟦",
+  alta: "🟠",
+  sobrecarga: "🔴",
+};
+
+/** Emoji por nível de energia/foco previstos (Signals/Focus). */
+export const ENERGY_EMOJI: Record<string, string> = { Alta: "🔋", Média: "🔌", Baixa: "🪫" };
+export const FOCUS_EMOJI: Record<string, string> = { Bom: "🎯", Regular: "🙂", Fraco: "😴" };

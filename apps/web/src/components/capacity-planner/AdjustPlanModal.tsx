@@ -32,7 +32,7 @@ export function AdjustPlanModal({
       >
         <div className="p-5 border-b border-paper-border dark:border-ink-border flex items-center gap-2.5">
           <Wand2 size={18} className="text-brand-600 dark:text-brand-400" />
-          <p className="font-display font-bold text-lg">Ajustar plano automaticamente</p>
+          <p className="font-display font-bold text-lg">✨ Ajustar plano automaticamente</p>
         </div>
         <div className="p-5 space-y-4">
           {loading ? (
@@ -43,11 +43,11 @@ export function AdjustPlanModal({
             <>
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="rounded-xl border border-paper-border dark:border-ink-border p-3">
-                  <p className="text-[11px] text-slate">Sobrecarga atual</p>
+                  <p className="text-[11px] text-slate">⚠️ Sobrecarga atual</p>
                   <p className="font-display font-bold text-lg">{fmt(suggestion.overloadBeforeMinutes)}</p>
                 </div>
                 <div className="rounded-xl border border-paper-border dark:border-ink-border p-3">
-                  <p className="text-[11px] text-slate">Sobrecarga após o plano</p>
+                  <p className="text-[11px] text-slate">✅ Sobrecarga após o plano</p>
                   <p className="font-display font-bold text-lg">{fmt(suggestion.overloadAfterMinutes)}</p>
                 </div>
               </div>
@@ -56,7 +56,7 @@ export function AdjustPlanModal({
                 <p className="text-sm text-slate">Nenhuma tarefa pôde ser reorganizada.</p>
               ) : (
                 <div>
-                  <p className="text-xs font-semibold text-slate mb-2">Plano sugerido</p>
+                  <p className="text-xs font-semibold text-slate mb-2">🗓️ Plano sugerido</p>
                   <ul className="space-y-1.5">
                     {suggestion.proposed.map((p) => (
                       <li key={p.taskId} className="flex items-center justify-between text-sm rounded-lg bg-paper dark:bg-ink px-3 py-2">
@@ -72,7 +72,7 @@ export function AdjustPlanModal({
 
               {suggestion.deferred.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-slate mb-2">Não coube hoje</p>
+                  <p className="text-xs font-semibold text-slate mb-2">⏳ Não coube hoje</p>
                   <ul className="space-y-1.5">
                     {suggestion.deferred.map((d) => (
                       <li key={d.taskId} className="text-xs text-slate">

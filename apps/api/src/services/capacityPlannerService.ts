@@ -44,6 +44,7 @@ export interface DayTask {
   plannedStart: string | null;
   plannedEnd: string | null;
   done: boolean;
+  effortType: EffortType;
 }
 
 export interface PlannedBlock {
@@ -87,6 +88,13 @@ export function formatDuration(minutes: number): string {
   if (h === 0) return `${sign}${m}min`;
   if (m === 0) return `${sign}${h}h`;
   return `${sign}${h}h${String(m).padStart(2, "0")}`;
+}
+
+/** Classifica o esforço de uma tarefa a partir de duração/prioridade — mesma regra usada no motor de sugestão. */
+export function classifyEffort(estimateMinutes: number | null, priority: "Baixa" | "Média" | "Alta"): EffortType {
+  if ((estimateMinutes ?? 0) >= 60 && priority === "Alta") return "deep_work";
+  if ((estimateMinutes ?? 0) <= 20) return "light";
+  return "normal";
 }
 
 export function classifyOccupancy(rate: number): WorkloadLevel {
@@ -208,6 +216,7 @@ export async function getDayTasks(db: Db, ownerId: string, date: string): Promis
     plannedStart: r.planned_start,
     plannedEnd: r.planned_end,
     done: false,
+    effortType: classifyEffort(r.estimate_minutes, r.priority),
   }));
 }
 
