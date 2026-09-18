@@ -1,5 +1,6 @@
 import { BatteryCharging, Timer } from "lucide-react";
 import { Card, IconBadge } from "@/components/ui/primitives";
+import { ENERGY_EMOJI, FOCUS_EMOJI } from "./capacityColors";
 import type { CapacityEnergyForecast, CapacityFocusForecast } from "@/types";
 
 export function EnergyForecastCard({ energy }: { energy: CapacityEnergyForecast }) {
@@ -7,13 +8,15 @@ export function EnergyForecastCard({ energy }: { energy: CapacityEnergyForecast 
     <Card className="p-5">
       <div className="flex items-center gap-2.5 mb-3">
         <IconBadge tone="amber" icon={<BatteryCharging size={18} />} size={36} />
-        <p className="text-sm font-semibold">Energia prevista</p>
+        <p className="text-sm font-semibold">🔋 Energia prevista</p>
       </div>
       {energy.level ? (
         <>
-          <p className="font-display font-bold text-xl">{energy.level}</p>
+          <p className="font-display font-bold text-xl">
+            {ENERGY_EMOJI[energy.level]} {energy.level}
+          </p>
           {energy.bestPeriod ? (
-            <p className="text-xs text-slate mt-1">Melhor período: {energy.bestPeriod}</p>
+            <p className="text-xs text-slate mt-1">⏰ Melhor período: {energy.bestPeriod}</p>
           ) : (
             <p className="text-xs text-slate mt-1">Sem horário de pico identificado ainda.</p>
           )}
@@ -30,12 +33,14 @@ export function FocusForecastCard({ focus }: { focus: CapacityFocusForecast }) {
     <Card className="p-5">
       <div className="flex items-center gap-2.5 mb-3">
         <IconBadge tone="purple" icon={<Timer size={18} />} size={36} />
-        <p className="text-sm font-semibold">Focus previsto</p>
+        <p className="text-sm font-semibold">🎯 Focus previsto</p>
       </div>
       {focus.level ? (
         <>
-          <p className="font-display font-bold text-xl">{focus.level}</p>
-          {focus.bestPeriod && <p className="text-xs text-slate mt-1">Melhor período: {focus.bestPeriod}</p>}
+          <p className="font-display font-bold text-xl">
+            {FOCUS_EMOJI[focus.level]} {focus.level}
+          </p>
+          {focus.bestPeriod && <p className="text-xs text-slate mt-1">⏰ Melhor período: {focus.bestPeriod}</p>}
         </>
       ) : (
         <p className="text-sm text-slate">Dados insuficientes.</p>

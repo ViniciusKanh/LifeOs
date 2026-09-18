@@ -65,7 +65,7 @@ export function CapacityPlannerPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <DateNavigator date={date} onChange={setDate} />
             <Button onClick={() => setModalOpen(true)}>
-              <Wand2 size={16} /> Ajustar plano automaticamente
+              <Wand2 size={16} /> ✨ Ajustar plano automaticamente
             </Button>
           </div>
         }
@@ -100,6 +100,7 @@ export function CapacityPlannerPage() {
             <DayTasksCard
               tasks={data.tasks}
               blocks={data.blocks}
+              bestFocusStart={data.focus.bestPeriod ? data.focus.bestPeriod.split("–")[0].replace("h", ":00") : null}
               onToggleDone={handleToggleDone}
               onSchedule={handleSchedule}
               onRemoveSchedule={handleRemoveBlock}

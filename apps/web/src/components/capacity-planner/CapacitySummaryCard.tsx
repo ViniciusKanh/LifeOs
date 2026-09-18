@@ -1,6 +1,6 @@
 import { Clock, CalendarClock, Coffee, ListTree, AlertTriangle } from "lucide-react";
 import { Card, IconBadge } from "@/components/ui/primitives";
-import { WORKLOAD_TONE, STATUS_BAR_COLOR } from "./capacityColors";
+import { WORKLOAD_TONE, STATUS_BAR_COLOR, WORKLOAD_EMOJI } from "./capacityColors";
 import type { CapacitySummary } from "@/types";
 
 function fmt(minutes: number): string {
@@ -18,8 +18,8 @@ export function CapacitySummaryCard({ summary, overloadMessage }: { summary: Cap
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-        <p className="text-sm font-semibold">Capacidade do dia</p>
-        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${tone.className}`}>{tone.label}</span>
+        <p className="text-sm font-semibold">📊 Capacidade do dia</p>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${tone.className}`}>{WORKLOAD_EMOJI[summary.workloadLevel]} {tone.label}</span>
       </div>
       <p className="text-xs text-slate mb-4">Janela útil: {summary.windowLabel}</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

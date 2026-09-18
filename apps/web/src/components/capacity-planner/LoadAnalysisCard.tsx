@@ -30,10 +30,10 @@ export function LoadAnalysisCard({ summary }: { summary: CapacitySummary }) {
   const max = Math.max(summary.freeMinutes, summary.plannedMinutes, 1);
   return (
     <Card className="p-5 space-y-3.5">
-      <p className="text-sm font-semibold">Análise de carga</p>
-      <Bar label="Capacidade" minutes={summary.freeMinutes} max={max} color="#3B6FE0" />
-      <Bar label="Carga" minutes={summary.plannedMinutes} max={max} color="#8B5CF6" />
-      {summary.overloadMinutes > 0 && <Bar label="Sobrecarga" minutes={summary.overloadMinutes} max={max} color="#D64545" />}
+      <p className="text-sm font-semibold">📐 Análise de carga</p>
+      <Bar label="🟦 Capacidade" minutes={summary.freeMinutes} max={max} color="#3B6FE0" />
+      <Bar label="🟣 Carga" minutes={summary.plannedMinutes} max={max} color="#8B5CF6" />
+      {summary.overloadMinutes > 0 && <Bar label="🔴 Sobrecarga" minutes={summary.overloadMinutes} max={max} color="#D64545" />}
     </Card>
   );
 }

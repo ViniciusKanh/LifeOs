@@ -1205,6 +1205,7 @@ export interface CapacityDayTask {
   plannedStart: string | null;
   plannedEnd: string | null;
   done: boolean;
+  effortType: EffortType;
 }
 
 export interface CapacityPlannedBlock {
