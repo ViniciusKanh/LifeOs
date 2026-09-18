@@ -92,6 +92,24 @@ export default {
         aurora:
           "radial-gradient(60% 90% at 10% 0%, rgba(124,77,255,0.30) 0%, rgba(124,77,255,0) 60%), radial-gradient(50% 80% at 100% 0%, rgba(255,122,69,0.28) 0%, rgba(255,122,69,0) 55%)",
       },
+      // Comemoração de troféu (seção Conquistas) — um único momento
+      // orquestrado (entrada) em vez de efeitos espalhados: o medalhão
+      // "estala" pra dentro enquanto um brilho varre a superfície uma vez.
+      keyframes: {
+        "trophy-in": {
+          "0%": { opacity: "0", transform: "translateY(-16px) scale(0.85)" },
+          "60%": { opacity: "1", transform: "translateY(2px) scale(1.04)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "trophy-shine": {
+          "0%": { transform: "translateX(-120%) rotate(20deg)" },
+          "100%": { transform: "translateX(220%) rotate(20deg)" },
+        },
+      },
+      animation: {
+        "trophy-in": "trophy-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        "trophy-shine": "trophy-shine 1.1s ease-out 0.15s 1",
+      },
     },
   },
   plugins: [],

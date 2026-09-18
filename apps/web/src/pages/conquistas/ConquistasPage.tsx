@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { BookOpen, ClipboardList, Flame, Library, ListChecks, Lock, Plus, Rocket, Target, Timer, Trash2, Trophy, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Target, Timer, Trash2, Trophy, X } from "lucide-react";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useCustomAchievements } from "@/hooks/useCustomAchievements";
 import { Button, Card, EmptyState, Field } from "@/components/ui/primitives";
-import type { Achievement, CustomAchievement } from "@/types";
+import { TIER_BORDER_TONE, TIER_EMOJI, TIER_GLOW, TIER_LABEL, TIER_MEDAL_GRADIENT, TIER_ORDER, TIER_TEXT_TONE } from "@/components/achievements/tierDisplay";
+import type { Achievement, AchievementTier, CustomAchievement } from "@/types";
 
 const ICONS: Record<string, typeof Trophy> = {
   ListChecks,
@@ -14,28 +15,32 @@ const ICONS: Record<string, typeof Trophy> = {
   Timer,
   ClipboardList,
   Target,
+  Dumbbell,
+  Droplets,
+  GraduationCap,
+  FlaskConical,
   Trophy,
 };
 
+/** Vitrine de troféu (estilo PlayStation/Xbox): medalhão com a cor real do metal + selo de raridade. */
 function AchievementCard({ achievement }: { achievement: Achievement }) {
   const Icon = (achievement.icon && ICONS[achievement.icon]) || Trophy;
   const unlocked = !!achievement.unlockedAt;
+  const tier = achievement.tier;
 
   return (
-    <Card className={`p-5 flex flex-col gap-3 ${unlocked ? "" : "opacity-70"}`}>
+    <Card className={`p-5 flex flex-col gap-3 border ${unlocked ? TIER_BORDER_TONE[tier] : ""} ${unlocked ? "" : "opacity-70"}`}>
       <div className="flex items-start justify-between">
         <span
-          className={`w-11 h-11 rounded-xl2 flex items-center justify-center ${
-            unlocked ? "bg-gradient-to-br from-brand-500 to-signal text-white shadow-glow-brand" : "bg-black/[0.04] dark:bg-white/[0.06] text-slate"
+          className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${
+            unlocked ? `bg-gradient-to-br ${TIER_MEDAL_GRADIENT[tier]} text-white ${TIER_GLOW[tier]}` : "bg-black/[0.04] dark:bg-white/[0.06] text-slate"
           }`}
         >
-          {unlocked ? <Icon size={20} /> : <Lock size={18} />}
+          {unlocked ? <Icon size={22} /> : <Lock size={18} />}
         </span>
-        {unlocked && (
-          <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-100 bg-brand-50 dark:bg-brand-700/20 rounded-full px-2 py-1">
-            Destravada
-          </span>
-        )}
+        <span className={`text-[10px] font-semibold rounded-full px-2 py-1 flex items-center gap-1 ${unlocked ? TIER_TEXT_TONE[tier] : "text-slate"} bg-black/[0.03] dark:bg-white/[0.06]`}>
+          {TIER_EMOJI[tier]} {TIER_LABEL[tier]}
+        </span>
       </div>
       <div>
         <p className="font-display font-semibold text-base">{achievement.title}</p>
@@ -44,10 +49,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
       {!unlocked && achievement.threshold ? (
         <div>
           <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.08] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-brand-500 to-signal"
-              style={{ width: `${achievement.progress}%` }}
-            />
+            <div className={`h-full rounded-full bg-gradient-to-r ${TIER_MEDAL_GRADIENT[tier]}`} style={{ width: `${achievement.progress}%` }} />
           </div>
           <p className="text-[11px] text-slate mt-1.5">{achievement.progress}% do caminho</p>
         </div>
@@ -74,7 +76,7 @@ function CustomTrophyCard({ trophy, onDelete }: { trophy: CustomAchievement; onD
       </button>
       <div className="flex items-start justify-between pr-6">
         <span
-          className={`w-11 h-11 rounded-xl2 flex items-center justify-center text-xl ${
+          className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl shrink-0 ${
             unlocked ? "bg-gradient-to-br from-brand-500 to-signal shadow-glow-brand" : "bg-black/[0.04] dark:bg-white/[0.06]"
           }`}
         >
@@ -82,7 +84,7 @@ function CustomTrophyCard({ trophy, onDelete }: { trophy: CustomAchievement; onD
         </span>
         {unlocked && (
           <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-100 bg-brand-50 dark:bg-brand-700/20 rounded-full px-2 py-1">
-            Destravada
+            Personalizado
           </span>
         )}
       </div>
@@ -212,10 +214,18 @@ export function ConquistasPage() {
   const { trophies, unlockedCount, metrics, isLoading: trophiesLoading, create, remove } = useCustomAchievements();
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Vitrine agrupada por raridade (platina → bronze), como uma sala de troféus.
+  const byTier = useMemo(() => {
+    const groups = new Map<AchievementTier, Achievement[]>();
+    for (const tier of TIER_ORDER) groups.set(tier, []);
+    for (const a of achievements) groups.get(a.tier)?.push(a);
+    return groups;
+  }, [achievements]);
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto space-y-8">
       <div>
-        <p className="font-display font-bold text-2xl tracking-tight">Conquistas</p>
+        <p className="font-display font-bold text-2xl tracking-tight flex items-center gap-2">🏆 Conquistas</p>
         <p className="text-sm text-slate mt-1">
           {unlocked.length} de {achievements.length} destravadas — sempre calculadas a partir dos seus dados reais, nunca marcadas à mão.
         </p>
@@ -224,10 +234,27 @@ export function ConquistasPage() {
       {isLoading ? (
         <p className="text-sm text-slate">Carregando…</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {achievements.map((a) => (
-            <AchievementCard key={a.id} achievement={a} />
-          ))}
+        <div className="space-y-6">
+          {TIER_ORDER.map((tier) => {
+            const items = byTier.get(tier) ?? [];
+            if (items.length === 0) return null;
+            return (
+              <div key={tier}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base leading-none">{TIER_EMOJI[tier]}</span>
+                  <p className="text-sm font-semibold">{TIER_LABEL[tier]}</p>
+                  <span className="text-xs text-slate">
+                    {items.filter((a) => a.unlockedAt).length}/{items.length}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {items.map((a) => (
+                    <AchievementCard key={a.id} achievement={a} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

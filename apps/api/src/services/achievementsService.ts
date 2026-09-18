@@ -16,6 +16,10 @@ const METRIC_KEYS = [
   "habit_checks_in_day",
   "water_ml_in_day",
   "workouts_in_day",
+  "workouts_total",
+  "water_days_total",
+  "study_minutes_total",
+  "experiments_completed_total",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -50,6 +54,10 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("focus_minutes_total", "SELECT COALESCE(SUM(actual_minutes), 0) FROM focus_sessions WHERE owner_id = ? AND actual_minutes IS NOT NULL");
   addScalar("weekly_reviews_total", "SELECT COUNT(*) FROM weekly_reviews WHERE owner_id = ?");
   addScalar("goals_completed_total", "SELECT COUNT(*) FROM goals WHERE owner_id = ? AND status = 'done'");
+  addScalar("workouts_total", "SELECT COUNT(*) FROM workouts WHERE owner_id = ?");
+  addScalar("water_days_total", "SELECT COUNT(DISTINCT date(recorded_at)) FROM water_entries WHERE owner_id = ?");
+  addScalar("study_minutes_total", "SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE owner_id = ?");
+  addScalar("experiments_completed_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status = 'completed'");
 
   // Métricas "por dia" usadas por troféus customizados. O valor é o
   // melhor dia real do histórico do usuário, calculado só quando algum
@@ -123,6 +131,10 @@ export const CUSTOM_ACHIEVEMENT_METRICS = [
   { value: "weekly_reviews_total", label: "Weekly Reviews preenchidas (total)" },
   { value: "goals_completed_total", label: "Metas concluídas (total)" },
   { value: "habit_best_streak", label: "Sequência de dias de hábito (streak)" },
+  { value: "workouts_total", label: "Treinos registrados (total)" },
+  { value: "water_days_total", label: "Dias com água registrada (total)" },
+  { value: "study_minutes_total", label: "Minutos de estudo (total)" },
+  { value: "experiments_completed_total", label: "Experimentos concluídos (total)" },
 ] as const;
 
 export type CustomAchievementMetric = (typeof CUSTOM_ACHIEVEMENT_METRICS)[number]["value"];
@@ -233,6 +245,8 @@ export async function evaluateCustomAchievements(ownerId: string): Promise<Custo
   return newlyUnlocked;
 }
 
+export type AchievementTier = "bronze" | "silver" | "gold" | "platinum";
+
 export interface AchievementView {
   id: string;
   code: string;
@@ -241,6 +255,7 @@ export interface AchievementView {
   icon: string | null;
   metric: string | null;
   threshold: number | null;
+  tier: AchievementTier;
   progress: number;
   unlockedAt: string | null;
 }
@@ -260,6 +275,7 @@ export async function listAchievements(ownerId: string): Promise<AchievementView
     icon: string | null;
     metric: string | null;
     threshold: number | null;
+    tier: AchievementTier;
   }>;
   const metrics = await computeMetrics(db, ownerId, catalogRows.map((row) => row.metric).filter((metric): metric is string => !!metric));
 
@@ -278,6 +294,7 @@ export async function listAchievements(ownerId: string): Promise<AchievementView
       icon: row.icon,
       metric: row.metric,
       threshold: row.threshold,
+      tier: row.tier,
       progress,
       unlockedAt: unlockedMap.get(row.id) ?? null,
     };
@@ -329,6 +346,7 @@ export async function evaluateAchievements(ownerId: string): Promise<Achievement
     icon: string | null;
     metric: string | null;
     threshold: number | null;
+    tier: AchievementTier;
   }>).map((row) => ({
     id: row.id,
     code: row.code,
@@ -337,6 +355,7 @@ export async function evaluateAchievements(ownerId: string): Promise<Achievement
     icon: row.icon,
     metric: row.metric,
     threshold: row.threshold,
+    tier: row.tier,
     progress: 100,
     unlockedAt: new Date().toISOString(),
   }));

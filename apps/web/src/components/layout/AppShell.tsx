@@ -38,6 +38,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { NotificationsBell } from "./NotificationsBell";
 import { ProfileMenu } from "./ProfileMenu";
 import { AchievementToast } from "./AchievementToast";
+import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
@@ -210,6 +211,7 @@ export function AppShell() {
             >
               {isDark ? <SunMedium size={16} /> : <Moon size={16} />}
             </button>
+            <AchievementHeaderPulse />
             <NotificationsBell />
             <ProfileMenu />
           </div>

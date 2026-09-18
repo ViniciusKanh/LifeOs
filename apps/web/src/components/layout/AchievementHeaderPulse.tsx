@@ -4,6 +4,7 @@ import { ArrowRight, Sparkles, Trophy } from "lucide-react";
 import { ACHIEVEMENT_CREATED_EVENT, ACHIEVEMENT_UNLOCKED_EVENT } from "@/services/achievementsService";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useCustomAchievements } from "@/hooks/useCustomAchievements";
+import { TIER_EMOJI } from "@/components/achievements/tierDisplay";
 import type { Achievement, CustomAchievement } from "@/types";
 
 type HeaderAchievementEvent = {
@@ -11,6 +12,8 @@ type HeaderAchievementEvent = {
   icon?: string | null;
   kind: "created" | "unlocked";
 };
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function toHeaderEvent(item: Achievement | CustomAchievement, kind: HeaderAchievementEvent["kind"]): HeaderAchievementEvent {
   return {
@@ -20,6 +23,12 @@ function toHeaderEvent(item: Achievement | CustomAchievement, kind: HeaderAchiev
   };
 }
 
+/**
+ * Sino de conquistas no cabeçalho — mostra o que você já destravou
+ * *nesta semana* (não o histórico inteiro) e o que está perto de
+ * destravar, além de pulsar/abrir sozinho assim que uma conquista
+ * nova acontece em qualquer tela do app.
+ */
 export function AchievementHeaderPulse() {
   const [item, setItem] = useState<HeaderAchievementEvent | null>(null);
   const [open, setOpen] = useState(false);
@@ -27,8 +36,15 @@ export function AchievementHeaderPulse() {
   const { achievements } = useAchievements();
   const { trophies } = useCustomAchievements();
   const all = [...achievements, ...trophies];
-  const achieved = all.filter((entry) => entry.unlockedAt).sort((a, b) => String(b.unlockedAt).localeCompare(String(a.unlockedAt))).slice(0, 5);
-  const close = all.filter((entry) => !entry.unlockedAt && entry.progress >= 60).sort((a, b) => b.progress - a.progress).slice(0, 4);
+
+  const weekAgo = Date.now() - WEEK_MS;
+  const thisWeek = all
+    .filter((entry) => entry.unlockedAt && new Date(entry.unlockedAt).getTime() >= weekAgo)
+    .sort((a, b) => String(b.unlockedAt).localeCompare(String(a.unlockedAt)));
+  const close = all
+    .filter((entry) => !entry.unlockedAt && entry.progress >= 60)
+    .sort((a, b) => b.progress - a.progress)
+    .slice(0, 4);
 
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
@@ -76,19 +92,64 @@ export function AchievementHeaderPulse() {
         title={item?.title ?? "Conquistas"}
         className={`flex h-9 min-w-9 max-w-[220px] items-center justify-center gap-2 rounded-full border px-2 sm:px-3 text-xs font-semibold transition-colors ${item ? "animate-pulse border-brand-500/30 bg-brand-500 text-white" : "border-paper-border text-slate hover:border-brand-500/50 hover:text-brand-600 dark:border-ink-border"}`}
       >
-        <Trophy size={15} className="shrink-0" /> <span className="hidden truncate sm:inline">{item ? `${item.kind === "unlocked" ? "Destravada" : "Criada"}: ${item.title}` : "Conquistas"}</span>
+        <Trophy size={15} className="shrink-0" />
+        <span className="hidden truncate sm:inline">
+          {item ? `${item.kind === "unlocked" ? "Destravada" : "Criada"}: ${item.title}` : "Conquistas"}
+        </span>
+        {!item && thisWeek.length > 0 && (
+          <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-growth px-1 text-[10px] font-bold text-white">
+            {thisWeek.length}
+          </span>
+        )}
       </button>
-      {open && <div className="absolute right-0 top-11 z-50 w-80 max-w-[90vw] overflow-hidden rounded-lg border border-paper-border bg-paper-raised shadow-xl dark:border-ink-border dark:bg-ink-raised">
-        <div className="flex items-center justify-between border-b border-paper-border px-4 py-3 dark:border-ink-border"><p className="text-sm font-semibold">Suas conquistas</p><span className="text-xs text-slate">{all.filter((entry) => entry.unlockedAt).length}/{all.length}</span></div>
-        <div className="max-h-96 overflow-y-auto px-4 py-3">
-          {item?.kind === "unlocked" && <p className="mb-3 flex items-center gap-2 rounded-md bg-growth/10 p-2 text-xs font-semibold text-growth"><Sparkles size={14} /> {item.title} desbloqueada!</p>}
-          <p className="mb-2 text-[11px] font-semibold uppercase text-slate">Conquistadas</p>
-          {achieved.length ? achieved.map((entry) => <div key={entry.id} className="flex items-center gap-2 py-1.5 text-xs"><Trophy size={14} className="shrink-0 text-signal" /><span className="truncate font-medium">{entry.title}</span></div>) : <p className="mb-3 text-xs text-slate">Sua primeira conquista aparecerá aqui.</p>}
-          <p className="mb-2 mt-4 text-[11px] font-semibold uppercase text-slate">Quase lá</p>
-          {close.length ? close.map((entry) => <div key={entry.id} className="mb-2"><div className="flex justify-between gap-2 text-xs"><span className="truncate">{entry.title}</span><span className="font-semibold">{entry.progress}%</span></div><div className="mt-1 h-1.5 rounded-full bg-paper-border dark:bg-ink-border"><div className="h-full rounded-full bg-brand-500" style={{ width: `${entry.progress}%` }} /></div></div>) : <p className="text-xs text-slate">Nenhuma conquista perto de desbloquear ainda.</p>}
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-80 max-w-[90vw] overflow-hidden rounded-lg border border-paper-border bg-paper-raised shadow-xl dark:border-ink-border dark:bg-ink-raised">
+          <div className="flex items-center justify-between border-b border-paper-border px-4 py-3 dark:border-ink-border">
+            <p className="text-sm font-semibold">Suas conquistas</p>
+            <span className="text-xs text-slate">
+              {all.filter((entry) => entry.unlockedAt).length}/{all.length}
+            </span>
+          </div>
+          <div className="max-h-96 overflow-y-auto px-4 py-3">
+            {item?.kind === "unlocked" && (
+              <p className="mb-3 flex items-center gap-2 rounded-md bg-growth/10 p-2 text-xs font-semibold text-growth">
+                <Sparkles size={14} /> {item.title} desbloqueada!
+              </p>
+            )}
+            <p className="mb-2 text-[11px] font-semibold uppercase text-slate">Destravadas essa semana</p>
+            {thisWeek.length ? (
+              thisWeek.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-2 py-1.5 text-xs">
+                  <Trophy size={14} className="shrink-0 text-signal" />
+                  <span className="truncate font-medium">{entry.title}</span>
+                  {"tier" in entry && <span className="shrink-0 text-[11px]">{TIER_EMOJI[entry.tier]}</span>}
+                </div>
+              ))
+            ) : (
+              <p className="mb-3 text-xs text-slate">Nenhuma conquista destravada essa semana ainda.</p>
+            )}
+            <p className="mb-2 mt-4 text-[11px] font-semibold uppercase text-slate">Quase lá</p>
+            {close.length ? (
+              close.map((entry) => (
+                <div key={entry.id} className="mb-2">
+                  <div className="flex justify-between gap-2 text-xs">
+                    <span className="truncate">{entry.title}</span>
+                    <span className="font-semibold">{entry.progress}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-paper-border dark:bg-ink-border">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${entry.progress}%` }} />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate">Nenhuma conquista perto de desbloquear ainda.</p>
+            )}
+          </div>
+          <Link to="/conquistas" onClick={() => setOpen(false)} className="flex items-center justify-between border-t border-paper-border px-4 py-3 text-xs font-semibold text-brand-600 dark:border-ink-border">
+            Ver todas <ArrowRight size={14} />
+          </Link>
         </div>
-        <Link to="/conquistas" onClick={() => setOpen(false)} className="flex items-center justify-between border-t border-paper-border px-4 py-3 text-xs font-semibold text-brand-600 dark:border-ink-border">Ver todas <ArrowRight size={14} /></Link>
-      </div>}
+      )}
     </div>
   );
 }
