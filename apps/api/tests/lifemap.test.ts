@@ -2,15 +2,16 @@ import { describe, it, expect } from "vitest";
 import { createAuthenticatedAgent } from "./helpers.js";
 
 describe("Life Map", () => {
-  it("começa vazio (sem itens) e mostra as 6 áreas com zero itens ativos", async () => {
+  it("começa vazio (sem itens) e mostra as 7 áreas com zero itens ativos", async () => {
     const { agent } = await createAuthenticatedAgent();
 
     const res = await agent.get("/api/lifemap");
     expect(res.status).toBe(200);
-    expect(res.body.summary.areasCount).toBe(6);
+    // 7 áreas desde a introdução da área "Profissional" (projetos kind='professional' + metas de carreira + work notes).
+    expect(res.body.summary.areasCount).toBe(7);
     expect(res.body.summary.areasActiveCount).toBe(0);
-    // nó central + 6 nós de área + 3 sub-nós fixos de resumo de saúde (água/sono/exercício)
-    expect(res.body.nodes.length).toBe(10);
+    // nó central + 7 nós de área + 3 sub-nós fixos de resumo de saúde (água/sono/exercício)
+    expect(res.body.nodes.length).toBe(11);
     expect(res.body.edges).toEqual([]);
   });
 

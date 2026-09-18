@@ -45,6 +45,8 @@ const EXPORTABLE_TABLES = [
   "user_achievements",
   "life_scores",
   "analytics_snapshots",
+  "personal_experiments",
+  "personal_experiment_logs",
 ] as const;
 
 /**

@@ -51,6 +51,8 @@ const AdminUsuariosPage = lazy(() =>
 const SaudePage = lazy(() => import("@/pages/saude/SaudePage").then((m) => ({ default: m.SaudePage })));
 const HabitosPage = lazy(() => import("@/pages/habitos/HabitosPage").then((m) => ({ default: m.HabitosPage })));
 const MetasPage = lazy(() => import("@/pages/metas/MetasPage").then((m) => ({ default: m.MetasPage })));
+const ExperimentsPage = lazy(() => import("@/pages/experimentos/ExperimentsPage").then((m) => ({ default: m.ExperimentsPage })));
+const ExperimentDetailPage = lazy(() => import("@/pages/experimentos/ExperimentDetailPage").then((m) => ({ default: m.ExperimentDetailPage })));
 const FocoPage = lazy(() => import("@/pages/foco/FocoPage").then((m) => ({ default: m.FocoPage })));
 const ConquistasPage = lazy(() =>
   import("@/pages/conquistas/ConquistasPage").then((m) => ({ default: m.ConquistasPage }))
@@ -125,6 +127,8 @@ export default function App() {
           <Route path="/saude" element={<SaudePage />} />
           <Route path="/habitos" element={<HabitosPage />} />
           <Route path="/metas" element={<MetasPage />} />
+          <Route path="/experimentos" element={<ExperimentsPage />} />
+          <Route path="/experimentos/:id" element={<ExperimentDetailPage />} />
           <Route path="/conquistas" element={<ConquistasPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
