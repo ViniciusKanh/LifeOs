@@ -220,7 +220,7 @@ function goalPeriodStart(period: string | null, date: string) {
 
 async function goalsScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
   const result = await db.execute({
-    sql: "SELECT id, parent_goal_id, title, kind, unit, status, target_value, current_value, period, completed_at FROM goals WHERE owner_id = ? AND status != 'abandoned'",
+    sql: "SELECT id, parent_goal_id, title, kind, unit, status, target_value, current_value, period, completed_at, due_date FROM goals WHERE owner_id = ? AND status != 'abandoned'",
     args: [ownerId],
   });
   const rows = (result.rows as unknown as Array<{
@@ -234,7 +234,17 @@ async function goalsScore(db: Db, ownerId: string, date: string): Promise<Dimens
     current_value: number;
     period: string | null;
     completed_at: string | null;
-  }>).filter((goal) => goal.status !== "done" || (goal.completed_at && goal.completed_at.slice(0, 10) >= goalPeriodStart(goal.period, date) && goal.completed_at.slice(0, 10) <= date));
+    due_date: string | null;
+  }>).filter((goal) => {
+    if (goal.status === "done") {
+      return !!(goal.completed_at && goal.completed_at.slice(0, 10) >= goalPeriodStart(goal.period, date) && goal.completed_at.slice(0, 10) <= date);
+    }
+    // Meta ativa com prazo vencido e nunca concluída/renovada: sem isso,
+    // um valor antigo "congelado" arrastava a nota do período pra
+    // sempre, mesmo com o usuário nunca mais tocando na meta.
+    if (goal.due_date && goal.due_date.slice(0, 10) < date) return false;
+    return true;
+  });
   if (rows.length === 0) return { score: 0, hasData: false };
   const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, ownerId, date) : 0;
 

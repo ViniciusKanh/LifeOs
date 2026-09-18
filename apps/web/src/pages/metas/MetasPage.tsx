@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Briefcase,
   Calendar,
   ChevronRight,
@@ -9,13 +10,14 @@ import {
   ListChecks,
   Pencil,
   Plus,
+  Repeat,
   Target,
   Trash2,
   Trophy,
   User,
   X,
 } from "lucide-react";
-import { useGoalForecast, useGoals } from "@/hooks/useGoals";
+import { useGoalDetail, useGoalForecast, useGoals } from "@/hooks/useGoals";
 import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/components/ui/primitives";
 import type { Goal, GoalKind, GoalPeriod } from "@/types";
 
@@ -57,6 +59,20 @@ const GOAL_CATEGORIES: Array<{ value: string; label: string; tone: "green" | "bl
 const GOAL_CATEGORY_BY_VALUE = new Map(GOAL_CATEGORIES.map((c) => [c.value, c]));
 const FALLBACK_GOAL_CATEGORY = { label: "Sem área", tone: "blue" as const, icon: Target };
 
+/** Cor de destaque do card (borda + barra de progresso) — mesma linguagem visual das áreas da vida. */
+const ACCENT_BORDER: Record<"green" | "blue" | "purple" | "pink", string> = {
+  green: "border-l-cat-green",
+  blue: "border-l-cat-blue",
+  purple: "border-l-cat-purple",
+  pink: "border-l-cat-pink",
+};
+const ACCENT_BAR: Record<"green" | "blue" | "purple" | "pink", string> = {
+  green: "bg-cat-green",
+  blue: "bg-cat-blue",
+  purple: "bg-cat-purple",
+  pink: "bg-cat-pink",
+};
+
 /**
  * Chip de previsão de conclusão da meta — regressão linear simples sobre o
  * histórico real de progresso (nunca IA, nunca um número inventado).
@@ -94,7 +110,7 @@ function formatDate(value: string | null) {
 }
 
 export function MetasPage() {
-  const { goals, stats, createGoal, updateGoal, removeGoal, addProgress } = useGoals({ parentGoalId: "null" });
+  const { goals, stats, createGoal, updateGoal, removeGoal, addProgress, renewGoal } = useGoals({ parentGoalId: "null" });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
@@ -102,6 +118,7 @@ export function MetasPage() {
   const [statusTab, setStatusTab] = useState<"ativas" | "concluidas" | "todas">("ativas");
 
   const activeGoals = goals.filter((g) => g.status === "active");
+  const overdueGoals = activeGoals.filter((g) => g.is_overdue);
   const overallProgressPct = activeGoals.length > 0 ? Math.round(activeGoals.reduce((sum, g) => sum + goalProgressPct(g), 0) / activeGoals.length) : 0;
 
   const visibleGoals = useMemo(() => {
@@ -111,6 +128,17 @@ export function MetasPage() {
     );
     return [...list].sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999") || b.created_at.localeCompare(a.created_at));
   }, [goals, periodTab, statusTab]);
+
+  const handleComplete = (goal: Goal) => {
+    const pct = goalProgressPct(goal);
+    if (pct < 100 && !confirm(`"${goal.title}" está em ${pct}% de progresso registrado. Marcar como concluída mesmo assim?`)) return;
+    updateGoal({ id: goal.id, patch: { status: "done" } });
+  };
+
+  const handleDelete = (goal: Goal) => {
+    if (!confirm(`Excluir "${goal.title}" e todo o seu histórico de progresso? Essa ação não pode ser desfeita.`)) return;
+    removeGoal(goal.id);
+  };
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
@@ -143,7 +171,13 @@ export function MetasPage() {
                   <p className="text-xs text-slate leading-tight">Metas ativas</p>
                 </div>
               </div>
-              <p className="text-[11px] text-slate mt-2">de {goals.length} criadas</p>
+              {overdueGoals.length > 0 ? (
+                <p className="text-[11px] text-drop mt-2 flex items-center gap-1">
+                  <AlertTriangle size={11} /> {overdueGoals.length} {overdueGoals.length === 1 ? "vencida" : "vencidas"}
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate mt-2">de {goals.length} criadas</p>
+              )}
             </Card>
             <Card className="p-3 sm:p-4">
               <div className="flex items-center gap-2.5 sm:gap-3">
@@ -213,26 +247,38 @@ export function MetasPage() {
                     const label = progressLabel(goal);
                     const meta = GOAL_CATEGORY_BY_VALUE.get(goal.category?.trim() ?? "") ?? FALLBACK_GOAL_CATEGORY;
                     const Icon = meta.icon;
+                    const overdue = !!goal.is_overdue;
+                    const canRenew = !!goal.period && (goal.status === "done" || overdue);
                     return (
-                      <div key={goal.id} className="rounded-xl border border-paper-border dark:border-ink-border p-4">
+                      <div
+                        key={goal.id}
+                        className={`rounded-xl border border-l-4 p-4 ${overdue ? "border-drop/60 border-l-drop" : `border-paper-border dark:border-ink-border ${ACCENT_BORDER[meta.tone]}`}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <IconBadge icon={<Icon size={15} />} tone={meta.tone} size={30} />
                               <p className="text-sm font-semibold truncate">{goal.title}</p>
+                              {overdue && (
+                                <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-drop bg-drop/10 rounded-full px-2 py-0.5">
+                                  <AlertTriangle size={10} /> Vencida
+                                </span>
+                              )}
                             </div>
                             {goal.description && <p className="text-xs text-slate mt-1.5 ml-9">{goal.description}</p>}
                             <div className="mt-3 flex items-center gap-3">
                               <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                                <div className="h-full rounded-full bg-signal" style={{ width: `${pct}%` }} />
+                                <div className={`h-full rounded-full ${overdue ? "bg-drop" : ACCENT_BAR[meta.tone]}`} style={{ width: `${pct}%` }} />
                               </div>
                               <span className="text-xs w-10 text-right shrink-0">{pct}%</span>
                             </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-slate">
                               {label && <span>{label}</span>}
+                              {goal.kind === "binary" && <span>Sim/Não</span>}
                               {goal.progress_source === "reading_today" && <span>Atualizado pela leitura de hoje</span>}
                               {goal.due_date && (
-                                <span>
+                                <span className={overdue ? "text-drop font-medium" : ""}>
+                                  {overdue ? "Venceu em " : ""}
                                   {formatDate(goal.due_date)}
                                   {goal.period ? ` • ${PERIOD_TAG[goal.period]}` : ""}
                                 </span>
@@ -242,23 +288,35 @@ export function MetasPage() {
                             <div className="mt-1.5 text-[11px]">
                               <GoalForecastChip goal={goal} />
                             </div>
+                            {overdue && (
+                              <p className="mt-2 text-[11px] text-drop">
+                                Prazo vencido — essa meta parou de contar no seu Life Score. Conclua ou clique em "Renovar" pra começar o próximo ciclo.
+                              </p>
+                            )}
                             {goal.next_action && <p className="mt-2 flex items-start gap-1.5 rounded-md bg-brand-500/5 px-2 py-1.5 text-xs"><ListChecks size={13} className="mt-0.5 shrink-0 text-brand-500" /><span>Próximo passo: {goal.next_action}{goal.next_action_due ? ` · ${formatDate(goal.next_action_due)}` : ""}</span></p>}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {goal.status === "active" && (
+                            {goal.status === "active" && !overdue && (
                               <>
-                                {goal.progress_source !== "reading_today" && <Button variant="secondary" onClick={() => setProgressGoal(goal)}>
-                                  Atualizar
-                                </Button>}
-                                <Button variant="ghost" onClick={() => updateGoal({ id: goal.id, patch: { status: "done" } })}>
+                                {goal.progress_source !== "reading_today" && goal.kind !== "binary" && (
+                                  <Button variant="secondary" onClick={() => setProgressGoal(goal)}>
+                                    Atualizar
+                                  </Button>
+                                )}
+                                <Button variant="ghost" onClick={() => handleComplete(goal)}>
                                   Concluir
                                 </Button>
                               </>
                             )}
+                            {canRenew && (
+                              <Button variant="secondary" onClick={() => renewGoal(goal.id)} title={`Iniciar o próximo ciclo ${goal.period ? PERIOD_TAG[goal.period].toLowerCase() : ""}`}>
+                                <Repeat size={13} /> Renovar
+                              </Button>
+                            )}
                             <button onClick={() => setEditingGoal(goal)} className="text-slate hover:text-inherit p-1">
                               <Pencil size={13} />
                             </button>
-                            <button onClick={() => removeGoal(goal.id)} className="text-slate hover:text-drop p-1">
+                            <button onClick={() => handleDelete(goal)} className="text-slate hover:text-drop p-1">
                               <Trash2 size={13} />
                             </button>
                           </div>
@@ -365,7 +423,12 @@ export function MetasPage() {
 
               <Card className="p-5">
                 <p className="text-sm font-semibold">Metas no Life Score</p>
-                <p className="mt-2 text-xs leading-relaxed text-slate">Cada meta contribui pelo seu avanço registrado. O Life Score calcula a média dentro de cada período e depois equilibra os períodos, para semanais, mensais e anuais terem peso semelhante.</p>
+                <p className="mt-2 text-xs leading-relaxed text-slate">
+                  Cada meta contribui pelo seu avanço real. O Life Score tira a média dentro de cada período e depois equilibra os períodos, para semanais, mensais e anuais terem peso semelhante.
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-slate">
+                  Uma meta com período que passa do prazo sem ser concluída sai do cálculo — ela não fica arrastando sua nota pra baixo pra sempre. Clique em "Renovar" pra começar o próximo ciclo do zero.
+                </p>
                 <div className="mt-3 flex items-center justify-between border-t border-paper-border pt-3 text-xs dark:border-ink-border"><span>Períodos com metas</span><span className="font-semibold">{stats?.periods.length ?? 0}</span></div>
               </Card>
             </div>
@@ -462,7 +525,10 @@ function MetaModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{goal ? "Editar meta" : "Nova meta"}</p>
+          <div className="flex items-center gap-2">
+            <IconBadge icon={<Flag size={15} />} tone="purple" size={30} />
+            <p className="text-sm font-semibold">{goal ? "Editar meta" : "Nova meta"}</p>
+          </div>
           <button onClick={onClose} className="text-slate">
             <X size={18} />
           </button>
@@ -501,6 +567,11 @@ function MetaModal({
               </select>
             </div>
           </div>
+          {period && (
+            <p className="text-[11px] text-slate -mt-1.5">
+              Metas com período contam no Life Score dentro do prazo. Se o prazo passar sem concluir, use "Renovar" na lista pra começar o próximo ciclo.
+            </p>
+          )}
           <div>
             <label className="text-xs text-slate">Tipo de acompanhamento</label>
             <select
@@ -520,6 +591,9 @@ function MetaModal({
               <Field label="Unidade" placeholder="páginas, marcos, livros..." value={unit} onChange={(e) => setUnit(e.target.value)} />
             </div>
           )}
+          {kind === "binary" && (
+            <p className="text-[11px] text-slate">Metas sim/não não têm progresso parcial — ficam em 0% até você clicar em "Concluir".</p>
+          )}
           <Field label="Prazo (opcional)" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           <div className="pt-2 border-t border-paper-border dark:border-ink-border">
             <p className="text-xs text-slate mb-2">Próximo passo (opcional — aparece em "Próximos marcos")</p>
@@ -537,9 +611,24 @@ function MetaModal({
   );
 }
 
+/** Passos rápidos por tipo de meta — evita ter que calcular o valor absoluto de cabeça. */
+function quickDeltas(goal: Goal): number[] {
+  if (goal.kind === "numeric") return [1, 5, 10];
+  return [10, 25, 50];
+}
+
 function ProgressoModal({ goal, onClose, onSave }: { goal: Goal; onClose: () => void; onSave: (value: number) => Promise<unknown> }) {
   const [value, setValue] = useState(String(goal.current_value));
   const [saving, setSaving] = useState(false);
+  const { goal: detail } = useGoalDetail(goal.id);
+  const history = [...(detail?.progress ?? [])].reverse().slice(0, 4);
+  const label = goal.kind === "percentage" || goal.kind === "task_based" ? "Progresso (%)" : `Valor atual${goal.unit ? ` (${goal.unit})` : ""}`;
+  const max = goal.kind === "percentage" || goal.kind === "task_based" ? 100 : undefined;
+
+  const applyDelta = (delta: number) => {
+    const next = (Number(value) || 0) + delta;
+    setValue(String(max !== undefined ? Math.min(next, max) : next));
+  };
 
   const submit = async () => {
     setSaving(true);
@@ -555,12 +644,31 @@ function ProgressoModal({ goal, onClose, onSave }: { goal: Goal; onClose: () => 
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-xs rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-semibold mb-3">Atualizar progresso de "{goal.title}"</p>
-        <Field
-          label={goal.kind === "percentage" ? "Progresso (%)" : `Valor atual${goal.unit ? ` (${goal.unit})` : ""}`}
-          type="number"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
+        <Field label={label} type="number" value={value} onChange={(e) => setValue(e.target.value)} />
+        <div className="flex gap-1.5 mt-2">
+          {quickDeltas(goal).map((delta) => (
+            <button
+              key={delta}
+              onClick={() => applyDelta(delta)}
+              className="flex-1 rounded-lg border border-paper-border dark:border-ink-border py-1.5 text-xs font-semibold text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+            >
+              +{delta}{goal.kind !== "numeric" ? "%" : ""}
+            </button>
+          ))}
+        </div>
+        {history.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-paper-border dark:border-ink-border">
+            <p className="text-[11px] font-semibold text-slate uppercase mb-1.5">Histórico recente</p>
+            <div className="space-y-1">
+              {history.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between text-[11px] text-slate">
+                  <span>{formatDate(entry.recorded_at) ?? entry.recorded_at.slice(0, 10)}</span>
+                  <span className="font-medium">{entry.value}{goal.kind !== "numeric" ? "%" : goal.unit ? ` ${goal.unit}` : ""}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <Button onClick={submit} disabled={saving} className="w-full mt-3">
           {saving ? "Salvando..." : "Salvar"}
         </Button>

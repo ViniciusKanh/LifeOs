@@ -437,6 +437,8 @@ export interface Goal {
   updated_at: string;
   /** Presente só quando a API substitui current_value pela leitura de hoje (meta de páginas lidas). */
   progress_source?: "reading_today";
+  /** true quando a meta está ativa, tem prazo e o prazo já passou — deixa de contar no Life Score. */
+  is_overdue?: boolean;
 }
 
 export interface GoalPeriodStat {

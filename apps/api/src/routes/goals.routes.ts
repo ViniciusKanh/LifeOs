@@ -31,6 +31,25 @@ function computeHabitStreak(entryDates: string[]): { current: number } {
   return { current };
 }
 
+/** Avança uma data pelo tamanho de um período de meta — usado ao renovar um ciclo. */
+function addPeriodCadence(dateStr: string, period: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (period === "semanal") d.setUTCDate(d.getUTCDate() + 7);
+  else if (period === "mensal") d.setUTCMonth(d.getUTCMonth() + 1);
+  else if (period === "semestral") d.setUTCMonth(d.getUTCMonth() + 6);
+  else if (period === "anual") d.setUTCFullYear(d.getUTCFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Marca uma meta ativa como vencida quando o prazo passou e ela nunca foi
+ * concluída — mesma regra usada pelo Life Score (metricsService.ts) para
+ * parar de contar o progresso congelado. Aqui só serve pra avisar a UI.
+ */
+function withOverdue<T extends { status: string; due_date: string | null }>(goal: T, today: string): T & { is_overdue: boolean } {
+  return { ...goal, is_overdue: goal.status === "active" && !!goal.due_date && goal.due_date.slice(0, 10) < today };
+}
+
 /** GET /api/goals?status=&parentGoalId= — parentGoalId="null" retorna só as metas de topo (anuais) */
 goalsRouter.get("/", async (req, res) => {
   const { status, parentGoalId } = req.query as { status?: string; parentGoalId?: string };
@@ -53,11 +72,12 @@ goalsRouter.get("/", async (req, res) => {
     sql: `SELECT * FROM goals WHERE ${conditions.join(" AND ")} ORDER BY due_date ASC, created_at ASC`,
     args,
   });
-  const rows = result.rows as unknown as Array<{ title: string; kind: string; unit: string | null; status: string; current_value: number }>;
-  const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, req.user!.id, new Date().toISOString().slice(0, 10)) : 0;
-  return res.json(rows.map((goal) => isDailyReadingGoal(goal)
+  const rows = result.rows as unknown as Array<{ title: string; kind: string; unit: string | null; status: string; current_value: number; due_date: string | null }>;
+  const today = new Date().toISOString().slice(0, 10);
+  const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, req.user!.id, today) : 0;
+  return res.json(rows.map((goal) => withOverdue(isDailyReadingGoal(goal)
     ? { ...goal, current_value: pagesToday, progress_source: "reading_today" }
-    : goal));
+    : goal, today)));
 });
 
 /**
@@ -196,8 +216,13 @@ goalsRouter.get("/:id", async (req, res) => {
   ]);
 
   const dailyReading = isDailyReadingGoal(goal as unknown as { title: string; kind: string; unit: string | null; status: string });
-  const pagesToday = dailyReading ? await pagesReadOn(db, req.user!.id, new Date().toISOString().slice(0, 10)) : 0;
-  return res.json({ ...goal, ...(dailyReading ? { current_value: pagesToday, progress_source: "reading_today" } : {}), children: children.rows, progress: progress.rows });
+  const today = new Date().toISOString().slice(0, 10);
+  const pagesToday = dailyReading ? await pagesReadOn(db, req.user!.id, today) : 0;
+  const merged = withOverdue(
+    { ...(goal as unknown as { status: string; due_date: string | null }), ...(dailyReading ? { current_value: pagesToday, progress_source: "reading_today" } : {}) },
+    today
+  );
+  return res.json({ ...merged, children: children.rows, progress: progress.rows });
 });
 
 /** POST /api/goals */
@@ -321,6 +346,53 @@ goalsRouter.post("/:id/progress", async (req, res) => {
 
   const updated = await db.execute({ sql: "SELECT * FROM goals WHERE id = ?", args: [req.params.id] });
   return res.status(201).json(updated.rows[0]);
+});
+
+/**
+ * POST /api/goals/:id/renew — inicia o próximo ciclo de uma meta periódica
+ * (semanal/mensal/semestral/anual): cria uma cópia zerada com o prazo
+ * avançado um período. A meta antiga concluída permanece "done" no
+ * histórico; se estava ativa e vencida, vira "abandoned" pra não
+ * duplicar na lista de ativas nem continuar pesando no Life Score.
+ */
+goalsRouter.post("/:id/renew", async (req, res) => {
+  const db = getDb();
+  const goal = await getOwnedGoal(db, req.params.id, req.user!.id) as unknown as {
+    id: string;
+    parent_goal_id: string | null;
+    title: string;
+    description: string | null;
+    category: string | null;
+    kind: string;
+    target_value: number | null;
+    unit: string | null;
+    due_date: string | null;
+    period: string | null;
+    status: string;
+  } | null;
+  if (!goal) return res.status(404).json({ error: "Meta não encontrada." });
+  if (!goal.period) return res.status(400).json({ error: "Só é possível renovar metas com período definido." });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const baseDate = goal.due_date && goal.due_date.slice(0, 10) >= today ? goal.due_date.slice(0, 10) : today;
+  const nextDueDate = addPeriodCadence(baseDate, goal.period);
+
+  const newId = nanoid();
+  await db.execute({
+    sql: `INSERT INTO goals (id, owner_id, parent_goal_id, title, description, category, kind, target_value, unit, due_date, period)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [newId, req.user!.id, goal.parent_goal_id, goal.title, goal.description, goal.category, goal.kind, goal.target_value, goal.unit, nextDueDate, goal.period],
+  });
+
+  if (goal.status === "active") {
+    await db.execute({
+      sql: "UPDATE goals SET status = 'abandoned', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+      args: [goal.id, req.user!.id],
+    });
+  }
+
+  const created = await db.execute({ sql: "SELECT * FROM goals WHERE id = ?", args: [newId] });
+  return res.status(201).json(withOverdue(created.rows[0] as unknown as { status: string; due_date: string | null }, today));
 });
 
 /**
