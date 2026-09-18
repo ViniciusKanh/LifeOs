@@ -1160,3 +1160,107 @@ export interface ContextTodayDashboard {
 }
 
 export type ContextDashboardResponse = ContextTodayDashboard | { configured: false };
+
+/* ===================== Capacity Planner ===================== */
+
+export type EffortType = "deep_work" | "normal" | "light";
+export type WorkloadLevel = "leve" | "equilibrada" | "alta" | "sobrecarga";
+
+export interface CapacitySummary {
+  date: string;
+  windowLabel: string;
+  totalMinutes: number;
+  busyMinutes: number;
+  freeMinutes: number;
+  plannedMinutes: number;
+  overloadMinutes: number;
+  occupancyRate: number;
+  workloadLevel: WorkloadLevel;
+}
+
+export interface CapacityFreeWindow {
+  start: string;
+  end: string;
+}
+
+export interface CapacityConflict {
+  blockId: string | null;
+  reason: string;
+}
+
+export interface CapacityArea {
+  label: string;
+  minutes: number;
+  pct: number;
+}
+
+export interface CapacityDayTask {
+  id: string;
+  title: string;
+  priority: "Baixa" | "Média" | "Alta";
+  estimateMinutes: number | null;
+  projectName: string | null;
+  projectColor: string | null;
+  dueDate: string | null;
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  done: boolean;
+}
+
+export interface CapacityPlannedBlock {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  entityType: "task" | "free_block" | "event";
+  entityId: string | null;
+  title: string;
+  blockType: EffortType;
+  projectColor: string | null;
+}
+
+export interface CapacityEnergyForecast {
+  level: "Baixa" | "Média" | "Alta" | null;
+  bestPeriod: string | null;
+  changePct: number | null;
+}
+
+export interface CapacityFocusForecast {
+  level: "Fraco" | "Regular" | "Bom" | null;
+  bestPeriod: string | null;
+}
+
+export interface CapacityContextSummary {
+  temperature: number | null;
+  condition: string | null;
+  rainChance: number | null;
+  favorable: boolean | null;
+}
+
+export interface CapacityDayDashboard {
+  summary: CapacitySummary;
+  overloadMessage: string | null;
+  tasks: CapacityDayTask[];
+  blocks: CapacityPlannedBlock[];
+  freeWindows: CapacityFreeWindow[];
+  conflicts: CapacityConflict[];
+  areas: CapacityArea[];
+  energy: CapacityEnergyForecast;
+  focus: CapacityFocusForecast;
+  context: CapacityContextSummary;
+}
+
+export interface CapacityProposedBlock {
+  taskId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  blockType: EffortType;
+}
+
+export interface CapacityPlanningSuggestion {
+  proposed: CapacityProposedBlock[];
+  deferred: Array<{ taskId: string; title: string; reason: string }>;
+  overloadBeforeMinutes: number;
+  overloadAfterMinutes: number;
+}

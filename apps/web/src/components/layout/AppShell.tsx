@@ -28,6 +28,7 @@ import {
   BellRing,
   Activity,
   CloudSun,
+  Gauge,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -62,6 +63,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/timeline": "Disciplina de hoje, liberdade de amanhã.",
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
   "/life-map": "Clareza nasce quando você enxerga as conexões.",
+  "/capacity-planner": "Quanto realmente cabe no seu dia?",
 };
 const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 
@@ -71,6 +73,7 @@ const NAV = [
   { to: "/tarefas", label: "Tarefas", icon: ListChecks },
   { to: "/projetos", label: "Projetos", icon: GanttChartSquare },
   { to: "/foco", label: "Focus", icon: Timer },
+  { to: "/capacity-planner", label: "Capacity Planner", icon: Gauge },
 ];
 
 const SECONDARY_NAV = [
