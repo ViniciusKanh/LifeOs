@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Gauge, Wand2 } from "lucide-react";
 import { PageHeader, Button } from "@/components/ui/primitives";
+import { ApiError } from "@/services/api";
 import {
   useCapacityDay,
   useCapacityPlanPreview,
@@ -25,9 +26,16 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Mensagem amigável a partir de um erro de API — nunca deixa a ação falhar em silêncio. */
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message || fallback;
+  return fallback;
+}
+
 export function CapacityPlannerPage() {
   const [date, setDate] = useState(todayISO());
   const [modalOpen, setModalOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const { data, isLoading, isError } = useCapacityDay(date);
   const { data: suggestion, isLoading: previewLoading } = useCapacityPlanPreview(date, modalOpen);
   const applyPlan = useApplyCapacityPlan(date);
@@ -36,23 +44,48 @@ export function CapacityPlannerPage() {
   const { updateTask } = useTasks();
   const queryClient = useQueryClient();
 
+  function notify(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast((current) => (current === message ? null : current)), 3500);
+  }
+
   async function handleToggleDone(taskId: string) {
-    await updateTask({ id: taskId, patch: { status: "Concluído" } });
-    queryClient.invalidateQueries({ queryKey: ["capacity", "day", date] });
+    try {
+      await updateTask({ id: taskId, patch: { status: "Concluído" } });
+      queryClient.invalidateQueries({ queryKey: ["capacity", "day", date] });
+      notify("✅ Tarefa concluída.");
+    } catch (err) {
+      notify(`⚠️ ${errorMessage(err, "Não foi possível concluir a tarefa.")}`);
+    }
   }
 
   function handleSchedule(taskId: string, startTime: string, endTime: string) {
-    createBlock.mutate({ date, startTime, endTime, entityType: "task", entityId: taskId, blockType: "normal" });
+    const task = data?.tasks.find((t) => t.id === taskId);
+    createBlock.mutate(
+      { date, startTime, endTime, entityType: "task", entityId: taskId, blockType: task?.effortType ?? "normal" },
+      {
+        onSuccess: () => notify(`🗓️ "${task?.title ?? "Tarefa"}" agendada para ${startTime}.`),
+        onError: (err) => notify(`⚠️ ${errorMessage(err, "Não foi possível agendar a tarefa.")}`),
+      }
+    );
   }
 
   function handleRemoveBlock(blockId: string) {
-    deleteBlock.mutate(blockId);
+    deleteBlock.mutate(blockId, {
+      onSuccess: () => notify("🗑️ Horário removido."),
+      onError: (err) => notify(`⚠️ ${errorMessage(err, "Não foi possível remover o horário.")}`),
+    });
   }
 
   async function handleConfirm() {
     if (!suggestion || suggestion.proposed.length === 0) return;
-    await applyPlan.mutateAsync(suggestion.proposed.map((p) => ({ taskId: p.taskId, startTime: p.startTime, endTime: p.endTime, blockType: p.blockType })));
-    setModalOpen(false);
+    try {
+      await applyPlan.mutateAsync(suggestion.proposed.map((p) => ({ taskId: p.taskId, startTime: p.startTime, endTime: p.endTime, blockType: p.blockType })));
+      setModalOpen(false);
+      notify(`✨ Plano aplicado — ${suggestion.proposed.length} tarefa${suggestion.proposed.length > 1 ? "s" : ""} agendada${suggestion.proposed.length > 1 ? "s" : ""}.`);
+    } catch (err) {
+      notify(`⚠️ ${errorMessage(err, "Não foi possível aplicar o plano.")}`);
+    }
   }
 
   return (
@@ -124,6 +157,15 @@ export function CapacityPlannerPage() {
           onClose={() => setModalOpen(false)}
           onConfirm={handleConfirm}
         />
+      )}
+
+      {toast && (
+        <button
+          className="fixed bottom-5 right-5 z-[70] rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-left text-sm font-semibold shadow-card dark:border-ink-border dark:bg-ink-raised max-w-xs"
+          onClick={() => setToast(null)}
+        >
+          {toast}
+        </button>
       )}
     </div>
   );

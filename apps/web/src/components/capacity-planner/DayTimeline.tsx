@@ -50,7 +50,7 @@ export function DayTimeline({
                     {removable && (
                       <button
                         onClick={() => onRemoveBlock(b.id)}
-                        className="shrink-0 p-1 rounded-lg text-slate opacity-0 group-hover:opacity-100 hover:bg-drop/10 hover:text-drop transition-all"
+                        className="shrink-0 p-1 rounded-lg text-slate opacity-60 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-drop/10 hover:text-drop transition-all"
                         aria-label={`Remover "${b.title}" do planejamento`}
                         title="Remover"
                       >

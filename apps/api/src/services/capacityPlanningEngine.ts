@@ -31,6 +31,7 @@ export interface ProposedBlock {
 export interface PlanningSuggestion {
   proposed: ProposedBlock[];
   deferred: Array<{ taskId: string; title: string; reason: string }>;
+  skippedNoEstimate: Array<{ taskId: string; title: string }>;
   overloadBeforeMinutes: number;
   overloadAfterMinutes: number;
 }
@@ -65,6 +66,11 @@ export async function buildPlanningSuggestion(db: Db, ownerId: string, date: str
 
   const proposed: ProposedBlock[] = [];
   const deferred: PlanningSuggestion["deferred"] = [];
+  // Transparência: tarefas sem estimativa nunca entram no plano (regra "nunca inventar duração"),
+  // mas o usuário precisa saber por que elas não aparecem, em vez de o recurso "parecer não funcionar".
+  const skippedNoEstimate = tasks
+    .filter((t) => !t.done && !t.plannedStart && (t.estimateMinutes == null || t.estimateMinutes <= 0))
+    .map((t) => ({ taskId: t.id, title: t.title }));
 
   function windowContaining(minute: number) {
     return windows.find((w) => toMinutes(w.start) <= minute && toMinutes(w.end) > minute);
@@ -106,5 +112,5 @@ export async function buildPlanningSuggestion(db: Db, ownerId: string, date: str
     return sum + (t?.estimateMinutes ?? 0);
   }, 0);
 
-  return { proposed, deferred, overloadBeforeMinutes: Math.max(0, overloadBefore), overloadAfterMinutes: overloadAfter };
+  return { proposed, deferred, skippedNoEstimate, overloadBeforeMinutes: Math.max(0, overloadBefore), overloadAfterMinutes: overloadAfter };
 }

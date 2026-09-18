@@ -89,7 +89,10 @@ export function DayTasksCard({
                     className="w-4 h-4 rounded accent-brand-600 shrink-0 cursor-pointer"
                     aria-label={`Marcar "${t.title}" como concluída`}
                   />
-                  <p className="text-sm font-medium truncate min-w-0 flex-1">{t.title}</p>
+                  <p className="text-sm font-medium truncate min-w-0 flex-1">
+                    {t.isOverdue && <span title="Atrasada">🔴 </span>}
+                    {t.title}
+                  </p>
                   {block ? (
                     <button
                       onClick={() => onRemoveSchedule(block.id)}

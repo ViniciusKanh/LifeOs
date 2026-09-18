@@ -1206,6 +1206,7 @@ export interface CapacityDayTask {
   plannedEnd: string | null;
   done: boolean;
   effortType: EffortType;
+  isOverdue: boolean;
 }
 
 export interface CapacityPlannedBlock {
@@ -1262,6 +1263,7 @@ export interface CapacityProposedBlock {
 export interface CapacityPlanningSuggestion {
   proposed: CapacityProposedBlock[];
   deferred: Array<{ taskId: string; title: string; reason: string }>;
+  skippedNoEstimate: Array<{ taskId: string; title: string }>;
   overloadBeforeMinutes: number;
   overloadAfterMinutes: number;
 }

@@ -82,6 +82,20 @@ export function AdjustPlanModal({
                   </ul>
                 </div>
               )}
+
+              {suggestion.skippedNoEstimate.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate mb-2">⚠️ Sem estimativa de duração (não entram no plano)</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    {suggestion.skippedNoEstimate.map((d) => (
+                      <li key={d.taskId} className="text-xs text-slate">
+                        {d.title}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-slate mt-1.5">Adicione uma duração estimada na tarefa para que ela possa ser agendada automaticamente.</p>
+                </div>
+              )}
             </>
           )}
         </div>
