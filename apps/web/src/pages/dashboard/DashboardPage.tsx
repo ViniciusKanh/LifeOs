@@ -33,7 +33,9 @@ import {
   FlaskConical,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
-import { useLifeScore, useAnalyticsOverview, useTimeline } from "@/hooks/useAnalytics";
+import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
+import { WeekGlance } from "@/components/dashboard/WeekGlance";
+import { useLifeScore, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
 import { useWeeklyReviewHistory } from "@/hooks/useReviews";
 import { useAuth } from "@/hooks/useAuth";
 import { useTasks } from "@/hooks/useTasks";
@@ -128,6 +130,13 @@ function weekShortLabel(monday: string) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
+// Legenda de tendência (▲/▼) para os StatTiles do topo — só aparece quando
+// há uma variação real vs. o período anterior (nunca "0%" ou texto inventado).
+function trendCaption(pct: number | null | undefined): string | undefined {
+  if (pct === null || pct === undefined || pct === 0) return undefined;
+  return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs. período anterior`;
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const { lifeScore, isLoading } = useLifeScore();
@@ -139,6 +148,7 @@ export function DashboardPage() {
   const { books } = useBooks({ status: "lendo" });
   const { stats: goalStats } = useGoals();
   const { overview } = useAnalyticsOverview(14);
+  const { insights: lifeInsights } = useInsights(30);
   const { history: reviewHistory } = useWeeklyReviewHistory(8);
   const { achievements, unlocked: unlockedCatalog } = useAchievements();
   const { trophies } = useCustomAchievements();
@@ -177,6 +187,16 @@ export function DashboardPage() {
   );
 
   const habitsDoneToday = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
+
+  // Sequência mais forte entre os hábitos ativos — dado já calculado por hábito, só pegamos o maior.
+  const streakHighlight: StreakHighlight | null = useMemo(() => {
+    let best: StreakHighlight | null = null;
+    for (const h of habits) {
+      const s = summaryByHabitId.get(h.id)?.currentStreak ?? 0;
+      if (s > 0 && (!best || s > best.streak)) best = { habitName: h.name, streak: s };
+    }
+    return best;
+  }, [habits, summaryByHabitId]);
   const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
   const currentBook = books[0];
 
@@ -288,14 +308,22 @@ export function DashboardPage() {
           label="Tarefas Hoje"
           value={`${tasksTodayDone} / ${tasksToday.length}`}
           progressPct={tasksToday.length > 0 ? Math.round((tasksTodayDone / tasksToday.length) * 100) : 0}
+          caption={trendCaption(overview?.changePct.tasksCompleted)}
         />
-        <StatTile tone="teal" icon={<Target size={18} />} label="Foco hoje" value={formatMinutes(focus?.todayMinutes ?? 0)} />
+        <StatTile
+          tone="teal"
+          icon={<Target size={18} />}
+          label="Foco hoje"
+          value={formatMinutes(focus?.todayMinutes ?? 0)}
+          caption={trendCaption(overview?.changePct.focusMinutes)}
+        />
         <StatTile
           tone="blue"
           icon={<Droplets size={18} />}
           label="Água"
           value={`${((health?.waterMl ?? 0) / 1000).toFixed(1)} L`}
           progressPct={Math.min(waterPct, 100)}
+          caption={trendCaption(overview?.changePct.avgWaterMl)}
         />
         <StatTile
           tone="green"
@@ -303,6 +331,7 @@ export function DashboardPage() {
           label="Hábitos"
           value={`${habitsDoneToday} / ${habits.length}`}
           progressPct={habits.length > 0 ? Math.round((habitsDoneToday / habits.length) * 100) : 0}
+          caption={trendCaption(overview?.changePct.habitsCompletionPct)}
         />
         <StatTile
           tone="amber"
@@ -330,6 +359,8 @@ export function DashboardPage() {
           description={`Média dos últimos 14 dias: ${scoreInsights.pagesPerDay} páginas/dia. Se sua meta é 20 páginas, o score agora usa esse alvo diário.`}
         />
       </div>
+
+      <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
 
       {/* Life Score + Como é calculado */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4 mb-4">
@@ -446,7 +477,7 @@ export function DashboardPage() {
       </Card>
 
       {/* Gráficos de análise */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         <Card className="p-5 md:p-6">
           <p className="text-sm font-semibold mb-1">Tarefas concluídas</p>
           <p className="text-xs text-slate mb-4">Últimos 14 dias.</p>
@@ -487,6 +518,8 @@ export function DashboardPage() {
             </div>
           )}
         </Card>
+
+        <WeekGlance series={overview?.dailySeries.tasks ?? []} />
       </div>
 
       {/* Linha principal — mesma composição do protótipo */}
