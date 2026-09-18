@@ -45,6 +45,7 @@ export interface DayTask {
   plannedEnd: string | null;
   done: boolean;
   effortType: EffortType;
+  isOverdue: boolean;
 }
 
 export interface PlannedBlock {
@@ -182,6 +183,7 @@ export async function getPlannedBlocks(db: Db, ownerId: string, date: string): P
 }
 
 export async function getDayTasks(db: Db, ownerId: string, date: string): Promise<DayTask[]> {
+  const isToday = date === new Date().toISOString().slice(0, 10);
   const result = await db.execute({
     sql: `SELECT t.id, t.title, t.priority, t.estimate_minutes, t.due_date, t.status,
                  p.name AS project_name, p.color AS project_color,
@@ -190,9 +192,13 @@ export async function getDayTasks(db: Db, ownerId: string, date: string): Promis
           LEFT JOIN projects p ON t.project_id = p.id
           LEFT JOIN planned_time_blocks b ON b.entity_type = 'task' AND b.entity_id = t.id AND b.date = ?
           WHERE t.owner_id = ? AND t.status != 'Concluído'
-                AND (date(t.due_date) = date(?) OR b.id IS NOT NULL)
+                AND (
+                  date(t.due_date) = date(?)
+                  OR b.id IS NOT NULL
+                  OR (? = 1 AND date(t.due_date) < date(?))
+                )
           ORDER BY (b.start_time IS NULL), b.start_time ASC, t.priority DESC`,
-    args: [date, ownerId, date],
+    args: [date, ownerId, date, isToday ? 1 : 0, date],
   });
   return (result.rows as unknown as Array<{
     id: string;
@@ -217,6 +223,7 @@ export async function getDayTasks(db: Db, ownerId: string, date: string): Promis
     plannedEnd: r.planned_end,
     done: false,
     effortType: classifyEffort(r.estimate_minutes, r.priority),
+    isOverdue: r.due_date != null && r.due_date.slice(0, 10) < date,
   }));
 }
 
