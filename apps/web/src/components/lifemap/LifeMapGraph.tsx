@@ -187,7 +187,12 @@ export function LifeMapGraph({
           const a = byId.get(e.from);
           const b = byId.get(e.to);
           if (!a || !b || !visibleIds.has(e.from) || !visibleIds.has(e.to)) return null;
-          const color = a.area ? AREA_COLOR[a.area] : "#98A2B3";
+          // Cor vem da área envolvida (o nó central não tem área própria,
+          // então herda a da ponta que tem — assim todo raio Você→área
+          // já nasce colorido em vez de cinza neutro).
+          const area = a.area ?? b.area;
+          const color = area ? AREA_COLOR[area] : "#98A2B3";
+          const isHub = e.kind === "hub";
           const isSelectedEdge = selectedId != null && (e.from === selectedId || e.to === selectedId);
           const isDimmed = selectedId != null && !isSelectedEdge;
           const dash = e.kind === "manual" ? "2 5" : e.kind === "habit_health" ? "4 4" : undefined;
@@ -199,8 +204,8 @@ export function LifeMapGraph({
               x2={b.x}
               y2={b.y}
               stroke={color}
-              strokeOpacity={isDimmed ? 0.05 : isSelectedEdge ? 0.85 : 0.16}
-              strokeWidth={isSelectedEdge ? 2.2 : 1.2}
+              strokeOpacity={isDimmed ? 0.05 : isSelectedEdge ? 0.9 : isHub ? 0.4 : 0.16}
+              strokeWidth={isSelectedEdge ? 2.2 : isHub ? 1.6 : 1.2}
               strokeDasharray={dash}
               strokeLinecap="round"
             />
