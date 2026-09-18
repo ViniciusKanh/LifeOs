@@ -30,6 +30,7 @@ import {
   CloudSun,
   Gauge,
   Radar,
+  TrendingUp,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,6 +67,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/life-map": "Clareza nasce quando você enxerga as conexões.",
   "/capacity-planner": "Quanto realmente cabe no seu dia?",
   "/deadline-radar": "Antecipar é criar mais liberdade.",
+  "/goal-forecast": "Pequenos passos hoje, grandes conquistas amanhã.",
 };
 const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 
@@ -92,6 +94,7 @@ const SECONDARY_NAV = [
   { to: "/metas", label: "Metas", icon: Target },
   { to: "/experimentos", label: "Experimentos", icon: FlaskConical },
   { to: "/conquistas", label: "Conquistas", icon: Trophy },
+  { to: "/goal-forecast", label: "Goal Forecast", icon: TrendingUp },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/signals", label: "Signals", icon: Activity },
   { to: "/timeline", label: "Timeline", icon: History },
