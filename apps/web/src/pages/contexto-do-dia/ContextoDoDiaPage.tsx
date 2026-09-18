@@ -28,7 +28,7 @@ export function ContextoDoDiaPage() {
   const { data, isLoading } = useContextToday(period);
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-6">
       <PageHeader
         icon={<CloudSun size={22} />}
         title="Contexto do Dia"
@@ -69,16 +69,10 @@ export function ContextoDoDiaPage() {
         <>
           <ContextKpis data={data} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-1">
-              <ClimaDeHojeCard data={data} />
-            </div>
-            <div className="lg:col-span-1">
-              <ImpactoRotinaCard impacts={data.impacts} />
-            </div>
-            <div className="lg:col-span-1">
-              <ResumoAmbientalCard data={data} />
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr] gap-4 items-start">
+            <ClimaDeHojeCard data={data} />
+            <ImpactoRotinaCard impacts={data.impacts} />
+            <ResumoAmbientalCard data={data} />
           </div>
 
           <TemperatureChart data={data} />
