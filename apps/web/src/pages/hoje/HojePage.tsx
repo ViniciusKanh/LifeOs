@@ -15,6 +15,7 @@ import {
   Dumbbell,
   BookOpen,
   Briefcase,
+  FlaskConical,
   Brain,
   GraduationCap,
   Wand2,
@@ -65,6 +66,7 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   mood: Smile,
   water: Droplets,
   work_note: Briefcase,
+  experiment: FlaskConical,
 };
 
 function timelineLabel(e: TimelineEvent): string {

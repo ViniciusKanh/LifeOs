@@ -30,6 +30,7 @@ import {
   Trophy,
   Wand2,
   Users,
+  FlaskConical,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
 import { useLifeScore, useAnalyticsOverview, useTimeline } from "@/hooks/useAnalytics";
@@ -85,6 +86,7 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   mood: Smile,
   water: Droplets,
   work_note: Users,
+  experiment: FlaskConical,
 };
 
 function timelineLabel(e: TimelineEvent): string {

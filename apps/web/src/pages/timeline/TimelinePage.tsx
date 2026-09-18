@@ -11,6 +11,7 @@ import {
   Droplets,
   Dumbbell,
   Flame,
+  FlaskConical,
   GraduationCap,
   Layers,
   ListChecks,
@@ -39,6 +40,7 @@ const TYPE_CONFIG: Record<EventType, { tab: string; tag: string; tone: Tone; ico
   mood: { tab: "Humor", tag: "Humor", tone: "amber", icon: Smile },
   water: { tab: "Água", tag: "Água", tone: "blue", icon: Droplets },
   work_note: { tab: "Profissional", tag: "Profissional", tone: "purple", icon: Briefcase },
+  experiment: { tab: "Experimentos", tag: "Experimentos", tone: "purple", icon: FlaskConical },
 };
 
 const TAG_PILL: Record<Tone, string> = {
@@ -71,6 +73,7 @@ const TABS: Array<{ value: EventType | "todos"; label: string }> = [
   { value: "sleep", label: "Sono" },
   { value: "mood", label: "Humor" },
   { value: "water", label: "Água" },
+  { value: "experiment", label: "Experimentos" },
 ];
 
 const RANGE_OPTIONS = [
@@ -117,6 +120,8 @@ function eventContent(e: TimelineEvent): { title: string; detail: string | null 
       return { title: "Reunião/anotação profissional", detail: e.label };
     case "sleep":
       return { title: "Dormir", detail: e.duration_minutes ? `${formatMinutes(Number(e.duration_minutes))} de sono` : "Boa noite!" };
+    case "experiment":
+      return { title: "Experimento pessoal", detail: e.label as string };
     default:
       return { title: e.label, detail: null };
   }

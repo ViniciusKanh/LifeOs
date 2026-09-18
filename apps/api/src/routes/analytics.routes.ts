@@ -201,7 +201,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
 
-  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded] = await Promise.all([
     // LEFT JOIN com projects: deixa claro a que projeto (profissional,
     // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
@@ -248,6 +248,18 @@ analyticsRouter.get("/timeline", async (req, res) => {
       sql: "SELECT id, title AS label, content, COALESCE(created_at, occurred_at) AS at, occurred_at FROM work_notes WHERE owner_id = ? AND date(occurred_at) >= date(?) AND date(occurred_at) <= date(?)",
       args: [ownerId, from, to],
     }),
+    // Experimentos Pessoais: só os marcos (início/conclusão/cancelamento), nunca um evento por
+    // check-in diário — isso poluiria a Timeline (ver seção 50 do briefing de Experimentos).
+    db.execute({
+      sql: `SELECT id, title AS label, created_at AS at FROM personal_experiments
+            WHERE owner_id = ? AND date(created_at) >= date(?) AND date(created_at) <= date(?)`,
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: `SELECT id, title AS label, updated_at AS at, status FROM personal_experiments
+            WHERE owner_id = ? AND status IN ('completed', 'cancelled') AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)`,
+      args: [ownerId, from, to],
+    }),
   ]);
 
   type TimelineRow = Record<string, unknown> & { at: string };
@@ -264,6 +276,13 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(moodEntries.rows).map((r) => ({ type: "mood", icon: "🙂", label: "Humor e energia", ...r })),
     ...asRows(waterEntries.rows).map((r) => ({ type: "water", icon: "💧", label: "Água", ...r })),
     ...asRows(workNotes.rows).map((r) => ({ type: "work_note", icon: "💼", ...r })),
+    ...asRows(experimentsStarted.rows).map((r) => ({ type: "experiment", icon: "🧪", label: `Experimento iniciado: ${r.label}`, ...r })),
+    ...asRows(experimentsEnded.rows).map((r) => ({
+      type: "experiment",
+      icon: "🧪",
+      label: r.status === "completed" ? `Experimento concluído: ${r.label}` : `Experimento cancelado: ${r.label}`,
+      ...r,
+    })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
   return res.json({ from, to, events });

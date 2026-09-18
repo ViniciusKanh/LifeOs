@@ -608,7 +608,7 @@ export interface LifeInsights {
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water" | "work_note";
+  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment";
   icon: string;
   id: string;
   label: string;
@@ -808,3 +808,192 @@ export interface CreateLifeMapLinkInput {
   targetId: string;
   relationshipType?: LifeMapRelationshipType;
 }
+
+/* -------------------------- Experimentos Pessoais -------------------------- */
+
+export type ExperimentStatus = "draft" | "active" | "paused" | "completed" | "cancelled";
+
+export type ExperimentCategory =
+  | "saude"
+  | "sono"
+  | "exercicio"
+  | "hidratacao"
+  | "produtividade"
+  | "focus"
+  | "educacao"
+  | "leitura"
+  | "habitos"
+  | "bem_estar"
+  | "personalizado";
+
+/** Chave do catálogo central de métricas — ver experimentMetricsService no backend para a definição de cada uma. */
+export type ExperimentMetricKey =
+  | "sleep_duration"
+  | "sleep_quality"
+  | "energy"
+  | "mood"
+  | "stress"
+  | "water_ml"
+  | "focus_minutes"
+  | "focus_sessions"
+  | "exercise_minutes"
+  | "exercise_sessions"
+  | "reading_pages"
+  | "reading_minutes"
+  | "study_minutes"
+  | "tasks_completed"
+  | "habit_consistency";
+
+export type ExperimentVerificationType = "automatic" | "manual";
+
+/** Chave da regra de verificação automática — ver experimentVerificationService no backend. */
+export type ExperimentVerificationRule =
+  | "sleep_before"
+  | "water_target"
+  | "focus_minimum"
+  | "reading_pages_minimum"
+  | "exercise_minimum"
+  | "study_minimum"
+  | "habit_completion";
+
+export type ExperimentSuccessCriteriaType = "consistency" | "metric_change" | "none";
+export type ExperimentWorthContinuing = "yes" | "maybe" | "no";
+export type ExperimentPerceivedResult = "improved" | "no_change" | "worsened";
+export type ExperimentPerception = "muito_ruim" | "ruim" | "neutro" | "bom" | "muito_bom";
+export type ExperimentCheckinStatus = "done" | "missed";
+
+export interface ExperimentMetricInfo {
+  key: ExperimentMetricKey;
+  label: string;
+  unit: string | null;
+  /** Métrica onde "menor é melhor" (ex.: estresse) — usado para interpretar a comparação corretamente. */
+  inverse: boolean;
+  requiresHabit: boolean;
+  hasHistory: boolean;
+  historyDays: number;
+}
+
+export interface Experiment {
+  id: string;
+  title: string;
+  description: string | null;
+  category: ExperimentCategory;
+  hypothesis: string | null;
+  motivation: string | null;
+  status: ExperimentStatus;
+  start_date: string;
+  end_date: string;
+  primary_metric: ExperimentMetricKey;
+  secondary_metrics: ExperimentMetricKey[];
+  linked_habit_id: string | null;
+  verification_type: ExperimentVerificationType;
+  verification_rule: ExperimentVerificationRule | null;
+  verification_config: Record<string, unknown> | null;
+  success_criteria_type: ExperimentSuccessCriteriaType;
+  success_criteria_value: number | null;
+  personal_conclusion: string | null;
+  worth_continuing: ExperimentWorthContinuing | null;
+  perceived_result: ExperimentPerceivedResult | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Linha da listagem — já vem com os campos derivados prontos (progresso, resultado), calculados no backend. */
+export interface ExperimentListItem extends Experiment {
+  progressPct: number;
+  daysElapsed: number;
+  durationDays: number;
+  resultLabel: string | null;
+}
+
+export interface ExperimentMetricComparison {
+  metric: ExperimentMetricKey;
+  label: string;
+  unit: string | null;
+  inverse: boolean;
+  beforeAvg: number | null;
+  duringAvg: number | null;
+  beforeDays: number;
+  duringDays: number;
+  diffAbs: number | null;
+  diffPct: number | null;
+  trend: "positive" | "negative" | "neutral" | "insufficient_data";
+  insufficientDataReason: string | null;
+}
+
+export interface ExperimentCheckinDay {
+  date: string;
+  status: ExperimentCheckinStatus | "pending";
+  source: "automatic" | "manual" | "none";
+}
+
+export interface ExperimentSeriesPoint {
+  date: string;
+  value: number | null;
+  phase: "before" | "during";
+}
+
+export interface ExperimentLog {
+  id: string;
+  experiment_id: string;
+  log_date: string;
+  checkin_status: ExperimentCheckinStatus | null;
+  perception: ExperimentPerception | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ExperimentDetail {
+  experiment: Experiment;
+  progressPct: number;
+  daysElapsed: number;
+  durationDays: number;
+  comparison: ExperimentMetricComparison[];
+  checkins: ExperimentCheckinDay[];
+  consistencyPct: number | null;
+  logs: ExperimentLog[];
+  interpretation: string;
+}
+
+export interface ExperimentSummary {
+  activeCount: number;
+  totalCount: number;
+  completedCount: number;
+  completionRatePct: number | null;
+  bestImpact: { label: string; diffPct: number } | null;
+  weeksExperimenting: number;
+  experimentingSinceDate: string | null;
+}
+
+export interface ExperimentInsightStat {
+  label: string;
+  value: string;
+}
+
+export interface ExperimentAISuggestion {
+  title: string;
+  hypothesis: string;
+  durationDays: number;
+  primaryMetric: ExperimentMetricKey;
+  motivation: string;
+}
+
+export interface CreateExperimentInput {
+  title: string;
+  description?: string;
+  category: ExperimentCategory;
+  hypothesis?: string;
+  motivation?: string;
+  startDate: string;
+  endDate: string;
+  primaryMetric: ExperimentMetricKey;
+  secondaryMetrics?: ExperimentMetricKey[];
+  linkedHabitId?: string | null;
+  verificationType: ExperimentVerificationType;
+  verificationRule?: ExperimentVerificationRule | null;
+  verificationConfig?: Record<string, unknown> | null;
+  successCriteriaType?: ExperimentSuccessCriteriaType;
+  successCriteriaValue?: number | null;
+}
+
+export type UpdateExperimentInput = Partial<CreateExperimentInput>;
