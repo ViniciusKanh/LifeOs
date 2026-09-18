@@ -282,6 +282,9 @@ export function LifeMapPage() {
               </span>
             ))}
           </div>
+          <p className="text-[10.5px] text-slate/80 mt-2">
+            Linha sólida: hierarquia real (Você → área → item). Linha pontilhada: relação automática por categoria ou vínculo manual.
+          </p>
         </Card>
 
         <div className="space-y-4">

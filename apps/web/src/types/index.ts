@@ -761,7 +761,7 @@ export interface LifeMapNode {
 export interface LifeMapEdge {
   from: string;
   to: string;
-  kind: "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health" | "manual";
+  kind: "hub" | "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health" | "manual";
   linkId?: string;
   relationshipType?: LifeMapRelationshipType;
 }

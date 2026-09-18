@@ -57,7 +57,7 @@ export interface LifeMapNode {
 export interface LifeMapEdge {
   from: string;
   to: string;
-  kind: "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health" | "manual";
+  kind: "hub" | "goal_project" | "goal_habit" | "project_task" | "academic_education" | "academic_project" | "habit_health" | "manual";
   linkId?: string;
   relationshipType?: RelationshipType;
 }
@@ -400,44 +400,73 @@ export async function getLifeMap(ownerId: string): Promise<LifeMapData> {
   // sono e treino são séries de registros, não entidades cadastráveis
   // como uma meta ou um livro) — por isso viram sub-nós de RESUMO,
   // com contagem real dos últimos registros, nunca um valor inventado.
-  nodes.push(
-    {
+  // Sub-nós de resumo de Saúde só aparecem quando existe pelo menos um
+  // registro real — evita nó "fantasma" (0 registros) boiando sem
+  // nenhuma conexão real no mapa, que é exatamente o tipo de item
+  // "desconexo" que o mapa deve evitar.
+  const waterCount = Number(waterRes.rows[0]?.n ?? 0);
+  const sleepCount = Number(sleepRes.rows[0]?.n ?? 0);
+  const workoutCount = Number(workoutsRes.rows[0]?.n ?? 0);
+  if (waterCount > 0) {
+    nodes.push({
       id: "health:water",
       kind: "health",
       area: "saude",
       label: "Hidratação",
-      sublabel: `${waterRes.rows[0]?.n ?? 0} registros`,
+      sublabel: `${waterCount} registros`,
       progressPct: null,
       lastActivityAt: waterRes.rows[0]?.last ? String(waterRes.rows[0].last) : null,
       linkedCount: 0,
       openPath: "/saude",
-    },
-    {
+    });
+  }
+  if (sleepCount > 0) {
+    nodes.push({
       id: "health:sleep",
       kind: "health",
       area: "saude",
       label: "Sono",
-      sublabel: `${sleepRes.rows[0]?.n ?? 0} registros`,
+      sublabel: `${sleepCount} registros`,
       progressPct: null,
       lastActivityAt: sleepRes.rows[0]?.last ? String(sleepRes.rows[0].last) : null,
       linkedCount: 0,
       openPath: "/saude",
-    },
-    {
+    });
+  }
+  if (workoutCount > 0) {
+    nodes.push({
       id: "health:workout",
       kind: "health",
       area: "saude",
       label: "Exercícios",
-      sublabel: `${workoutsRes.rows[0]?.n ?? 0} registros`,
+      sublabel: `${workoutCount} registros`,
       progressPct: null,
       lastActivityAt: workoutsRes.rows[0]?.last ? String(workoutsRes.rows[0].last) : null,
       linkedCount: 0,
       openPath: "/saude",
-    }
-  );
+    });
+  }
 
   // ---- Arestas (só relações reais) ------------------------------------
   const edges: LifeMapEdge[] = [];
+
+  // Espinha estrutural do mapa: Você → área (quando a área tem algum
+  // item desenhado) e área → cada item dela. Sem essas arestas o mapa
+  // ficava com nós boiando sem nenhuma linha visível, mesmo pertencendo
+  // claramente a uma área — esse era o principal motivo do mapa parecer
+  // "desconexo". É pura estrutura, não uma relação inventada: todo item
+  // já pertence a uma área por definição (campo `area` do próprio nó).
+  const areasWithChildren = new Set(
+    nodes.filter((n) => n.kind !== "center" && n.kind !== "area" && n.area).map((n) => n.area as LifeMapAreaId)
+  );
+  for (const areaId of areasWithChildren) {
+    edges.push({ from: "voce", to: `area:${areaId}`, kind: "hub" });
+  }
+  for (const n of nodes) {
+    if (n.kind !== "center" && n.kind !== "area" && n.area) {
+      edges.push({ from: `area:${n.area}`, to: n.id, kind: "hub" });
+    }
+  }
 
   // Meta ↔ Projeto: via tarefas que têm goal_id E project_id ao mesmo tempo.
   const goalProjectPairs = new Set<string>();

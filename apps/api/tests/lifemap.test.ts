@@ -10,8 +10,9 @@ describe("Life Map", () => {
     // 7 áreas desde a introdução da área "Profissional" (projetos kind='professional' + metas de carreira + work notes).
     expect(res.body.summary.areasCount).toBe(7);
     expect(res.body.summary.areasActiveCount).toBe(0);
-    // nó central + 7 nós de área + 3 sub-nós fixos de resumo de saúde (água/sono/exercício)
-    expect(res.body.nodes.length).toBe(11);
+    // nó central + 7 nós de área — sub-nós de resumo de saúde (água/sono/exercício) só aparecem
+    // quando existe pelo menos um registro real, para não deixar nó "fantasma" sem conexão.
+    expect(res.body.nodes.length).toBe(8);
     expect(res.body.edges).toEqual([]);
   });
 
