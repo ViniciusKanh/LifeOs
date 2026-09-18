@@ -63,6 +63,9 @@ const AnalyticsPage = lazy(() => import("@/pages/analytics/AnalyticsPage").then(
 const CapacityPlannerPage = lazy(() =>
   import("@/pages/capacity-planner/CapacityPlannerPage").then((m) => ({ default: m.CapacityPlannerPage }))
 );
+const DeadlineRadarPage = lazy(() =>
+  import("@/pages/deadline-radar/DeadlineRadarPage").then((m) => ({ default: m.DeadlineRadarPage }))
+);
 const TimelinePage = lazy(() => import("@/pages/timeline/TimelinePage").then((m) => ({ default: m.TimelinePage })));
 const WeeklyReviewPage = lazy(() =>
   import("@/pages/weekly-review/WeeklyReviewPage").then((m) => ({ default: m.WeeklyReviewPage }))
@@ -139,6 +142,7 @@ export default function App() {
           <Route path="/conquistas" element={<ConquistasPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/capacity-planner" element={<CapacityPlannerPage />} />
+          <Route path="/deadline-radar" element={<DeadlineRadarPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
           <Route path="/life-map" element={<LifeMapPage />} />

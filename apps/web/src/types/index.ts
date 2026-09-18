@@ -1264,3 +1264,79 @@ export interface CapacityPlanningSuggestion {
   overloadBeforeMinutes: number;
   overloadAfterMinutes: number;
 }
+
+/* ===================== Deadline Radar ===================== */
+
+export type DeadlineStatus = "atrasado" | "vence_hoje" | "vence_7d" | "vence_30d" | "no_prazo" | "concluido";
+export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Saúde" | "Outros";
+export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment";
+export type DeadlineRisk = "low" | "medium" | "high" | "critical";
+export type DeadlinePeriodFilter = "today" | "7d" | "30d" | "all";
+
+export interface DeadlineItem {
+  id: string;
+  entityType: DeadlineEntityType;
+  entityId: string;
+  title: string;
+  dueDate: string;
+  status: DeadlineStatus;
+  priority: "Baixa" | "Média" | "Alta" | null;
+  progress: number | null;
+  area: DeadlineArea;
+  projectId: string | null;
+  projectName: string | null;
+  sourceModule: string;
+  daysRemaining: number;
+  done: boolean;
+}
+
+export interface DeadlineSummary {
+  overdue: number;
+  dueToday: number;
+  due7d: number;
+  due8to30: number;
+  onTrack: number;
+  onTimeRate: { pct: number; completedOnTime: number; completedWithDeadline: number } | null;
+}
+
+export interface DeadlineAreaBucket {
+  area: DeadlineArea;
+  count: number;
+  pct: number;
+}
+
+export interface DeadlineTrendPoint {
+  month: string;
+  label: string;
+  count: number;
+}
+
+export interface ProjectRiskItem {
+  projectId: string;
+  projectName: string;
+  progressPct: number;
+  daysRemaining: number | null;
+  dueDate: string | null;
+  riskScore: number;
+  risk: DeadlineRisk;
+}
+
+export interface DeadlineStatusBars {
+  atrasados: number;
+  vence7d: number;
+  em8a30: number;
+  noPrazo: number;
+}
+
+export interface DeadlineRadarDashboard {
+  summary: DeadlineSummary;
+  items: DeadlineItem[];
+  critical: DeadlineItem[];
+  areas: DeadlineAreaBucket[];
+  upcomingMilestones: DeadlineItem[];
+  statusBars: DeadlineStatusBars;
+  risks: ProjectRiskItem[];
+  trend: DeadlineTrendPoint[];
+  suggestions: string[];
+  insights: string[];
+}

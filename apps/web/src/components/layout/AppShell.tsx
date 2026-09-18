@@ -29,6 +29,7 @@ import {
   Activity,
   CloudSun,
   Gauge,
+  Radar,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -64,6 +65,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
   "/life-map": "Clareza nasce quando você enxerga as conexões.",
   "/capacity-planner": "Quanto realmente cabe no seu dia?",
+  "/deadline-radar": "Antecipar é criar mais liberdade.",
 };
 const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 
@@ -74,6 +76,7 @@ const NAV = [
   { to: "/projetos", label: "Projetos", icon: GanttChartSquare },
   { to: "/foco", label: "Focus", icon: Timer },
   { to: "/capacity-planner", label: "Capacity Planner", icon: Gauge },
+  { to: "/deadline-radar", label: "Deadline Radar", icon: Radar },
 ];
 
 const SECONDARY_NAV = [
