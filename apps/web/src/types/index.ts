@@ -1425,3 +1425,94 @@ export interface GoalForecastDashboard {
   insights: string[];
   today: string;
 }
+
+/* -------------------------------- Data Health -------------------------------- */
+
+export type DataHealthModuleKey = "tasks" | "projects" | "goals" | "habits" | "education" | "library" | "health" | "focus" | "experiments" | "signals";
+
+export type DataHealthDimension = "completeness" | "consistency" | "integrity" | "freshness" | "sync" | "history";
+
+export type DataHealthDimensionScores = Record<DataHealthDimension, number>;
+
+export type DataHealthLabel = "Crítico" | "Atenção" | "Bom" | "Saudável";
+
+export type DataHealthSeverity = "info" | "attention" | "warning" | "critical";
+
+export type CoverageStatus = "alta" | "média" | "baixa";
+
+export type ReadinessStatus = "ready" | "partial" | "insufficient" | "unavailable";
+
+export interface ModuleCoverage {
+  key: DataHealthModuleKey;
+  label: string;
+  coveragePct: number;
+  status: CoverageStatus;
+  mainIssue: string | null;
+  openPath: string;
+}
+
+export interface DataHealthIssue {
+  id: string;
+  severity: DataHealthSeverity;
+  module: string;
+  dimension: DataHealthDimension;
+  title: string;
+  description: string;
+  affectedCount: number;
+  actionPath: string;
+}
+
+export interface ReadinessResult {
+  tool: string;
+  status: ReadinessStatus;
+  reason: string;
+}
+
+export interface IntegrityMetric {
+  key: string;
+  label: string;
+  count: number;
+  totalUniverse: number;
+  pctOfUniverse: number;
+  severity: "baixo" | "atenção" | "médio" | "alto";
+}
+
+export interface IssueDistributionItem {
+  dimension: DataHealthDimension;
+  label: string;
+  count: number;
+  pct: number;
+}
+
+export interface DataHealthRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  actionPath: string;
+}
+
+export interface DataHealthHistoryPoint {
+  date: string;
+  score: number;
+}
+
+export interface DataHealthSummary {
+  score: number;
+  label: DataHealthLabel;
+  scoreFormula: string;
+  dimensions: DataHealthDimensionScores;
+  monitoredSourcesCount: number;
+  activeAlertsCount: number;
+  analyticsCoveragePct: number;
+  aiReadyModulesCount: number;
+  aiReadyModulesTotal: number;
+  modules: ModuleCoverage[];
+  issues: DataHealthIssue[];
+  readiness: ReadinessResult[];
+  integrity: IntegrityMetric[];
+  distribution: IssueDistributionItem[];
+  recommendations: DataHealthRecommendation[];
+  diagnosis: string;
+  history: DataHealthHistoryPoint[];
+  isNewUser: boolean;
+}
