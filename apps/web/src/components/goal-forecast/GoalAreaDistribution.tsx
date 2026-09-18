@@ -8,7 +8,7 @@ export function GoalAreaDistribution({ areas }: { areas: GoalAreaBucket[] }) {
   const total = data.reduce((sum, d) => sum + d.count, 0);
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold mb-1">Distribuição das metas por área</p>
+      <p className="text-sm font-semibold mb-1">🧭 Distribuição das metas por área</p>
       <p className="text-xs text-slate mb-4">Quantidade de metas e progresso médio.</p>
       {data.length === 0 ? (
         <p className="text-sm text-slate py-6 text-center">Sem metas para distribuir.</p>

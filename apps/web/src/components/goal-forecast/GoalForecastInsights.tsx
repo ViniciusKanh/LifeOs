@@ -7,7 +7,7 @@ export function GoalForecastInsights({ suggestions, insights }: { suggestions: s
     <Card className="p-5">
       <div className="flex items-center gap-2.5 mb-1">
         <IconBadge tone="purple" icon={<Lightbulb size={18} />} size={32} />
-        <p className="text-sm font-semibold">Insights do LifeOS</p>
+        <p className="text-sm font-semibold">💡 Insights do LifeOS</p>
       </div>
       <p className="text-xs text-slate mb-3">Padrões encontrados nas suas metas.</p>
       {all.length === 0 ? (

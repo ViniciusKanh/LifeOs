@@ -102,15 +102,20 @@ goalForecastRouter.get("/", async (req, res) => {
     ])
   );
 
+  // Regra corrigida: metas concluídas (status "done") sempre entram no dashboard — antes ficavam de fora
+  // (só activeGoals era iterado), então o filtro de período que já preservava "done" incondicionalmente
+  // não tinha efeito nenhum e "Concluída" nunca aparecia em lugar nenhum do Goal Forecast.
   const items = await Promise.all(
-    activeGoals.map(async (g) => {
+    filteredGoals.map(async (g) => {
       const progress = await getProgressHistory(db, g.id);
       const goalInput = { kind: g.kind, status: g.status, targetValue: g.target_value, currentValue: g.current_value, dueDate: g.due_date };
       const { forecast, reason } = computeGoalForecast(goalInput, progress);
       const status = classifyGoalForecastStatus(goalInput, forecast, today);
-      const requiredPace = computeRequiredPace(goalInput, today);
-      const expectedProgressPct = g.due_date ? computeExpectedProgressPct(g.created_at, g.due_date, today) : null;
-      const progressPct = g.kind === "numeric" ? (g.target_value ? Math.min(100, Math.round((g.current_value / g.target_value) * 100)) : null) : g.kind === "binary" ? null : Math.round(g.current_value);
+      const requiredPace = status === "completed" ? null : computeRequiredPace(goalInput, today);
+      const expectedProgressPct = status !== "completed" && g.due_date ? computeExpectedProgressPct(g.created_at, g.due_date, today) : null;
+      const rawProgressPct = g.kind === "numeric" ? (g.target_value ? Math.min(100, Math.round((g.current_value / g.target_value) * 100)) : null) : g.kind === "binary" ? null : Math.round(g.current_value);
+      // Meta concluída sempre mostra 100%, mesmo que o valor registrado não tenha alcançado o alvo exato (mesma convenção do Deadline Radar).
+      const progressPct = status === "completed" ? 100 : rawProgressPct;
       const progressDeficitPct = expectedProgressPct != null && progressPct != null ? Math.max(0, expectedProgressPct - progressPct) : null;
 
       const riskScore = computeGoalRiskScore({
@@ -189,8 +194,10 @@ goalForecastRouter.get("/", async (req, res) => {
   const bestArea = [...areas].filter((a) => a.avgProgress != null).sort((a, b) => (b.avgProgress ?? 0) - (a.avgProgress ?? 0))[0];
   if (bestArea && areas.length > 1) insights.push(`Nos seus dados, a área "${bestArea.area}" concentra o maior progresso médio (${bestArea.avgProgress}%).`);
 
+  const completedGoals = items.filter((i) => i.status === "completed").length;
+
   res.json({
-    summary: { activeGoals: activeGoals.length, avgProgress, projectedCompletions3Months, paceMultiplier },
+    summary: { activeGoals: activeGoals.length, completedGoals, avgProgress, projectedCompletions3Months, paceMultiplier },
     goals: items,
     timeline: items.filter((i) => i.forecastDate || i.dueDate).map((i) => ({ id: i.id, title: i.title, start: i.createdAt, end: i.forecastDate ?? i.dueDate, status: i.status })),
     areas,

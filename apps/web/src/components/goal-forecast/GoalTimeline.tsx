@@ -11,7 +11,7 @@ export function GoalTimeline({ entries, today }: { entries: GoalTimelineEntry[];
   if (entries.length === 0) {
     return (
       <Card className="p-5">
-        <p className="text-sm font-semibold mb-1">Linha do tempo das metas</p>
+        <p className="text-sm font-semibold mb-1">🗓️ Linha do tempo das metas</p>
         <p className="text-sm text-slate py-8 text-center">Sem previsões suficientes para montar a linha do tempo.</p>
       </Card>
     );
@@ -27,7 +27,7 @@ export function GoalTimeline({ entries, today }: { entries: GoalTimelineEntry[];
 
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold mb-1">Linha do tempo das metas</p>
+      <p className="text-sm font-semibold mb-1">🗓️ Linha do tempo das metas</p>
       <p className="text-xs text-slate mb-4">Previsão de conclusão das suas metas ao longo do tempo.</p>
       <div className="relative space-y-3">
         <div className="absolute top-0 bottom-0 w-px bg-brand-500 z-10" style={{ left: `${Math.min(100, Math.max(0, todayPct))}%` }}>

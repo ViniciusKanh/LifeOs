@@ -8,7 +8,7 @@ export function GoalRiskList({ risks }: { risks: GoalForecastItem[] }) {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-1">
-        <p className="text-sm font-semibold">Metas em risco</p>
+        <p className="text-sm font-semibold">🚨 Metas em risco</p>
       </div>
       <p className="text-xs text-slate mb-4">Podem não ser concluídas no prazo atual.</p>
       {risks.length === 0 ? (

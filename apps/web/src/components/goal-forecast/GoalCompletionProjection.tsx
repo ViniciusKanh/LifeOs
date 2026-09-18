@@ -5,7 +5,7 @@ import type { GoalMonthlyProjectionPoint } from "@/types";
 export function GoalCompletionProjection({ points }: { points: GoalMonthlyProjectionPoint[] }) {
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold mb-1">Projeção de conclusão</p>
+      <p className="text-sm font-semibold mb-1">📈 Projeção de conclusão</p>
       <p className="text-xs text-slate mb-4">Quantas metas podem ser concluídas em cada período.</p>
       <div className="h-40">
         <ResponsiveContainer width="100%" height="100%">
