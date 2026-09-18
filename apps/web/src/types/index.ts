@@ -1071,3 +1071,92 @@ export interface SignalTrendSeries {
   to: string;
   series: SignalTrendPoint[];
 }
+
+/* ============================================================
+   Contexto do Dia — fonte ambiental (clima, qualidade do ar, luz do
+   dia) que alimenta o Signals via provider interno. Nunca duplica
+   Signals; Signals só consome o sinal já pronto daqui.
+   ============================================================ */
+
+export type ContextPeriod = "today" | "7d" | "30d";
+
+export interface ContextLocation {
+  configured: boolean;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+  autoLocation: boolean;
+  tempUnit: "celsius" | "fahrenheit";
+  windUnit: "kmh" | "mph";
+  showAirQuality: boolean;
+  showUv: boolean;
+  weatherAlerts: boolean;
+}
+
+export interface UpdateContextLocationInput {
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
+  autoLocation?: boolean;
+  tempUnit?: "celsius" | "fahrenheit";
+  windUnit?: "kmh" | "mph";
+  showAirQuality?: boolean;
+  showUv?: boolean;
+  weatherAlerts?: boolean;
+}
+
+export interface GeocodeResult {
+  name: string;
+  region: string | null;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+}
+
+export interface RoutineImpact {
+  key: string;
+  label: string;
+  groupLabel: string;
+  value: number;
+  unit: string;
+  comparisonPct: number | null;
+  favorable: "positive" | "negative" | "neutral";
+  sampleSize: number;
+}
+
+export interface ContextInsight {
+  text: string;
+}
+
+export interface ContextTodayDashboard {
+  configured: true;
+  location: { city: string | null; region: string | null; country: string | null };
+  lastUpdated: string;
+  kpis: {
+    temperature: { value: number; apparentTemperature: number };
+    rainChance: { value: number; note: string };
+    airQuality: { aqi: number; level: string } | null;
+    daylight: { durationMinutes: number; sunrise: string; sunset: string };
+  };
+  todayPeriods: Array<{ key: string; label: string; temperature: number; condition: string; icon: string; rainProbability: number | null }>;
+  tomorrow: { temperature: number; condition: string; icon: string } | null;
+  hourlyChart: Array<{ time: string; temperature: number; apparentTemperature: number; rainProbability: number | null }>;
+  summary: { humidity: number | null; windSpeedKmh: number | null; uv: { value: number; level: string; description: string } | null };
+  resumoAmbiental: { condition: string; airQuality: string | null; uv: string | null; thermalComfort: string | null };
+  dicaDoDia: string;
+  agendaRecomendada: Array<{ period: string; label: string; text: string }>;
+  impacts: RoutineImpact[];
+  insights: ContextInsight[];
+  comparativo: Array<{ label: string; unit: string; current: number | null; previous: number | null }>;
+  disclaimer: string;
+  attribution: string;
+}
+
+export type ContextDashboardResponse = ContextTodayDashboard | { configured: false };

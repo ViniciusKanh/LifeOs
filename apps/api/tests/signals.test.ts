@@ -21,16 +21,15 @@ async function insertFocusSession(ownerId: string, day: Date, actualMinutes: num
 }
 
 describe("Signals", () => {
-  it("nunca fabrica dado para Clima e Uso de tela — aparecem como not_connected", async () => {
+  it("nunca fabrica dado para Clima sem Contexto do Dia configurado — aparece como not_connected", async () => {
     const { agent } = await createAuthenticatedAgent();
     const res = await agent.get("/api/signals?period=7d");
     expect(res.status).toBe(200);
     const weather = res.body.signals.find((s: { key: string }) => s.key === "weather");
-    const screenTime = res.body.signals.find((s: { key: string }) => s.key === "screen_time");
     expect(weather.status).toBe("not_connected");
     expect(weather.value).toBeNull();
-    expect(screenTime.status).toBe("not_connected");
-    expect(screenTime.value).toBeNull();
+    // Uso de tela (Digital Wellbeing) foi removido — não existe coletor real no LifeOS.
+    expect(res.body.signals.find((s: { key: string }) => s.key === "screen_time")).toBeUndefined();
   });
 
   it("marca sinais sem registro como insufficient_data, nunca zero fabricado", async () => {

@@ -27,6 +27,7 @@ import {
   Share2,
   BellRing,
   Activity,
+  CloudSun,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -57,6 +58,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/conquistas": "Cada conquista começou com um hábito repetido.",
   "/analytics": "Dados transformam esforço em clareza.",
   "/signals": "Observar com atenção é o primeiro passo para melhorar.",
+  "/contexto-do-dia": "Entender o contexto é ajustar melhor a rotina.",
   "/timeline": "Disciplina de hoje, liberdade de amanhã.",
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
   "/life-map": "Clareza nasce quando você enxerga as conexões.",
@@ -79,6 +81,7 @@ const SECONDARY_NAV = [
   { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
   { to: "/educacao", label: "Educação", icon: GraduationCap },
   { to: "/saude", label: "Saúde", icon: HeartPulse },
+  { to: "/contexto-do-dia", label: "Contexto do Dia", icon: CloudSun },
   { to: "/habitos", label: "Hábitos", icon: Repeat },
   { to: "/metas", label: "Metas", icon: Target },
   { to: "/experimentos", label: "Experimentos", icon: FlaskConical },
