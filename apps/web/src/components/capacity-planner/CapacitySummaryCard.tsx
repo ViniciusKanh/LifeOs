@@ -1,6 +1,6 @@
 import { Clock, CalendarClock, Coffee, ListTree, AlertTriangle } from "lucide-react";
 import { Card, IconBadge } from "@/components/ui/primitives";
-import { WORKLOAD_TONE } from "./capacityColors";
+import { WORKLOAD_TONE, STATUS_BAR_COLOR } from "./capacityColors";
 import type { CapacitySummary } from "@/types";
 
 function fmt(minutes: number): string {
@@ -50,6 +50,18 @@ export function CapacitySummaryCard({ summary, overloadMessage }: { summary: Cap
             <p className="font-display font-bold text-lg leading-none">{fmt(summary.plannedMinutes)}</p>
             <p className="text-[11px] text-slate">carga planejada</p>
           </div>
+        </div>
+      </div>
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-[11px] text-slate mb-1">
+          <span>Ocupação da capacidade</span>
+          <span className="font-semibold">{Math.round(summary.occupancyRate * 100)}%</span>
+        </div>
+        <div className="h-2 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${Math.min(100, summary.occupancyRate * 100)}%`, background: STATUS_BAR_COLOR[summary.workloadLevel] }}
+          />
         </div>
       </div>
       {overloadMessage && (

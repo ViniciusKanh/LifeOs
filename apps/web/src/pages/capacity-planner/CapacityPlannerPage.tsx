@@ -1,7 +1,15 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Gauge, Wand2 } from "lucide-react";
 import { PageHeader, Button } from "@/components/ui/primitives";
-import { useCapacityDay, useCapacityPlanPreview, useApplyCapacityPlan } from "@/hooks/useCapacityPlanner";
+import {
+  useCapacityDay,
+  useCapacityPlanPreview,
+  useApplyCapacityPlan,
+  useCreateCapacityBlock,
+  useDeleteCapacityBlock,
+} from "@/hooks/useCapacityPlanner";
+import { useTasks } from "@/hooks/useTasks";
 import { DateNavigator } from "@/components/capacity-planner/DateNavigator";
 import { CapacitySummaryCard } from "@/components/capacity-planner/CapacitySummaryCard";
 import { EnergyForecastCard, FocusForecastCard } from "@/components/capacity-planner/ForecastCards";
@@ -23,6 +31,23 @@ export function CapacityPlannerPage() {
   const { data, isLoading, isError } = useCapacityDay(date);
   const { data: suggestion, isLoading: previewLoading } = useCapacityPlanPreview(date, modalOpen);
   const applyPlan = useApplyCapacityPlan(date);
+  const createBlock = useCreateCapacityBlock(date);
+  const deleteBlock = useDeleteCapacityBlock(date);
+  const { updateTask } = useTasks();
+  const queryClient = useQueryClient();
+
+  async function handleToggleDone(taskId: string) {
+    await updateTask({ id: taskId, patch: { status: "Concluído" } });
+    queryClient.invalidateQueries({ queryKey: ["capacity", "day", date] });
+  }
+
+  function handleSchedule(taskId: string, startTime: string, endTime: string) {
+    createBlock.mutate({ date, startTime, endTime, entityType: "task", entityId: taskId, blockType: "normal" });
+  }
+
+  function handleRemoveBlock(blockId: string) {
+    deleteBlock.mutate(blockId);
+  }
 
   async function handleConfirm() {
     if (!suggestion || suggestion.proposed.length === 0) return;
@@ -71,8 +96,14 @@ export function CapacityPlannerPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4 items-start">
-            <DayTimeline blocks={data.blocks} conflicts={data.conflicts} />
-            <DayTasksCard tasks={data.tasks} />
+            <DayTimeline blocks={data.blocks} conflicts={data.conflicts} onRemoveBlock={handleRemoveBlock} />
+            <DayTasksCard
+              tasks={data.tasks}
+              blocks={data.blocks}
+              onToggleDone={handleToggleDone}
+              onSchedule={handleSchedule}
+              onRemoveSchedule={handleRemoveBlock}
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
