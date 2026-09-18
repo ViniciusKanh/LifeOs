@@ -32,6 +32,7 @@ export const goalsService = {
   update: (id: string, patch: GoalUpdateInput) => api.patch<Goal>(`/goals/${id}`, patch),
   remove: (id: string) => api.delete<void>(`/goals/${id}`),
   addProgress: (id: string, value: number, note?: string) => api.post<Goal>(`/goals/${id}/progress`, { value, note }),
+  renew: (id: string) => api.post<Goal>(`/goals/${id}/renew`, {}),
   stats: () => api.get<GoalStats>("/goals/stats"),
   forecast: (id: string) => api.get<GoalForecast>(`/goals/${id}/forecast`),
 };

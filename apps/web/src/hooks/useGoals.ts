@@ -36,6 +36,10 @@ export function useGoals(params?: { parentGoalId?: string }) {
       goalsService.addProgress(id, value, note),
     onSuccess: invalidate,
   });
+  // Renovar inicia o próximo ciclo de uma meta semanal/mensal/semestral/anual
+  // (cópia zerada com prazo avançado) — sem isso o usuário tinha que recriar
+  // a meta do zero toda vez que o período virava.
+  const renewGoal = useMutation({ mutationFn: (id: string) => goalsService.renew(id), onSuccess: invalidate });
 
   return {
     goals: goalsQuery.data ?? [],
@@ -45,6 +49,7 @@ export function useGoals(params?: { parentGoalId?: string }) {
     updateGoal: updateGoal.mutateAsync,
     removeGoal: removeGoal.mutateAsync,
     addProgress: addProgress.mutateAsync,
+    renewGoal: renewGoal.mutateAsync,
   };
 }
 
