@@ -39,3 +39,24 @@ export const STATUS_BAR_COLOR: Record<string, string> = {
   completed: "#2E7D6B",
   insufficient_data: "#94A3B8",
 };
+
+/** Emoji por status — leitura rápida na lista e nos badges. */
+export const STATUS_EMOJI: Record<string, string> = {
+  ahead: "🚀",
+  on_track: "🟢",
+  attention: "🟡",
+  at_risk: "🟠",
+  overdue: "🔴",
+  completed: "✅",
+  insufficient_data: "❔",
+};
+
+/** Emoji por área — mesmo padrão usado em Capacity Planner e Deadline Radar. */
+export const AREA_EMOJI: Record<string, string> = {
+  Educação: "🎓",
+  Saúde: "💪",
+  Profissional: "💼",
+  Pessoal: "🌱",
+  Financeira: "💰",
+  Outros: "📌",
+};

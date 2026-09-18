@@ -70,20 +70,21 @@ export function GoalForecastPage() {
         <>
           <GoalForecastSummaryCards summary={data.summary} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Conteúdo principal: lista de metas é o elemento-estrela, com risco e projeção como coluna de apoio */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 items-start">
             <GoalForecastList goals={data.goals} />
-            <GoalTimeline entries={data.timeline} today={data.today} />
+            <div className="space-y-4">
+              <GoalRiskList risks={data.risks} />
+              <GoalCompletionProjection points={data.monthlyProjection} />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             <GoalAreaDistribution areas={data.areas} />
-            <GoalCompletionProjection points={data.monthlyProjection} />
+            <GoalTimeline entries={data.timeline} today={data.today} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <GoalRiskList risks={data.risks} />
-            <GoalForecastInsights suggestions={data.suggestions} insights={data.insights} />
-          </div>
+          <GoalForecastInsights suggestions={data.suggestions} insights={data.insights} />
         </>
       )}
     </div>

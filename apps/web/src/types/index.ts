@@ -1387,6 +1387,7 @@ export interface GoalForecastItem {
 
 export interface GoalForecastSummary {
   activeGoals: number;
+  completedGoals: number;
   avgProgress: number | null;
   projectedCompletions3Months: number;
   paceMultiplier: number | null;
