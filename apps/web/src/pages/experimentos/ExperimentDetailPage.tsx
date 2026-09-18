@@ -120,7 +120,14 @@ export function ExperimentDetailPage() {
       )}
 
       {logModalOpen && (
-        <ExperimentLogModal experiment={experiment} onClose={() => setLogModalOpen(false)} onSave={(input) => upsertLog(input)} isSaving={isSavingLog} />
+        <ExperimentLogModal
+          experiment={experiment}
+          checkins={checkins}
+          logs={logs}
+          onClose={() => setLogModalOpen(false)}
+          onSave={(input) => upsertLog(input)}
+          isSaving={isSavingLog}
+        />
       )}
       {concludeOpen && (
         <ExperimentConcludeModal onClose={() => setConcludeOpen(false)} onConfirm={(input) => conclude(input)} isSaving={isConcluding} />

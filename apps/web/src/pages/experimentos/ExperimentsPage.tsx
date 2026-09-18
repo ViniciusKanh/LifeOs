@@ -107,6 +107,8 @@ export function ExperimentsPage() {
       {logModalOpen && featured && (
         <ExperimentLogModal
           experiment={featured}
+          checkins={featuredDetail.detail?.checkins}
+          logs={featuredDetail.detail?.logs}
           onClose={() => setLogModalOpen(false)}
           onSave={(input) => featuredDetail.upsertLog(input)}
           isSaving={featuredDetail.isSavingLog}
