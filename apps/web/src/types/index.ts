@@ -1340,3 +1340,78 @@ export interface DeadlineRadarDashboard {
   suggestions: string[];
   insights: string[];
 }
+
+/* ===================== Goal Forecast ===================== */
+
+export type GoalForecastStatus = "ahead" | "on_track" | "attention" | "at_risk" | "overdue" | "completed" | "insufficient_data";
+export type GoalArea = "Educação" | "Saúde" | "Profissional" | "Pessoal" | "Financeira" | "Outros";
+export type GoalRisk = "low" | "medium" | "high" | "critical";
+export type GoalForecastPeriodFilter = "all" | "this_year" | "next_year" | "custom";
+
+export interface GoalForecastLinkedTasks {
+  total: number;
+  done: number;
+  projectIds: string[];
+}
+
+export interface GoalForecastItem {
+  id: string;
+  title: string;
+  category: string | null;
+  area: GoalArea;
+  kind: GoalKind;
+  unit: string | null;
+  currentValue: number;
+  targetValue: number | null;
+  progressPct: number | null;
+  dueDate: string | null;
+  createdAt: string;
+  forecastDate: string | null;
+  forecastReason: string | null;
+  currentPace: number | null;
+  requiredPace: number | null;
+  status: GoalForecastStatus;
+  statusLabel: string;
+  risk: GoalRisk | null;
+  linkedTasks: GoalForecastLinkedTasks | null;
+}
+
+export interface GoalForecastSummary {
+  activeGoals: number;
+  avgProgress: number | null;
+  projectedCompletions3Months: number;
+  paceMultiplier: number | null;
+}
+
+export interface GoalAreaBucket {
+  area: GoalArea;
+  count: number;
+  pct: number;
+  avgProgress: number | null;
+}
+
+export interface GoalMonthlyProjectionPoint {
+  month: string;
+  label: string;
+  count: number;
+}
+
+export interface GoalTimelineEntry {
+  id: string;
+  title: string;
+  start: string;
+  end: string | null;
+  status: GoalForecastStatus;
+}
+
+export interface GoalForecastDashboard {
+  summary: GoalForecastSummary;
+  goals: GoalForecastItem[];
+  timeline: GoalTimelineEntry[];
+  areas: GoalAreaBucket[];
+  monthlyProjection: GoalMonthlyProjectionPoint[];
+  risks: GoalForecastItem[];
+  suggestions: string[];
+  insights: string[];
+  today: string;
+}
