@@ -31,6 +31,7 @@ import {
   Gauge,
   Radar,
   TrendingUp,
+  Database,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -68,6 +69,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/capacity-planner": "Quanto realmente cabe no seu dia?",
   "/deadline-radar": "Antecipar é criar mais liberdade.",
   "/goal-forecast": "Pequenos passos hoje, grandes conquistas amanhã.",
+  "/data-health": "Dados confiáveis geram decisões melhores.",
 };
 const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 
@@ -101,6 +103,7 @@ const SECONDARY_NAV = [
   { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
   { to: "/life-map", label: "Life Map", icon: Share2 },
   { to: "/gatilhos", label: "Gatilhos", icon: BellRing },
+  { to: "/data-health", label: "Data Health", icon: Database },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
