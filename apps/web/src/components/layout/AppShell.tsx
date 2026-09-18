@@ -26,6 +26,7 @@ import {
   CalendarRange,
   Share2,
   BellRing,
+  Activity,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -55,6 +56,7 @@ const PAGE_QUOTES: Record<string, string> = {
   "/calendario": "Quem planeja o tempo, comanda o progresso.",
   "/conquistas": "Cada conquista começou com um hábito repetido.",
   "/analytics": "Dados transformam esforço em clareza.",
+  "/signals": "Observar com atenção é o primeiro passo para melhorar.",
   "/timeline": "Disciplina de hoje, liberdade de amanhã.",
   "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
   "/life-map": "Clareza nasce quando você enxerga as conexões.",
@@ -82,6 +84,7 @@ const SECONDARY_NAV = [
   { to: "/experimentos", label: "Experimentos", icon: FlaskConical },
   { to: "/conquistas", label: "Conquistas", icon: Trophy },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/signals", label: "Signals", icon: Activity },
   { to: "/timeline", label: "Timeline", icon: History },
   { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
   { to: "/life-map", label: "Life Map", icon: Share2 },

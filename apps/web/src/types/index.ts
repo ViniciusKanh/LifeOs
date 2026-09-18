@@ -997,3 +997,77 @@ export interface CreateExperimentInput {
 }
 
 export type UpdateExperimentInput = Partial<CreateExperimentInput>;
+
+/* ============================================================
+   Signals — camada agregadora/analítica de sinais pessoais.
+   Nunca duplica dado de outro módulo; só consolida e compara.
+   ============================================================ */
+
+export type SignalPeriod = "today" | "7d" | "30d";
+
+export type SignalStatus = "ok" | "attention" | "insufficient_data" | "not_connected";
+
+export interface SignalCard {
+  key: string;
+  label: string;
+  value: number | string | null;
+  unit: string | null;
+  status: SignalStatus;
+  description: string;
+  comparisonPct: number | null;
+  comparisonLabel: string | null;
+}
+
+export type SignalScoreKey = "sleep" | "energy" | "mood" | "productivity" | "health" | "balance";
+
+export interface RadarDimension {
+  key: SignalScoreKey;
+  label: string;
+  value: number | null;
+}
+
+export interface DayClassification {
+  label: string;
+  description: string;
+}
+
+export type PatternType = "trend" | "attention" | "positive_association" | "negative_association" | "change" | "consistency";
+
+export interface DetectedPattern {
+  type: PatternType;
+  signal: string;
+  title: string;
+  description: string;
+  sampleSize: number;
+}
+
+export interface SignalsRecommendation {
+  source: "rule" | "ai";
+  title: string;
+  message: string;
+}
+
+export interface SignalsDashboard {
+  period: SignalPeriod;
+  from: string;
+  to: string;
+  signals: SignalCard[];
+  radar: RadarDimension[];
+  dayClassification: DayClassification | null;
+  patterns: DetectedPattern[];
+  recommendation: SignalsRecommendation;
+}
+
+export type TrendSignalKey = "sleep" | "mood" | "energy" | "focus" | "exercise" | "reading";
+
+export interface SignalTrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface SignalTrendSeries {
+  signal: TrendSignalKey;
+  from: string;
+  to: string;
+  series: SignalTrendPoint[];
+}
