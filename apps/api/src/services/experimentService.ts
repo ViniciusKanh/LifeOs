@@ -143,7 +143,17 @@ export async function getMetricCatalog(db: Db, ownerId: string) {
   return METRIC_KEYS.map((key) => {
     const def = METRIC_CATALOG[key];
     const info = byKey.get(key)!;
-    return { key, label: def.label, unit: def.unit, inverse: def.inverse, requiresHabit: def.requiresHabit, hasHistory: info.hasHistory, historyDays: info.historyDays };
+    return {
+      key,
+      label: def.label,
+      unit: def.unit,
+      inverse: def.inverse,
+      requiresHabit: def.requiresHabit,
+      sourcePath: def.sourcePath,
+      sourceLabel: def.sourceLabel,
+      hasHistory: info.hasHistory,
+      historyDays: info.historyDays,
+    };
   });
 }
 

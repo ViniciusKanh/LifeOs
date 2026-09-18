@@ -869,6 +869,9 @@ export interface ExperimentMetricInfo {
   /** Métrica onde "menor é melhor" (ex.: estresse) — usado para interpretar a comparação corretamente. */
   inverse: boolean;
   requiresHabit: boolean;
+  /** Rota real do módulo onde esse dado é registrado (ex.: /saude, /foco) — usada para orientar o check-in diário. */
+  sourcePath: string;
+  sourceLabel: string;
   hasHistory: boolean;
   historyDays: number;
 }

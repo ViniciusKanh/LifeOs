@@ -1,17 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { MoreHorizontal, Sparkles, TrendingUp, Quote } from "lucide-react";
-import { Button, Card } from "@/components/ui/primitives";
-import { CATEGORY_METRIC_LABEL } from "./experimentDisplay";
+import { MoreHorizontal, Sparkles, TrendingUp, Quote, Bot, PenLine } from "lucide-react";
+import { Button, Card, IconBadge } from "@/components/ui/primitives";
+import { CATEGORY_ICON, CATEGORY_METRIC_LABEL, STATUS_LABEL_PT } from "./experimentDisplay";
 import type { ExperimentListItem, ExperimentStatus } from "@/types";
-
-const STATUS_LABEL: Record<ExperimentStatus, string> = {
-  draft: "Rascunho",
-  active: "Em andamento",
-  paused: "Pausado",
-  completed: "Concluído",
-  cancelled: "Cancelado",
-};
 
 const STATUS_TONE: Record<ExperimentStatus, string> = {
   draft: "bg-slate/10 text-slate",
@@ -32,11 +24,18 @@ export function ActiveExperimentCard({
   onChangeStatus: (status: ExperimentStatus) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const CategoryIcon = CATEGORY_ICON[experiment.category];
 
   return (
     <Card className="p-4 md:p-5 relative">
       <div className="flex items-start justify-between mb-3">
-        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_TONE[experiment.status]}`}>{STATUS_LABEL[experiment.status]}</span>
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_TONE[experiment.status]}`}>{STATUS_LABEL_PT[experiment.status]}</span>
+          <span className="inline-flex items-center gap-1 text-[10px] text-slate" title={experiment.verification_type === "automatic" ? "Verificação automática" : "Check-in manual"}>
+            {experiment.verification_type === "automatic" ? <Bot size={11} /> : <PenLine size={11} />}
+            {experiment.verification_type === "automatic" ? "Automático" : "Manual"}
+          </span>
+        </div>
         <div className="text-right">
           <p className="text-[11px] text-slate">
             Dia {experiment.daysElapsed} de {experiment.durationDays}
@@ -45,10 +44,15 @@ export function ActiveExperimentCard({
         </div>
       </div>
 
-      <Link to={`/experimentos/${experiment.id}`} className="block">
-        <p className="font-display font-bold text-lg leading-tight hover:text-cat-purple transition-colors">{experiment.title}</p>
-      </Link>
-      {experiment.description && <p className="text-sm text-slate mt-1">{experiment.description}</p>}
+      <div className="flex items-start gap-2.5">
+        <IconBadge icon={<CategoryIcon size={16} />} tone="purple" size={34} />
+        <div className="min-w-0">
+          <Link to={`/experimentos/${experiment.id}`} className="block">
+            <p className="font-display font-bold text-lg leading-tight hover:text-cat-purple transition-colors">{experiment.title}</p>
+          </Link>
+          {experiment.description && <p className="text-sm text-slate mt-1">{experiment.description}</p>}
+        </div>
+      </div>
 
       <div className="h-2 rounded-full bg-paper-border dark:bg-ink-border overflow-hidden mt-3">
         <div className="h-full rounded-full bg-gradient-to-r from-cat-purple to-brand-500" style={{ width: `${experiment.progressPct}%` }} />

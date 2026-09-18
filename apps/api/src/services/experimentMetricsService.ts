@@ -35,6 +35,9 @@ export interface MetricDefinition {
   /** "menor é melhor" (ex.: estresse) — decide o sinal da interpretação, nunca assumido na UI. */
   inverse: boolean;
   requiresHabit: boolean;
+  /** Rota real do módulo onde esse dado é efetivamente registrado — usado para orientar o check-in diário. */
+  sourcePath: string;
+  sourceLabel: string;
   /**
    * Ausência de registro num dia É um dado real (ex.: 0 minutos de foco = não focou)
    * para métricas de contagem/soma; para métricas subjetivas/pontuais (sono, humor)
@@ -46,21 +49,21 @@ export interface MetricDefinition {
 }
 
 export const METRIC_CATALOG: Record<ExperimentMetricKey, MetricDefinition> = {
-  sleep_duration: { key: "sleep_duration", label: "Sono (duração)", unit: "h", inverse: false, requiresHabit: false, fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
-  sleep_quality: { key: "sleep_quality", label: "Qualidade do sono", unit: "/5", inverse: false, requiresHabit: false, fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
-  energy: { key: "energy", label: "Energia", unit: "/5", inverse: false, requiresHabit: false, fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
-  mood: { key: "mood", label: "Humor", unit: "/5", inverse: false, requiresHabit: false, fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
-  stress: { key: "stress", label: "Estresse", unit: "/5", inverse: true, requiresHabit: false, fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
-  water_ml: { key: "water_ml", label: "Água", unit: "ml", inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  focus_minutes: { key: "focus_minutes", label: "Foco (minutos)", unit: "min", inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  focus_sessions: { key: "focus_sessions", label: "Sessões de Foco", unit: null, inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  exercise_minutes: { key: "exercise_minutes", label: "Exercício (minutos)", unit: "min", inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  exercise_sessions: { key: "exercise_sessions", label: "Atividades físicas", unit: null, inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  reading_pages: { key: "reading_pages", label: "Páginas lidas", unit: "pág.", inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  reading_minutes: { key: "reading_minutes", label: "Leitura (minutos)", unit: "min", inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  study_minutes: { key: "study_minutes", label: "Estudo (minutos)", unit: "min", inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  tasks_completed: { key: "tasks_completed", label: "Tarefas concluídas", unit: null, inverse: false, requiresHabit: false, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  habit_consistency: { key: "habit_consistency", label: "Consistência do hábito", unit: "%", inverse: false, requiresHabit: true, fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  sleep_duration: { key: "sleep_duration", label: "Sono (duração)", unit: "h", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
+  sleep_quality: { key: "sleep_quality", label: "Qualidade do sono", unit: "/5", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
+  energy: { key: "energy", label: "Energia", unit: "/5", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
+  mood: { key: "mood", label: "Humor", unit: "/5", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
+  stress: { key: "stress", label: "Estresse", unit: "/5", inverse: true, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
+  water_ml: { key: "water_ml", label: "Água", unit: "ml", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  focus_minutes: { key: "focus_minutes", label: "Foco (minutos)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/foco", sourceLabel: "Foco", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  focus_sessions: { key: "focus_sessions", label: "Sessões de Foco", unit: null, inverse: false, requiresHabit: false, sourcePath: "/foco", sourceLabel: "Foco", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  exercise_minutes: { key: "exercise_minutes", label: "Exercício (minutos)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  exercise_sessions: { key: "exercise_sessions", label: "Atividades físicas", unit: null, inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  reading_pages: { key: "reading_pages", label: "Páginas lidas", unit: "pág.", inverse: false, requiresHabit: false, sourcePath: "/biblioteca", sourceLabel: "Biblioteca", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  reading_minutes: { key: "reading_minutes", label: "Leitura (minutos)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/biblioteca", sourceLabel: "Biblioteca", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  study_minutes: { key: "study_minutes", label: "Estudo (minutos)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/educacao", sourceLabel: "Educação", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  tasks_completed: { key: "tasks_completed", label: "Tarefas concluídas", unit: null, inverse: false, requiresHabit: false, sourcePath: "/tarefas", sourceLabel: "Tarefas", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  habit_consistency: { key: "habit_consistency", label: "Consistência do hábito", unit: "%", inverse: false, requiresHabit: true, sourcePath: "/habitos", sourceLabel: "Hábitos", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
 };
 
 export const METRIC_KEYS = Object.keys(METRIC_CATALOG) as ExperimentMetricKey[];
