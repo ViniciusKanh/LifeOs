@@ -40,3 +40,31 @@ export const RISK_BAR_COLOR: Record<DeadlineRisk, string> = {
 };
 
 export const AREA_PALETTE = ["#8B5CF6", "#3B6FE0", "#2E7D6B", "#C9821E", "#E0578B", "#94A3B8"];
+
+/** Emoji por status — reforço visual rápido na lista de itens críticos. */
+export const STATUS_EMOJI: Record<string, string> = {
+  atrasado: "🔴",
+  vence_hoje: "🟠",
+  vence_7d: "🟡",
+  vence_30d: "🔵",
+  no_prazo: "🟢",
+  concluido: "✅",
+};
+
+/** Emoji por área — usado nos badges das listas de prazos. */
+export const AREA_EMOJI: Record<string, string> = {
+  Educação: "🎓",
+  Projetos: "📁",
+  Profissional: "💼",
+  Pessoal: "🌱",
+  Outros: "📌",
+};
+
+export const STATUS_BORDER_COLOR: Record<string, string> = {
+  atrasado: "#D64545",
+  vence_hoje: "#C9821E",
+  vence_7d: "#C9821E",
+  vence_30d: "#8B5CF6",
+  no_prazo: "#2E7D6B",
+  concluido: "#2E7D6B",
+};

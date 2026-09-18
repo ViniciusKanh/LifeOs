@@ -12,7 +12,7 @@ function formatMarker(dueDate: string): { day: string; month: string } {
 export function UpcomingMilestones({ items }: { items: DeadlineItem[] }) {
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold mb-1">Próximos marcos</p>
+      <p className="text-sm font-semibold mb-1">🚩 Próximos marcos</p>
       <p className="text-xs text-slate mb-4">Eventos importantes no seu horizonte.</p>
       {items.length === 0 ? (
         <p className="text-sm text-slate py-6 text-center">Nenhum marco futuro registrado.</p>

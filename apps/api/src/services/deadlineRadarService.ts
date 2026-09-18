@@ -10,7 +10,7 @@ import { computeRiskScore, classifyRisk, type DeadlineRisk } from "./deadlineRis
 type Db = ReturnType<typeof getDb>;
 
 export type DeadlineStatus = "atrasado" | "vence_hoje" | "vence_7d" | "vence_30d" | "no_prazo" | "concluido";
-export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Saúde" | "Outros";
+export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Outros";
 export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment";
 
 export interface DeadlineItem {
@@ -335,6 +335,8 @@ export interface ProjectRiskItem {
   dueDate: string | null;
   riskScore: number;
   risk: DeadlineRisk;
+  kind: "project" | "academic";
+  sourceModule: string;
 }
 
 /** Risco de não concluir — projetos com tarefas datadas, progresso = tarefas concluídas / total. */
@@ -382,7 +384,54 @@ export async function getProjectRisks(db: Db, ownerId: string, todayParam?: stri
         dueDate,
         riskScore,
         risk: classifyRisk(riskScore),
+        kind: "project" as const,
+        sourceModule: "/projetos",
       };
     })
     .sort((a, b) => b.riskScore - a.riskScore);
+}
+
+/**
+ * Risco de TCC/dissertação/tese — mesma fórmula de risco dos projetos
+ * (regra de negócio compartilhada, nunca duplicada), aplicada aos
+ * projetos acadêmicos que já têm progresso e data de defesa reais.
+ * Antes ficavam de fora da análise de risco (ilha de informação).
+ */
+export async function getAcademicProjectRisks(db: Db, ownerId: string, todayParam?: string): Promise<ProjectRiskItem[]> {
+  const today = resolveToday(todayParam);
+  const result = await db.execute({
+    sql: `SELECT id, title, created_at, progress_pct, defense_date
+          FROM academic_projects WHERE owner_id = ? AND defense_date IS NOT NULL AND progress_pct < 100`,
+    args: [ownerId],
+  });
+  const rows = result.rows as unknown as Array<{ id: string; title: string; created_at: string; progress_pct: number; defense_date: string }>;
+  return rows.map((r) => {
+    const dueDate = r.defense_date.slice(0, 10);
+    const daysRemaining = daysBetween(today, dueDate);
+    const totalSpanDays = daysBetween(r.created_at.slice(0, 10), dueDate);
+    const riskScore = computeRiskScore({
+      daysRemaining,
+      totalSpanDays: totalSpanDays > 0 ? totalSpanDays : null,
+      progressPct: r.progress_pct,
+      openItemsRatio: null,
+      priority: "Alta",
+    });
+    return {
+      projectId: r.id,
+      projectName: r.title,
+      progressPct: r.progress_pct,
+      daysRemaining,
+      dueDate,
+      riskScore,
+      risk: classifyRisk(riskScore),
+      kind: "academic" as const,
+      sourceModule: "/educacao",
+    };
+  });
+}
+
+/** Une risco de projetos e de projetos acadêmicos (TCC/dissertação) em uma única lista ordenada por risco. */
+export async function getAllRisks(db: Db, ownerId: string, todayParam?: string): Promise<ProjectRiskItem[]> {
+  const [projects, academic] = await Promise.all([getProjectRisks(db, ownerId, todayParam), getAcademicProjectRisks(db, ownerId, todayParam)]);
+  return [...projects, ...academic].sort((a, b) => b.riskScore - a.riskScore);
 }

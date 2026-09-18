@@ -20,12 +20,12 @@ export function DeadlineStatusOverview({ bars }: { bars: DeadlineStatusBars }) {
   const max = Math.max(bars.atrasados, bars.vence7d, bars.em8a30, bars.noPrazo, 1);
   return (
     <Card className="p-5 space-y-3.5">
-      <p className="text-sm font-semibold">Itens por status</p>
+      <p className="text-sm font-semibold">📊 Itens por status</p>
       <p className="text-xs text-slate -mt-2">Visão geral da sua situação atual.</p>
-      <Bar label="Atrasados" value={bars.atrasados} max={max} color="#D64545" />
-      <Bar label="Vencem em 7 dias" value={bars.vence7d} max={max} color="#C9821E" />
-      <Bar label="Em 8–30 dias" value={bars.em8a30} max={max} color="#8B5CF6" />
-      <Bar label="No prazo" value={bars.noPrazo} max={max} color="#2E7D6B" />
+      <Bar label="🔴 Atrasados" value={bars.atrasados} max={max} color="#D64545" />
+      <Bar label="🟡 Vencem em 7 dias" value={bars.vence7d} max={max} color="#C9821E" />
+      <Bar label="🔵 Em 8–30 dias" value={bars.em8a30} max={max} color="#8B5CF6" />
+      <Bar label="🟢 No prazo" value={bars.noPrazo} max={max} color="#2E7D6B" />
     </Card>
   );
 }
