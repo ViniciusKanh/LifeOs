@@ -19,3 +19,10 @@ export const WORKLOAD_TONE: Record<string, { label: string; className: string }>
   alta: { label: "Alta", className: "bg-signal/15 text-signal-deep" },
   sobrecarga: { label: "Sobrecarga", className: "bg-drop/10 text-drop" },
 };
+
+export const STATUS_BAR_COLOR: Record<string, string> = {
+  leve: "#2E7D6B",
+  equilibrada: "#3B6FE0",
+  alta: "#C9821E",
+  sobrecarga: "#D64545",
+};
