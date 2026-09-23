@@ -12,6 +12,8 @@ export interface LiveNotification {
 
 export const notificationsService = {
   live: () => api.get<LiveNotification[]>("/notifications/live"),
+  /** Marca notificações como vistas — somem do sino até a condição gerar uma nova (ver notifications.routes.ts). */
+  dismiss: (ids: string[]) => api.post<void>("/notifications/dismiss", { ids }),
   triggers: () => api.get<NotificationTriggerRule[]>("/notifications/triggers"),
   customTriggers: () => api.get<CustomNotificationTrigger[]>("/notifications/triggers/custom"),
   createCustomTrigger: (input: Omit<CustomNotificationTrigger, "id">) => api.post<CustomNotificationTrigger>("/notifications/triggers/custom", input),

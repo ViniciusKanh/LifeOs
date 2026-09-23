@@ -207,7 +207,8 @@ notificationsRouter.get("/live", async (req, res) => {
   if ((pendingHabits.rows as unknown[]).length > 0) {
     const names = (pendingHabits.rows as unknown as Array<{ name: string }>).map((h) => h.name).join(", ");
     notifications.push({
-      id: "habits_pending_today",
+      // Com data no id: "vista" hoje não esconde o aviso de amanhã, se ainda houver hábito pendente.
+      id: `habits_pending_${today}`,
       kind: "habit_pending",
       title: `${pendingHabits.rows.length} hábito(s) pendente(s) hoje`,
       body: names,
@@ -217,7 +218,8 @@ notificationsRouter.get("/live", async (req, res) => {
   }
   if (weeklyReview.rows.length === 0) {
     notifications.push({
-      id: "weekly_review_pending",
+      // Com a segunda-feira da semana no id: só reaparece na semana seguinte.
+      id: `weekly_review_pending_${mondayOf()}`,
       kind: "weekly_review_pending",
       title: "Weekly Review da semana em aberto",
       body: "Reserve alguns minutos para revisar sua semana.",
@@ -226,5 +228,35 @@ notificationsRouter.get("/live", async (req, res) => {
     });
   }
 
-  return res.json(notifications);
+  // "Vi essa notificação": some da lista assim que o usuário abre o sino,
+  // sem precisar que a condição real (tarefa atrasada, hábito pendente...)
+  // deixe de existir — é o que faltava pra elas pararem de "grudar".
+  const dismissedResult = await db.execute({
+    sql: "SELECT notification_id FROM notification_dismissals WHERE owner_id = ?",
+    args: [ownerId],
+  });
+  const dismissed = new Set((dismissedResult.rows as unknown as Array<{ notification_id: string }>).map((r) => r.notification_id));
+  const visible = notifications.filter((n) => !dismissed.has(n.id));
+
+  return res.json(visible);
+});
+
+/**
+ * POST /api/notifications/dismiss — marca notificações como vistas (o
+ * usuário abriu o sino e olhou pra elas). Idempotente: reenviar o mesmo
+ * id não duplica nem dá erro.
+ */
+const dismissSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(50) });
+notificationsRouter.post("/dismiss", async (req, res) => {
+  const parsed = dismissSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const db = getDb();
+  const ownerId = req.user!.id;
+  for (const notificationId of parsed.data.ids) {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO notification_dismissals (id, owner_id, notification_id) VALUES (?, ?, ?)",
+      args: [`${ownerId}_${notificationId}`, ownerId, notificationId],
+    });
+  }
+  return res.status(204).send();
 });

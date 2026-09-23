@@ -20,11 +20,28 @@ const SEVERITY_DOT: Record<LiveNotification["severity"], string> = {
 };
 
 export function NotificationsBell() {
-  const { notifications } = useNotifications();
+  const { notifications, dismiss } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const hasHighAlert = notifications.some((n) => n.severity === "alta");
+
+  // "Vi essas notificações": ao fechar o sino (clique fora, novo clique no
+  // sino ou ao navegar por uma delas), tudo que estava visível enquanto
+  // estava aberto é marcado como visto — não soma mais depois disso, só
+  // reaparece quando a condição real gerar uma notificação nova (ver
+  // notifications.routes.ts). Sem isso, o mesmo aviso "grudava" pra sempre.
+  const shownIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (open) {
+      shownIdsRef.current = notifications.map((n) => n.id);
+    } else if (shownIdsRef.current.length > 0) {
+      const ids = shownIdsRef.current;
+      shownIdsRef.current = [];
+      dismiss(ids).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
