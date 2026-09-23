@@ -40,7 +40,7 @@ export function DetectedPatterns({ patterns }: { patterns: DetectedPattern[] }) 
       <Card className="p-6 text-center">
         <p className="text-sm font-medium">Sem padrões detectados</p>
         <p className="text-xs text-slate mt-1.5 max-w-sm mx-auto">
-          Ainda não há dados suficientes neste período para identificar tendências ou associações. Continue registrando sono, humor, foco e outros sinais.
+          Ainda não há dados suficientes neste período para identificar tendências ou associações. Continue registrando sono, humor e outros sinais.
         </p>
       </Card>
     );

@@ -88,7 +88,6 @@ interface Aggregates {
   moodAvg: number | null;
   energyAvg: number | null;
   stressAvg: number | null;
-  focusMinutesAvg: number | null;
   exerciseMinutesAvg: number | null;
   waterMlAvg: number | null;
   readingMinutesAvg: number | null;
@@ -98,17 +97,13 @@ interface Aggregates {
 }
 
 async function fetchAggregates(db: Db, ownerId: string, from: string, to: string, days: number): Promise<Aggregates> {
-  const [sleep, mood, focus, exercise, water, reading, tasks, agenda] = await Promise.all([
+  const [sleep, mood, exercise, water, reading, tasks, agenda] = await Promise.all([
     db.execute({
       sql: `SELECT AVG(duration_minutes) AS mins, AVG(quality) AS qual FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) BETWEEN date(?) AND date(?)`,
       args: [ownerId, from, to],
     }),
     db.execute({
       sql: `SELECT AVG(mood) AS mood, AVG(energy) AS energy, AVG(stress) AS stress FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?)`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT SUM(actual_minutes) AS mins FROM focus_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?)`,
       args: [ownerId, from, to],
     }),
     db.execute({
@@ -135,7 +130,6 @@ async function fetchAggregates(db: Db, ownerId: string, from: string, to: string
 
   const sleepRow = sleep.rows[0] as unknown as { mins: number | null; qual: number | null };
   const moodRow = mood.rows[0] as unknown as { mood: number | null; energy: number | null; stress: number | null };
-  const focusRow = focus.rows[0] as unknown as { mins: number | null };
   const exerciseRow = exercise.rows[0] as unknown as { mins: number | null };
   const waterRow = water.rows[0] as unknown as { ml: number | null };
   const readingRow = reading.rows[0] as unknown as { mins: number | null; pages: number | null };
@@ -148,7 +142,6 @@ async function fetchAggregates(db: Db, ownerId: string, from: string, to: string
     moodAvg: moodRow?.mood ?? null,
     energyAvg: moodRow?.energy ?? null,
     stressAvg: moodRow?.stress ?? null,
-    focusMinutesAvg: focusRow?.mins != null ? focusRow.mins / days : null,
     exerciseMinutesAvg: exerciseRow?.mins != null ? exerciseRow.mins / days : null,
     waterMlAvg: waterRow?.ml != null ? waterRow.ml / days : null,
     readingMinutesAvg: readingRow?.mins != null ? readingRow.mins / days : null,
@@ -192,17 +185,6 @@ function buildSignalCards(current: Aggregates, prior: Aggregates): SignalCard[] 
     description: current.energyAvg != null ? `Média de energia autorregistrada de ${current.energyAvg.toFixed(1)} em 5 no período.` : "Sem check-ins de energia neste período.",
     comparisonPct: pctChange(current.energyAvg, prior.energyAvg),
     comparisonLabel: comparisonLabel(pctChange(current.energyAvg, prior.energyAvg), true),
-  });
-
-  cards.push({
-    key: "focus",
-    label: "Focus",
-    value: current.focusMinutesAvg != null ? Math.round(current.focusMinutesAvg) : null,
-    unit: "min/dia",
-    status: current.focusMinutesAvg == null ? "insufficient_data" : "ok",
-    description: current.focusMinutesAvg != null ? `Média de ${Math.round(current.focusMinutesAvg)} min de foco por dia no período.` : "Sem sessões de Focus registradas neste período.",
-    comparisonPct: pctChange(current.focusMinutesAvg, prior.focusMinutesAvg),
-    comparisonLabel: comparisonLabel(pctChange(current.focusMinutesAvg, prior.focusMinutesAvg), true),
   });
 
   cards.push({
@@ -271,7 +253,7 @@ export async function getSignalsDashboard(db: Db, ownerId: string, period: Signa
     sleep: sleepScore,
     energy: scoreFromFivePoint(current.energyAvg),
     mood: scoreFromFivePoint(current.moodAvg),
-    productivity: scoreProductivity(current.focusMinutesAvg, current.tasksCompletedAvg),
+    productivity: scoreProductivity(current.tasksCompletedAvg),
     health: scoreHealth(sleepScore, current.exerciseMinutesAvg, current.waterMlAvg),
     balance: scoreBalance(current.stressAvg),
   });

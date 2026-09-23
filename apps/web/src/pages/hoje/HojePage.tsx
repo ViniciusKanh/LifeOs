@@ -27,7 +27,6 @@ import {
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealthSummary, useHealth } from "@/hooks/useHealth";
-import { useFocus } from "@/hooks/useFocus";
 import { useEvents } from "@/hooks/useEvents";
 import { useTimeline } from "@/hooks/useAnalytics";
 import { useDailyInsight } from "@/hooks/useCopilot";
@@ -38,11 +37,10 @@ import type { Task, TimelineEvent } from "@/types";
 // Metas de referência usadas só para calcular "% da meta" nos
 // indicadores — ainda não são configuráveis por usuário no backend
 // (não existe uma tabela de metas de saúde por enquanto). O valor
-// registrado (litros bebidos, minutos dormidos, minutos de foco)
-// é sempre real; só o denominador é um padrão fixo.
+// registrado (litros bebidos, minutos dormidos) é sempre real; só o
+// denominador é um padrão fixo.
 const WATER_GOAL_ML = 2500;
 const SLEEP_GOAL_MINUTES = 8 * 60;
-const FOCUS_GOAL_MINUTES = 25;
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -60,7 +58,6 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   habit: Repeat,
   workout: Dumbbell,
   reading: BookOpen,
-  focus: Brain,
   education: GraduationCap,
   sleep: Moon,
   mood: Smile,
@@ -79,8 +76,6 @@ function timelineLabel(e: TimelineEvent): string {
       return e.label;
     case "reading":
       return `Leitura: ${e.label}`;
-    case "focus":
-      return "Sessão de foco";
     case "education":
       return `Disciplina concluída: ${e.label}`;
     case "work_note":
@@ -102,7 +97,6 @@ export function HojePage() {
   const { habits, summaryByHabitId, checkIn } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
-  const { summary: focus, activeSession } = useFocus();
   const today = todayStr();
   const { events } = useTimeline({ from: today, to: today });
   const { items: calendarItems } = useEvents(today, today);
@@ -125,7 +119,6 @@ export function HojePage() {
   const habitsDone = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
   const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
   const sleepPct = health?.lastSleepMinutes ? Math.round((health.lastSleepMinutes / SLEEP_GOAL_MINUTES) * 100) : 0;
-  const focusPct = focus ? Math.round((focus.todayMinutes / FOCUS_GOAL_MINUTES) * 100) : 0;
 
   const todaysEvents = [...events]
     .filter((e) => String(e.at).slice(0, 10) === today)
@@ -159,26 +152,8 @@ export function HojePage() {
         <button onClick={() => copilot.regenerate()} disabled={copilot.isRegenerating} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-teal-500/30 px-3 py-1.5 text-xs font-semibold text-teal-700 disabled:opacity-50 dark:text-teal-300"><Wand2 size={14} /> {copilot.isRegenerating ? "Gerando..." : "Novo insight"}</button>
       </section>
 
-      {activeSession && (
-        <Link
-          to="/foco"
-          className="mb-4 flex items-center justify-between gap-3 rounded-2xl px-5 py-3.5 bg-gradient-to-r from-signal to-signal-deep text-white shadow-card hover:opacity-95 transition-opacity"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <TimerReset size={18} className="shrink-0 animate-pulse" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">
-                Sessão de foco em andamento{activeSession.mode === "pomodoro" ? " · Pomodoro" : " · Cronômetro livre"}
-              </p>
-              <p className="text-xs text-white/80">Iniciada às {formatTime(activeSession.started_at)}</p>
-            </div>
-          </div>
-          <span className="text-xs font-semibold shrink-0">Abrir Focus Mode →</span>
-        </Link>
-      )}
-
       {/* Stat tiles — 2 colunas no celular (mobile-first) para caber bem em telas ~360-400px */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
         <StatTile
           tone="blue"
           icon={<CheckCircle2 size={18} />}
@@ -210,13 +185,6 @@ export function HojePage() {
           value={health?.lastSleepMinutes ? formatHM(health.lastSleepMinutes) : "—"}
           progressPct={Math.min(sleepPct, 100)}
           caption={health?.lastSleepMinutes ? `${sleepPct}% da meta` : "sem registro"}
-        />
-        <StatTile
-          tone="amber"
-          icon={<Target size={18} />}
-          label="Foco"
-          value={formatHM(focus?.todayMinutes ?? 0)}
-          caption={`Meta: ${FOCUS_GOAL_MINUTES}min`}
         />
       </div>
 

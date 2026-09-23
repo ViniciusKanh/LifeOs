@@ -55,9 +55,7 @@ export function weeklySummaryEmail(input: {
   lifeScore: Awaited<ReturnType<typeof computeLifeScore>>;
   changePctByMetric: {
     tasksCompleted: number | null;
-    studyMinutes: number | null;
     pagesRead: number | null;
-    focusMinutes: number | null;
     productivity: number;
     health: number;
   };
@@ -78,9 +76,7 @@ export function weeklySummaryEmail(input: {
         </div>
         <table style="width:100%;border-collapse:collapse;">
           ${row("Tarefas concluídas", `${metrics.tasksCompleted}`, fmtChange(changePctByMetric.tasksCompleted))}
-          ${row("Minutos de estudo", `${metrics.studyMinutes}min`, fmtChange(changePctByMetric.studyMinutes))}
           ${row("Páginas lidas", `${metrics.pagesRead}`, fmtChange(changePctByMetric.pagesRead))}
-          ${row("Minutos de foco", `${metrics.focusMinutes}min`, fmtChange(changePctByMetric.focusMinutes))}
           ${row("Hábitos concluídos", `${metrics.habitsDoneCount}/${metrics.habitsPossibleCount}`)}
           ${row("Produtividade", `${lifeScore.productivity}%`)}
           ${row("Saúde", `${lifeScore.health}%`)}
@@ -147,9 +143,7 @@ export async function sendWeeklySummaryForUser(
     lifeScore,
     changePctByMetric: {
       tasksCompleted: changePct(metrics.tasksCompleted, prevMetrics.tasksCompleted),
-      studyMinutes: changePct(metrics.studyMinutes, prevMetrics.studyMinutes),
       pagesRead: changePct(metrics.pagesRead, prevMetrics.pagesRead),
-      focusMinutes: changePct(metrics.focusMinutes, prevMetrics.focusMinutes),
       productivity: lifeScore.productivity - prevLifeScore.productivity,
       health: lifeScore.health - prevLifeScore.health,
     },

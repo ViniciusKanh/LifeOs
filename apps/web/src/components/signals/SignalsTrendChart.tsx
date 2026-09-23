@@ -9,7 +9,6 @@ const SIGNAL_CHIPS: { key: TrendSignalKey; label: string }[] = [
   { key: "sleep", label: "Sono" },
   { key: "mood", label: "Humor" },
   { key: "energy", label: "Energia" },
-  { key: "focus", label: "Focus" },
   { key: "exercise", label: "Exercício" },
   { key: "reading", label: "Leitura" },
 ];

@@ -493,20 +493,14 @@ async function buildAnalyticsContext(ownerId: string, days: number) {
 function buildAnalyticsPrompt(ctx: Awaited<ReturnType<typeof buildAnalyticsContext>>): string {
   const { days, metrics, previous, insights } = ctx;
   const tasksDelta = changePct(metrics.tasksCompleted, previous.tasksCompleted);
-  const focusDelta = changePct(metrics.focusMinutes, previous.focusMinutes);
 
   const lines = [
     `Período analisado: últimos ${days} dias.`,
     `Tarefas concluídas: ${metrics.tasksCompleted}${tasksDelta !== null ? ` (${tasksDelta >= 0 ? "+" : ""}${tasksDelta}% vs. período anterior)` : ""}.`,
-    `Minutos de foco: ${metrics.focusMinutes}${focusDelta !== null ? ` (${focusDelta >= 0 ? "+" : ""}${focusDelta}% vs. período anterior)` : ""}.`,
     `Páginas lidas: ${metrics.pagesRead}. Exercícios: ${metrics.workouts}. Consistência de hábitos: ${metrics.habitsCompletionPct}%.`,
     insights.bestWeekday ? `Dia mais produtivo: ${insights.bestWeekday.label} (média de ${insights.bestWeekday.avgCompleted} tarefas concluídas).` : "",
-    insights.bestFocusHour ? `Horário de foco mais produtivo: por volta das ${insights.bestFocusHour.hour}h.` : "",
     insights.sleepVsNextDayProductivity.r !== null
       ? `Correlação entre sono e produtividade do dia seguinte: r = ${insights.sleepVsNextDayProductivity.r} (${insights.sleepVsNextDayProductivity.pairs} noites comparadas).`
-      : "",
-    insights.moodVsFocusMinutes.r !== null
-      ? `Correlação entre humor e minutos de foco: r = ${insights.moodVsFocusMinutes.r} (${insights.moodVsFocusMinutes.pairs} dias comparados).`
       : "",
   ].filter(Boolean);
 
@@ -658,9 +652,7 @@ async function buildWeeklyReviewContext(ownerId: string, weekStartDate: string) 
     overdueTasks,
     changePct: {
       tasksCompleted: changePct(metrics.tasksCompleted, prevMetrics.tasksCompleted),
-      studyMinutes: changePct(metrics.studyMinutes, prevMetrics.studyMinutes),
       pagesRead: changePct(metrics.pagesRead, prevMetrics.pagesRead),
-      focusMinutes: changePct(metrics.focusMinutes, prevMetrics.focusMinutes),
       productivity: lifeScore.productivity - prevLifeScore.productivity,
       health: lifeScore.health - prevLifeScore.health,
       education: lifeScore.education - prevLifeScore.education,
@@ -686,9 +678,7 @@ function buildWeeklyReviewPrompt(ctx: Awaited<ReturnType<typeof buildWeeklyRevie
   const lines = [
     `Tarefas concluídas na semana: ${metrics.tasksCompleted} de ${metrics.tasksPlanned} planejadas (variação vs. semana anterior: ${fmtPct(delta.tasksCompleted)}).`,
     `Tarefas atrasadas (em aberto, com prazo já vencido): ${overdueTasks}.`,
-    `Minutos de estudo: ${metrics.studyMinutes} (${fmtPct(delta.studyMinutes)}).`,
     `Páginas lidas: ${metrics.pagesRead} (${fmtPct(delta.pagesRead)}).`,
-    `Minutos de foco (Pomodoro/timer): ${metrics.focusMinutes} (${fmtPct(delta.focusMinutes)}).`,
     `Consistência de hábitos na semana: ${metrics.habitsCompletionPct}% (${metrics.habitsDoneCount} de ${metrics.habitsPossibleCount} check-ins possíveis).`,
     `Life Score ao final da semana — produtividade ${lifeScore.productivity} (${fmtPts(delta.productivity)}), saúde ${lifeScore.health} (${fmtPts(delta.health)}), educação ${lifeScore.education} (${fmtPts(delta.education)}), leitura ${lifeScore.reading} (${fmtPts(delta.reading)}), hábitos ${lifeScore.habits} (${fmtPts(delta.habits)}) — todas 0-100.`,
   ];

@@ -3,12 +3,12 @@
  *
  * Regra central do módulo: Signals é uma camada AGREGADORA. Nunca
  * lemos/gravamos dado novo aqui — só transformamos números que já
- * existem em outros módulos (sono, humor, energia, foco, exercício,
+ * existem em outros módulos (sono, humor, energia, exercício,
  * água) numa escala comum de 0 a 100 para poder comparar coisas
  * diferentes (minutos, nota de 1-5, ml) lado a lado no radar.
  *
  * Toda fórmula abaixo é documentada e determinística — nunca um
- * "chute" da IA. Metas de referência (8h de sono, 120min de foco,
+ * "chute" da IA. Metas de referência (8h de sono, 5 tarefas/dia,
  * 30min de exercício, 2000ml de água) são âncoras conceituais comuns
  * de bem-estar/produtividade, não recomendações médicas individuais.
  */
@@ -41,14 +41,10 @@ export function scoreFromFivePoint(avg: number | null): number | null {
   return clamp100(((avg - 1) / 4) * 100);
 }
 
-/** Produtividade: mistura minutos de foco (meta 120min/dia = 100) com tarefas concluídas (meta 5/dia = 100), 60/40. */
-export function scoreProductivity(avgFocusMinutes: number | null, avgTasksCompleted: number | null): number | null {
-  const focusScore = avgFocusMinutes == null ? null : clamp100((avgFocusMinutes / 120) * 100);
-  const tasksScore = avgTasksCompleted == null ? null : clamp100((avgTasksCompleted / 5) * 100);
-  if (focusScore == null && tasksScore == null) return null;
-  if (focusScore == null) return tasksScore;
-  if (tasksScore == null) return focusScore;
-  return clamp100(focusScore * 0.6 + tasksScore * 0.4);
+/** Produtividade: tarefas concluídas por dia (meta 5/dia = 100). */
+export function scoreProductivity(avgTasksCompleted: number | null): number | null {
+  if (avgTasksCompleted == null) return null;
+  return clamp100((avgTasksCompleted / 5) * 100);
 }
 
 /** Saúde: média dos sub-scores disponíveis (sono, exercício meta 30min/dia, água meta 2000ml/dia). Ignora os ausentes em vez de zerar. */

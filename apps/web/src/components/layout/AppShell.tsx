@@ -4,7 +4,6 @@ import {
   LayoutGrid,
   Sun,
   ListChecks,
-  Timer,
   BookOpen,
   GraduationCap,
   HeartPulse,
@@ -53,7 +52,6 @@ const PAGE_QUOTES: Record<string, string> = {
   "/inbox": "Capture agora, decida depois.",
   "/profissional": "Foco no que move os ponteiros.",
   "/semana": "Uma semana bem planejada se vive melhor.",
-  "/foco": "Foco é a ponte entre onde você está e onde quer chegar.",
   "/biblioteca": "Livros constroem a melhor versão de nós.",
   "/educacao": "Estudo hoje, liberdade amanhã.",
   "/saude": "Corpo saudável, mente mais forte.",
@@ -79,7 +77,6 @@ const NAV = [
   { to: "/hoje", label: "Hoje", icon: Sun },
   { to: "/tarefas", label: "Tarefas", icon: ListChecks },
   { to: "/projetos", label: "Projetos", icon: GanttChartSquare },
-  { to: "/foco", label: "Focus", icon: Timer },
   { to: "/capacity-planner", label: "Capacity Planner", icon: Gauge },
   { to: "/deadline-radar", label: "Deadline Radar", icon: Radar },
 ];

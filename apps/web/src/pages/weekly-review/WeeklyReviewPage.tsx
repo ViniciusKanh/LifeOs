@@ -263,9 +263,7 @@ export function WeeklyReviewPage() {
         reading: saved.reading_pct ?? 0,
         habits: saved.habits_pct ?? 0,
         tasksCompleted: saved.tasks_completed ?? 0,
-        studyMinutes: saved.study_minutes ?? 0,
         pagesRead: saved.pages_read ?? 0,
-        focusMinutes: saved.focus_minutes ?? 0,
       }
     : computed
       ? {
@@ -275,9 +273,7 @@ export function WeeklyReviewPage() {
           reading: computed.lifeScore.reading,
           habits: computed.lifeScore.habits,
           tasksCompleted: computed.tasksCompleted,
-          studyMinutes: computed.studyMinutes,
           pagesRead: computed.pagesRead,
-          focusMinutes: computed.focusMinutes,
         }
       : null;
 
@@ -359,7 +355,7 @@ export function WeeklyReviewPage() {
       )}
 
       {score && <section className="grid gap-4 border-y border-paper-border py-5 dark:border-ink-border lg:grid-cols-2">
-        <div><p className="text-xs font-semibold text-brand-600">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold">{score.tasksCompleted} tarefas concluídas · {score.focusMinutes} min de foco</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para comparar as dimensões."} {strongest && strongest.value > 0 && weakest && weakest.label !== strongest.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
+        <div><p className="text-xs font-semibold text-brand-600">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold">{score.tasksCompleted} tarefas concluídas · {score.pagesRead} páginas lidas</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para comparar as dimensões."} {strongest && strongest.value > 0 && weakest && weakest.label !== strongest.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
         <div className="space-y-2">{dimensionSignals.map((signal) => <div key={signal.label} className="grid grid-cols-[90px_1fr_34px] items-center gap-2 text-xs"><span className="text-slate">{signal.label}</span><div className="h-2 rounded-full bg-paper-border dark:bg-ink-border"><div className="h-full rounded-full bg-brand-500" style={{ width: `${signal.value}%` }} /></div><span className="text-right font-semibold">{signal.value}%</span></div>)}</div>
       </section>}
 
@@ -420,25 +416,11 @@ export function WeeklyReviewPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-paper-border dark:border-ink-border">
                 <MetricTile
-                  icon={<GraduationCap size={16} />}
-                  tone="blue"
-                  label="Minutos de estudo"
-                  value={`${score.studyMinutes}min`}
-                  trend={changePct ? <RelativeTrend pct={changePct.studyMinutes} /> : <span className="text-[11px] text-slate">—</span>}
-                />
-                <MetricTile
                   icon={<BookOpen size={16} />}
                   tone="teal"
                   label="Páginas lidas"
                   value={String(score.pagesRead)}
                   trend={changePct ? <RelativeTrend pct={changePct.pagesRead} /> : <span className="text-[11px] text-slate">—</span>}
-                />
-                <MetricTile
-                  icon={<Target size={16} />}
-                  tone="purple"
-                  label="Minutos de foco"
-                  value={`${score.focusMinutes}min`}
-                  trend={changePct ? <RelativeTrend pct={changePct.focusMinutes} /> : <span className="text-[11px] text-slate">—</span>}
                 />
               </div>
               {!saved && (
@@ -561,7 +543,7 @@ export function WeeklyReviewPage() {
             <p className="mt-3 text-xs leading-relaxed text-slate">O Gemini usa seus registros da semana para sugerir uma reflexão e prioridades. Você revisa antes de salvar.</p>
             <Button className="mt-4 w-full" onClick={() => { setMode("edit"); void handleGenerateDraft(); }} disabled={isGeneratingDraft}><Wand2 size={14} /> {isGeneratingDraft ? "Analisando..." : "Analisar minha semana"}</Button>
             {draftError && <p className="mt-2 text-xs text-drop">{draftError.message}</p>}
-            {changePct && <div className="mt-4 border-t border-paper-border pt-3 text-xs dark:border-ink-border"><p className="font-semibold">Comparado à semana anterior</p><p className="mt-1 text-slate">Tarefas: {changePct.tasksCompleted === null ? "sem base" : `${changePct.tasksCompleted > 0 ? "+" : ""}${changePct.tasksCompleted}%`} · Foco: {changePct.focusMinutes === null ? "sem base" : `${changePct.focusMinutes > 0 ? "+" : ""}${changePct.focusMinutes}%`}</p></div>}
+            {changePct && <div className="mt-4 border-t border-paper-border pt-3 text-xs dark:border-ink-border"><p className="font-semibold">Comparado à semana anterior</p><p className="mt-1 text-slate">Tarefas: {changePct.tasksCompleted === null ? "sem base" : `${changePct.tasksCompleted > 0 ? "+" : ""}${changePct.tasksCompleted}%`} · Páginas lidas: {changePct.pagesRead === null ? "sem base" : `${changePct.pagesRead > 0 ? "+" : ""}${changePct.pagesRead}%`}</p></div>}
           </Card>
         </div>
       </div>

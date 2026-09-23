@@ -64,7 +64,7 @@ analyticsRouter.get("/overview", async (req, res) => {
   const prevToStr = isoDate(prevTo);
 
   const db = getDb();
-  const [metrics, previous, current, prevWater, tasksByDay, focusByDay, studyByDay, pagesByDay, workoutsByDay, habitsByDay, sleepByDay, waterByDay] = await Promise.all([
+  const [metrics, previous, current, prevWater, tasksByDay, pagesByDay, workoutsByDay, habitsByDay, sleepByDay, waterByDay] = await Promise.all([
     computeRangeMetrics(ownerId, fromStr, toBoundaryStr),
     computeRangeMetrics(ownerId, prevFromStr, prevToStr),
     sleepWaterAverages(ownerId, fromStr, toBoundaryStr),
@@ -72,19 +72,6 @@ analyticsRouter.get("/overview", async (req, res) => {
     db.execute({
       sql: `SELECT date(updated_at) AS day, COUNT(*) AS total FROM tasks
             WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?)
-            GROUP BY day ORDER BY day ASC`,
-      args: [ownerId, fromStr],
-    }),
-    db.execute({
-      sql: `SELECT date(started_at) AS day, COALESCE(SUM(actual_minutes), 0) AS total FROM focus_sessions
-            WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) >= date(?)
-            GROUP BY day ORDER BY day ASC`,
-      args: [ownerId, fromStr],
-    }),
-    db.execute({
-      sql: `SELECT date(fs.started_at) AS day, COALESCE(SUM(fs.actual_minutes), 0) AS total FROM focus_sessions fs
-            JOIN tasks t ON t.id = fs.task_id JOIN projects p ON p.id = t.project_id
-            WHERE fs.owner_id = ? AND p.kind = 'academic' AND fs.ended_at IS NOT NULL AND date(fs.started_at) >= date(?)
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),
@@ -126,8 +113,6 @@ analyticsRouter.get("/overview", async (req, res) => {
   // não há registro naquele dia).
   const toMap = (rows: unknown[]) => new Map((rows as Array<{ day: string; total: number }>).map((r) => [r.day, Number(r.total)]));
   const tasksMap = toMap(tasksByDay.rows as unknown[]);
-  const focusMap = toMap(focusByDay.rows as unknown[]);
-  const studyMap = toMap(studyByDay.rows as unknown[]);
   const pagesMap = toMap(pagesByDay.rows as unknown[]);
   const workoutsMap = toMap(workoutsByDay.rows as unknown[]);
   const habitsMap = toMap(habitsByDay.rows as unknown[]);
@@ -145,8 +130,6 @@ analyticsRouter.get("/overview", async (req, res) => {
 
   const dailySeries = {
     tasks: seriesFor(tasksMap),
-    focus: seriesFor(focusMap),
-    study: seriesFor(studyMap),
     pages: seriesFor(pagesMap),
     workouts: seriesFor(workoutsMap),
     habits: seriesFor(habitsMap),
@@ -159,11 +142,9 @@ analyticsRouter.get("/overview", async (req, res) => {
   // acima (nunca uma proporção inventada). O sono fica de fora deste
   // gráfico de propósito: por ser muito maior em minutos que as demais
   // áreas, misturado no mesmo donut ele dominaria o gráfico e esconderia
-  // a distribuição entre trabalho/estudo/leitura/exercício, que é o que
-  // este card se propõe a mostrar — o sono já tem seu próprio card acima.
+  // a distribuição entre leitura/exercício, que é o que este card se
+  // propõe a mostrar — o sono já tem seu próprio card acima.
   const timeDistribution = {
-    trabalho: Math.max(0, Math.round((metrics.focusMinutes - metrics.studyMinutes) / days)),
-    estudo: Math.round(metrics.studyMinutes / days),
     leitura: Math.round(metrics.readingMinutes / days),
     exercicio: Math.round(metrics.workoutMinutes / days),
   };
@@ -177,8 +158,6 @@ analyticsRouter.get("/overview", async (req, res) => {
     timeDistribution,
     changePct: {
       tasksCompleted: changePct(metrics.tasksCompleted, previous.tasksCompleted),
-      focusMinutes: changePct(metrics.focusMinutes, previous.focusMinutes),
-      studyMinutes: changePct(metrics.studyMinutes, previous.studyMinutes),
       pagesRead: changePct(metrics.pagesRead, previous.pagesRead),
       workouts: changePct(metrics.workouts, previous.workouts),
       // Diferença em pontos percentuais (não variação relativa) — evita um
@@ -201,7 +180,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
 
-  const [tasks, habitEntries, workouts, readingSessions, focusSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded] = await Promise.all([
     // LEFT JOIN com projects: deixa claro a que projeto (profissional,
     // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
@@ -222,10 +201,6 @@ analyticsRouter.get("/timeline", async (req, res) => {
     db.execute({
       sql: `SELECT rs.id, b.title AS label, rs.started_at AS at, rs.pages_read FROM reading_sessions rs JOIN books b ON b.id = rs.book_id
             WHERE rs.owner_id = ? AND date(rs.started_at) >= date(?) AND date(rs.started_at) <= date(?)`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: "SELECT id, mode AS label, started_at AS at, actual_minutes FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) >= date(?) AND date(started_at) <= date(?)",
       args: [ownerId, from, to],
     }),
     db.execute({
@@ -270,7 +245,6 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(habitEntries.rows).map((r) => ({ type: "habit", icon: "🔁", ...r })),
     ...asRows(workouts.rows).map((r) => ({ type: "workout", icon: "🏃", ...r })),
     ...asRows(readingSessions.rows).map((r) => ({ type: "reading", icon: "📚", ...r })),
-    ...asRows(focusSessions.rows).map((r) => ({ type: "focus", icon: "🧠", ...r })),
     ...asRows(subjects.rows).map((r) => ({ type: "education", icon: "🎓", ...r })),
     ...asRows(sleepEntries.rows).map((r) => ({ type: "sleep", icon: "🌙", label: "Dormir", ...r })),
     ...asRows(moodEntries.rows).map((r) => ({ type: "mood", icon: "🙂", label: "Humor e energia", ...r })),

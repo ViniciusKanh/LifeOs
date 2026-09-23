@@ -6,7 +6,7 @@
  * automática").
  */
 import type { getDb } from "../db/client.js";
-import { getDayTasks, getFreeWindows, getFocusForecast, classifyEffort, type DayTask, type FreeWindow, type EffortType } from "./capacityPlannerService.js";
+import { getDayTasks, getFreeWindows, getEnergyForecast, classifyEffort, type DayTask, type FreeWindow, type EffortType } from "./capacityPlannerService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -50,12 +50,15 @@ function sortTasks(tasks: DayTask[]): DayTask[] {
 }
 
 export async function buildPlanningSuggestion(db: Db, ownerId: string, date: string): Promise<PlanningSuggestion> {
-  const [tasks, freeWindows, focus] = await Promise.all([getDayTasks(db, ownerId, date), getFreeWindows(db, ownerId, date), getFocusForecast(db, ownerId)]);
+  const [tasks, freeWindows, energy] = await Promise.all([getDayTasks(db, ownerId, date), getFreeWindows(db, ownerId, date), getEnergyForecast(db, ownerId)]);
 
   const overloadBefore = tasks.reduce((sum, t) => sum + (t.estimateMinutes ?? 0), 0) - freeWindows.reduce((sum, w) => sum + (toMinutes(w.end) - toMinutes(w.start)), 0);
 
   const windows: FreeWindow[] = freeWindows.map((w) => ({ ...w }));
-  const bestFocusStart = focus.bestPeriod ? toMinutes(focus.bestPeriod.split("–")[0].replace("h", ":00")) : null;
+  // Trabalho profundo tenta ocupar o horário de maior energia prevista
+  // (Signals/mood_entries) — sem sessões de Focus Mode registradas, essa
+  // é a única janela "melhor horário" com dado real por trás.
+  const bestFocusStart = energy.bestPeriod ? toMinutes(energy.bestPeriod.split("–")[0].replace("h", ":00")) : null;
 
   const sorted = sortTasks(tasks).sort((a, b) => {
     // Trabalho profundo primeiro para poder ocupar a melhor janela de Focus quando ela existir.

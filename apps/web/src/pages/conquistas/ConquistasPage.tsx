@@ -278,7 +278,7 @@ export function ConquistasPage() {
         ) : trophies.length === 0 ? (
           <EmptyState
             title="Nenhum troféu customizado ainda"
-            description='Crie um desafio como "concluir 5 tarefas no dia" ou "30 minutos de foco no dia" e ele destrava sozinho quando você bater a meta.'
+            description='Crie um desafio como "concluir 5 tarefas no dia" ou "30 minutos de leitura no dia" e ele destrava sozinho quando você bater a meta.'
             ctaLabel="Criar troféu"
             onCta={() => setModalOpen(true)}
           />
