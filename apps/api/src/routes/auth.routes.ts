@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { nanoid } from "nanoid";
+import crypto from "node:crypto";
 import { getDb } from "../db/client.js";
+import { getGoogleOAuthConfig, buildGoogleAuthUrl, exchangeGoogleCode, googleRedirectUri } from "../services/googleAuthService.js";
 import {
   hashPassword,
   verifyPassword,
@@ -443,4 +445,101 @@ authRouter.post("/resend-verification", rateLimit({ max: 5 }), async (req, res) 
   }
 
   return res.json(genericResponse);
+});
+
+const GOOGLE_STATE_COOKIE = "lifeos_google_oauth_state";
+
+/** GET /api/auth/google/status — só diz se o login com Google está configurado (nunca expõe as credenciais). */
+authRouter.get("/google/status", async (_req, res) => {
+  const db = getDb();
+  const config = await getGoogleOAuthConfig(db);
+  return res.json({ available: !!config });
+});
+
+/**
+ * GET /api/auth/google/start — inicia o login/cadastro com Google:
+ * redireciona pra tela de consentimento do Google com um "state"
+ * aleatório guardado em cookie de curta duração (proteção CSRF,
+ * conferido de volta no callback).
+ */
+authRouter.get("/google/start", async (req, res) => {
+  const db = getDb();
+  const config = await getGoogleOAuthConfig(db);
+  if (!config) {
+    return res
+      .status(503)
+      .send("Login com Google ainda não foi configurado. Peça a um administrador para configurar em Configurações → Login com Google.");
+  }
+  const state = crypto.randomBytes(24).toString("hex");
+  res.cookie(GOOGLE_STATE_COOKIE, state, { ...COOKIE_BASE, maxAge: 10 * 60 * 1000 });
+  return res.redirect(buildGoogleAuthUrl(config, googleRedirectUri(req), state));
+});
+
+/**
+ * GET /api/auth/google/callback — o Google volta pra cá com ?code&state.
+ * Localiza o usuário pelo google_id; se não existir ainda, tenta achar
+ * por e-mail (associa a conta Google a um cadastro já existente, como
+ * pedido); senão cria um cadastro novo, já com e-mail verificado (o
+ * Google já confirmou o e-mail) e uma senha aleatória que o usuário
+ * nunca usa (pode definir uma de verdade depois via "Esqueci minha
+ * senha", se quiser entrar também com e-mail/senha).
+ */
+authRouter.get("/google/callback", async (req, res) => {
+  const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
+  const savedState = (req as unknown as { cookies?: Record<string, string> }).cookies?.[GOOGLE_STATE_COOKIE];
+  res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" });
+
+  const failRedirect = (reason: string) => res.redirect(`${APP_URL}/login?google_error=${encodeURIComponent(reason)}`);
+
+  if (error) return failRedirect(error);
+  if (!code || !state || !savedState || state !== savedState) return failRedirect("state_invalido");
+
+  const db = getDb();
+  const config = await getGoogleOAuthConfig(db);
+  if (!config) return failRedirect("nao_configurado");
+
+  let profile;
+  try {
+    profile = await exchangeGoogleCode(config, code, googleRedirectUri(req));
+  } catch (err) {
+    console.error("[google-oauth] falha na troca de código:", err);
+    return failRedirect("falha_google");
+  }
+
+  const byGoogleId = await db.execute({ sql: "SELECT * FROM users WHERE google_id = ?", args: [profile.sub] });
+  let user = byGoogleId.rows[0] as unknown as { id: string; name: string; email: string; role: "user" | "admin" } | undefined;
+
+  if (!user) {
+    const byEmail = await db.execute({ sql: "SELECT * FROM users WHERE email = ?", args: [profile.email] });
+    const existing = byEmail.rows[0] as unknown as { id: string; name: string; email: string; role: "user" | "admin" } | undefined;
+    if (existing) {
+      // Conta já existia com esse e-mail (cadastro normal) — associa o Google a ela em vez de duplicar.
+      await db.execute({
+        sql: "UPDATE users SET google_id = ?, email_verified = 1, updated_at = datetime('now') WHERE id = ?",
+        args: [profile.sub, existing.id],
+      });
+      user = existing;
+    } else {
+      const id = nanoid();
+      // Senha aleatória que o usuário nunca vê nem usa — login por Google não passa por ela;
+      // existe só porque users.password_hash é NOT NULL. Se quiser, define uma de verdade via "Esqueci minha senha".
+      const randomPasswordHash = await hashPassword(crypto.randomBytes(32).toString("hex"));
+      const adminEmail = (process.env.ADMIN_EMAIL ?? "").toLowerCase();
+      const role = profile.email.toLowerCase() === adminEmail ? "admin" : "user";
+      await db.execute({
+        sql: `INSERT INTO users (id, name, email, password_hash, role, avatar_url, google_id, email_verified)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [id, profile.name, profile.email, randomPasswordHash, role, profile.picture, profile.sub, profile.emailVerified ? 1 : 0],
+      });
+      await db.execute({ sql: "INSERT INTO user_settings (user_id) VALUES (?)", args: [id] });
+      user = { id, name: profile.name, email: profile.email, role };
+
+      const welcome = welcomeEmail(profile.name);
+      sendMail({ to: profile.email, ...welcome }).catch((err) => console.error("[email] falha ao enviar boas-vindas (google):", err));
+    }
+  }
+
+  const token = signSessionToken({ sub: user.id, role: user.role });
+  res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 30 * 24 * 60 * 60 * 1000 });
+  return res.redirect(`${APP_URL}/dashboard`);
 });

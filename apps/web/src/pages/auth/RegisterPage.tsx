@@ -7,6 +7,7 @@ import { registerFormSchema, type RegisterFormValues, passwordStrength } from "@
 import { useAuth } from "@/hooks/useAuth";
 import { Button, IconField } from "@/components/ui/primitives";
 import { AuthIllustration } from "@/components/auth/AuthIllustration";
+import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
 
 const STRENGTH_LABELS = ["Muito fraca", "Fraca", "Razoável", "Boa", "Forte"];
 const STRENGTH_COLORS = ["#C75146", "#C75146", "#E8A33D", "#E8A33D", "#4F8F63"];
@@ -155,6 +156,8 @@ export function RegisterPage() {
                 {isRegistering ? "Criando conta..." : "Criar minha conta"}
                 {!isRegistering && <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />}
               </Button>
+
+              <GoogleLoginButton />
 
               <p className="text-xs text-slate text-center pt-2">
                 Já tem conta?{" "}

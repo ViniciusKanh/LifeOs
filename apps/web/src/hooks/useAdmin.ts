@@ -35,6 +35,12 @@ export function useGeminiModels() {
   return { models: query.data?.models ?? [], defaultModel: query.data?.default ?? "gemini-3.6-flash" };
 }
 
+/** URL exata a cadastrar em "Authorized redirect URIs" no Google Cloud Console. */
+export function useGoogleRedirectUri() {
+  const query = useQuery({ queryKey: ["admin", "google-redirect-uri"], queryFn: adminService.googleRedirectUri, staleTime: 60 * 60 * 1000 });
+  return { redirectUri: query.data?.redirectUri ?? null };
+}
+
 /** Configurações de segurança efetivas (só leitura — vêm de variáveis de ambiente). */
 export function useSecurityInfo() {
   const query = useQuery({ queryKey: ["admin", "security"], queryFn: adminService.security });

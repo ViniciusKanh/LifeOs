@@ -21,7 +21,7 @@ export interface AdminUser {
   updated_at: string;
 }
 
-export type AdminIntegration = "gemini" | "turso" | "smtp";
+export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth";
 
 export interface AdminSetting {
   id: string;
