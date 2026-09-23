@@ -50,6 +50,40 @@ function withOverdue<T extends { status: string; due_date: string | null }>(goal
   return { ...goal, is_overdue: goal.status === "active" && !!goal.due_date && goal.due_date.slice(0, 10) < today };
 }
 
+/**
+ * Tarefas vinculadas por meta (tasks.goal_id) — base real do tipo "task_based":
+ * conta quantas tarefas apontam pra cada meta e quantas já foram concluídas.
+ * Sem isso, "Etapas" não tinha nenhuma ligação de fato com tarefas de verdade.
+ */
+async function getGoalTaskLinks(db: ReturnType<typeof getDb>, ownerId: string): Promise<Map<string, { total: number; done: number }>> {
+  const result = await db.execute({
+    sql: `SELECT goal_id, COUNT(*) AS total, SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) AS done
+          FROM tasks WHERE owner_id = ? AND goal_id IS NOT NULL GROUP BY goal_id`,
+    args: [ownerId],
+  });
+  return new Map(
+    (result.rows as unknown as Array<{ goal_id: string; total: number; done: number }>).map((r) => [r.goal_id, { total: r.total, done: r.done }])
+  );
+}
+
+/**
+ * Quando uma meta "task_based" tem tarefas vinculadas, o progresso passa a
+ * ser automático (tarefas concluídas / total) — current_value manual deixa
+ * de valer pra essas metas. Sem tarefas vinculadas, continua manual (modo
+ * "Etapas" original). Metas com submetas (rollup) não entram aqui — essa
+ * agregação é feita à parte em metricsService.ts.
+ */
+function applyTaskLinkProgress<T extends { id: string; kind: string; current_value: number }>(
+  goal: T,
+  taskLinks: Map<string, { total: number; done: number }>
+): T & { linked_tasks: { total: number; done: number } | null } {
+  const links = taskLinks.get(goal.id) ?? null;
+  if (goal.kind !== "task_based" || !links || links.total === 0) {
+    return { ...goal, linked_tasks: links };
+  }
+  return { ...goal, current_value: Math.round((links.done / links.total) * 100), linked_tasks: links };
+}
+
 /** GET /api/goals?status=&parentGoalId= — parentGoalId="null" retorna só as metas de topo (anuais) */
 goalsRouter.get("/", async (req, res) => {
   const { status, parentGoalId } = req.query as { status?: string; parentGoalId?: string };
@@ -72,12 +106,21 @@ goalsRouter.get("/", async (req, res) => {
     sql: `SELECT * FROM goals WHERE ${conditions.join(" AND ")} ORDER BY due_date ASC, created_at ASC`,
     args,
   });
-  const rows = result.rows as unknown as Array<{ title: string; kind: string; unit: string | null; status: string; current_value: number; due_date: string | null }>;
+  const rows = result.rows as unknown as Array<{ id: string; title: string; kind: string; unit: string | null; status: string; current_value: number; due_date: string | null }>;
   const today = new Date().toISOString().slice(0, 10);
   const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, req.user!.id, today) : 0;
-  return res.json(rows.map((goal) => withOverdue(isDailyReadingGoal(goal)
-    ? { ...goal, current_value: pagesToday, progress_source: "reading_today" }
-    : goal, today)));
+  const taskLinks = await getGoalTaskLinks(db, req.user!.id);
+  return res.json(
+    rows.map((goal) =>
+      withOverdue(
+        applyTaskLinkProgress(
+          isDailyReadingGoal(goal) ? { ...goal, current_value: pagesToday, progress_source: "reading_today" } : goal,
+          taskLinks
+        ),
+        today
+      )
+    )
+  );
 });
 
 /**
@@ -218,8 +261,15 @@ goalsRouter.get("/:id", async (req, res) => {
   const dailyReading = isDailyReadingGoal(goal as unknown as { title: string; kind: string; unit: string | null; status: string });
   const today = new Date().toISOString().slice(0, 10);
   const pagesToday = dailyReading ? await pagesReadOn(db, req.user!.id, today) : 0;
+  const taskLinks = await getGoalTaskLinks(db, req.user!.id);
   const merged = withOverdue(
-    { ...(goal as unknown as { status: string; due_date: string | null }), ...(dailyReading ? { current_value: pagesToday, progress_source: "reading_today" } : {}) },
+    applyTaskLinkProgress(
+      {
+        ...(goal as unknown as { id: string; kind: string; current_value: number; status: string; due_date: string | null }),
+        ...(dailyReading ? { current_value: pagesToday, progress_source: "reading_today" } : {}),
+      },
+      taskLinks
+    ),
     today
   );
   return res.json({ ...merged, children: children.rows, progress: progress.rows });
@@ -273,6 +323,18 @@ goalsRouter.patch("/:id", async (req, res) => {
   const existing = await getOwnedGoal(db, req.params.id, req.user!.id);
   if (!existing) return res.status(404).json({ error: "Meta não encontrada." });
 
+  // Meta superior: validar dono + impedir ciclo (meta virar filha dela mesma ou de uma das próprias filhas).
+  if (parsed.data.parentGoalId !== undefined && parsed.data.parentGoalId !== null) {
+    if (parsed.data.parentGoalId === req.params.id) {
+      return res.status(400).json({ error: "Uma meta não pode ser submeta dela mesma." });
+    }
+    const parent = await getOwnedGoal(db, parsed.data.parentGoalId, req.user!.id);
+    if (!parent) return res.status(400).json({ error: "Meta superior inválida." });
+    if ((parent as unknown as { parent_goal_id: string | null }).parent_goal_id === req.params.id) {
+      return res.status(400).json({ error: "Essa meta já é submeta desta — não é possível criar um ciclo." });
+    }
+  }
+
   const fieldMap: Record<string, string> = {
     title: "title",
     description: "description",
@@ -286,6 +348,7 @@ goalsRouter.patch("/:id", async (req, res) => {
     period: "period",
     nextAction: "next_action",
     nextActionDue: "next_action_due",
+    parentGoalId: "parent_goal_id",
   };
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
@@ -332,8 +395,17 @@ goalsRouter.post("/:id/progress", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
   const db = getDb();
-  const goal = await getOwnedGoal(db, req.params.id, req.user!.id);
+  const goal = await getOwnedGoal(db, req.params.id, req.user!.id) as unknown as { id: string; kind: string } | null;
   if (!goal) return res.status(404).json({ error: "Meta não encontrada." });
+
+  // Meta "task_based" com tarefas vinculadas é atualizada automaticamente pela conclusão delas —
+  // registro manual de progresso deixaria de refletir a realidade das tarefas.
+  if (goal.kind === "task_based") {
+    const links = (await getGoalTaskLinks(db, req.user!.id)).get(goal.id);
+    if (links && links.total > 0) {
+      return res.status(400).json({ error: "Esta meta é atualizada automaticamente pelas tarefas vinculadas a ela. Conclua as tarefas para avançar o progresso." });
+    }
+  }
 
   await db.execute({
     sql: "INSERT INTO goal_progress (id, goal_id, owner_id, value, note) VALUES (?, ?, ?, ?, ?)",

@@ -7,6 +7,7 @@ export interface TaskInput {
   status?: string;
   priority?: Task["priority"];
   projectId?: string | null;
+  goalId?: string | null;
   dueDate?: string | null;
   startDate?: string | null;
   estimateMinutes?: number | null;

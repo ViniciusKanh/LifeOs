@@ -38,7 +38,15 @@ function progressLabel(goal: Goal): string | null {
   if (goal.kind === "numeric" && goal.target_value) {
     return `${goal.current_value} de ${goal.target_value}${goal.unit ? ` ${goal.unit}` : ""}`;
   }
+  if (goal.kind === "task_based" && goal.linked_tasks && goal.linked_tasks.total > 0) {
+    return `${goal.linked_tasks.done} de ${goal.linked_tasks.total} tarefas concluídas`;
+  }
   return null;
+}
+
+/** true quando a meta tem tarefas de verdade vinculadas — progresso passa a ser automático (ver goals.routes.ts). */
+function hasAutoProgress(goal: Goal): boolean {
+  return goal.kind === "task_based" && !!goal.linked_tasks && goal.linked_tasks.total > 0;
 }
 
 const PERIOD_TABS: Array<{ value: GoalPeriod | "todas"; label: string }> = [
@@ -110,24 +118,39 @@ function formatDate(value: string | null) {
 }
 
 export function MetasPage() {
-  const { goals, stats, createGoal, updateGoal, removeGoal, addProgress, renewGoal } = useGoals({ parentGoalId: "null" });
+  // Busca todas as metas (não só as de topo) pra poder montar a hierarquia
+  // meta/submeta na tela — antes só vinha o topo e a submeta nunca aparecia.
+  const { goals: allGoals, stats, createGoal, updateGoal, removeGoal, addProgress, renewGoal } = useGoals();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
   const [periodTab, setPeriodTab] = useState<GoalPeriod | "todas">("todas");
   const [statusTab, setStatusTab] = useState<"ativas" | "concluidas" | "todas">("ativas");
 
-  const activeGoals = goals.filter((g) => g.status === "active");
+  const goals = allGoals;
+  const topLevelGoals = goals.filter((g) => !g.parent_goal_id);
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, Goal[]>();
+    for (const g of goals) {
+      if (!g.parent_goal_id) continue;
+      const list = map.get(g.parent_goal_id) ?? [];
+      list.push(g);
+      map.set(g.parent_goal_id, list);
+    }
+    return map;
+  }, [goals]);
+
+  const activeGoals = topLevelGoals.filter((g) => g.status === "active");
   const overdueGoals = activeGoals.filter((g) => g.is_overdue);
   const overallProgressPct = activeGoals.length > 0 ? Math.round(activeGoals.reduce((sum, g) => sum + goalProgressPct(g), 0) / activeGoals.length) : 0;
 
   const visibleGoals = useMemo(() => {
-    const list = goals.filter((goal) =>
+    const list = topLevelGoals.filter((goal) =>
       (periodTab === "todas" || goal.period === periodTab) &&
       (statusTab === "todas" || (statusTab === "ativas" ? goal.status === "active" : goal.status === "done"))
     );
     return [...list].sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999") || b.created_at.localeCompare(a.created_at));
-  }, [goals, periodTab, statusTab]);
+  }, [topLevelGoals, periodTab, statusTab]);
 
   const handleComplete = (goal: Goal) => {
     const pct = goalProgressPct(goal);
@@ -276,6 +299,7 @@ export function MetasPage() {
                               {label && <span>{label}</span>}
                               {goal.kind === "binary" && <span>Sim/Não</span>}
                               {goal.progress_source === "reading_today" && <span>Atualizado pela leitura de hoje</span>}
+                              {hasAutoProgress(goal) && <span className="text-cat-blue">Progresso automático pelas tarefas</span>}
                               {goal.due_date && (
                                 <span className={overdue ? "text-drop font-medium" : ""}>
                                   {overdue ? "Venceu em " : ""}
@@ -294,11 +318,32 @@ export function MetasPage() {
                               </p>
                             )}
                             {goal.next_action && <p className="mt-2 flex items-start gap-1.5 rounded-md bg-brand-500/5 px-2 py-1.5 text-xs"><ListChecks size={13} className="mt-0.5 shrink-0 text-brand-500" /><span>Próximo passo: {goal.next_action}{goal.next_action_due ? ` · ${formatDate(goal.next_action_due)}` : ""}</span></p>}
+                            {(childrenByParent.get(goal.id) ?? []).length > 0 && (
+                              <div className="mt-3 ml-9 space-y-1.5 border-l-2 border-paper-border dark:border-ink-border pl-3">
+                                <p className="text-[11px] font-medium text-slate">Submetas</p>
+                                {(childrenByParent.get(goal.id) ?? []).map((child) => {
+                                  const childPct = goalProgressPct(child);
+                                  return (
+                                    <button
+                                      key={child.id}
+                                      onClick={() => setEditingGoal(child)}
+                                      className="w-full flex items-center gap-2 text-left text-xs hover:opacity-80"
+                                    >
+                                      <span className="flex-1 truncate">{child.title}</span>
+                                      <div className="w-16 h-1 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border shrink-0">
+                                        <div className={`h-full rounded-full ${ACCENT_BAR[meta.tone]}`} style={{ width: `${childPct}%` }} />
+                                      </div>
+                                      <span className="w-8 text-right text-[11px] text-slate shrink-0">{childPct}%</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {goal.status === "active" && !overdue && (
                               <>
-                                {goal.progress_source !== "reading_today" && goal.kind !== "binary" && (
+                                {goal.progress_source !== "reading_today" && goal.kind !== "binary" && !hasAutoProgress(goal) && (
                                   <Button variant="secondary" onClick={() => setProgressGoal(goal)}>
                                     Atualizar
                                   </Button>
@@ -438,6 +483,7 @@ export function MetasPage() {
 
       {modalOpen && (
         <MetaModal
+          candidateParents={topLevelGoals}
           onClose={() => setModalOpen(false)}
           onSubmit={async (input) => {
             await createGoal(input);
@@ -447,6 +493,7 @@ export function MetasPage() {
       {editingGoal && (
         <MetaModal
           goal={editingGoal}
+          candidateParents={topLevelGoals}
           onClose={() => setEditingGoal(null)}
           onSubmit={async (input) => {
             await updateGoal({ id: editingGoal.id, patch: input });
@@ -466,10 +513,12 @@ export function MetasPage() {
 
 function MetaModal({
   goal,
+  candidateParents = [],
   onClose,
   onSubmit,
 }: {
   goal?: Goal;
+  candidateParents?: Goal[];
   onClose: () => void;
   onSubmit: (input: {
     title: string;
@@ -482,6 +531,7 @@ function MetaModal({
     period?: GoalPeriod;
     nextAction?: string;
     nextActionDue?: string;
+    parentGoalId?: string | null;
   }) => Promise<unknown>;
 }) {
   const [title, setTitle] = useState(goal?.title ?? "");
@@ -494,7 +544,12 @@ function MetaModal({
   const [period, setPeriod] = useState<GoalPeriod | "">(goal?.period ?? "");
   const [nextAction, setNextAction] = useState(goal?.next_action ?? "");
   const [nextActionDue, setNextActionDue] = useState(goal?.next_action_due ?? "");
+  const [parentGoalId, setParentGoalId] = useState(goal?.parent_goal_id ?? "");
   const [saving, setSaving] = useState(false);
+
+  // Só metas "Etapas" ativas fazem sentido como meta superior (rollup de submetas
+  // no Life Score — ver goalsScore em metricsService.ts). Uma meta nunca vira sua própria mãe.
+  const parentOptions = candidateParents.filter((g) => g.kind === "task_based" && g.status === "active" && g.id !== goal?.id);
 
   const submit = async () => {
     if (!title.trim()) return;
@@ -511,6 +566,7 @@ function MetaModal({
         period: period || undefined,
         nextAction: nextAction.trim() || undefined,
         nextActionDue: nextActionDue || undefined,
+        parentGoalId: parentGoalId || null,
       });
       onClose();
     } finally {
@@ -572,6 +628,26 @@ function MetaModal({
               Metas com período contam no Life Score dentro do prazo. Se o prazo passar sem concluir, use "Renovar" na lista pra começar o próximo ciclo.
             </p>
           )}
+          {parentOptions.length > 0 && (
+            <div>
+              <label className="text-xs text-slate">Meta superior (opcional)</label>
+              <select
+                value={parentGoalId}
+                onChange={(e) => setParentGoalId(e.target.value)}
+                className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+              >
+                <option value="">Meta independente</option>
+                {parentOptions.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.title}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate mt-1">
+                Vincular a uma meta "Etapas" faz esta virar submeta dela — o progresso da meta superior passa a ser a média das submetas.
+              </p>
+            </div>
+          )}
           <div>
             <label className="text-xs text-slate">Tipo de acompanhamento</label>
             <select
@@ -582,9 +658,14 @@ function MetaModal({
               <option value="percentage">Percentual (0-100%)</option>
               <option value="numeric">Numérico (com meta e unidade)</option>
               <option value="binary">Sim/Não</option>
-              <option value="task_based">Etapas (progresso manual)</option>
+              <option value="task_based">Etapas (vincule tarefas ou submetas)</option>
             </select>
           </div>
+          {kind === "task_based" && (
+            <p className="text-[11px] text-slate -mt-1.5">
+              Vincule tarefas a esta meta (no formulário da tarefa) ou defina submetas apontando pra ela — o progresso passa a ser calculado automaticamente. Sem nenhuma das duas, o progresso continua manual.
+            </p>
+          )}
           {kind === "numeric" && (
             <div className="grid grid-cols-2 gap-2">
               <Field label="Meta" type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} />

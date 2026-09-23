@@ -41,6 +41,8 @@ export interface Task {
   id: string;
   owner_id: string;
   project_id: string | null;
+  /** Meta "Etapas" vinculada (opcional) — concluir a tarefa avança o progresso automático dessa meta. */
+  goal_id: string | null;
   title: string;
   description: string | null;
   status: string;
@@ -439,6 +441,8 @@ export interface Goal {
   progress_source?: "reading_today";
   /** true quando a meta está ativa, tem prazo e o prazo já passou — deixa de contar no Life Score. */
   is_overdue?: boolean;
+  /** Tarefas vinculadas (tasks.goal_id) a esta meta "task_based" — presente/derivado pela API; current_value já vem calculado a partir dele quando houver. */
+  linked_tasks?: { total: number; done: number } | null;
 }
 
 export interface GoalPeriodStat {
