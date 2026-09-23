@@ -11,7 +11,6 @@ import {
   getScheduleConflicts,
   getAreaDistribution,
   getEnergyForecast,
-  getFocusForecast,
   getContextForPlanner,
   formatDuration,
 } from "../services/capacityPlannerService.js";
@@ -32,7 +31,7 @@ capacityRouter.get("/day", async (req, res) => {
   const ownerId = req.user!.id;
   const date = dateSchema.parse(req.query.date ?? new Date().toISOString().slice(0, 10));
 
-  const [summary, tasks, blocks, freeWindows, conflicts, areas, energy, focus, context] = await Promise.all([
+  const [summary, tasks, blocks, freeWindows, conflicts, areas, energy, context] = await Promise.all([
     computeCapacitySummary(db, ownerId, date),
     getDayTasks(db, ownerId, date),
     getPlannedBlocks(db, ownerId, date),
@@ -40,7 +39,6 @@ capacityRouter.get("/day", async (req, res) => {
     getScheduleConflicts(db, ownerId, date),
     getAreaDistribution(db, ownerId, date),
     getEnergyForecast(db, ownerId),
-    getFocusForecast(db, ownerId),
     getContextForPlanner(db, ownerId),
   ]);
 
@@ -49,7 +47,7 @@ capacityRouter.get("/day", async (req, res) => {
       ? `Você está com ${formatDuration(summary.overloadMinutes)} de carga acima da sua capacidade estimada.`
       : null;
 
-  res.json({ summary, overloadMessage, tasks, blocks, freeWindows, conflicts, areas, energy, focus, context });
+  res.json({ summary, overloadMessage, tasks, blocks, freeWindows, conflicts, areas, energy, context });
 });
 
 /** GET /api/capacity/plan/preview?date= — gera sugestão de reorganização SEM salvar (regra: sem alteração automática). */

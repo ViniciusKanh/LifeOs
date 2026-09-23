@@ -344,32 +344,6 @@ export async function getEnergyForecast(db: Db, ownerId: string): Promise<Energy
   return { level, bestPeriod, changePct: null };
 }
 
-export interface FocusForecast {
-  level: "Fraco" | "Regular" | "Bom" | null;
-  bestPeriod: string | null;
-}
-
-/** Focus previsto — distribuição real de minutos de Focus por hora (últimos 60 dias). Nunca via Gemini. */
-export async function getFocusForecast(db: Db, ownerId: string): Promise<FocusForecast> {
-  const result = await db.execute({
-    sql: `SELECT CAST(strftime('%H', started_at) AS INTEGER) AS h, SUM(actual_minutes) AS total, COUNT(*) AS n
-          FROM focus_sessions WHERE owner_id = ? AND started_at >= datetime('now', '-60 days') AND actual_minutes IS NOT NULL
-          GROUP BY h HAVING n >= 2`,
-    args: [ownerId],
-  });
-  const rows = result.rows as unknown as Array<{ h: number; total: number; n: number }>;
-  if (rows.length === 0) return { level: null, bestPeriod: null };
-
-  const totalMinutes = rows.reduce((a, b) => a + b.total, 0);
-  const totalSessions = rows.reduce((a, b) => a + b.n, 0);
-  const avgPerSession = totalMinutes / totalSessions;
-  const level = avgPerSession >= 40 ? "Bom" : avgPerSession >= 20 ? "Regular" : "Fraco";
-
-  const best = rows.reduce((a, b) => (b.total > a.total ? b : a));
-  const bestPeriod = `${String(best.h).padStart(2, "0")}h–${String((best.h + 3) % 24).padStart(2, "0")}h`;
-  return { level, bestPeriod };
-}
-
 export interface ContextSummaryForPlanner {
   temperature: number | null;
   condition: string | null;

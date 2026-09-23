@@ -4,7 +4,7 @@ import type { CapacityDayDashboard } from "@/types";
 
 /**
  * Melhores horários / sugestões / insights — tudo derivado apenas do
- * que já veio do backend (tarefas, energia, focus, contexto, áreas,
+ * que já veio do backend (tarefas, energia, contexto, áreas,
  * sobrecarga). Nunca inventa dado: quando não há base suficiente, o
  * bloco correspondente fica vazio.
  */
@@ -18,16 +18,15 @@ function parsePeriod(period: string | null): [number, number] | null {
 }
 
 export function InsightsAndSuggestionsCard({ dashboard }: { dashboard: CapacityDayDashboard }) {
-  const { energy, focus, context, summary, tasks, areas } = dashboard;
+  const { energy, context, summary, tasks, areas } = dashboard;
 
   const bestTimes: Array<{ label: string; period: string; emoji: string }> = [];
-  if (focus.bestPeriod) bestTimes.push({ label: "Trabalho profundo", period: focus.bestPeriod, emoji: "🧠" });
-  if (energy.bestPeriod && energy.bestPeriod !== focus.bestPeriod) bestTimes.push({ label: "Energia alta", period: energy.bestPeriod, emoji: "🔋" });
+  if (energy.bestPeriod) bestTimes.push({ label: "Trabalho profundo (energia alta)", period: energy.bestPeriod, emoji: "🧠" });
 
   const pending = tasks.filter((t) => !t.done);
   const highPriorityUnscheduled = pending.filter((t) => t.priority === "Alta" && !t.plannedStart);
   const withoutEstimate = pending.filter((t) => t.estimateMinutes == null);
-  const focusWindow = parsePeriod(focus.bestPeriod);
+  const focusWindow = parsePeriod(energy.bestPeriod);
   const deepWorkOffPeak = focusWindow
     ? pending.filter((t) => {
         if (t.effortType !== "deep_work" || !t.plannedStart) return false;
@@ -47,14 +46,13 @@ export function InsightsAndSuggestionsCard({ dashboard }: { dashboard: CapacityD
       text: `${highPriorityUnscheduled.length} tarefa${highPriorityUnscheduled.length > 1 ? "s" : ""} de alta prioridade sem horário definido: ${highPriorityUnscheduled.slice(0, 3).map((t) => t.title).join(", ")}${highPriorityUnscheduled.length > 3 ? "…" : ""}.`,
     });
   if (deepWorkOffPeak.length > 0)
-    suggestions.push({ emoji: "🧠", text: `${deepWorkOffPeak.length} tarefa${deepWorkOffPeak.length > 1 ? "s" : ""} de trabalho profundo fora do seu melhor período de foco (${focus.bestPeriod}).` });
+    suggestions.push({ emoji: "🧠", text: `${deepWorkOffPeak.length} tarefa${deepWorkOffPeak.length > 1 ? "s" : ""} de trabalho profundo fora do seu horário de maior energia (${energy.bestPeriod}).` });
   if (dominantAreaOverloaded) suggestions.push({ emoji: "⚖️", text: `"${dominantArea.label}" concentra ${dominantArea.pct}% da carga do dia — considere distribuir entre outras áreas.` });
   if (context.favorable === false) suggestions.push({ emoji: "🌧️", text: "O clima de hoje pode reduzir seu rendimento fora de casa — priorize tarefas internas." });
   if (energy.level === "Baixa") suggestions.push({ emoji: "🪫", text: "Energia prevista baixa — reserve tarefas leves e evite trabalho profundo no período de menor energia." });
 
   const insights: Array<{ text: string; emoji: string }> = [];
   if (summary.workloadLevel === "sobrecarga") insights.push({ emoji: "🔴", text: `Ocupação de ${Math.round(summary.occupancyRate * 100)}% da capacidade disponível hoje.` });
-  if (focus.level) insights.push({ emoji: "🎯", text: `Seu padrão histórico de Focus está classificado como "${focus.level}".` });
   if (withoutEstimate.length > 0) insights.push({ emoji: "⚠️", text: `${withoutEstimate.length} tarefa${withoutEstimate.length > 1 ? "s" : ""} sem estimativa de duração — não entram no cálculo de carga.` });
   if (pending.length > 0) {
     const scheduledPct = Math.round((pending.filter((t) => t.plannedStart).length / pending.length) * 100);

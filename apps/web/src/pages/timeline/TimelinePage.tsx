@@ -34,7 +34,6 @@ const TYPE_CONFIG: Record<EventType, { tab: string; tag: string; tone: Tone; ico
   habit: { tab: "Hábitos", tag: "Hábitos", tone: "pink", icon: Repeat },
   workout: { tab: "Saúde", tag: "Saúde", tone: "green", icon: Dumbbell },
   reading: { tab: "Leitura", tag: "Leitura", tone: "teal", icon: BookOpen },
-  focus: { tab: "Foco", tag: "Foco", tone: "purple", icon: Target },
   education: { tab: "Estudo", tag: "Estudo", tone: "amber", icon: GraduationCap },
   sleep: { tab: "Sono", tag: "Sono", tone: "purple", icon: Moon },
   mood: { tab: "Humor", tag: "Humor", tone: "amber", icon: Smile },
@@ -68,7 +67,6 @@ const TABS: Array<{ value: EventType | "todos"; label: string }> = [
   { value: "education", label: "Estudo" },
   { value: "work_note", label: "Profissional" },
   { value: "workout", label: "Saúde" },
-  { value: "focus", label: "Foco" },
   { value: "reading", label: "Leitura" },
   { value: "sleep", label: "Sono" },
   { value: "mood", label: "Humor" },
@@ -112,8 +110,6 @@ function eventContent(e: TimelineEvent): { title: string; detail: string | null 
     }
     case "reading":
       return { title: "Leitura", detail: `${e.pages_read ?? 0} páginas · ${e.label}` };
-    case "focus":
-      return { title: "Sessão de foco", detail: e.actual_minutes ? `${e.actual_minutes} minutos` : null };
     case "education":
       return { title: "Disciplina concluída", detail: e.label };
     case "work_note":

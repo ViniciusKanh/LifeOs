@@ -13,7 +13,7 @@ import {
 import { useTasks } from "@/hooks/useTasks";
 import { DateNavigator } from "@/components/capacity-planner/DateNavigator";
 import { CapacitySummaryCard } from "@/components/capacity-planner/CapacitySummaryCard";
-import { EnergyForecastCard, FocusForecastCard } from "@/components/capacity-planner/ForecastCards";
+import { EnergyForecastCard } from "@/components/capacity-planner/ForecastCards";
 import { ContextCard } from "@/components/capacity-planner/ContextCard";
 import { DayTimeline } from "@/components/capacity-planner/DayTimeline";
 import { DayTasksCard } from "@/components/capacity-planner/DayTasksCard";
@@ -107,8 +107,8 @@ export function CapacityPlannerPage() {
       {isLoading ? (
         <div className="space-y-4">
           <div className="h-32 rounded-2xl bg-paper dark:bg-ink animate-pulse" />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {Array.from({ length: 2 }).map((_, i) => (
               <div key={i} className="h-28 rounded-2xl bg-paper dark:bg-ink animate-pulse" />
             ))}
           </div>
@@ -122,9 +122,8 @@ export function CapacityPlannerPage() {
         <>
           <CapacitySummaryCard summary={data.summary} overloadMessage={data.overloadMessage} />
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <EnergyForecastCard energy={data.energy} />
-            <FocusForecastCard focus={data.focus} />
             <ContextCard context={data.context} />
           </div>
 
@@ -133,7 +132,7 @@ export function CapacityPlannerPage() {
             <DayTasksCard
               tasks={data.tasks}
               blocks={data.blocks}
-              bestFocusStart={data.focus.bestPeriod ? data.focus.bestPeriod.split("–")[0].replace("h", ":00") : null}
+              bestFocusStart={data.energy.bestPeriod ? data.energy.bestPeriod.split("–")[0].replace("h", ":00") : null}
               onToggleDone={handleToggleDone}
               onSchedule={handleSchedule}
               onRemoveSchedule={handleRemoveBlock}

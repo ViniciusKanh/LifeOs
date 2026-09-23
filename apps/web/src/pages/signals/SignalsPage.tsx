@@ -25,7 +25,7 @@ export function SignalsPage() {
       <PageHeader
         icon={<Activity size={22} />}
         title="Signals"
-        subtitle="Camada analítica que consolida seus sinais reais — sono, humor, energia, foco, exercício, leitura e agenda — para detectar padrões e sugerir ajustes."
+        subtitle="Camada analítica que consolida seus sinais reais — sono, humor, energia, exercício, leitura e agenda — para detectar padrões e sugerir ajustes."
         actions={
           <div className="flex gap-1.5 bg-paper dark:bg-ink rounded-xl p-1">
             {PERIODS.map((p) => (

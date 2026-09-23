@@ -42,6 +42,5 @@ export const WORKLOAD_EMOJI: Record<string, string> = {
   sobrecarga: "🔴",
 };
 
-/** Emoji por nível de energia/foco previstos (Signals/Focus). */
+/** Emoji por nível de energia prevista (Signals). */
 export const ENERGY_EMOJI: Record<string, string> = { Alta: "🔋", Média: "🔌", Baixa: "🪫" };
-export const FOCUS_EMOJI: Record<string, string> = { Bom: "🎯", Regular: "🙂", Fraco: "😴" };

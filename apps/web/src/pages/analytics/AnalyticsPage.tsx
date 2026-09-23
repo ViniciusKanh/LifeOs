@@ -50,7 +50,6 @@ import type { DailySeriesPoint } from "@/types";
 // exibição — nunca como um número inventado no lugar de um dado real.
 const SLEEP_GOAL_MINUTES = 480; // 8h
 const WATER_GOAL_ML = 2500; // 2,5L
-const FOCUS_GOAL_WEEKLY_MINUTES = 600; // 10h/semana — meta de referência do LifeOS, escalada ao período selecionado
 const READING_GOAL_MONTHLY_PAGES = 150; // páginas/mês — meta de referência do LifeOS, escalada ao período selecionado
 
 const RANGES = [
@@ -157,12 +156,10 @@ export function AnalyticsPage() {
 
   const productivityEvolution = useMemo(() => {
     if (!overview) return [];
-    const { tasks, focus, study } = overview.dailySeries;
-    return tasks.map((d, i) => ({
+    const { tasks } = overview.dailySeries;
+    return tasks.map((d) => ({
       day: d.day,
       "Tarefas concluídas": d.total,
-      "Minutos de foco": focus[i]?.total ?? 0,
-      "Minutos de estudo": study[i]?.total ?? 0,
     }));
   }, [overview]);
 
@@ -170,8 +167,6 @@ export function AnalyticsPage() {
     if (!overview) return [];
     const t = overview.timeDistribution;
     return [
-      { name: "Trabalho", value: t.trabalho, color: "#5B6EF5" },
-      { name: "Estudo", value: t.estudo, color: "#2E7D6B" },
       { name: "Leitura", value: t.leitura, color: "#D6488F" },
       { name: "Exercício", value: t.exercicio, color: "#C9821E" },
     ].filter((d) => d.value > 0);
@@ -223,9 +218,6 @@ export function AnalyticsPage() {
         text: `Seu sono médio ${c.avgSleepMinutes > 0 ? "melhorou" : "caiu"} ${Math.abs(c.avgSleepMinutes)}% em relação ao período anterior.`,
       });
     }
-    if (insights?.bestFocusHour) {
-      list.push({ icon: <Lightbulb size={16} />, text: `Seu horário de maior foco é por volta das ${HOUR_LABEL(insights.bestFocusHour.hour)}.` });
-    }
     return list.slice(0, 4);
   }, [overview, insights]);
 
@@ -270,18 +262,6 @@ export function AnalyticsPage() {
               sparkColor="#5B6EF5"
             />
             <MetricCard
-              icon={<Target size={18} />}
-              tone="purple"
-              label="Minutos de foco"
-              value={`${overview.focusMinutes}min`}
-              changePct={overview.changePct.focusMinutes}
-              sublabel={`Média de ${Math.round(overview.focusMinutes / days)}min/dia`}
-              progressPct={null}
-              barTone="bg-cat-purple"
-              sparkData={overview.dailySeries.focus}
-              sparkColor="#8B5CF6"
-            />
-            <MetricCard
               icon={<BookOpen size={18} />}
               tone="pink"
               label="Páginas lidas"
@@ -304,18 +284,6 @@ export function AnalyticsPage() {
               barTone="bg-signal"
               sparkData={overview.dailySeries.workouts}
               sparkColor="#C9821E"
-            />
-            <MetricCard
-              icon={<GraduationCap size={18} />}
-              tone="blue"
-              label="Minutos de estudo"
-              value={`${overview.studyMinutes}min`}
-              changePct={overview.changePct.studyMinutes}
-              sublabel={`Média de ${Math.round(overview.studyMinutes / days)}min/dia`}
-              progressPct={null}
-              barTone="bg-cat-blue"
-              sparkData={overview.dailySeries.study}
-              sparkColor="#2E7D6B"
             />
             <MetricCard
               icon={<Heart size={18} />}
@@ -358,8 +326,8 @@ export function AnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
             <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
               <p className="text-sm font-semibold mb-1">Evolução da produtividade</p>
-              <p className="text-xs text-slate mb-3">Tarefas, foco e estudo ao longo dos últimos {days} dias.</p>
-              {productivityEvolution.every((d) => d["Tarefas concluídas"] === 0 && d["Minutos de foco"] === 0 && d["Minutos de estudo"] === 0) ? (
+              <p className="text-xs text-slate mb-3">Tarefas concluídas ao longo dos últimos {days} dias.</p>
+              {productivityEvolution.every((d) => d["Tarefas concluídas"] === 0) ? (
                 <p className="text-xs text-slate py-10 text-center">Sem atividade registrada nesse período ainda.</p>
               ) : (
                 <div className="h-48">
@@ -369,8 +337,6 @@ export function AnalyticsPage() {
                       <YAxis tick={{ fontSize: 9 }} stroke="currentColor" className="text-slate" allowDecimals={false} />
                       <Tooltip contentStyle={{ fontSize: 11 }} />
                       <Area type="monotone" dataKey="Tarefas concluídas" stroke="#5B6EF5" fill="#5B6EF5" fillOpacity={0.18} strokeWidth={2} />
-                      <Area type="monotone" dataKey="Minutos de foco" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.12} strokeWidth={2} />
-                      <Area type="monotone" dataKey="Minutos de estudo" stroke="#2E7D6B" fill="#2E7D6B" fillOpacity={0.1} strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -379,7 +345,7 @@ export function AnalyticsPage() {
 
             <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
               <p className="text-sm font-semibold mb-1">Distribuição do tempo</p>
-              <p className="text-xs text-slate mb-3">Tempo ativo (média/dia) entre trabalho, estudo, leitura e exercício.</p>
+              <p className="text-xs text-slate mb-3">Tempo ativo (média/dia) entre leitura e exercício.</p>
               {timeDistributionData.length === 0 ? (
                 <p className="text-xs text-slate py-10 text-center">Registre atividades para ver a distribuição aqui.</p>
               ) : (
@@ -490,31 +456,12 @@ export function AnalyticsPage() {
                   r={insights?.sleepVsNextDayProductivity.r ?? null}
                 />
                 <InsightTile
-                  icon={<Smile size={15} />}
-                  title="Humor → minutos de foco"
-                  body={
-                    insights?.moodVsFocusMinutes.r === null || !insights
-                      ? `Ainda sem dados suficientes.`
-                      : correlationText(insights.moodVsFocusMinutes.r)
-                  }
-                  r={insights?.moodVsFocusMinutes.r ?? null}
-                />
-                <InsightTile
                   icon={<CalendarDays size={15} />}
                   title="Melhor dia da semana"
                   body={
                     insights?.bestWeekday
                       ? `${insights.bestWeekday.label} é seu dia mais produtivo, com média de ${insights.bestWeekday.avgCompleted} tarefa(s) concluída(s).`
                       : "Conclua tarefas em mais dias diferentes para revelar seu melhor dia."
-                  }
-                />
-                <InsightTile
-                  icon={<Clock3 size={15} />}
-                  title="Melhor horário de foco"
-                  body={
-                    insights?.bestFocusHour
-                      ? `Suas sessões de foco rendem mais por volta das ${HOUR_LABEL(insights.bestFocusHour.hour)}, com ${insights.bestFocusHour.totalMinutes} minutos acumulados.`
-                      : "Use o Focus Mode para descobrir seu horário mais produtivo."
                   }
                 />
               </div>
@@ -526,14 +473,6 @@ export function AnalyticsPage() {
                 <p className="text-sm font-semibold">Resumo do período</p>
               </div>
               <div className="space-y-3.5">
-                <GoalRow
-                  icon={<Target size={13} />}
-                  label="Meta de foco no período"
-                  current={overview.focusMinutes}
-                  target={Math.round(FOCUS_GOAL_WEEKLY_MINUTES * (days / 7))}
-                  unit="min"
-                  tone="bg-cat-purple"
-                />
                 <GoalRow
                   icon={<BookOpen size={13} />}
                   label="Meta de leitura"

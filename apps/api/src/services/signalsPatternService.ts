@@ -126,7 +126,7 @@ export async function detectPatterns(db: Db, ownerId: string, from: string, to: 
   const dates = isoRange(from, to);
   const patterns: DetectedPattern[] = [];
 
-  const [sleepRows, moodRows, focusRows] = await Promise.all([
+  const [sleepRows, moodRows] = await Promise.all([
     db.execute({
       sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) BETWEEN date(?) AND date(?) AND duration_minutes IS NOT NULL GROUP BY d`,
       args: [ownerId, from, to],
@@ -135,27 +135,16 @@ export async function detectPatterns(db: Db, ownerId: string, from: string, to: 
       sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d`,
       args: [ownerId, from, to],
     }),
-    db.execute({
-      sql: `SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?) AND actual_minutes IS NOT NULL GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
   ]);
 
   const sleepSeries = toMap(sleepRows.rows as unknown as DailyNumberRow[]);
   const energySeries = toMap(moodRows.rows as unknown as DailyNumberRow[]);
-  const focusSeries = toMap(focusRows.rows as unknown as DailyNumberRow[]);
 
   const sleepTrend = trendFor(sleepSeries, dates, MIN_TREND_DAYS, "Sono", "sleep", "min", true);
   if (sleepTrend) patterns.push(sleepTrend);
 
   const energyTrend = trendFor(energySeries, dates, MIN_TREND_DAYS, "Energia", "energy", "", true);
   if (energyTrend) patterns.push(energyTrend);
-
-  const focusTrend = trendFor(focusSeries, dates, MIN_TREND_DAYS, "Foco", "focus", "min", true);
-  if (focusTrend) patterns.push(focusTrend);
-
-  const focusConsistency = consistencyFor(focusSeries, dates, "Focus", "focus");
-  if (focusConsistency) patterns.push(focusConsistency);
 
   // Associações: reaproveita o serviço de correlação já existente em Saúde/Analytics
   // (nunca recalcula Pearson de novo) e só usa os pares com amostra >= MIN_ASSOCIATION_N.

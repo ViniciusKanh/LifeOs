@@ -78,9 +78,7 @@ reviewsRouter.get("/weekly/compute", async (req, res) => {
     lifeScore,
     changePct: {
       tasksCompleted: changePct(metrics.tasksCompleted, prevMetrics.tasksCompleted),
-      studyMinutes: changePct(metrics.studyMinutes, prevMetrics.studyMinutes),
       pagesRead: changePct(metrics.pagesRead, prevMetrics.pagesRead),
-      focusMinutes: changePct(metrics.focusMinutes, prevMetrics.focusMinutes),
       // Diferença em pontos percentuais (não variação relativa) — mesma
       // convenção usada em Analytics: evita um "+925%" absurdo quando a
       // semana anterior tinha uma base perto de zero.
@@ -168,9 +166,12 @@ reviewsRouter.put("/weekly", async (req, res) => {
       lifeScore.reading,
       lifeScore.habits,
       metrics.tasksCompleted,
-      metrics.studyMinutes,
+      // Focus Mode foi removido do LifeOS — as colunas continuam existindo
+      // (histórico de semanas anteriores preservado), mas não recebem
+      // mais valor novo.
+      null,
       metrics.pagesRead,
-      metrics.focusMinutes,
+      null,
       d.whatWorked ?? null,
       d.whatDidntWork ?? null,
       d.whatToImprove ?? null,

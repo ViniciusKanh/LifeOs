@@ -15,7 +15,6 @@ import {
   Flag,
   Wrench,
   Plus,
-  Timer,
   Check,
   Sparkles,
   Briefcase,
@@ -41,7 +40,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealth, useHealthSummary } from "@/hooks/useHealth";
-import { useFocus } from "@/hooks/useFocus";
 import { useBooks } from "@/hooks/useBooks";
 import { useGoals } from "@/hooks/useGoals";
 import { useAchievements } from "@/hooks/useAchievements";
@@ -82,7 +80,6 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   habit: Repeat,
   workout: Dumbbell,
   reading: BookOpen,
-  focus: Brain,
   education: GraduationCap,
   sleep: Moon,
   mood: Smile,
@@ -101,8 +98,6 @@ function timelineLabel(e: TimelineEvent): string {
       return e.label;
     case "reading":
       return `Leitura: ${e.label}`;
-    case "focus":
-      return "Sessão de foco";
     case "education":
       return `Disciplina concluída: ${e.label}`;
     case "work_note":
@@ -144,7 +139,6 @@ export function DashboardPage() {
   const { habits, summaryByHabitId, checkIn } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
-  const { summary: focus, activeSession, start: startFocus } = useFocus();
   const { books } = useBooks({ status: "lendo" });
   const { stats: goalStats } = useGoals();
   const { overview } = useAnalyticsOverview(14);
@@ -232,12 +226,6 @@ export function DashboardPage() {
     flash("+250ml de água registrados!");
   };
 
-  const handleQuickFocus = async () => {
-    if (activeSession) return;
-    await startFocus({ mode: "pomodoro", plannedMinutes: 25 });
-    flash("Sessão de foco de 25min iniciada!");
-  };
-
   const handleQuickTask = async () => {
     const title = quickTitle.trim();
     if (!title) return;
@@ -300,7 +288,7 @@ export function DashboardPage() {
       </div>
 
       {/* Linha de stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
         <StatTile tone="blue" icon={<TrendingUp size={18} />} label="Life Score" value={`${isLoading ? "—" : overall} / 100`} />
         <StatTile
           tone="purple"
@@ -309,13 +297,6 @@ export function DashboardPage() {
           value={`${tasksTodayDone} / ${tasksToday.length}`}
           progressPct={tasksToday.length > 0 ? Math.round((tasksTodayDone / tasksToday.length) * 100) : 0}
           caption={trendCaption(overview?.changePct.tasksCompleted)}
-        />
-        <StatTile
-          tone="teal"
-          icon={<Target size={18} />}
-          label="Foco hoje"
-          value={formatMinutes(focus?.todayMinutes ?? 0)}
-          caption={trendCaption(overview?.changePct.focusMinutes)}
         />
         <StatTile
           tone="blue"
@@ -694,17 +675,6 @@ export function DashboardPage() {
               <span className="flex-1 text-left">Registrar +250ml de água</span>
             </button>
 
-            <button
-              onClick={handleQuickFocus}
-              disabled={!!activeSession}
-              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors disabled:opacity-50"
-            >
-              <IconBadge tone="teal" size={28} icon={<Timer size={13} />} />
-              <span className="flex-1 text-left">
-                {activeSession ? "Sessão de foco já em andamento" : "Iniciar foco (Pomodoro 25min)"}
-              </span>
-            </button>
-
             <Link
               to="/saude"
               className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
@@ -722,12 +692,8 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Foco e bem-estar</p>
+          <p className="text-sm font-semibold mb-3">Bem-estar</p>
           <div className="space-y-2.5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate">Minutos de foco hoje</span>
-              <span className="font-semibold">{formatMinutes(focus?.todayMinutes ?? 0)}</span>
-            </div>
             <div className="flex items-center justify-between">
               <span className="text-slate">Água</span>
               <span className="font-semibold">{((health?.waterMl ?? 0) / 1000).toFixed(1)} L</span>

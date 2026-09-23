@@ -55,7 +55,6 @@ const ExperimentsPage = lazy(() => import("@/pages/experimentos/ExperimentsPage"
 const ExperimentDetailPage = lazy(() => import("@/pages/experimentos/ExperimentDetailPage").then((m) => ({ default: m.ExperimentDetailPage })));
 const SignalsPage = lazy(() => import("@/pages/signals/SignalsPage").then((m) => ({ default: m.SignalsPage })));
 const ContextoDoDiaPage = lazy(() => import("@/pages/contexto-do-dia/ContextoDoDiaPage").then((m) => ({ default: m.ContextoDoDiaPage })));
-const FocoPage = lazy(() => import("@/pages/foco/FocoPage").then((m) => ({ default: m.FocoPage })));
 const ConquistasPage = lazy(() =>
   import("@/pages/conquistas/ConquistasPage").then((m) => ({ default: m.ConquistasPage }))
 );
@@ -131,7 +130,6 @@ export default function App() {
           <Route path="/profissional" element={<ProfissionalPage />} />
           <Route path="/calendario" element={<CalendarioPage />} />
           <Route path="/semana" element={<SemanaPage />} />
-          <Route path="/foco" element={<FocoPage />} />
           <Route path="/biblioteca" element={<BibliotecaPage />} />
           <Route path="/biblioteca/:id" element={<LivroDetalhePage />} />
           <Route path="/educacao" element={<EducacaoPage />} />

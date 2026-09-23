@@ -37,31 +37,12 @@ interface DimensionScore {
   hasData: boolean;
 }
 
-/**
- * Produtividade: % de tarefas concluídas sobre o total já criado,
- * combinado com um "bônus de foco" quando o usuário tem sessões de
- * Focus Mode registradas nos últimos 30 dias (meta de referência:
- * 25min/dia em média, mesma duração do Pomodoro padrão). Sem nenhuma
- * sessão de foco, o bônus não entra — a nota fica só nas tarefas,
- * exatamente como antes (nenhum usuário que não usa o Focus Mode é
- * penalizado ou beneficiado por isso).
- */
+/** Produtividade: % de tarefas concluídas sobre o total já criado. */
 async function productivityScore(db: Db, ownerId: string): Promise<DimensionScore> {
   const total = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ?", [ownerId]);
   if (total === 0) return { score: 0, hasData: false };
   const done = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído'", [ownerId]);
-  const taskRatio = clamp((done / total) * 100);
-
-  const focusMinutes30d = await scalar(
-    db,
-    "SELECT COALESCE(SUM(actual_minutes), 0) FROM focus_sessions WHERE owner_id = ? AND started_at >= date('now', '-29 days') AND ended_at IS NOT NULL",
-    [ownerId]
-  );
-  const hasFocusSessions = (await scalar(db, "SELECT COUNT(*) FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL", [ownerId])) > 0;
-  if (!hasFocusSessions) return { score: taskRatio, hasData: true };
-
-  const focusBonus = clamp((focusMinutes30d / (30 * 25)) * 100);
-  return { score: clamp(taskRatio * 0.8 + focusBonus * 0.2), hasData: true };
+  return { score: clamp((done / total) * 100), hasData: true };
 }
 
 /**
@@ -348,8 +329,6 @@ export interface RangeMetrics {
   to: string;
   tasksCompleted: number;
   tasksPlanned: number;
-  focusMinutes: number;
-  studyMinutes: number;
   pagesRead: number;
   workouts: number;
   readingMinutes: number;
@@ -363,7 +342,7 @@ export interface RangeMetrics {
 export async function computeRangeMetrics(ownerId: string, from: string, to: string): Promise<RangeMetrics> {
   const db = getDb();
 
-  const [tasksCompleted, tasksPlanned, focusMinutes, studyMinutes, pagesRead, workouts, readingMinutes, workoutMinutes, habitsTotal, habitsDone] = await Promise.all([
+  const [tasksCompleted, tasksPlanned, pagesRead, workouts, readingMinutes, workoutMinutes, habitsTotal, habitsDone] = await Promise.all([
     scalar(
       db,
       "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?) AND date(updated_at) < date(?)",
@@ -374,18 +353,6 @@ export async function computeRangeMetrics(ownerId: string, from: string, to: str
     scalar(
       db,
       "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND date(created_at) >= date(?) AND date(created_at) < date(?)",
-      [ownerId, from, to]
-    ),
-    scalar(
-      db,
-      "SELECT COALESCE(SUM(actual_minutes), 0) FROM focus_sessions WHERE owner_id = ? AND date(started_at) >= date(?) AND date(started_at) < date(?) AND ended_at IS NOT NULL",
-      [ownerId, from, to]
-    ),
-    scalar(
-      db,
-      `SELECT COALESCE(SUM(fs.actual_minutes), 0) FROM focus_sessions fs
-       JOIN tasks t ON t.id = fs.task_id JOIN projects p ON p.id = t.project_id
-       WHERE fs.owner_id = ? AND p.kind = 'academic' AND date(fs.started_at) >= date(?) AND date(fs.started_at) < date(?) AND fs.ended_at IS NOT NULL`,
       [ownerId, from, to]
     ),
     scalar(
@@ -427,8 +394,6 @@ export async function computeRangeMetrics(ownerId: string, from: string, to: str
     to,
     tasksCompleted,
     tasksPlanned,
-    focusMinutes,
-    studyMinutes,
     pagesRead,
     workouts,
     readingMinutes,
@@ -479,9 +444,7 @@ export interface LifeInsights {
   from: string;
   to: string;
   sleepVsNextDayProductivity: { r: number | null; pairs: number };
-  moodVsFocusMinutes: { r: number | null; pairs: number };
   bestWeekday: { label: string; avgCompleted: number } | null;
-  bestFocusHour: { hour: number; totalMinutes: number } | null;
   weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
@@ -491,7 +454,7 @@ export async function computeInsights(ownerId: string, from: string, to: string)
   const db = getDb();
 
   // 1) Sono (minutos, por noite) vs. tarefas concluídas no dia seguinte.
-  const [sleepByNight, tasksByDay, moodByDay, focusByDay, focusByHour] = await Promise.all([
+  const [sleepByNight, tasksByDay] = await Promise.all([
     db.execute({
       sql: `SELECT date(went_to_bed_at) AS d, AVG(duration_minutes) AS minutes FROM sleep_entries
             WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(went_to_bed_at) >= date(?) AND date(went_to_bed_at) <= date(?)
@@ -504,31 +467,11 @@ export async function computeInsights(ownerId: string, from: string, to: string)
             GROUP BY d`,
       args: [ownerId, from, to],
     }),
-    db.execute({
-      sql: `SELECT date(recorded_at) AS d, AVG(mood) AS mood FROM mood_entries
-            WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) <= date(?)
-            GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT date(started_at) AS d, SUM(COALESCE(actual_minutes, 0)) AS minutes FROM focus_sessions
-            WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) >= date(?) AND date(started_at) <= date(?)
-            GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, SUM(COALESCE(actual_minutes, 0)) AS minutes
-            FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) >= date(?) AND date(started_at) <= date(?)
-            GROUP BY hour ORDER BY minutes DESC LIMIT 1`,
-      args: [ownerId, from, to],
-    }),
   ]);
 
   type Row = Record<string, unknown>;
   const sleepMap = new Map((sleepByNight.rows as unknown as Row[]).map((r) => [String(r.d), Number(r.minutes)]));
   const tasksMap = new Map((tasksByDay.rows as unknown as Row[]).map((r) => [String(r.d), Number(r.total)]));
-  const moodMap = new Map((moodByDay.rows as unknown as Row[]).map((r) => [String(r.d), Number(r.mood)]));
-  const focusMap = new Map((focusByDay.rows as unknown as Row[]).map((r) => [String(r.d), Number(r.minutes)]));
 
   // Sono da noite de D vs. tarefas concluídas em D+1.
   const sleepPairsX: number[] = [];
@@ -539,17 +482,6 @@ export async function computeInsights(ownerId: string, from: string, to: string)
     if (completed !== undefined) {
       sleepPairsX.push(minutes);
       sleepPairsY.push(completed);
-    }
-  }
-
-  // Humor médio do dia vs. minutos de foco no mesmo dia.
-  const moodPairsX: number[] = [];
-  const moodPairsY: number[] = [];
-  for (const [day, mood] of moodMap.entries()) {
-    const minutes = focusMap.get(day);
-    if (minutes !== undefined) {
-      moodPairsX.push(mood);
-      moodPairsY.push(minutes);
     }
   }
 
@@ -579,19 +511,11 @@ export async function computeInsights(ownerId: string, from: string, to: string)
     .map(([weekday, entry]) => ({ weekday, label: WEEKDAY_LABEL[weekday], avgCompleted: Math.round((entry.sum / entry.count) * 10) / 10 }))
     .sort((a, b) => (a.weekday === 0 ? 7 : a.weekday) - (b.weekday === 0 ? 7 : b.weekday));
 
-  const bestHourRow = (focusByHour.rows as unknown as Row[])[0];
-  const bestFocusHour =
-    bestHourRow && Number(bestHourRow.minutes) > 0
-      ? { hour: Number(bestHourRow.hour), totalMinutes: Number(bestHourRow.minutes) }
-      : null;
-
   return {
     from,
     to,
     sleepVsNextDayProductivity: { r: pearson(sleepPairsX, sleepPairsY), pairs: sleepPairsX.length },
-    moodVsFocusMinutes: { r: pearson(moodPairsX, moodPairsY), pairs: moodPairsX.length },
     bestWeekday,
-    bestFocusHour,
     weekdayBreakdown,
   };
 }

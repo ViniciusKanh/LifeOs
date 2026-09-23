@@ -505,29 +505,6 @@ export interface GoalForecast {
   reason: string | null;
 }
 
-/* ---------------------------- Focus Mode ---------------------------- */
-
-export interface FocusSession {
-  id: string;
-  task_id: string | null;
-  project_id: string | null;
-  mode: "pomodoro" | "free_timer";
-  planned_minutes: number | null;
-  actual_minutes: number | null;
-  perceived_productivity: number | null;
-  distractions: number;
-  notes: string | null;
-  started_at: string;
-  ended_at: string | null;
-}
-
-export interface FocusSummary {
-  todayMinutes: number;
-  weekMinutes: number;
-  monthMinutes: number;
-  bestHour: { hour: string; avg_productivity: number; total: number } | null;
-}
-
 /* -------------------------- Analytics / Reviews -------------------------- */
 
 export interface LifeScoreBreakdown {
@@ -547,8 +524,6 @@ export interface RangeMetrics {
   to: string;
   tasksCompleted: number;
   tasksPlanned: number;
-  focusMinutes: number;
-  studyMinutes: number;
   pagesRead: number;
   workouts: number;
   readingMinutes: number;
@@ -564,16 +539,12 @@ export interface DailySeriesPoint {
 }
 
 export interface AnalyticsTimeDistribution {
-  trabalho: number;
-  estudo: number;
   leitura: number;
   exercicio: number;
 }
 
 export interface AnalyticsChangePct {
   tasksCompleted: number | null;
-  focusMinutes: number | null;
-  studyMinutes: number | null;
   pagesRead: number | null;
   workouts: number | null;
   habitsCompletionPct: number | null;
@@ -587,8 +558,6 @@ export interface AnalyticsOverview extends RangeMetrics {
   tasksCompletedByDay: Array<{ day: string; total: number }>;
   dailySeries: {
     tasks: DailySeriesPoint[];
-    focus: DailySeriesPoint[];
-    study: DailySeriesPoint[];
     pages: DailySeriesPoint[];
     workouts: DailySeriesPoint[];
     habits: DailySeriesPoint[];
@@ -603,14 +572,12 @@ export interface LifeInsights {
   from: string;
   to: string;
   sleepVsNextDayProductivity: { r: number | null; pairs: number };
-  moodVsFocusMinutes: { r: number | null; pairs: number };
   bestWeekday: { label: string; avgCompleted: number } | null;
-  bestFocusHour: { hour: number; totalMinutes: number } | null;
   weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "focus" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment";
+  type: "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment";
   icon: string;
   id: string;
   label: string;
@@ -647,9 +614,7 @@ export interface WeeklyReview {
 
 export interface WeeklyChangePct {
   tasksCompleted: number | null;
-  studyMinutes: number | null;
   pagesRead: number | null;
-  focusMinutes: number | null;
   productivity: number;
   health: number;
   education: number;
@@ -1066,7 +1031,7 @@ export interface SignalsDashboard {
   recommendation: SignalsRecommendation;
 }
 
-export type TrendSignalKey = "sleep" | "mood" | "energy" | "focus" | "exercise" | "reading";
+export type TrendSignalKey = "sleep" | "mood" | "energy" | "exercise" | "reading";
 
 export interface SignalTrendPoint {
   date: string;
@@ -1235,11 +1200,6 @@ export interface CapacityEnergyForecast {
   changePct: number | null;
 }
 
-export interface CapacityFocusForecast {
-  level: "Fraco" | "Regular" | "Bom" | null;
-  bestPeriod: string | null;
-}
-
 export interface CapacityContextSummary {
   temperature: number | null;
   condition: string | null;
@@ -1256,7 +1216,6 @@ export interface CapacityDayDashboard {
   conflicts: CapacityConflict[];
   areas: CapacityArea[];
   energy: CapacityEnergyForecast;
-  focus: CapacityFocusForecast;
   context: CapacityContextSummary;
 }
 

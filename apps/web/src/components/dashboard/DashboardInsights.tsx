@@ -17,9 +17,9 @@ export interface StreakHighlight {
 
 /**
  * "Insights da sua semana" (novo, seção pedida pelo usuário) — cada frase só
- * aparece se houver dado real por trás (bestWeekday, bestFocusHour, correlação
- * com pares suficientes, sequência de hábito, variação de tarefas). Quando
- * falta dado, mostramos isso explicitamente em vez de esconder o cartão —
+ * aparece se houver dado real por trás (bestWeekday, correlação com pares
+ * suficientes, sequência de hábito, variação de tarefas). Quando falta
+ * dado, mostramos isso explicitamente em vez de esconder o cartão —
  * mesmo padrão usado em Data Health e Capacity Planner.
  */
 export function DashboardInsights({
@@ -40,15 +40,6 @@ export function DashboardInsights({
     body: insights?.bestWeekday
       ? `${insights.bestWeekday.label}-feira costuma ser seu dia mais produtivo, com média de ${insights.bestWeekday.avgCompleted} tarefa(s) concluída(s).`
       : "Conclua tarefas em mais dias diferentes para revelar seu melhor dia da semana.",
-  });
-
-  items.push({
-    emoji: "🧠",
-    tone: "border-cat-purple/25 bg-cat-purple/[0.06]",
-    title: "Pico de foco",
-    body: insights?.bestFocusHour
-      ? `Suas sessões de Foco rendem mais por volta das ${HOUR_LABEL(insights.bestFocusHour.hour)}, com ${insights.bestFocusHour.totalMinutes} min acumulados no período.`
-      : "Use o Focus Mode em horários variados para descobrir seu pico de produtividade.",
   });
 
   const sleepR = insights?.sleepVsNextDayProductivity.r ?? null;

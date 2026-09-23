@@ -15,7 +15,7 @@ signalsRouter.use(requireAuth);
 
 const periodSchema = z.enum(["today", "7d", "30d"]).catch("7d");
 
-const TREND_SIGNALS = ["sleep", "mood", "energy", "focus", "exercise", "reading"] as const;
+const TREND_SIGNALS = ["sleep", "mood", "energy", "exercise", "reading"] as const;
 type TrendSignal = (typeof TREND_SIGNALS)[number];
 
 const TREND_QUERIES: Record<TrendSignal, { sql: string; scale: (v: number) => number }> = {
@@ -30,10 +30,6 @@ const TREND_QUERIES: Record<TrendSignal, { sql: string; scale: (v: number) => nu
   energy: {
     sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d`,
     scale: (v) => Math.max(0, Math.min(100, Math.round(((v - 1) / 4) * 100))),
-  },
-  focus: {
-    sql: `SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d`,
-    scale: (v) => Math.max(0, Math.min(100, Math.round((v / 120) * 100))),
   },
   exercise: {
     sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND date(performed_at) BETWEEN date(?) AND date(?) GROUP BY d`,
