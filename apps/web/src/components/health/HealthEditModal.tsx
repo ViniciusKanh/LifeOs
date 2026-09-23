@@ -107,9 +107,9 @@ export function HealthEditModal({
           : "Editar humor";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 px-4 py-8 overflow-y-auto" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-2xl border border-paper-border bg-paper-raised p-5 shadow-card-dark dark:border-ink-border dark:bg-ink-raised"
+        className="w-full max-w-lg rounded-2xl border border-paper-border bg-paper-raised p-5 shadow-card-dark dark:border-ink-border dark:bg-ink-raised my-auto"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

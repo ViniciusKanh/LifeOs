@@ -95,8 +95,8 @@ export function ImageCropModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="w-full max-w-sm rounded-2xl p-5 bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border my-8">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold">Ajustar foto</p>
           <button onClick={onCancel} className="text-slate">
