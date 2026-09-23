@@ -589,6 +589,13 @@ export interface JournalAutoData {
   suggestedFocusTasks: Array<{ id: string; title: string; priority: string }>;
   currentBook: { id: string; title: string; author: string | null; coverUrl: string | null } | null;
   autoSelfCare: string[];
+  tasksToday: { done: number; total: number };
+  habitsToday: { done: number; total: number; streak: { habitName: string; streak: number } | null };
+  waterMl: number;
+  focusMinutes: number;
+  exerciseMinutes: number;
+  reading: { pages: number; minutes: number };
+  summary: string;
 }
 
 export interface JournalEntry {
