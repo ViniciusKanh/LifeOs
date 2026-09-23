@@ -91,8 +91,8 @@ export function OnboardingFlow() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <Card className="w-full max-w-md p-6 md:p-7 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+      <Card className="w-full max-w-md p-6 md:p-7 relative my-8">
         <button onClick={finish} className="absolute top-4 right-4 text-slate" aria-label="Pular introdução">
           <X size={18} />
         </button>

@@ -192,7 +192,7 @@ export function CalendarioPage() {
       {/* painel do dia selecionado */}
       {newEventDate && (
         <div className="fixed inset-0 z-30 flex items-end md:items-center justify-center bg-black/40" onClick={() => setNewEventDate(null)}>
-          <Card className="w-full md:max-w-md p-5 md:p-6 rounded-b-none md:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <Card className="w-full md:max-w-md p-5 md:p-6 rounded-b-none md:rounded-2xl max-h-[85vh] overflow-y-auto md:my-8" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <p className="font-display font-semibold text-lg">
                 {new Date(`${newEventDate}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}

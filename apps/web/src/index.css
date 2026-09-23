@@ -6,6 +6,12 @@
   html, body, #root {
     height: 100%;
   }
+  /* Rede de segurança contra overflow horizontal acidental no mobile — qualquer
+     elemento fora do fluxo (largura fixa, tabela sem wrapper) fica escondido
+     em vez de abrir uma barra de rolagem horizontal na página inteira. */
+  html, body {
+    overflow-x: hidden;
+  }
   body {
     @apply bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] font-sans antialiased;
   }
