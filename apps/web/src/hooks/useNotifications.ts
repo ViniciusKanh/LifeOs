@@ -8,12 +8,17 @@ import type { CustomNotificationTrigger, NotificationTriggerEvent, NotificationT
  * ainda, então refetch periódico é o jeito de "atualizar" a lista.
  */
 export function useNotifications() {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["notifications", "live"],
     queryFn: notificationsService.live,
     refetchInterval: 60_000,
   });
-  return { notifications: query.data ?? [], isLoading: query.isLoading };
+  const dismiss = useMutation({
+    mutationFn: (ids: string[]) => notificationsService.dismiss(ids),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications", "live"] }),
+  });
+  return { notifications: query.data ?? [], isLoading: query.isLoading, dismiss: dismiss.mutateAsync };
 }
 
 export function useNotificationTriggers() {
