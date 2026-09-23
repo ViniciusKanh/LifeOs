@@ -9,6 +9,8 @@ export interface CurrentUser {
   theme: "light" | "dark" | "system";
   onboarding_done: number;
   created_at: string;
+  /** true quando a conta está vinculada a um login com Google (users.google_id preenchido). */
+  google_linked: boolean;
 }
 
 export interface AdminUser {
@@ -580,8 +582,34 @@ export interface LifeInsights {
   weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
+export interface JournalAutoData {
+  mood: { mood: number; energy: number; stress: number | null } | null;
+  sleep: { qualityScore: number | null; durationMinutes: number | null } | null;
+  insightText: string | null;
+  suggestedFocusTasks: Array<{ id: string; title: string; priority: string }>;
+  currentBook: { id: string; title: string; author: string | null; coverUrl: string | null } | null;
+  autoSelfCare: string[];
+}
+
+export interface JournalEntry {
+  date: string;
+  intention: string | null;
+  thoughts: string | null;
+  gratitude: string[];
+  selfCare: string[];
+  selfCareOther: string | null;
+  challenges: string | null;
+  lighterPlan: string | null;
+  feelGood: string | null;
+  nightMood: number | null;
+  nightHelped: string | null;
+  nightTakeaway: string | null;
+  focusTaskIds: string[];
+  auto: JournalAutoData;
+}
+
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment";
+  type: "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal";
   icon: string;
   id: string;
   label: string;

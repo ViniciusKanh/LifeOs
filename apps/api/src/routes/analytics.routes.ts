@@ -180,7 +180,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
 
-  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded, journalEntries] = await Promise.all([
     // LEFT JOIN com projects: deixa claro a que projeto (profissional,
     // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
@@ -235,6 +235,12 @@ analyticsRouter.get("/timeline", async (req, res) => {
             WHERE owner_id = ? AND status IN ('completed', 'cancelled') AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)`,
       args: [ownerId, from, to],
     }),
+    db.execute({
+      sql: `SELECT id, entry_date AS at FROM journal_entries
+            WHERE owner_id = ? AND date(entry_date) >= date(?) AND date(entry_date) <= date(?)
+            AND (COALESCE(thoughts, '') != '' OR COALESCE(intention, '') != '')`,
+      args: [ownerId, from, to],
+    }),
   ]);
 
   type TimelineRow = Record<string, unknown> & { at: string };
@@ -257,6 +263,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       label: r.status === "completed" ? `Experimento concluído: ${r.label}` : `Experimento cancelado: ${r.label}`,
       ...r,
     })),
+    ...asRows(journalEntries.rows).map((r) => ({ type: "journal", icon: "📔", label: "Entrada do diário", ...r })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
   return res.json({ from, to, events });

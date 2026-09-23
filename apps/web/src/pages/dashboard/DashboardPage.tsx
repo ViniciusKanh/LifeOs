@@ -28,6 +28,7 @@ import {
   Wand2,
   Users,
   FlaskConical,
+  NotebookPen,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
 import { HealthBodyGauge, GoalsThermometerGauge, DimensionRingGauge } from "@/components/dashboard/DimensionVectors";
@@ -95,6 +96,7 @@ const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
   water: Droplets,
   work_note: Users,
   experiment: FlaskConical,
+  journal: NotebookPen,
 };
 
 function timelineLabel(e: TimelineEvent): string {
@@ -141,7 +143,7 @@ export function DashboardPage() {
   const { habits, summaryByHabitId, checkIn } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
-  const { books } = useBooks({ status: "lendo" });
+  const { books } = useBooks({ status: "Lendo" }); // bug corrigido: o CHECK do banco usa "Lendo" (maiúsculo), o filtro em minúsculo nunca batia e o card de leitura atual nunca aparecia
   const { stats: goalStats } = useGoals();
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
@@ -345,6 +347,144 @@ export function DashboardPage() {
 
       <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
 
+      {/* Linha principal — mesma composição do protótipo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <Card className="p-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <IconBadge tone="blue" size={30} icon={<HistoryIcon size={14} />} />
+            <p className="text-sm font-semibold">Resumo do dia</p>
+          </div>
+          {todaysEvents.length === 0 ? (
+            <p className="text-xs text-slate">Nada registrado ainda hoje.</p>
+          ) : (
+            <div className="relative pl-4 border-l-2 border-paper-border dark:border-ink-border space-y-3">
+              {todaysEvents.map((e) => {
+                const Icon = TIMELINE_ICON[e.type] ?? CheckSquare;
+                return (
+                  <div key={`${e.type}-${e.id}`} className="relative">
+                    <span className="absolute -left-[19px] top-0.5 w-2 h-2 rounded-full bg-brand-500 ring-4 ring-paper-raised dark:ring-ink-raised" />
+                    <div className="flex items-start gap-2">
+                      <Icon size={12} className="text-slate mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium truncate">{timelineLabel(e)}</p>
+                        <p className="text-[10px] text-slate">{formatEventTime(String(e.at))}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <Link to="/hoje" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
+            Ver hoje →
+          </Link>
+        </Card>
+
+        <Card className="p-5">
+          <p className="text-sm font-semibold mb-3">Próximas prioridades</p>
+          {priorities.length === 0 ? (
+            <p className="text-xs text-slate">Nenhuma tarefa pendente — bom trabalho!</p>
+          ) : (
+            <div className="space-y-1">
+              {priorities.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => toggleTask(t.id, t.status)}
+                  className="w-full flex items-center gap-2.5 rounded-lg px-1.5 py-2 text-left hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+                >
+                  <Circle size={15} className="text-slate shrink-0" />
+                  <span className="text-xs truncate flex-1">{t.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <Link to="/tarefas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-2 inline-block">
+            Ver todas →
+          </Link>
+        </Card>
+
+        <Card className="p-5">
+          <p className="text-sm font-semibold mb-3">Hábitos de hoje</p>
+          {habits.length === 0 ? (
+            <p className="text-xs text-slate">Crie seu primeiro hábito para acompanhar aqui.</p>
+          ) : (
+            <div className="space-y-1">
+              {habits.slice(0, 5).map((h) => {
+                const done = summaryByHabitId.get(h.id)?.checkedInToday ?? false;
+                const streak = summaryByHabitId.get(h.id)?.currentStreak ?? 0;
+                return (
+                  <button
+                    key={h.id}
+                    onClick={() => checkIn({ id: h.id, entryDate: today })}
+                    className="w-full flex items-center justify-between rounded-lg px-1.5 py-2 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+                  >
+                    <span className="flex items-center gap-2.5 text-xs">
+                      {done ? <CheckCircle2 size={15} className="text-growth" /> : <Circle size={15} className="text-slate" />}
+                      <span className="truncate">
+                        {h.icon ? `${h.icon} ` : ""}
+                        {h.name}
+                      </span>
+                    </span>
+                    {streak > 0 && (
+                      <span className="flex items-center gap-1 text-[11px] text-slate shrink-0">
+                        <Flame size={11} className="text-signal" /> {streak}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <Link to="/habitos" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-2 inline-block">
+            Ver todos →
+          </Link>
+        </Card>
+
+        <Card className="p-5">
+          <p className="text-sm font-semibold mb-3">Leitura atual</p>
+          {!currentBook ? (
+            <p className="text-xs text-slate">Nenhum livro em andamento — comece um na Biblioteca.</p>
+          ) : (
+            <div className="flex gap-3">
+              {currentBook.cover_url ? (
+                <img
+                  src={currentBook.cover_url}
+                  alt={currentBook.title}
+                  className="w-12 h-[72px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border"
+                />
+              ) : (
+                <div className="w-12 h-[72px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
+                  <BookOpen size={18} className="text-cat-pink" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold leading-snug truncate">{currentBook.title}</p>
+                {currentBook.author && <p className="text-xs text-slate mt-0.5 truncate">{currentBook.author}</p>}
+                {currentBook.total_pages ? (
+                  <div className="mt-2.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate mb-1">
+                      <span>
+                        Página {currentBook.current_page} de {currentBook.total_pages}
+                      </span>
+                      <span>{Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                      <div
+                        className="h-full rounded-full bg-cat-pink"
+                        style={{ width: `${Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+          <Link to="/biblioteca" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
+            Continuar lendo →
+          </Link>
+        </Card>
+      </div>
+
       {/* Life Score + Como é calculado */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4 mb-4">
         <Card className="p-6">
@@ -516,143 +656,6 @@ export function DashboardPage() {
         <WeekGlance series={overview?.dailySeries.tasks ?? []} />
       </div>
 
-      {/* Linha principal — mesma composição do protótipo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <Card className="p-5">
-          <div className="flex items-center gap-2.5 mb-3">
-            <IconBadge tone="blue" size={30} icon={<HistoryIcon size={14} />} />
-            <p className="text-sm font-semibold">Resumo do dia</p>
-          </div>
-          {todaysEvents.length === 0 ? (
-            <p className="text-xs text-slate">Nada registrado ainda hoje.</p>
-          ) : (
-            <div className="relative pl-4 border-l-2 border-paper-border dark:border-ink-border space-y-3">
-              {todaysEvents.map((e) => {
-                const Icon = TIMELINE_ICON[e.type] ?? CheckSquare;
-                return (
-                  <div key={`${e.type}-${e.id}`} className="relative">
-                    <span className="absolute -left-[19px] top-0.5 w-2 h-2 rounded-full bg-brand-500 ring-4 ring-paper-raised dark:ring-ink-raised" />
-                    <div className="flex items-start gap-2">
-                      <Icon size={12} className="text-slate mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{timelineLabel(e)}</p>
-                        <p className="text-[10px] text-slate">{formatEventTime(String(e.at))}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <Link to="/hoje" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Ver hoje →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Próximas prioridades</p>
-          {priorities.length === 0 ? (
-            <p className="text-xs text-slate">Nenhuma tarefa pendente — bom trabalho!</p>
-          ) : (
-            <div className="space-y-1">
-              {priorities.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => toggleTask(t.id, t.status)}
-                  className="w-full flex items-center gap-2.5 rounded-lg px-1.5 py-2 text-left hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                >
-                  <Circle size={15} className="text-slate shrink-0" />
-                  <span className="text-xs truncate flex-1">{t.title}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <Link to="/tarefas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-2 inline-block">
-            Ver todas →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Hábitos de hoje</p>
-          {habits.length === 0 ? (
-            <p className="text-xs text-slate">Crie seu primeiro hábito para acompanhar aqui.</p>
-          ) : (
-            <div className="space-y-1">
-              {habits.slice(0, 5).map((h) => {
-                const done = summaryByHabitId.get(h.id)?.checkedInToday ?? false;
-                const streak = summaryByHabitId.get(h.id)?.currentStreak ?? 0;
-                return (
-                  <button
-                    key={h.id}
-                    onClick={() => checkIn({ id: h.id, entryDate: today })}
-                    className="w-full flex items-center justify-between rounded-lg px-1.5 py-2 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                  >
-                    <span className="flex items-center gap-2.5 text-xs">
-                      {done ? <CheckCircle2 size={15} className="text-growth" /> : <Circle size={15} className="text-slate" />}
-                      <span className="truncate">
-                        {h.icon ? `${h.icon} ` : ""}
-                        {h.name}
-                      </span>
-                    </span>
-                    {streak > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] text-slate shrink-0">
-                        <Flame size={11} className="text-signal" /> {streak}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <Link to="/habitos" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-2 inline-block">
-            Ver todos →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Leitura atual</p>
-          {!currentBook ? (
-            <p className="text-xs text-slate">Nenhum livro em andamento — comece um na Biblioteca.</p>
-          ) : (
-            <div className="flex gap-3">
-              {currentBook.cover_url ? (
-                <img
-                  src={currentBook.cover_url}
-                  alt={currentBook.title}
-                  className="w-12 h-[72px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border"
-                />
-              ) : (
-                <div className="w-12 h-[72px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
-                  <BookOpen size={18} className="text-cat-pink" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold leading-snug truncate">{currentBook.title}</p>
-                {currentBook.author && <p className="text-xs text-slate mt-0.5 truncate">{currentBook.author}</p>}
-                {currentBook.total_pages ? (
-                  <div className="mt-2.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate mb-1">
-                      <span>
-                        Página {currentBook.current_page} de {currentBook.total_pages}
-                      </span>
-                      <span>{Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%</span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                      <div
-                        className="h-full rounded-full bg-cat-pink"
-                        style={{ width: `${Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-          <Link to="/biblioteca" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Continuar lendo →
-          </Link>
-        </Card>
-      </div>
 
       {/* Linha secundária */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

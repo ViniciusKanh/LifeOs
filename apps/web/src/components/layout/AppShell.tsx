@@ -31,6 +31,7 @@ import {
   Radar,
   TrendingUp,
   Database,
+  NotebookPen,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -101,6 +102,7 @@ const SECONDARY_NAV = [
   { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
   { to: "/life-map", label: "Life Map", icon: Share2 },
   { to: "/gatilhos", label: "Gatilhos", icon: BellRing },
+  { to: "/diario", label: "Diário", icon: NotebookPen },
   { to: "/data-health", label: "Data Health", icon: Database },
 ];
 

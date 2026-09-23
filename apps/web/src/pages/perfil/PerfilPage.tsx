@@ -19,6 +19,8 @@ import {
   Send,
   Mails,
   BellRing,
+  Link2,
+  Link2Off,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -231,7 +233,7 @@ export function PerfilPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="rounded-xl p-3.5 bg-paper dark:bg-ink flex items-center gap-2.5">
                 <IconBadge tone="teal" size={30} icon={<Calendar size={14} />} />
                 <div className="min-w-0">
@@ -249,6 +251,20 @@ export function PerfilPage() {
                 </div>
                 <ChevronRight size={14} className="text-slate shrink-0" />
               </Link>
+              <div className="rounded-xl p-3.5 bg-paper dark:bg-ink flex items-center gap-2.5">
+                <IconBadge
+                  tone={user.google_linked ? "green" : "amber"}
+                  size={30}
+                  icon={user.google_linked ? <Link2 size={14} /> : <Link2Off size={14} />}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs text-slate">Login com Google</p>
+                  <p className="text-sm font-semibold truncate">{user.google_linked ? "Conectado" : "Não conectado"}</p>
+                  <p className="text-[11px] text-slate">
+                    {user.google_linked ? "Você também pode entrar com sua conta Google." : "Entre uma vez com o Google pra vincular."}
+                  </p>
+                </div>
+              </div>
             </div>
           </Card>
 
