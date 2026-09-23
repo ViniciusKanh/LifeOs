@@ -4,7 +4,6 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, L
 import {
   TrendingUp,
   ListChecks,
-  Target,
   Droplets,
   Heart,
   Circle,
@@ -23,7 +22,6 @@ import {
   History as HistoryIcon,
   CheckSquare,
   Dumbbell,
-  Brain,
   Moon,
   Smile,
   Trophy,
@@ -32,6 +30,7 @@ import {
   FlaskConical,
 } from "lucide-react";
 import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
+import { HealthBodyGauge, GoalsThermometerGauge, DimensionRingGauge } from "@/components/dashboard/DimensionVectors";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
 import { WeekGlance } from "@/components/dashboard/WeekGlance";
 import { useLifeScore, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
@@ -60,14 +59,24 @@ const DIMENSION_LABELS: Record<string, string> = {
 
 // Cor de cada dimensão no radar/lista — o mesmo significado usado em
 // toda a aplicação (ver comentário em primitives.tsx: IconBadge).
-const DIMENSION_BAR_TONE: Record<string, string> = {
-  productivity: "bg-signal",
-  professional: "bg-signal",
-  health: "bg-cat-blue",
-  education: "bg-cat-purple",
-  reading: "bg-cat-pink",
-  habits: "bg-cat-green",
-  goals: "bg-cat-teal",
+/** Mesmo mapeamento de tom acima, em classe de texto — usado pelos vetores (fill/stroke="currentColor"). */
+const DIMENSION_TEXT_TONE: Record<string, string> = {
+  productivity: "text-signal",
+  professional: "text-signal",
+  health: "text-cat-blue",
+  education: "text-cat-purple",
+  reading: "text-cat-pink",
+  habits: "text-cat-green",
+  goals: "text-cat-teal",
+};
+
+/** Ícone de cada dimensão nos vetores do Life Score — os mesmos já usados em "Como o Life Score é calculado". */
+const DIMENSION_ICON: Record<string, ReactNode> = {
+  productivity: <CheckSquare size={20} />,
+  professional: <Briefcase size={20} />,
+  education: <GraduationCap size={20} />,
+  reading: <BookOpen size={20} />,
+  habits: <Repeat size={20} />,
 };
 
 // Meta diária de água — ainda não é configurável por usuário no
@@ -111,13 +120,6 @@ function formatEventTime(at: string) {
   const iso = at.includes("T") ? at : at.replace(" ", "T");
   const d = new Date(iso.endsWith("Z") ? iso : `${iso}Z`);
   return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatMinutes(total: number) {
-  if (total <= 0) return "0min";
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return h > 0 ? `${h}h ${m.toString().padStart(2, "0")}min` : `${m}min`;
 }
 
 function weekShortLabel(monday: string) {
@@ -361,18 +363,29 @@ export function DashboardPage() {
               <LifeScoreRadar data={dims} />
             </div>
             <div className="flex-1 w-full">
-              <div className="flex items-end gap-2">
-                <span className="font-display font-extrabold text-4xl leading-none">{isLoading ? "—" : overall}</span>
-                <span className="text-sm mb-1 text-slate">/ 100 · Seu Life Score</span>
+              <div className="flex items-center gap-3">
+                <div className="relative w-16 h-16 shrink-0 text-brand-500">
+                  <DimensionRingGauge pct={overall} size={64} icon={null} />
+                  <span className="absolute inset-0 flex items-center justify-center font-display font-extrabold text-lg">
+                    {isLoading ? "—" : overall}
+                  </span>
+                </div>
+                <span className="text-sm text-slate">/ 100 · Seu Life Score</span>
               </div>
-              <div className="mt-4 space-y-2.5">
+              <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                 {dims.map((d) => (
-                  <div key={d.dim} className="flex items-center gap-3 text-xs">
-                    <span className="w-24 shrink-0 text-slate">{d.dim}</span>
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                      <div className={`h-full rounded-full ${DIMENSION_BAR_TONE[d.key]}`} style={{ width: `${d.value}%` }} />
+                  <div key={d.dim} className="flex flex-col items-center gap-1.5 text-center">
+                    <div className={`w-14 h-14 ${DIMENSION_TEXT_TONE[d.key]}`}>
+                      {d.key === "health" ? (
+                        <HealthBodyGauge pct={d.value} />
+                      ) : d.key === "goals" ? (
+                        <GoalsThermometerGauge pct={d.value} />
+                      ) : (
+                        <DimensionRingGauge pct={d.value} icon={DIMENSION_ICON[d.key]} />
+                      )}
                     </div>
-                    <span className="w-6 text-right font-medium">{d.value}</span>
+                    <span className="text-[11px] text-slate leading-tight">{d.dim}</span>
+                    <span className="text-xs font-semibold">{d.value}</span>
                   </div>
                 ))}
               </div>
