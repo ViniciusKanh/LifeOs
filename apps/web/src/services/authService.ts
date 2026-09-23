@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, API_URL } from "./api";
 import type { CurrentUser } from "@/types";
 
 export interface RegisterResult {
@@ -6,8 +6,13 @@ export interface RegisterResult {
   email: string;
 }
 
+/** URL de navegação (não fetch — precisa ser um redirect de página inteira) que inicia o login/cadastro com Google. */
+export const GOOGLE_LOGIN_START_URL = `${API_URL}/auth/google/start`;
+
 export const authService = {
   me: () => api.get<CurrentUser>("/auth/me"),
+  /** Só diz se o login com Google está configurado — nunca expõe credenciais. */
+  googleStatus: () => api.get<{ available: boolean }>("/auth/google/status"),
   login: (email: string, password: string, rememberMe: boolean) =>
     api.post<CurrentUser>("/auth/login", { email, password, rememberMe }),
   // Cadastro não loga mais direto: a conta nasce pendente de

@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { loginFormSchema, type LoginFormValues } from "@/lib/validation";
 import { Button, IconField } from "@/components/ui/primitives";
 import { AuthIllustration } from "@/components/auth/AuthIllustration";
+import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
 
 export function LoginPage() {
   const { login, isLoggingIn, loginError, resendVerification, isResendingVerification, resendVerificationSuccess } = useAuth();
@@ -123,6 +124,8 @@ export function LoginPage() {
               {isLoggingIn ? "Entrando..." : "Entrar"}
               {!isLoggingIn && <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />}
             </Button>
+
+            <GoogleLoginButton />
 
             <p className="text-xs text-slate text-center pt-2">
               Não tem conta?{" "}

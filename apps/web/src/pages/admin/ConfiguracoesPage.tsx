@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, KeyRound, Mail, Plus, Send, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useAdminSettings, useAdminUsers, useGeminiModels, useSecurityInfo } from "@/hooks/useAdmin";
+import { useAdminSettings, useAdminUsers, useGeminiModels, useGoogleRedirectUri, useSecurityInfo } from "@/hooks/useAdmin";
 import { adminService } from "@/services/adminService";
 import { NovoUsuarioModal } from "@/components/admin/NovoUsuarioModal";
 import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
@@ -182,6 +182,38 @@ function GeminiModelSelect({
   );
 }
 
+/** Mostra a URL exata a cadastrar no Google Cloud Console, com botão de copiar. */
+function GoogleRedirectUriField() {
+  const { redirectUri } = useGoogleRedirectUri();
+  const [copied, setCopied] = useState(false);
+  if (!redirectUri) return null;
+  return (
+    <div>
+      <label className="text-xs text-slate">URI de redirecionamento (cole no Google Cloud Console)</label>
+      <div className="flex flex-wrap items-center gap-2 mt-1.5">
+        <input
+          readOnly
+          value={redirectUri}
+          onFocus={(e) => e.target.select()}
+          className="flex-1 min-w-[220px] rounded-lg px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border"
+        />
+        <Button
+          variant="secondary"
+          className="shrink-0"
+          onClick={() => {
+            navigator.clipboard.writeText(redirectUri).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          }}
+        >
+          {copied ? "Copiado!" : "Copiar"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Painel de segurança — só leitura: esses valores vêm de variáveis de ambiente (Vercel/.env), não do banco. */
 function SecurityInfo() {
   const { info, isLoading } = useSecurityInfo();
@@ -240,6 +272,8 @@ export function ConfiguracoesPage() {
   const smtpPort = findSetting(settings, "smtp", "port");
   const smtpUser = findSetting(settings, "smtp", "user");
   const smtpPass = findSetting(settings, "smtp", "app_password");
+  const googleClientId = findSetting(settings, "google_oauth", "client_id");
+  const googleClientSecret = findSetting(settings, "google_oauth", "client_secret");
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-3xl mx-auto space-y-4">
@@ -335,6 +369,37 @@ export function ConfiguracoesPage() {
           verdade para o seu próprio e-mail — use os dois. Sem servidor, porta, e-mail e senha de app configurados, o
           link de redefinição de senha continua sendo apenas registrado no servidor (modo de desenvolvimento) em vez
           de enviado por e-mail.
+        </p>
+      </SectionCard>
+
+      <SectionCard
+        icon={<IconBadge tone="blue" size={30} icon={<KeyRound size={14} />} />}
+        title="Login com Google"
+        description="Deixa o usuário criar conta e entrar com a conta Google (associa automaticamente pelo e-mail se já existir cadastro). Exige um Client ID/Secret OAuth do Google Cloud Console."
+      >
+        <GoogleRedirectUriField />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SecretField
+            label="Client ID"
+            placeholder="xxxxx.apps.googleusercontent.com"
+            existing={googleClientId}
+            onSave={(value) => upsertSetting({ integration: "google_oauth", keyName: "client_id", value })}
+            onRemove={() => removeSetting({ integration: "google_oauth", keyName: "client_id" })}
+          />
+          <SecretField
+            label="Client Secret"
+            placeholder="GOCSPX-..."
+            existing={googleClientSecret}
+            onSave={(value) => upsertSetting({ integration: "google_oauth", keyName: "client_secret", value })}
+            onRemove={() => removeSetting({ integration: "google_oauth", keyName: "client_secret" })}
+          />
+        </div>
+        <p className="text-[11px] text-slate">
+          Passo a passo: console.cloud.google.com → crie/selecione um projeto → "APIs e serviços" → "Tela de
+          consentimento OAuth" (tipo Externo, adicione seu e-mail como usuário de teste se o app não estiver
+          publicado) → "Credenciais" → "Criar credenciais" → "ID do cliente OAuth" → tipo "Aplicativo da Web" → cole a
+          URL acima em "URIs de redirecionamento autorizados" → copie o Client ID e o Client Secret gerados pra cá.
+          Sem essas duas credenciais, o botão "Entrar com Google" fica desativado na tela de login.
         </p>
       </SectionCard>
 

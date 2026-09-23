@@ -11,6 +11,7 @@ export const adminService = {
     api.post<{ ok: boolean; message: string }>(`/admin/settings/${integration}/test`),
   geminiModels: () => api.get<{ models: Array<{ id: string; label: string }>; default: string }>("/admin/settings/gemini/models"),
   sendTestEmail: () => api.post<{ ok: boolean; message: string }>("/admin/settings/email/send-test"),
+  googleRedirectUri: () => api.get<{ redirectUri: string }>("/admin/settings/google/redirect-uri"),
   security: () =>
     api.get<{
       jwtExpiresIn: string;

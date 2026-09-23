@@ -60,3 +60,9 @@ export function useAuth() {
     logout: logoutMutation.mutateAsync,
   };
 }
+
+/** Só usado pra decidir se mostra o botão "Entrar com Google" nas telas de login/cadastro. */
+export function useGoogleLoginAvailable() {
+  const query = useQuery({ queryKey: ["auth", "google-status"], queryFn: authService.googleStatus, staleTime: 5 * 60 * 1000 });
+  return query.data?.available ?? false;
+}

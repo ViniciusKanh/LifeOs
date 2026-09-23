@@ -9,6 +9,7 @@ import { hashPassword } from "../services/authService.js";
 import { verifySmtpConnection, sendMail, testEmail } from "../services/emailService.js";
 import { testGeminiConnection, GEMINI_MODELS, DEFAULT_GEMINI_MODEL } from "../services/geminiService.js";
 import { testTursoConnection } from "../services/tursoService.js";
+import { googleRedirectUri } from "../services/googleAuthService.js";
 
 export const adminRouter = Router();
 
@@ -17,7 +18,7 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
 
 const upsertSettingSchema = z.object({
-  integration: z.enum(["gemini", "turso", "smtp"]),
+  integration: z.enum(["gemini", "turso", "smtp", "google_oauth"]),
   keyName: z.string().min(1).max(60),
   value: z.string().min(1).max(4000),
   extraConfig: z.record(z.unknown()).optional(),
@@ -69,6 +70,17 @@ adminRouter.get("/settings", async (req, res) => {
     return rest;
   });
   return res.json(rows);
+});
+
+/**
+ * GET /api/admin/settings/google/redirect-uri — a URL exata que precisa
+ * ser cadastrada em "Authorized redirect URIs" no Google Cloud Console
+ * pra login com Google funcionar. Calculada a partir da própria
+ * requisição (mesma lógica usada de verdade no callback), pra nunca
+ * divergir do que o backend realmente vai usar.
+ */
+adminRouter.get("/settings/google/redirect-uri", async (req, res) => {
+  return res.json({ redirectUri: googleRedirectUri(req) });
 });
 
 /** PUT /api/admin/settings — cria ou atualiza uma credencial */
