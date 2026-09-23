@@ -113,7 +113,17 @@ goalForecastRouter.get("/", async (req, res) => {
       const status = classifyGoalForecastStatus(goalInput, forecast, today);
       const requiredPace = status === "completed" ? null : computeRequiredPace(goalInput, today);
       const expectedProgressPct = status !== "completed" && g.due_date ? computeExpectedProgressPct(g.created_at, g.due_date, today) : null;
-      const rawProgressPct = g.kind === "numeric" ? (g.target_value ? Math.min(100, Math.round((g.current_value / g.target_value) * 100)) : null) : g.kind === "binary" ? null : Math.round(g.current_value);
+      const linkedTasks = taskLinks.get(g.id);
+      // "task_based" com tarefas vinculadas: progresso vem da conclusão real delas, não do current_value manual.
+      const taskBasedPct = g.kind === "task_based" && linkedTasks && linkedTasks.total > 0 ? Math.round((linkedTasks.done / linkedTasks.total) * 100) : null;
+      const rawProgressPct =
+        g.kind === "numeric"
+          ? g.target_value
+            ? Math.min(100, Math.round((g.current_value / g.target_value) * 100))
+            : null
+          : g.kind === "binary"
+            ? null
+            : taskBasedPct ?? Math.round(g.current_value);
       // Meta concluída sempre mostra 100%, mesmo que o valor registrado não tenha alcançado o alvo exato (mesma convenção do Deadline Radar).
       const progressPct = status === "completed" ? 100 : rawProgressPct;
       const progressDeficitPct = expectedProgressPct != null && progressPct != null ? Math.max(0, expectedProgressPct - progressPct) : null;

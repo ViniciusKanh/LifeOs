@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Trash2, Repeat } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
 import { useProjects } from "@/hooks/useProjects";
+import { useGoals } from "@/hooks/useGoals";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, buildRecurrenceRule, parseRecurrenceRule, type RecurrenceFreq } from "@/utils/recurrence";
 import type { Task, TaskPriority } from "@/types";
 import type { TaskInput } from "@/services/taskService";
@@ -68,6 +69,7 @@ export function TaskModal({
   const [startDate, setStartDate] = useState(toDateInput(task?.start_date ?? null));
   const [dueDate, setDueDate] = useState(toDateInput(task?.due_date ?? null));
   const [projectId, setProjectId] = useState<string>(task?.project_id ?? "");
+  const [goalId, setGoalId] = useState<string>(task?.goal_id ?? "");
   const [impact, setImpact] = useState(task?.impact ?? 0);
   const [urgency, setUrgency] = useState(task?.urgency ?? 0);
   const [effort, setEffort] = useState(task?.effort ?? 0);
@@ -84,6 +86,10 @@ export function TaskModal({
   const { projects } = useProjects();
   const selectedProject = projects.find((p) => p.id === projectId);
   const isProfessional = selectedProject?.kind === "professional";
+  // Só metas do tipo "Etapas" fazem sentido pra vincular tarefas — são elas que ganham progresso
+  // automático (tarefas concluídas / total) em vez de progresso manual (ver goals.routes.ts).
+  const { goals } = useGoals();
+  const linkableGoals = goals.filter((g) => g.kind === "task_based" && g.status === "active");
 
   const handleSave = async () => {
     if (!title.trim()) return;
@@ -98,6 +104,7 @@ export function TaskModal({
         startDate: startDate || null,
         dueDate: dueDate || null,
         projectId: projectId || null,
+        goalId: goalId || null,
         impact: isProfessional && impact > 0 ? impact : null,
         urgency: isProfessional && urgency > 0 ? urgency : null,
         effort: isProfessional && effort > 0 ? effort : null,
@@ -196,6 +203,25 @@ export function TaskModal({
             </select>
             <p className="text-[11px] text-slate mt-1">
               Vincular a um projeto Workspace ou Profissional é o que faz a tarefa contar na dimensão "Profissional" do Life Score.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs text-slate">Meta (opcional)</label>
+            <select
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value)}
+              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            >
+              <option value="">Sem meta</option>
+              {linkableGoals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.title}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate mt-1">
+              Vincular a uma meta do tipo "Etapas" faz o progresso dela avançar sozinho conforme você conclui as tarefas vinculadas.
             </p>
           </div>
 

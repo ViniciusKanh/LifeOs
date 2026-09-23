@@ -52,6 +52,7 @@ async function maybeSpawnNextOccurrence(db: ReturnType<typeof getDb>, taskId: st
         recurrence_rule: string | null;
         status: string;
         project_id: string | null;
+        goal_id: string | null;
         title: string;
         description: string | null;
         priority: string;
@@ -86,12 +87,13 @@ async function maybeSpawnNextOccurrence(db: ReturnType<typeof getDb>, taskId: st
 
   const newId = nanoid();
   await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort, recurrence_rule)
-          VALUES (?, ?, ?, ?, ?, 'Backlog', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO tasks (id, owner_id, project_id, goal_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort, recurrence_rule)
+          VALUES (?, ?, ?, ?, ?, ?, 'Backlog', ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       newId,
       ownerId,
       task.project_id,
+      task.goal_id,
       task.title,
       task.description,
       task.priority,
@@ -202,12 +204,13 @@ tasksRouter.post("/", async (req, res) => {
   const status = d.status ?? "Backlog";
 
   await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, title, description, status, priority, due_date, start_date, estimate_minutes, completed_at, impact, urgency, effort, recurrence_rule)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO tasks (id, owner_id, project_id, goal_id, title, description, status, priority, due_date, start_date, estimate_minutes, completed_at, impact, urgency, effort, recurrence_rule)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       req.user!.id,
       d.projectId ?? null,
+      d.goalId ?? null,
       d.title,
       d.description ?? null,
       status,
@@ -252,6 +255,7 @@ tasksRouter.patch("/:id", async (req, res) => {
     title: "title",
     description: "description",
     projectId: "project_id",
+    goalId: "goal_id",
     status: "status",
     priority: "priority",
     dueDate: "due_date",

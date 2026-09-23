@@ -229,6 +229,19 @@ async function goalsScore(db: Db, ownerId: string, date: string): Promise<Dimens
   if (rows.length === 0) return { score: 0, hasData: false };
   const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, ownerId, date) : 0;
 
+  // Metas "task_based" com tarefas vinculadas (tasks.goal_id): progresso real
+  // vem da conclusão delas, não de um valor manual — mesma regra usada nas
+  // rotas de metas e no Goal Forecast, pra não haver dois números diferentes
+  // pro mesmo "quanto essa meta andou".
+  const taskLinksResult = await db.execute({
+    sql: `SELECT goal_id, COUNT(*) AS total, SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) AS done
+          FROM tasks WHERE owner_id = ? AND goal_id IS NOT NULL GROUP BY goal_id`,
+    args: [ownerId],
+  });
+  const taskLinks = new Map(
+    (taskLinksResult.rows as unknown as Array<{ goal_id: string; total: number; done: number }>).map((r) => [r.goal_id, { total: r.total, done: r.done }])
+  );
+
   const childrenByParent = new Map<string, typeof rows>();
   for (const goal of rows) {
     if (!goal.parent_goal_id) continue;
@@ -241,12 +254,15 @@ async function goalsScore(db: Db, ownerId: string, date: string): Promise<Dimens
   const scoreGoal = (goal: (typeof rows)[number]): number => {
     if (scoreCache.has(goal.id)) return scoreCache.get(goal.id)!;
     const children = childrenByParent.get(goal.id) ?? [];
+    const links = taskLinks.get(goal.id);
     const score =
       goal.status === "done"
         ? 100
         : goal.kind === "task_based" && children.length > 0
           ? clamp(children.reduce((sum, child) => sum + scoreGoal(child), 0) / children.length)
-          : goalProgressScore(isDailyReadingGoal(goal) ? { ...goal, current_value: pagesToday } : goal);
+          : goal.kind === "task_based" && links && links.total > 0
+            ? clamp((links.done / links.total) * 100)
+            : goalProgressScore(isDailyReadingGoal(goal) ? { ...goal, current_value: pagesToday } : goal);
     scoreCache.set(goal.id, score);
     return score;
   };
