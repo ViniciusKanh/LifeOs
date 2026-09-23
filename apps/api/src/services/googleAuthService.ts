@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import { getDb } from "../db/client.js";
 import { decryptSecret } from "./cryptoService.js";
 
@@ -45,6 +46,35 @@ export const GOOGLE_OAUTH_CALLBACK_PATH = "/api/auth/google/callback";
 export function googleRedirectUri(req: { protocol: string; get(name: string): string | undefined }): string {
   const base = process.env.GOOGLE_REDIRECT_BASE_URL ?? `${req.protocol}://${req.get("host")}`;
   return `${base}${GOOGLE_OAUTH_CALLBACK_PATH}`;
+}
+
+/**
+ * O "state" do OAuth deixou de depender só do cookie de curta duração
+ * (lifeos_google_oauth_state): em algumas redes/navegadores (proxy
+ * corporativo, antivírus, extensões) o Set-Cookie da resposta de
+ * /google/start pode não sobreviver até o redirect de volta do Google,
+ * e o callback falhava com "state_invalido" mesmo em um fluxo legítimo.
+ * Agora o próprio state é um JWT assinado e com expiração curta: o
+ * callback consegue confirmar que foi este servidor quem o gerou e que
+ * ainda está dentro da janela de validade, sem depender só do cookie
+ * chegar de volta. O cookie continua sendo setado como camada extra,
+ * mas não é mais obrigatório pra aceitar o retorno do Google.
+ */
+export function signOAuthState(purpose: string): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET não configurado");
+  return jwt.sign({ purpose }, secret, { expiresIn: "10m" });
+}
+
+export function verifyOAuthState(state: string, purpose: string): boolean {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return false;
+  try {
+    const payload = jwt.verify(state, secret) as { purpose?: string };
+    return payload.purpose === purpose;
+  } catch {
+    return false;
+  }
 }
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";

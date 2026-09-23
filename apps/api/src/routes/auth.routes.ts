@@ -2,7 +2,14 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import crypto from "node:crypto";
 import { getDb } from "../db/client.js";
-import { getGoogleOAuthConfig, buildGoogleAuthUrl, exchangeGoogleCode, googleRedirectUri } from "../services/googleAuthService.js";
+import {
+  getGoogleOAuthConfig,
+  buildGoogleAuthUrl,
+  exchangeGoogleCode,
+  googleRedirectUri,
+  signOAuthState,
+  verifyOAuthState,
+} from "../services/googleAuthService.js";
 import {
   hashPassword,
   verifyPassword,
@@ -174,21 +181,24 @@ authRouter.post("/logout", (_req, res) => {
 authRouter.get("/me", requireAuth, async (req, res) => {
   const db = getDb();
   const result = await db.execute({
-    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at
+    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, google_id
           FROM users WHERE id = ?`,
     args: [req.user!.id],
   });
-  const user = result.rows[0];
+  const row = result.rows[0] as unknown as { google_id?: string | null } | undefined;
   // Um JWT assinado pode continuar "válido" mesmo depois que o usuário
   // some do banco (ex: troca de banco de dados em desenvolvimento, ou
   // conta apagada). Nesse caso a sessão deve ser tratada como inválida
   // (401 + cookie limpo), nunca um 404 solto — é assim que o frontend
   // (useAuth) já sabe tratar "deslogado" sem quebrar a tela.
-  if (!user) {
+  if (!row) {
     res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
     return res.status(401).json({ error: "Sessão inválida. Faça login novamente." });
   }
-  return res.json(user);
+  // google_id nunca é exposto (é só um identificador interno do Google) — só se
+  // a conta está vinculada, pra frontend mostrar "Conectado com Google" no perfil.
+  const { google_id, ...user } = row as Record<string, unknown>;
+  return res.json({ ...user, google_linked: !!google_id });
 });
 
 /** PATCH /api/auth/me — o próprio usuário edita seu perfil (nunca outro id) */
@@ -470,7 +480,9 @@ authRouter.get("/google/start", async (req, res) => {
       .status(503)
       .send("Login com Google ainda não foi configurado. Peça a um administrador para configurar em Configurações → Login com Google.");
   }
-  const state = crypto.randomBytes(24).toString("hex");
+  const state = signOAuthState("google_oauth");
+  // O cookie ainda é setado como camada extra (liga o state a esta aba/navegador
+  // quando o cookie sobrevive ao redirect), mas o callback não depende mais dele.
   res.cookie(GOOGLE_STATE_COOKIE, state, { ...COOKIE_BASE, maxAge: 10 * 60 * 1000 });
   return res.redirect(buildGoogleAuthUrl(config, googleRedirectUri(req), state));
 });
@@ -486,13 +498,15 @@ authRouter.get("/google/start", async (req, res) => {
  */
 authRouter.get("/google/callback", async (req, res) => {
   const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
-  const savedState = (req as unknown as { cookies?: Record<string, string> }).cookies?.[GOOGLE_STATE_COOKIE];
+  // O cookie (quando presente) é só uma camada extra de confirmação — não é mais
+  // obrigatório, porque em alguns navegadores/redes ele pode não sobreviver ao
+  // redirect de volta do Google (ver comentário em signOAuthState).
   res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" });
 
   const failRedirect = (reason: string) => res.redirect(`${APP_URL}/login?google_error=${encodeURIComponent(reason)}`);
 
   if (error) return failRedirect(error);
-  if (!code || !state || !savedState || state !== savedState) return failRedirect("state_invalido");
+  if (!code || !state || !verifyOAuthState(state, "google_oauth")) return failRedirect("state_invalido");
 
   const db = getDb();
   const config = await getGoogleOAuthConfig(db);

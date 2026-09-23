@@ -39,6 +39,7 @@ import { capacityRouter } from "./routes/capacity.routes.js";
 import { deadlineRouter } from "./routes/deadline.routes.js";
 import { goalForecastRouter } from "./routes/goal-forecast.routes.js";
 import { dataHealthRouter } from "./routes/data-health.routes.js";
+import { journalRouter } from "./routes/journal.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -125,6 +126,7 @@ app.use("/api/capacity", capacityRouter);
 app.use("/api/deadline-radar", deadlineRouter);
 app.use("/api/goal-forecast", goalForecastRouter);
 app.use("/api/data-health", dataHealthRouter);
+app.use("/api/journal", journalRouter);
 // Sem requireAuth — protegido por segredo próprio (ver cron.routes.ts),
 // chamado por um agendador externo, nunca por um usuário logado.
 app.use("/api/cron", cronRouter);

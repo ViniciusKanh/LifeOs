@@ -75,6 +75,7 @@ const WeeklyReviewPage = lazy(() =>
 const LifeMapPage = lazy(() => import("@/pages/lifemap/LifeMapPage").then((m) => ({ default: m.LifeMapPage })));
 const DataHealthPage = lazy(() => import("@/pages/data-health/DataHealthPage").then((m) => ({ default: m.DataHealthPage })));
 const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
+const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 
 function PageFallback() {
   return (
@@ -151,6 +152,7 @@ export default function App() {
           <Route path="/life-map" element={<LifeMapPage />} />
           <Route path="/data-health" element={<DataHealthPage />} />
           <Route path="/gatilhos" element={<GatilhosPage />} />
+          <Route path="/diario" element={<DiarioPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route
             path="/configuracoes"
