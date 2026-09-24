@@ -66,15 +66,33 @@ export function signOAuthState(purpose: string): string {
   return jwt.sign({ purpose }, secret, { expiresIn: "10m" });
 }
 
-export function verifyOAuthState(state: string, purpose: string): boolean {
+export type OAuthStateCheck = { ok: true } | { ok: false; reason: "chave_ausente" | "state_expirado" | "state_assinatura_invalida" | "state_propósito_invalido" };
+
+/**
+ * Versão detalhada de verifyOAuthState: em vez de só true/false, diz QUAL
+ * motivo específico fez o state falhar. Existe porque "state_invalido"
+ * genérico deixava impossível diferenciar, a partir do relato do usuário,
+ * se era JWT_SECRET ausente/trocado, state expirado (usuário demorou mais
+ * de 10min na tela de consentimento do Google) ou assinatura realmente
+ * inválida (adulteração ou secret diferente do usado por outra instância
+ * do servidor rodando em paralelo).
+ */
+export function verifyOAuthStateDetailed(state: string, purpose: string): OAuthStateCheck {
   const secret = process.env.JWT_SECRET;
-  if (!secret) return false;
+  if (!secret) return { ok: false, reason: "chave_ausente" };
   try {
     const payload = jwt.verify(state, secret) as { purpose?: string };
-    return payload.purpose === purpose;
-  } catch {
-    return false;
+    if (payload.purpose !== purpose) return { ok: false, reason: "state_propósito_invalido" };
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) return { ok: false, reason: "state_expirado" };
+    return { ok: false, reason: "state_assinatura_invalida" };
   }
+}
+
+/** Mantido para compatibilidade — usa a versão detalhada por baixo. */
+export function verifyOAuthState(state: string, purpose: string): boolean {
+  return verifyOAuthStateDetailed(state, purpose).ok;
 }
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";

@@ -8,7 +8,7 @@ import {
   exchangeGoogleCode,
   googleRedirectUri,
   signOAuthState,
-  verifyOAuthState,
+  verifyOAuthStateDetailed,
 } from "../services/googleAuthService.js";
 import {
   hashPassword,
@@ -497,7 +497,12 @@ authRouter.get("/google/start", async (req, res) => {
  * senha", se quiser entrar também com e-mail/senha).
  */
 authRouter.get("/google/callback", async (req, res) => {
-  const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
+  // Alguns proxies/navegadores podem entregar code/state como array — normaliza defensivamente.
+  const rawCode = req.query.code as string | string[] | undefined;
+  const rawState = req.query.state as string | string[] | undefined;
+  const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+  const state = Array.isArray(rawState) ? rawState[0] : rawState;
+  const error = req.query.error as string | undefined;
   // O cookie (quando presente) é só uma camada extra de confirmação — não é mais
   // obrigatório, porque em alguns navegadores/redes ele pode não sobreviver ao
   // redirect de volta do Google (ver comentário em signOAuthState).
@@ -505,8 +510,13 @@ authRouter.get("/google/callback", async (req, res) => {
 
   const failRedirect = (reason: string) => res.redirect(`${APP_URL}/login?google_error=${encodeURIComponent(reason)}`);
 
-  if (error) return failRedirect(error);
-  if (!code || !state || !verifyOAuthState(state, "google_oauth")) return failRedirect("state_invalido");
+  // Erros específicos por etapa (em vez de um único "state_invalido" genérico)
+  // para dar um diagnóstico claro caso o problema volte a acontecer.
+  if (error) return failRedirect(`google_${error}`);
+  if (!code) return failRedirect("code_ausente");
+  if (!state) return failRedirect("state_ausente");
+  const stateCheck = verifyOAuthStateDetailed(state, "google_oauth");
+  if (!stateCheck.ok) return failRedirect(stateCheck.reason);
 
   const db = getDb();
   const config = await getGoogleOAuthConfig(db);

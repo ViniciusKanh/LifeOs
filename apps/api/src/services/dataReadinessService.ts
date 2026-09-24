@@ -28,7 +28,7 @@ export interface ReadinessInput {
   tasksWithDueDateCount: number;
   goalsWithDueDateCount: number;
   invalidTimestampCount: number;
-  signalCategoriesWithRecentData: number; // de 0 a 5 (sono, água, treino, focus, humor)
+  signalCategoriesWithRecentData: number; // de 0 a 4 (sono, água, treino, humor) — Focus Mode foi removido do produto
   totalScore: number;
 }
 
@@ -43,15 +43,15 @@ function goalForecastReadiness(i: ReadinessInput): ReadinessResult {
   return { tool: "Goal Forecast", status: "insufficient", reason: "Poucas metas têm progresso registrado — previsões ficam pouco confiáveis." };
 }
 
-/** Signals: precisa de múltiplas fontes reais (sono, água, treino, focus, humor) com dado recente. */
+/** Signals: precisa de múltiplas fontes reais (sono, água, treino, humor) com dado recente. */
 function signalsReadiness(i: ReadinessInput): ReadinessResult {
   if (i.signalCategoriesWithRecentData === 0) {
     return { tool: "Signals", status: "insufficient", reason: "Nenhuma fonte com registro nos últimos 7 dias." };
   }
   if (i.signalCategoriesWithRecentData >= 3) {
-    return { tool: "Signals", status: "ready", reason: `${i.signalCategoriesWithRecentData} de 5 fontes com dado recente.` };
+    return { tool: "Signals", status: "ready", reason: `${i.signalCategoriesWithRecentData} de 4 fontes com dado recente.` };
   }
-  return { tool: "Signals", status: "partial", reason: `Só ${i.signalCategoriesWithRecentData} de 5 fontes com dado recente — padrões ficam limitados.` };
+  return { tool: "Signals", status: "partial", reason: `Só ${i.signalCategoriesWithRecentData} de 4 fontes com dado recente — padrões ficam limitados.` };
 }
 
 /** Capacity Planner: depende de tarefas ativas com duração estimada para calcular carga do dia. */

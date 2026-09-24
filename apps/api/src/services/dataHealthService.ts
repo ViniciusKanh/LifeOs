@@ -125,8 +125,6 @@ async function fetchAll(db: Db, ownerId: string) {
     sleepLastRes,
     workoutsRecentRes,
     workoutsLastRes,
-    focusRecentRes,
-    focusLastRes,
     experimentsRes,
     experimentLogsRes,
     moodRes,
@@ -164,8 +162,6 @@ async function fetchAll(db: Db, ownerId: string) {
     db.execute({ sql: "SELECT MAX(went_to_bed_at) AS last FROM sleep_entries WHERE owner_id = ?", args: [ownerId] }),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? AND performed_at >= datetime('now', '-30 day')", args: [ownerId] }),
     db.execute({ sql: "SELECT MAX(performed_at) AS last FROM workouts WHERE owner_id = ?", args: [ownerId] }),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM focus_sessions WHERE owner_id = ? AND started_at >= datetime('now', '-30 day')", args: [ownerId] }),
-    db.execute({ sql: "SELECT MAX(started_at) AS last FROM focus_sessions WHERE owner_id = ?", args: [ownerId] }),
     db.execute({ sql: "SELECT id, status, start_date, end_date FROM personal_experiments WHERE owner_id = ?", args: [ownerId] }),
     db.execute({ sql: "SELECT experiment_id, COUNT(*) AS n FROM personal_experiment_logs WHERE owner_id = ? GROUP BY experiment_id", args: [ownerId] }),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM mood_entries WHERE owner_id = ? AND recorded_at >= datetime('now', '-7 day')", args: [ownerId] }),
@@ -187,8 +183,6 @@ async function fetchAll(db: Db, ownerId: string) {
     sleepLast: sleepLastRes.rows[0]?.last ? String(sleepLastRes.rows[0].last) : null,
     workoutsRecentCount: Number(workoutsRecentRes.rows[0]?.n ?? 0),
     workoutsLast: workoutsLastRes.rows[0]?.last ? String(workoutsLastRes.rows[0].last) : null,
-    focusRecentCount: Number(focusRecentRes.rows[0]?.n ?? 0),
-    focusLast: focusLastRes.rows[0]?.last ? String(focusLastRes.rows[0].last) : null,
     experiments: experimentsRes.rows as unknown as Row[],
     experimentLogsByExperiment: new Map((experimentLogsRes.rows as unknown as Row[]).map((r) => [String(r.experiment_id), Number(r.n)])),
     moodRecentCount: Number(moodRes.rows[0]?.n ?? 0),
@@ -331,19 +325,6 @@ async function computeSummary(db: Db, ownerId: string): Promise<DataHealthSummar
     });
   }
 
-  // Focus: volume de sessões nos últimos 30 dias (meta heurística: 20 sessões/mês = cobertura plena).
-  {
-    const covPct = Math.min(100, Math.round((d.focusRecentCount / 20) * 100));
-    modules.push({
-      key: "focus",
-      label: "Focus",
-      coveragePct: covPct,
-      status: coverageStatus(covPct),
-      mainIssue: d.focusRecentCount === 0 ? "Nenhuma sessão nos últimos 30 dias" : null,
-      openPath: MODULE_PATH.focus,
-    });
-  }
-
   // Experimentos: % de experimentos ativos/concluídos com pelo menos 3 check-ins registrados.
   {
     const relevant = d.experiments.filter((e) => e.status === "active" || e.status === "completed");
@@ -360,22 +341,24 @@ async function computeSummary(db: Db, ownerId: string): Promise<DataHealthSummar
     });
   }
 
-  // Signals: quantas das 5 fontes reais (sono, água, treino, focus, humor) têm dado recente.
+  // Signals: quantas das 4 fontes reais (sono, água, treino, humor) têm dado recente.
+  // Focus Mode foi removido do produto — focus_sessions nunca mais recebe dado
+  // novo, então deixou de contar como fonte de Signals (senão o teto ficava
+  // permanentemente em 4/5, mesmo com tudo em dia).
   const signalCategoriesWithRecentData = [
     sleepFreshDays != null && sleepFreshDays <= 7,
     d.waterRecentCount > 0,
     daysSince(d.workoutsLast) != null && (daysSince(d.workoutsLast) as number) <= 7,
-    daysSince(d.focusLast) != null && (daysSince(d.focusLast) as number) <= 7,
     d.moodRecentCount > 0,
   ].filter(Boolean).length;
   {
-    const covPct = pct(signalCategoriesWithRecentData, 5);
+    const covPct = pct(signalCategoriesWithRecentData, 4);
     modules.push({
       key: "signals",
       label: "Signals",
       coveragePct: covPct,
       status: coverageStatus(covPct),
-      mainIssue: signalCategoriesWithRecentData < 3 ? `Só ${signalCategoriesWithRecentData} de 5 fontes com dado recente` : null,
+      mainIssue: signalCategoriesWithRecentData < 3 ? `Só ${signalCategoriesWithRecentData} de 4 fontes com dado recente` : null,
       openPath: MODULE_PATH.signals,
     });
   }
@@ -429,13 +412,12 @@ async function computeSummary(db: Db, ownerId: string): Promise<DataHealthSummar
     completeness: Math.round(avgModuleCoverage),
     consistency: Math.max(0, 100 - Math.round((consistencyIssues / totalEntities) * 500)),
     integrity: Math.max(0, 100 - Math.round((integrityIssues / totalEntities) * 500)),
-    freshness: Math.round((healthFreshSources / 3) * 40 + (signalCategoriesWithRecentData / 5) * 60),
+    freshness: Math.round((healthFreshSources / 3) * 40 + (signalCategoriesWithRecentData / 4) * 60),
     sync: d.contextConfigured ? 100 : 60,
     history: Math.round(
       (pct(goalsWithEnoughProgress, numericGoals.length) +
-        Math.min(100, Math.round((d.focusRecentCount / 20) * 100)) +
         Math.min(100, Math.round((d.experiments.filter((e) => (d.experimentLogsByExperiment.get(String(e.id)) ?? 0) >= 3).length / Math.max(1, d.experiments.length)) * 100))) /
-        3
+        2
     ),
   };
 

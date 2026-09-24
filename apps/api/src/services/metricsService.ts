@@ -47,22 +47,30 @@ async function productivityScore(db: Db, ownerId: string): Promise<DimensionScor
 
 /**
  * Profissional: mesmo cálculo, restrito a tarefas vinculadas a um
- * projeto "professional"/"workspace" (ver seletor de projeto no
- * TaskModal — sem vincular, a tarefa não entra aqui mesmo sendo
- * trabalho de verdade).
+ * projeto kind='professional' (ver seletor de projeto no TaskModal —
+ * sem vincular a um projeto profissional, a tarefa não entra aqui
+ * mesmo sendo trabalho de verdade). Mesmo filtro da tela Profissional
+ * (GET /api/tasks/professional), para o score bater com o que o
+ * usuário vê ali.
  */
 async function professionalScore(db: Db, ownerId: string): Promise<DimensionScore> {
+  // Restrito a p.kind = 'professional' (mesmo filtro usado pela tela
+  // Profissional em GET /api/tasks/professional). 'workspace' é um kind
+  // genérico de projeto ("Projetos" no Deadline Radar, por exemplo), não
+  // profissional — antes essa dimensão incluía tarefas 'workspace' que
+  // nunca apareciam na tela Profissional, então o usuário terminava tudo
+  // que via ali e mesmo assim o score não batia 100%.
   const total = await scalar(
     db,
     `SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id = t.project_id
-     WHERE t.owner_id = ? AND p.kind IN ('professional', 'workspace')`,
+     WHERE t.owner_id = ? AND p.kind = 'professional'`,
     [ownerId]
   );
   if (total === 0) return { score: 0, hasData: false };
   const done = await scalar(
     db,
     `SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id = t.project_id
-     WHERE t.owner_id = ? AND p.kind IN ('professional', 'workspace') AND t.status = 'Concluído'`,
+     WHERE t.owner_id = ? AND p.kind = 'professional' AND t.status = 'Concluído'`,
     [ownerId]
   );
   return { score: clamp((done / total) * 100), hasData: true };

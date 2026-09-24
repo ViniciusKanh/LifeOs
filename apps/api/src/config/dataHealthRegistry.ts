@@ -14,7 +14,6 @@ export type DataHealthModuleKey =
   | "education"
   | "library"
   | "health"
-  | "focus"
   | "experiments"
   | "signals";
 
@@ -33,7 +32,6 @@ export const DATA_HEALTH_MODULES: DataHealthModuleDefinition[] = [
   { key: "education", label: "Educação", openPath: "/educacao" },
   { key: "library", label: "Biblioteca", openPath: "/biblioteca" },
   { key: "health", label: "Saúde", openPath: "/saude" },
-  { key: "focus", label: "Focus", openPath: "/foco" },
   { key: "experiments", label: "Experimentos", openPath: "/experimentos" },
   { key: "signals", label: "Signals", openPath: "/signals" },
 ];

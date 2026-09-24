@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Activity, Dumbbell, Droplets, HeartPulse, Loader2, Moon, Sun } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Dumbbell, Droplets, HeartPulse, Loader2, Moon, Sun } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
 import { useHealthInsight } from "@/hooks/useCopilot";
@@ -19,6 +19,7 @@ import {
 import {
   SLEEP_GOAL_MINUTES,
   WATER_GOAL_ML,
+  WEEKDAY_LABELS,
   formatHM,
   localDateKey,
   parseHealthDate,
@@ -42,6 +43,18 @@ function statusBadge(value: number | null, highLabel: string, middleLabel: strin
 function average(values: number[]) {
   if (values.length === 0) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/** dateKey +/- N dias (mesmo padrão usado no Diário e no Capacity Planner). */
+function addDaysKey(dateKey: string, delta: number) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return localDateKey(d);
+}
+
+function formatDayLabel(dateKey: string) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 }
 
 export function SaudePage() {
@@ -71,8 +84,14 @@ export function SaudePage() {
   const [editTarget, setEditTarget] = useState<HealthEditTarget | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const weekStart = useMemo(() => startOfWeek(new Date()), []);
-  const today = todayKey();
+  // Controle por dia — sem isso, a tela sempre olhava só pra "hoje" e "esta
+  // semana" (Date.now()), então dava pra ver um dia passado só cavando o
+  // histórico de cada card, nunca a tela toda daquele dia de uma vez. Segue o
+  // mesmo padrão de dia selecionável do Diário e do Capacity Planner.
+  const [selectedDate, setSelectedDate] = useState(todayKey());
+  const todayStr = todayKey();
+  const today = selectedDate;
+  const weekStart = useMemo(() => startOfWeek(new Date(`${selectedDate}T00:00:00`)), [selectedDate]);
 
   const waterToday = useMemo(() => water.filter((entry) => localDateKey(entry.recorded_at) === today), [water, today]);
   const waterTotal = waterToday.reduce((sum, entry) => sum + entry.amount_ml, 0);
@@ -121,7 +140,7 @@ export function SaudePage() {
   const moodBadge: HealthBadge =
     avgMoodWeek === null ? { label: "Sem registro", tone: "slate" } : avgMoodWeek >= 4 ? { label: "Bem hoje", tone: "green" } : avgMoodWeek >= 2.5 ? { label: "Estavel", tone: "amber" } : { label: "Atencao", tone: "slate" };
 
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const yesterday = addDaysKey(selectedDate, -1);
   const recentSleep = sleep.find((entry) => {
     const key = localDateKey(entry.went_to_bed_at);
     return key === today || key === yesterday;
@@ -176,6 +195,58 @@ export function SaudePage() {
         actions={<p className="text-xs italic text-slate">Corpo saudável, mente mais forte.</p>}
       />
 
+      {/* Controle por dia — mesma navegação usada no Diário e no Capacity Planner:
+          todos os cards abaixo (hoje, semana, cards de água/sono/exercício/humor)
+          passam a olhar pro dia selecionado, não sempre pra "agora". */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-paper-border bg-paper-raised px-3.5 py-2.5 dark:border-ink-border dark:bg-ink-raised">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSelectedDate((d) => addDaysKey(d, -1))}
+            className="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+            aria-label="Dia anterior"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <p className="text-sm font-semibold capitalize min-w-[9rem] text-center sm:min-w-[13rem]">{formatDayLabel(selectedDate)}</p>
+          <button
+            onClick={() => setSelectedDate((d) => addDaysKey(d, 1))}
+            disabled={selectedDate >= todayStr}
+            className="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] disabled:opacity-30"
+            aria-label="Próximo dia"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {WEEKDAY_LABELS.map((_, i) => {
+            const dayKey = addDaysKey(localDateKey(weekStart), i);
+            const isSelected = dayKey === selectedDate;
+            const isToday = dayKey === todayStr;
+            return (
+              <button
+                key={dayKey}
+                onClick={() => setSelectedDate(dayKey)}
+                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors ${
+                  isSelected
+                    ? "bg-growth text-white"
+                    : isToday
+                      ? "text-growth border border-growth/50"
+                      : "text-slate border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+                }`}
+                aria-label={formatDayLabel(dayKey)}
+              >
+                {WEEKDAY_LABELS[i][0]}
+              </button>
+            );
+          })}
+          {selectedDate !== todayStr && (
+            <button onClick={() => setSelectedDate(todayStr)} className="text-xs text-growth font-medium underline underline-offset-2 ml-1">
+              Voltar para hoje
+            </button>
+          )}
+        </div>
+      </div>
+
       {isLoading && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-sm text-slate dark:border-ink-border dark:bg-ink-raised">
           <Loader2 size={16} className="animate-spin" />
@@ -190,6 +261,7 @@ export function SaudePage() {
           sleepPct={dailySleepPct}
           workoutsPct={movedToday ? 100 : 0}
           moodPct={moodLoggedToday ? 100 : 0}
+          isToday={selectedDate === todayStr}
         />
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -376,12 +448,14 @@ function HealthHero({
   sleepPct,
   workoutsPct,
   moodPct,
+  isToday,
 }: {
   vitalityScore: number;
   waterPct: number;
   sleepPct: number;
   workoutsPct: number;
   moodPct: number;
+  isToday: boolean;
 }) {
   return (
     <section className="grid gap-6 border-y border-paper-border bg-paper py-6 dark:border-ink-border dark:bg-ink lg:grid-cols-[210px_1fr] lg:items-center">
@@ -393,7 +467,7 @@ function HealthHero({
           <div className="relative flex h-32 w-32 flex-col items-center justify-center rounded-full bg-paper dark:bg-ink text-center">
             <HeartPulse size={21} className="mb-1 text-growth" />
             <p className="font-display text-4xl font-bold leading-none">{vitalityScore}</p>
-            <p className="mt-1 text-xs text-slate">score de hoje</p>
+            <p className="mt-1 text-xs text-slate">{isToday ? "score de hoje" : "score do dia"}</p>
           </div>
         </div>
         <div>
