@@ -13,6 +13,7 @@ import {
   BookOpen,
   Check,
   Loader2,
+  Save,
   ListChecks,
   Repeat,
   Droplets,
@@ -182,7 +183,9 @@ export function DiarioPage() {
   const { insights: lifeInsights } = useInsights(30);
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [justSaved, setJustSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sincroniza o form local com a entrada carregada — só quando ela muda de
   // fato (troca de dia ou primeiro load), nunca sobrescrevendo o que o
@@ -208,6 +211,7 @@ export function DiarioPage() {
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (justSavedTimer.current) clearTimeout(justSavedTimer.current);
     };
   }, []);
 
@@ -247,6 +251,15 @@ export function DiarioPage() {
     });
   };
 
+  /** Botão "Salvar" explícito do masthead: força salvar tudo agora (o autosave já cobre isso, mas o usuário pediu um botão pra confirmar que os dados foram gravados). */
+  const saveAllNow = () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    persistNow(form);
+    if (justSavedTimer.current) clearTimeout(justSavedTimer.current);
+    setJustSaved(true);
+    justSavedTimer.current = setTimeout(() => setJustSaved(false), 2200);
+  };
+
   const combinedSelfCare = useMemo(() => {
     const auto = entry?.auto.autoSelfCare ?? [];
     return new Set([...auto, ...form.selfCare]);
@@ -278,9 +291,9 @@ export function DiarioPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
-      {/* Masthead — data, navegação e resumo automático do dia (dado real) */}
-      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/10 via-cat-pink/[0.02] to-transparent p-4 sm:p-6">
-        <div className="flex items-center justify-between gap-2 mb-3">
+      {/* Masthead — visual de capa de jornal: filete duplo, olho da página e data em itálico */}
+      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/10 via-cat-pink/[0.03] to-transparent p-4 sm:p-6 sm:pt-5">
+        <div className="flex items-center justify-between gap-2 mb-2">
           <button
             onClick={() => setDate((d) => addDays(d, -1))}
             className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
@@ -289,8 +302,9 @@ export function DiarioPage() {
             <ChevronLeft size={15} />
           </button>
           <div className="text-center min-w-0">
-            <p className="font-display text-2xl sm:text-3xl md:text-4xl font-bold italic tracking-tight text-cat-pink truncate">Diário do Ser</p>
-            <p className="text-[11px] sm:text-xs text-slate mt-1 capitalize truncate">{formatHeaderDate(date)}</p>
+            <p className="text-[9px] sm:text-[10px] tracking-[0.25em] text-cat-pink/70 font-semibold mb-0.5">EDIÇÃO PESSOAL</p>
+            <p className="font-display text-2xl sm:text-3xl md:text-5xl font-bold italic tracking-tight text-cat-pink truncate leading-none">Diário do Ser</p>
+            <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
           </div>
           <button
             onClick={() => setDate((d) => addDays(d, 1))}
@@ -301,6 +315,9 @@ export function DiarioPage() {
             <ChevronRight size={15} />
           </button>
         </div>
+
+        {/* Filete duplo — moldura de capa de jornal */}
+        <div className="h-[3px] border-t-2 border-b border-cat-pink/40 mb-4 mt-3" />
 
         <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -320,10 +337,25 @@ export function DiarioPage() {
               Voltar para hoje
             </button>
           )}
-          <span className="flex items-center gap-1 text-[11px] text-slate">
-            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} className="text-growth" />}
-            {isSaving ? "Salvando…" : "Salvo"}
-          </span>
+
+          <div className="flex items-center gap-2.5 ml-auto">
+            <span className="flex items-center gap-1 text-[11px] text-slate">
+              {isSaving ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Check size={12} className={justSaved ? "text-growth" : "text-slate/60"} />
+              )}
+              {isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}
+            </span>
+            <button
+              onClick={saveAllNow}
+              disabled={isSaving}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 transition-colors disabled:opacity-50 shadow-sm"
+            >
+              <Save size={13} />
+              Salvar
+            </button>
+          </div>
         </div>
 
         {auto && (
