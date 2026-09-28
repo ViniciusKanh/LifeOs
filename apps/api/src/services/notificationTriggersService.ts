@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { notificationTriggerEmail, sendMail } from "./emailService.js";
 import { sendPushToUser } from "./pushService.js";
+import { hasJournalEntryForDate } from "./journalService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -50,6 +51,15 @@ export const NOTIFICATION_TRIGGER_DEFS = {
     defaultInApp: true,
     defaultAlertLevel: "soft",
     link: "/dashboard",
+  },
+  journal_reminder: {
+    label: "Lembrete de escrever no diário",
+    description: "No fim do dia, se você ainda não escreveu nada no Diário hoje.",
+    defaultEmail: false,
+    defaultPush: true,
+    defaultInApp: true,
+    defaultAlertLevel: "soft",
+    link: "/diario",
   },
 } as const;
 
@@ -441,6 +451,43 @@ export async function runTaskDeadlineTriggersForAll(date = new Date().toISOStrin
     checked += 1;
     const result = await runTaskDeadlineTriggers(row.owner_id, date);
     fired += result.results.reduce((sum, item) => sum + item.count, 0);
+  }
+  return { date, checked, fired };
+}
+
+/**
+ * Lembrete de escrita (Fase 11): se o usuário ainda não escreveu nada real
+ * no Diário na data informada (padrão: hoje), dispara notificação — nunca
+ * cobra quem já escreveu, respeita as preferências de canal do gatilho.
+ */
+export async function runJournalReminderTriggers(ownerId: string, date = new Date().toISOString().slice(0, 10)) {
+  const db = getDb();
+  await ensureNotificationTriggers(ownerId, db);
+  const already = await hasJournalEntryForDate(db, ownerId, date);
+  if (already) return { date, fired: false };
+
+  const delivered = await dispatchTriggerNotification(ownerId, "journal_reminder", {
+    title: "Que tal registrar o seu dia?",
+    body: "Você ainda não escreveu nada no Diário hoje.",
+    url: "/diario",
+    sourceId: `journal_reminder_${date}`,
+    ctaLabel: "Escrever agora",
+  });
+  return { date, fired: !delivered.skipped, emailSent: delivered.emailSent, pushSent: delivered.pushSent };
+}
+
+export async function runJournalReminderTriggersForAll(date = new Date().toISOString().slice(0, 10)) {
+  const db = getDb();
+  const owners = await db.execute({
+    sql: "SELECT id AS owner_id FROM users",
+    args: [],
+  });
+  let checked = 0;
+  let fired = 0;
+  for (const row of owners.rows as unknown as Array<{ owner_id: string }>) {
+    checked += 1;
+    const result = await runJournalReminderTriggers(row.owner_id, date);
+    if (result.fired) fired += 1;
   }
   return { date, checked, fired };
 }

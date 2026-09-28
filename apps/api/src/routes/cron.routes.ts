@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { mondayOf, sendWeeklySummariesToAllOptedIn } from "../services/weeklyEmailService.js";
-import { runTaskDeadlineTriggersForAll } from "../services/notificationTriggersService.js";
+import { runTaskDeadlineTriggersForAll, runJournalReminderTriggersForAll } from "../services/notificationTriggersService.js";
 
 /**
  * Endpoints de cron — chamados por um agendador externo (Vercel Cron,
@@ -43,5 +43,18 @@ cronRouter.get("/notification-triggers", async (req, res) => {
     return res.status(401).json({ error: "Não autorizado." });
   }
   const result = await runTaskDeadlineTriggersForAll();
+  return res.json(result);
+});
+
+/**
+ * GET /api/cron/journal-reminder — lembrete de escrever no diário (Fase
+ * 11), pensado pra rodar no fim do dia (ex.: 22h UTC); só notifica quem
+ * ainda não escreveu nada real no Diário hoje.
+ */
+cronRouter.get("/journal-reminder", async (req, res) => {
+  if (!isAuthorized(req)) {
+    return res.status(401).json({ error: "Não autorizado." });
+  }
+  const result = await runJournalReminderTriggersForAll();
   return res.json(result);
 });

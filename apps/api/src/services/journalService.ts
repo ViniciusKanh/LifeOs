@@ -409,6 +409,20 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
 }
 
 /**
+ * Verifica se o usuário já escreveu algo real no diário numa data (Fase 11
+ * — lembrete de escrita): reaproveita a mesma regra de "conteúdo real"
+ * usada no feed, pra nunca cobrar quem já escreveu.
+ */
+export async function hasJournalEntryForDate(db: Db, ownerId: string, date: string): Promise<boolean> {
+  const result = await db.execute({
+    sql: "SELECT * FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
+    args: [ownerId, date],
+  });
+  const row = result.rows[0] as unknown as Record<string, unknown> | undefined;
+  return !!row && hasWrittenContent(row);
+}
+
+/**
  * "Lembranças" (Fase 10 — On This Day do Apple Journal): entradas reais de
  * anos anteriores no mesmo dia e mês de `date` (padrão: hoje). Nunca mistura
  * com o ano atual, nunca inventa nada — só existe quando o usuário
