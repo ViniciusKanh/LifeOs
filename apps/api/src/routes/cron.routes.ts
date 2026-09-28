@@ -47,9 +47,13 @@ cronRouter.get("/notification-triggers", async (req, res) => {
 });
 
 /**
- * GET /api/cron/journal-reminder — lembrete de escrever no diário (Fase
- * 11), pensado pra rodar no fim do dia (ex.: 22h UTC); só notifica quem
- * ainda não escreveu nada real no Diário hoje.
+ * GET /api/cron/journal-reminder — lembrete inteligente de escrever no
+ * diário (Fase 11, horário aprendido na Fase 15): pensado pra rodar a
+ * cada hora (ver "crons" no vercel.json); só notifica quem ainda não
+ * escreveu nada real no Diário hoje E cuja hora atual (UTC) bate com o
+ * horário que o próprio usuário costuma escrever de verdade — aprendido
+ * a partir do histórico real de journal_entries, com um horário padrão
+ * de fim de dia pra quem ainda não tem histórico suficiente.
  */
 cronRouter.get("/journal-reminder", async (req, res) => {
   if (!isAuthorized(req)) {

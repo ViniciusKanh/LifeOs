@@ -456,15 +456,61 @@ export async function runTaskDeadlineTriggersForAll(date = new Date().toISOStrin
 }
 
 /**
- * Lembrete de escrita (Fase 11): se o usuário ainda não escreveu nada real
- * no Diário na data informada (padrão: hoje), dispara notificação — nunca
- * cobra quem já escreveu, respeita as preferências de canal do gatilho.
+ * Horário padrão do lembrete quando o usuário ainda não tem histórico
+ * suficiente no Diário (fim do dia, horário em que a Fase 11 rodava fixo).
  */
-export async function runJournalReminderTriggers(ownerId: string, date = new Date().toISOString().slice(0, 10)) {
+const JOURNAL_REMINDER_DEFAULT_HOUR_UTC = 22;
+
+/** Mínimo de entradas reais pra considerar o padrão de horário aprendido confiável. */
+const JOURNAL_REMINDER_MIN_SAMPLES = 5;
+
+/**
+ * Lembrete inteligente de escrita (Fase 15): aprende o horário em que o
+ * usuário costuma realmente escrever no Diário, olhando o histórico real
+ * de `journal_entries.created_at` (hora UTC, mesmo padrão já usado em
+ * copilotService.ts pra "peakHour" de hábitos) — nunca inventa um horário,
+ * só usa o que os dados reais do usuário mostram. Com poucas entradas
+ * (menos que o mínimo), cai no horário padrão fixo (fim do dia).
+ */
+export async function computePreferredJournalReminderHour(db: Db, ownerId: string): Promise<{ hour: number; learned: boolean; sampleSize: number }> {
+  const result = await db.execute({
+    sql: "SELECT created_at FROM journal_entries WHERE owner_id = ? ORDER BY created_at DESC LIMIT 200",
+    args: [ownerId],
+  });
+  const rows = result.rows as unknown as Array<{ created_at: string }>;
+  if (rows.length < JOURNAL_REMINDER_MIN_SAMPLES) {
+    return { hour: JOURNAL_REMINDER_DEFAULT_HOUR_UTC, learned: false, sampleSize: rows.length };
+  }
+  const hourCounts = new Array(24).fill(0);
+  for (const row of rows) {
+    const hour = new Date(row.created_at.replace(" ", "T") + "Z").getUTCHours();
+    hourCounts[hour] += 1;
+  }
+  const peakHour = hourCounts.reduce((best, count, hour) => (count > hourCounts[best] ? hour : best), 0);
+  return { hour: peakHour, learned: true, sampleSize: rows.length };
+}
+
+/**
+ * Lembrete de escrita (Fase 11, horário aprendido na Fase 15): se o usuário
+ * ainda não escreveu nada real no Diário na data informada, dispara
+ * notificação — nunca cobra quem já escreveu, respeita as preferências de
+ * canal do gatilho. `currentHourUtc` é a hora corrente (UTC); o lembrete só
+ * dispara quando ela bate com o horário aprendido (ou padrão) do usuário.
+ */
+export async function runJournalReminderTriggers(
+  ownerId: string,
+  date = new Date().toISOString().slice(0, 10),
+  currentHourUtc = new Date().getUTCHours(),
+) {
   const db = getDb();
   await ensureNotificationTriggers(ownerId, db);
   const already = await hasJournalEntryForDate(db, ownerId, date);
-  if (already) return { date, fired: false };
+  if (already) return { date, fired: false, reason: "already_written" as const };
+
+  const preferred = await computePreferredJournalReminderHour(db, ownerId);
+  if (preferred.hour !== currentHourUtc) {
+    return { date, fired: false, reason: "not_preferred_hour" as const, preferredHour: preferred.hour };
+  }
 
   const delivered = await dispatchTriggerNotification(ownerId, "journal_reminder", {
     title: "Que tal registrar o seu dia?",
@@ -473,10 +519,20 @@ export async function runJournalReminderTriggers(ownerId: string, date = new Dat
     sourceId: `journal_reminder_${date}`,
     ctaLabel: "Escrever agora",
   });
-  return { date, fired: !delivered.skipped, emailSent: delivered.emailSent, pushSent: delivered.pushSent };
+  return {
+    date,
+    fired: !delivered.skipped,
+    emailSent: delivered.emailSent,
+    pushSent: delivered.pushSent,
+    preferredHour: preferred.hour,
+    learned: preferred.learned,
+  };
 }
 
-export async function runJournalReminderTriggersForAll(date = new Date().toISOString().slice(0, 10)) {
+export async function runJournalReminderTriggersForAll(
+  date = new Date().toISOString().slice(0, 10),
+  currentHourUtc = new Date().getUTCHours(),
+) {
   const db = getDb();
   const owners = await db.execute({
     sql: "SELECT id AS owner_id FROM users",
@@ -486,8 +542,8 @@ export async function runJournalReminderTriggersForAll(date = new Date().toISOSt
   let fired = 0;
   for (const row of owners.rows as unknown as Array<{ owner_id: string }>) {
     checked += 1;
-    const result = await runJournalReminderTriggers(row.owner_id, date);
+    const result = await runJournalReminderTriggers(row.owner_id, date, currentHourUtc);
     if (result.fired) fired += 1;
   }
-  return { date, checked, fired };
+  return { date, hourUtc: currentHourUtc, checked, fired };
 }
