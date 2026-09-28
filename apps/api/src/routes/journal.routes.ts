@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { journalUpsertSchema } from "../validators/journal.schema.js";
-import { getJournalAutoData, getJournalInsights } from "../services/journalService.js";
+import { getJournalAutoData, getJournalInsights, listJournalDays, getJournalCalendarMonth } from "../services/journalService.js";
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
@@ -62,6 +62,32 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
 journalRouter.get("/insights", async (req, res) => {
   const db = getDb();
   return res.json(await getJournalInsights(db, req.user!.id));
+});
+
+/**
+ * GET /api/journal/days — feed cronológico (aba "Entradas"): só dias com
+ * conteúdo real escrito, paginado por cursor (?before=YYYY-MM-DD&limit=20).
+ * Precisa vir ANTES de "/:date".
+ */
+journalRouter.get("/days", async (req, res) => {
+  const before = typeof req.query.before === "string" && isValidDate(req.query.before) ? req.query.before : undefined;
+  const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+  const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+  const db = getDb();
+  return res.json(await listJournalDays(db, req.user!.id, { before, limit }));
+});
+
+/**
+ * GET /api/journal/calendar?month=YYYY-MM — datas do mês com entrada
+ * real escrita (aba "Calendário"). Precisa vir ANTES de "/:date".
+ */
+journalRouter.get("/calendar", async (req, res) => {
+  const month = req.query.month;
+  if (typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: "Mês inválido. Use o formato YYYY-MM." });
+  }
+  const db = getDb();
+  return res.json({ days: await getJournalCalendarMonth(db, req.user!.id, month) });
 });
 
 journalRouter.get("/:date", async (req, res) => {

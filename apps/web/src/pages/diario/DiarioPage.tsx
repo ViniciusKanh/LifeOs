@@ -22,12 +22,14 @@ import {
   Award,
   CalendarDays,
   Type as TypeIcon,
+  Plus,
 } from "lucide-react";
-import { useJournal, useJournalInsights } from "@/hooks/useJournal";
+import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth } from "@/hooks/useJournal";
+import type { JournalDaySummary } from "@/services/journalService";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
-import { Card } from "@/components/ui/primitives";
+import { Card, EmptyState } from "@/components/ui/primitives";
 
 /* ============================================================
    Diário — inspirado no app Diário/Journal da Apple (macOS Tahoe):
@@ -209,8 +211,13 @@ const EMPTY_FORM: FormState = {
   nightTakeaway: "",
 };
 
-export function DiarioPage() {
-  const [date, setDate] = useState(todayIso());
+/**
+ * Editor imersivo de um dia — o antigo `DiarioPage` inteiro, agora
+ * "encaixado" dentro da navegação por abas (Entradas/Insights/Calendário):
+ * data e navegação de dia continuam controladas aqui, mas `date` vem do
+ * componente pai pra permitir abrir um dia direto do feed ou do calendário.
+ */
+function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: React.Dispatch<React.SetStateAction<string>>; onBack: () => void }) {
   const { entry, isLoading, save, isSaving } = useJournal(date);
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
@@ -334,13 +341,22 @@ export function DiarioPage() {
           sobre o hábito de escrever (sequência, recorde, entradas, palavras) */}
       <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/15 via-cat-purple/[0.06] to-transparent p-4 sm:p-6 sm:pt-5">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <button
-            onClick={() => setDate((d) => addDays(d, -1))}
-            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-            aria-label="Dia anterior"
-          >
-            <ChevronLeft size={15} />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={onBack}
+              className="hidden sm:flex items-center gap-1 text-xs text-slate hover:text-cat-pink font-medium transition-colors pr-1"
+            >
+              <ChevronLeft size={14} />
+              Entradas
+            </button>
+            <button
+              onClick={() => setDate((d) => addDays(d, -1))}
+              className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
+              aria-label="Dia anterior"
+            >
+              <ChevronLeft size={15} />
+            </button>
+          </div>
           <div className="text-center min-w-0">
             <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none">Diário</p>
             <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
@@ -642,6 +658,272 @@ export function DiarioPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const TABS: Array<{ key: "feed" | "insights" | "calendar"; label: string }> = [
+  { key: "feed", label: "Entradas" },
+  { key: "insights", label: "Insights" },
+  { key: "calendar", label: "Calendário" },
+];
+
+function TabBar({ active, onChange }: { active: "feed" | "insights" | "calendar"; onChange: (t: "feed" | "insights" | "calendar") => void }) {
+  return (
+    <div className="flex items-center gap-1 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-1 w-fit">
+      {TABS.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            active === tab.key ? "bg-white dark:bg-ink-raised text-cat-pink shadow-sm" : "text-slate hover:text-inherit"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatCardDate(date: string) {
+  const d = new Date(`${date}T00:00:00`);
+  const today = todayIso();
+  const yesterday = addDays(today, -1);
+  if (date === today) return "Hoje";
+  if (date === yesterday) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+}
+
+/** Um card do feed "Entradas" — resumo de um dia real, nunca inventado, com o mesmo hover/press das seções do editor. */
+function DayCard({ day, onOpen }: { day: JournalDaySummary; onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      className="w-full text-left rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-4 sm:p-5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99]"
+    >
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-sm font-semibold capitalize">{formatCardDate(day.date)}</p>
+        {day.mood && <span className="text-lg leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
+      </div>
+      <p className="text-sm text-slate leading-relaxed line-clamp-3">{day.preview}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px] text-slate">
+        <span className="flex items-center gap-1">
+          <TypeIcon size={11} />
+          {day.wordCount} palavras
+        </span>
+        {day.gratitudeCount > 0 && (
+          <span className="flex items-center gap-1">
+            <Heart size={11} />
+            {day.gratitudeCount} gratidão
+          </span>
+        )}
+        {day.selfCareCount > 0 && (
+          <span className="flex items-center gap-1">
+            <Sparkles size={11} />
+            {day.selfCareCount} cuidado comigo
+          </span>
+        )}
+        {day.nightMood != null && (
+          <span className="flex items-center gap-1">
+            <Moon size={11} />
+            {day.nightMood}/5 à noite
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+/** Aba "Entradas" — feed cronológico real (só dias com conteúdo escrito), mais recente primeiro. */
+function JournalFeedTab({ onOpenDay }: { onOpenDay: (date: string) => void }) {
+  const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays();
+
+  if (isLoading) return <p className="text-sm text-slate">Carregando…</p>;
+
+  if (days.length === 0) {
+    return (
+      <EmptyState
+        title="Seu diário está esperando a primeira entrada"
+        description="Escreva sobre sua intenção do dia, uma reflexão ou o que te fez bem — o LifeOS guarda tudo com data e monta seus Insights a partir disso."
+        ctaLabel="Escrever hoje"
+        onCta={() => onOpenDay(todayIso())}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3 max-w-2xl">
+      {days.map((day) => (
+        <DayCard key={day.date} day={day} onOpen={() => onOpenDay(day.date)} />
+      ))}
+      {hasNextPage && (
+        <button
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="w-full text-center text-sm text-cat-pink font-medium py-3 hover:underline disabled:opacity-50"
+        >
+          {isFetchingNextPage ? "Carregando…" : "Carregar mais"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Aba "Insights" — as mesmas métricas reais do masthead, em destaque, com contagem animada. */
+function JournalInsightsTab() {
+  const { insights, isLoading } = useJournalInsights();
+  const streakCount = useCountUp(insights?.currentStreak ?? 0);
+  const longestCount = useCountUp(insights?.longestStreak ?? 0);
+  const entriesCount = useCountUp(insights?.totalEntries ?? 0);
+  const wordsCount = useCountUp(insights?.totalWords ?? 0);
+
+  if (isLoading) return <p className="text-sm text-slate">Carregando…</p>;
+
+  if (!insights || insights.totalEntries === 0) {
+    return (
+      <EmptyState
+        title="Ainda sem Insights"
+        description="Assim que você escrever sua primeira entrada, sua sequência, recorde, total de entradas e de palavras aparecem aqui — sempre derivados do que você realmente escreveu."
+        ctaLabel="Escrever hoje"
+        onCta={() => undefined}
+      />
+    );
+  }
+
+  const tiles: Array<{ icon: React.ReactNode; label: string; value: string; tone: string }> = [
+    { icon: <Flame size={20} />, label: "Sequência atual", value: `${streakCount} ${streakCount === 1 ? "dia" : "dias"}`, tone: "text-signal" },
+    { icon: <Award size={20} />, label: "Recorde", value: `${longestCount} ${longestCount === 1 ? "dia" : "dias"}`, tone: "text-cat-purple" },
+    { icon: <CalendarDays size={20} />, label: "Entradas escritas", value: `${entriesCount}`, tone: "text-cat-blue" },
+    { icon: <TypeIcon size={20} />, label: "Palavras escritas", value: wordsCount.toLocaleString("pt-BR"), tone: "text-cat-green" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-3xl">
+      {tiles.map((t) => (
+        <Card key={t.label} className="p-4 sm:p-5 flex flex-col items-start gap-2 transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md">
+          <span className={t.tone}>{t.icon}</span>
+          <p className="text-2xl font-bold leading-none">{t.value}</p>
+          <p className="text-xs text-slate">{t.label}</p>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function daysInMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** Aba "Calendário" — grade do mês com pontinho nos dias que têm entrada real; clicar abre o dia. */
+function JournalCalendarTab({ onOpenDay }: { onOpenDay: (date: string) => void }) {
+  const [month, setMonth] = useState(() => todayIso().slice(0, 7));
+  const { days: markedDays, isLoading } = useJournalCalendarMonth(month);
+  const marked = useMemo(() => new Set(markedDays), [markedDays]);
+
+  const [year, monthNum] = month.split("-").map(Number);
+  const monthIndex = monthNum - 1;
+  const firstWeekday = new Date(year, monthIndex, 1).getDay();
+  const total = daysInMonth(year, monthIndex);
+  const monthLabel = new Date(year, monthIndex, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const today = todayIso();
+
+  const changeMonth = (delta: number) => {
+    const d = new Date(year, monthIndex + delta, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const cells: Array<{ day: number; date: string } | null> = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= total; d++) {
+    cells.push({ day: d, date: `${year}-${String(monthNum).padStart(2, "0")}-${String(d).padStart(2, "0")}` });
+  }
+
+  return (
+    <div className="max-w-md">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => changeMonth(-1)} className="w-8 h-8 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]" aria-label="Mês anterior">
+          <ChevronLeft size={15} />
+        </button>
+        <p className="text-sm font-semibold capitalize">{monthLabel}</p>
+        <button onClick={() => changeMonth(1)} disabled={month >= today.slice(0, 7)} className="w-8 h-8 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] disabled:opacity-30" aria-label="Próximo mês">
+          <ChevronRight size={15} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-1.5">
+        {WEEKDAYS.map((w, i) => (
+          <p key={i} className="text-center text-[10px] text-slate font-semibold">
+            {w}
+          </p>
+        ))}
+      </div>
+      <div className={`grid grid-cols-7 gap-1 ${isLoading ? "opacity-50" : ""}`}>
+        {cells.map((cell, i) =>
+          cell ? (
+            <button
+              key={cell.date}
+              onClick={() => onOpenDay(cell.date)}
+              disabled={cell.date > today}
+              className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 text-xs transition-colors disabled:opacity-30 ${
+                cell.date === today ? "bg-cat-pink text-white font-semibold" : "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              {cell.day}
+              {marked.has(cell.date) && <span className={`w-1 h-1 rounded-full ${cell.date === today ? "bg-white" : "bg-cat-pink"}`} />}
+            </button>
+          ) : (
+            <div key={`empty-${i}`} />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Diário — ponto de entrada da tela: navegação por abas no espírito do
+ * app Diário da Apple (Entradas / Insights / Calendário), todas 100%
+ * derivadas de journal_entries reais. "Entradas" é o feed cronológico
+ * (a home passa a ser sobre memória, não sobre um dashboard de métricas);
+ * abrir um dia — pelo feed, pelo calendário ou por "+ Nova entrada" —
+ * leva ao editor imersivo do dia (DiaryDayEditor, o antigo Diário).
+ */
+export function DiarioPage() {
+  const [view, setView] = useState<"feed" | "insights" | "calendar" | "day">("feed");
+  const [date, setDate] = useState(todayIso());
+
+  const openDay = (d: string) => {
+    setDate(d);
+    setView("day");
+  };
+
+  if (view === "day") {
+    return <DiaryDayEditor date={date} setDate={setDate} onBack={() => setView("feed")} />;
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div>
+          <p className="text-2xl sm:text-3xl font-bold tracking-tight text-cat-pink">Diário</p>
+          <p className="text-xs sm:text-sm text-slate mt-0.5">Reflita sobre os momentos do seu dia.</p>
+        </div>
+        <button
+          onClick={() => openDay(todayIso())}
+          className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 active:scale-95 transition-all shadow-sm"
+        >
+          <Plus size={15} />
+          Nova entrada
+        </button>
+      </div>
+
+      <div className="mb-5">
+        <TabBar active={view} onChange={setView} />
+      </div>
+
+      {view === "feed" && <JournalFeedTab onOpenDay={openDay} />}
+      {view === "insights" && <JournalInsightsTab />}
+      {view === "calendar" && <JournalCalendarTab onOpenDay={openDay} />}
     </div>
   );
 }

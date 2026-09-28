@@ -162,6 +162,112 @@ export async function getJournalInsights(db: Db, ownerId: string): Promise<Journ
   return { totalEntries: writtenRows.length, currentStreak, longestStreak, totalWords };
 }
 
+/** Um item do feed "Entradas" — resumo de um dia com conteúdo real escrito, sem os dados pesados de auto (esses só são buscados na tela do dia). */
+export interface JournalDaySummary {
+  date: string;
+  preview: string;
+  wordCount: number;
+  gratitudeCount: number;
+  selfCareCount: number;
+  nightMood: number | null;
+  mood: { mood: number; energy: number } | null;
+}
+
+const PREVIEW_FIELD_ORDER = ["intention", "thoughts", "feel_good", "challenges", "lighter_plan", "night_takeaway"] as const;
+
+function buildPreview(row: Record<string, unknown>): string {
+  for (const field of PREVIEW_FIELD_ORDER) {
+    const value = row[field];
+    if (typeof value === "string" && value.trim().length > 0) {
+      const trimmed = value.trim();
+      return trimmed.length > 220 ? `${trimmed.slice(0, 220)}…` : trimmed;
+    }
+  }
+  const gratitude = parseJsonArraySafe(row.gratitude as string | undefined);
+  if (gratitude.length > 0) return `Grato por: ${gratitude.join(", ")}`;
+  return "Entrada sem texto — só itens marcados (cuidado comigo/gratidão).";
+}
+
+function parseJsonArraySafe(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Feed cronológico do Diário (aba "Entradas") — só dias com conteúdo
+ * real escrito pelo usuário, mais recentes primeiro, com paginação por
+ * cursor (before = último `date` da página anterior). O humor do dia
+ * (quando existir) vem de mood_entries, mesma fonte usada na tela do dia.
+ */
+export async function listJournalDays(
+  db: Db,
+  ownerId: string,
+  opts: { before?: string; limit?: number } = {}
+): Promise<{ items: JournalDaySummary[]; hasMore: boolean }> {
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
+  const beforeClause = opts.before ? "AND entry_date < ?" : "";
+  const args = opts.before ? [ownerId, opts.before] : [ownerId];
+
+  const result = await db.execute({
+    sql: `SELECT * FROM journal_entries WHERE owner_id = ? ${beforeClause} ORDER BY entry_date DESC LIMIT ?`,
+    args: [...args, limit + 1],
+  });
+  const rows = (result.rows as unknown as Array<Record<string, unknown>>).filter(hasWrittenContent);
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
+
+  const moodByDate = new Map<string, { mood: number; energy: number }>();
+  if (page.length > 0) {
+    const dates = page.map((r) => String(r.entry_date));
+    const placeholders = dates.map(() => "?").join(",");
+    const moodRes = await db.execute({
+      // Um registro de humor por dia (o mais recente) — window function em
+      // vez de GROUP BY, pra não depender de comportamento implícito do SQLite.
+      sql: `SELECT d, mood, energy FROM (
+              SELECT date(recorded_at) AS d, mood, energy,
+                     ROW_NUMBER() OVER (PARTITION BY date(recorded_at) ORDER BY recorded_at DESC) AS rn
+              FROM mood_entries
+              WHERE owner_id = ? AND date(recorded_at) IN (${placeholders})
+            ) WHERE rn = 1`,
+      args: [ownerId, ...dates],
+    });
+    for (const r of moodRes.rows as unknown as Array<{ d: string; mood: number; energy: number }>) {
+      moodByDate.set(r.d, { mood: r.mood, energy: r.energy });
+    }
+  }
+
+  const items: JournalDaySummary[] = page.map((row) => ({
+    date: String(row.entry_date),
+    preview: buildPreview(row),
+    wordCount: WRITTEN_FIELDS.reduce((s, f) => s + countWords(row[f] as string | null), 0),
+    gratitudeCount: parseJsonArraySafe(row.gratitude as string | undefined).length,
+    selfCareCount: parseJsonArraySafe(row.self_care as string | undefined).length,
+    nightMood: (row.night_mood as number | null) ?? null,
+    mood: moodByDate.get(String(row.entry_date)) ?? null,
+  }));
+
+  return { items, hasMore };
+}
+
+/**
+ * Datas do mês (YYYY-MM) que possuem entrada com conteúdo real escrito —
+ * usado só pra marcar os pontinhos da aba "Calendário", nunca inventa
+ * presença de entrada.
+ */
+export async function getJournalCalendarMonth(db: Db, ownerId: string, month: string): Promise<string[]> {
+  const result = await db.execute({
+    sql: "SELECT * FROM journal_entries WHERE owner_id = ? AND entry_date LIKE ? ORDER BY entry_date ASC",
+    args: [ownerId, `${month}%`],
+  });
+  const rows = (result.rows as unknown as Array<Record<string, unknown>>).filter(hasWrittenContent);
+  return rows.map((r) => String(r.entry_date));
+}
+
 export async function getJournalAutoData(db: Db, ownerId: string, date: string): Promise<JournalAutoData> {
   const [
     moodRes,
