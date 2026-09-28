@@ -1137,17 +1137,52 @@ function JournalInsightsTab() {
     { icon: <Award size={20} />, label: "Recorde", value: `${longestCount} ${longestCount === 1 ? "dia" : "dias"}`, tone: "text-cat-purple" },
     { icon: <CalendarDays size={20} />, label: "Entradas escritas", value: `${entriesCount}`, tone: "text-cat-blue" },
     { icon: <TypeIcon size={20} />, label: "Palavras escritas", value: wordsCount.toLocaleString("pt-BR"), tone: "text-cat-green" },
+    { icon: <BookOpen size={20} />, label: "Palavras por entrada", value: `${insights.avgWordsPerEntry}`, tone: "text-cat-teal" },
+    ...(insights.bestWeekday
+      ? [{ icon: <Sun size={20} />, label: "Dia que mais escreve", value: insights.bestWeekday, tone: "text-cat-pink" }]
+      : []),
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-3xl">
-      {tiles.map((t) => (
-        <Card key={t.label} className="p-4 sm:p-5 flex flex-col items-start gap-2 transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md">
-          <span className={t.tone}>{t.icon}</span>
-          <p className="text-2xl font-bold leading-none">{t.value}</p>
-          <p className="text-xs text-slate">{t.label}</p>
+    <div className="max-w-3xl space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {tiles.map((t) => (
+          <Card key={t.label} className="p-4 sm:p-5 flex flex-col items-start gap-2 transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md">
+            <span className={t.tone}>{t.icon}</span>
+            <p className="text-2xl font-bold leading-none">{t.value}</p>
+            <p className="text-xs text-slate">{t.label}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Correlação real com humor (Saúde) — só aparece com amostra suficiente
+          em ambos os grupos (ver getJournalInsights); nunca uma métrica
+          inventada, e o texto deixa claro que é uma correlação, não causa. */}
+      {insights.moodCorrelation && (
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Heart size={16} className="text-cat-pink" />
+            <p className="text-sm font-semibold">Humor e o hábito de escrever</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-cat-pink/10 p-3">
+              <p className="text-2xl font-bold text-cat-pink leading-none">{insights.moodCorrelation.onWritingDays}/5</p>
+              <p className="text-[11px] text-slate mt-1">
+                Humor médio em dias que você escreveu ({insights.moodCorrelation.sampleSize.writingDays} dias)
+              </p>
+            </div>
+            <div className="rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-3">
+              <p className="text-2xl font-bold leading-none">{insights.moodCorrelation.onOtherDays}/5</p>
+              <p className="text-[11px] text-slate mt-1">
+                Humor médio nos demais dias ({insights.moodCorrelation.sampleSize.otherDays} dias)
+              </p>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate mt-3">
+            Correlação, não causa: baseado no humor real registrado em Saúde nos mesmos dias das suas entradas.
+          </p>
         </Card>
-      ))}
+      )}
     </div>
   );
 }

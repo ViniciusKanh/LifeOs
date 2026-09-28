@@ -76,6 +76,21 @@ export interface JournalInsights {
   currentStreak: number;
   longestStreak: number;
   totalWords: number;
+  /** Média de palavras por entrada (arredondada) — 0 quando ainda não há nenhuma entrada. */
+  avgWordsPerEntry: number;
+  /** Dia da semana com mais entradas escritas (ex.: "domingo") — null sem dados suficientes. */
+  bestWeekday: string | null;
+  /**
+   * Correlação real entre escrever no Diário e o humor registrado em Saúde
+   * (mood_entries) no mesmo dia — só é calculada (não inventada) quando há
+   * pelo menos 5 dias com humor registrado em cada grupo (dias com entrada
+   * e dias sem), pra não tirar conclusão de amostra pequena demais.
+   */
+  moodCorrelation: {
+    onWritingDays: number;
+    onOtherDays: number;
+    sampleSize: { writingDays: number; otherDays: number };
+  } | null;
 }
 
 const WRITTEN_FIELDS = [
@@ -181,7 +196,53 @@ export async function getJournalInsights(db: Db, ownerId: string): Promise<Journ
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
 
-  return { totalEntries: writtenRows.length, currentStreak, longestStreak, totalWords };
+  const avgWordsPerEntry = writtenRows.length > 0 ? Math.round(totalWords / writtenRows.length) : 0;
+
+  // Dia da semana com mais entradas — parse com "T00:00:00" pra não sofrer
+  // deslocamento de fuso horário na hora de descobrir o dia da semana.
+  const WEEKDAY_LABELS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+  let bestWeekday: string | null = null;
+  if (sorted.length > 0) {
+    const weekdayCounts = new Array(7).fill(0);
+    for (const date of sorted) {
+      weekdayCounts[new Date(`${date}T00:00:00`).getDay()] += 1;
+    }
+    const maxCount = Math.max(...weekdayCounts);
+    if (maxCount > 0) bestWeekday = WEEKDAY_LABELS[weekdayCounts.indexOf(maxCount)];
+  }
+
+  // Correlação real com humor (Saúde): agrupa mood_entries por dia (pode
+  // haver mais de um registro no mesmo dia) e separa em "dias que escrevi
+  // no Diário" vs "dias que não escrevi", comparando a média de humor.
+  const moodByDay = await db.execute({
+    sql: `SELECT date(recorded_at) AS d, AVG(mood) AS avg_mood FROM mood_entries WHERE owner_id = ? GROUP BY d`,
+    args: [ownerId],
+  });
+  const writingMoods: number[] = [];
+  const otherMoods: number[] = [];
+  for (const row of moodByDay.rows as unknown as Array<{ d: string; avg_mood: number }>) {
+    (dates.has(row.d) ? writingMoods : otherMoods).push(Number(row.avg_mood));
+  }
+  const MIN_SAMPLE = 5;
+  const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const moodCorrelation =
+    writingMoods.length >= MIN_SAMPLE && otherMoods.length >= MIN_SAMPLE
+      ? {
+          onWritingDays: Math.round(avg(writingMoods) * 10) / 10,
+          onOtherDays: Math.round(avg(otherMoods) * 10) / 10,
+          sampleSize: { writingDays: writingMoods.length, otherDays: otherMoods.length },
+        }
+      : null;
+
+  return {
+    totalEntries: writtenRows.length,
+    currentStreak,
+    longestStreak,
+    totalWords,
+    avgWordsPerEntry,
+    bestWeekday,
+    moodCorrelation,
+  };
 }
 
 /** Um item do feed "Entradas" — resumo de um dia com conteúdo real escrito, sem os dados pesados de auto (esses só são buscados na tela do dia). */

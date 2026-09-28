@@ -22,6 +22,13 @@ export interface JournalInsights {
   currentStreak: number;
   longestStreak: number;
   totalWords: number;
+  avgWordsPerEntry: number;
+  bestWeekday: string | null;
+  moodCorrelation: {
+    onWritingDays: number;
+    onOtherDays: number;
+    sampleSize: { writingDays: number; otherDays: number };
+  } | null;
 }
 
 export interface JournalDaySummary {
