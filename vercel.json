@@ -27,10 +27,6 @@
     {
       "path": "/api/cron/notification-triggers",
       "schedule": "5 12 * * *"
-    },
-    {
-      "path": "/api/cron/journal-reminder",
-      "schedule": "0 * * * *"
     }
   ]
 }
