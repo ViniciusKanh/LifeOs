@@ -15,12 +15,19 @@ import {
   updateJournalMediaCaption,
   deleteJournalMedia,
   setJournalFavorite,
+  setJournalTags,
   deleteJournalEntry,
   getJournalOnThisDay,
   getJournalPinStatus,
   setJournalPin,
   verifyJournalPin,
   removeJournalPin,
+  getJournalEntryLinks,
+  addJournalEntryLink,
+  removeJournalEntryLink,
+  moveJournalEntryDate,
+  getJournalLocations,
+  getJournalDaysByLocation,
 } from "../services/journalService.js";
 
 export const journalRouter = Router();
@@ -63,6 +70,7 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
       ).rows.map((r) => (r as unknown as { journal_id: string }).journal_id)
     : [];
   const media = row ? await getJournalMedia(db, row.id as string) : [];
+  const links = row ? await getJournalEntryLinks(db, row.id as string) : [];
   return {
     date,
     intention: row?.intention ?? null,
@@ -80,6 +88,11 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     journalIds,
     media,
     isFavorite: Number(row?.is_favorite ?? 0) === 1,
+    locationLabel: row?.location_label ?? null,
+    locationLat: row?.location_lat ?? null,
+    locationLng: row?.location_lng ?? null,
+    tags: parseJsonArray(row?.tags),
+    links,
     auto,
   };
 }
@@ -191,11 +204,79 @@ journalRouter.get("/on-this-day", async (req, res) => {
   return res.json({ items: await getJournalOnThisDay(db, req.user!.id, date) });
 });
 
+/**
+ * GET /api/journal/locations — locais reais (aba "Lugares"), agrupados
+ * a partir de journal_entries.location_label. Precisa vir ANTES de
+ * "/:date". Sem parâmetros: sempre os dados atuais, nunca cacheado.
+ */
+journalRouter.get("/locations", async (req, res) => {
+  const db = getDb();
+  return res.json({ items: await getJournalLocations(db, req.user!.id) });
+});
+
+/**
+ * GET /api/journal/locations/:label/days — dias reais escritos naquele
+ * local exato (clique num pino/local da aba "Lugares"). Precisa vir
+ * ANTES de "/:date".
+ */
+journalRouter.get("/locations/:label/days", async (req, res) => {
+  const db = getDb();
+  const label = decodeURIComponent(req.params.label);
+  return res.json({ items: await getJournalDaysByLocation(db, req.user!.id, label) });
+});
+
 journalRouter.get("/:date", async (req, res) => {
   const { date } = req.params;
   if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
   const db = getDb();
   return res.json(await buildJournalResponse(db, req.user!.id, date));
+});
+
+/**
+ * PATCH /api/journal/:date/date — "Alterar data" do menu do card: move a
+ * entrada inteira pra outro dia. Recusa se o destino já tiver entrada
+ * própria (nunca mescla ou sobrescreve em silêncio).
+ */
+journalRouter.patch("/:date/date", async (req, res) => {
+  const { date } = req.params;
+  const newDate = req.body?.newDate;
+  if (!isValidDate(date) || typeof newDate !== "string" || !isValidDate(newDate)) {
+    return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const result = await moveJournalEntryDate(db, ownerId, date, newDate);
+  if (!result.ok) return res.status(409).json({ error: result.reason ?? "Não foi possível mover a entrada." });
+  return res.json(await buildJournalResponse(db, ownerId, newDate));
+});
+
+/**
+ * POST /api/journal/:date/links — "Vincular a projeto/meta" do menu do
+ * card: liga o dia a um projeto ou meta real do usuário autenticado.
+ */
+journalRouter.post("/:date/links", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const targetType = req.body?.targetType;
+  const targetId = req.body?.targetId;
+  if ((targetType !== "project" && targetType !== "goal") || typeof targetId !== "string" || !targetId) {
+    return res.status(400).json({ error: "targetType precisa ser 'project' ou 'goal', e targetId é obrigatório." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const ok = await addJournalEntryLink(db, ownerId, date, targetType, targetId);
+  if (!ok) return res.status(404).json({ error: "Projeto ou meta não encontrado(a)." });
+  return res.json(await buildJournalResponse(db, ownerId, date));
+});
+
+/** DELETE /api/journal/:date/links/:linkId — remove um vínculo de projeto/meta da entrada. */
+journalRouter.delete("/:date/links/:linkId", async (req, res) => {
+  const { date, linkId } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const db = getDb();
+  const ownerId = req.user!.id;
+  await removeJournalEntryLink(db, ownerId, linkId);
+  return res.json(await buildJournalResponse(db, ownerId, date));
 });
 
 /** PATCH /api/journal/:date/favorite — marca/desmarca o dia como favorito (Fase 6). */
@@ -208,6 +289,20 @@ journalRouter.patch("/:date/favorite", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
   await setJournalFavorite(db, ownerId, date, req.body.isFavorite);
+  return res.json(await buildJournalResponse(db, ownerId, date));
+});
+
+/** PATCH /api/journal/:date/tags — atualiza só as etiquetas do dia (menu "Adicionar etiquetas" do card). */
+journalRouter.patch("/:date/tags", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const tags = req.body?.tags;
+  if (!Array.isArray(tags) || !tags.every((t) => typeof t === "string")) {
+    return res.status(400).json({ error: "tags precisa ser uma lista de strings." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  await setJournalTags(db, ownerId, date, tags);
   return res.json(await buildJournalResponse(db, ownerId, date));
 });
 
@@ -368,6 +463,10 @@ journalRouter.put("/:date", async (req, res) => {
     night_helped: data.nightHelped ?? null,
     night_takeaway: data.nightTakeaway ?? null,
     focus_task_ids: JSON.stringify(data.focusTaskIds ?? []),
+    location_label: data.locationLabel ?? null,
+    location_lat: data.locationLat ?? null,
+    location_lng: data.locationLng ?? null,
+    tags: JSON.stringify(data.tags ?? []),
   };
 
   const entryId = existingRow?.id ?? nanoid();
@@ -377,7 +476,8 @@ journalRouter.put("/:date", async (req, res) => {
       sql: `UPDATE journal_entries SET
               intention = ?, thoughts = ?, gratitude = ?, self_care = ?, self_care_other = ?,
               challenges = ?, lighter_plan = ?, feel_good = ?, night_mood = ?, night_helped = ?,
-              night_takeaway = ?, focus_task_ids = ?, updated_at = datetime('now')
+              night_takeaway = ?, focus_task_ids = ?, location_label = ?, location_lat = ?,
+              location_lng = ?, tags = ?, updated_at = datetime('now')
             WHERE id = ?`,
       args: [
         values.intention,
@@ -392,6 +492,10 @@ journalRouter.put("/:date", async (req, res) => {
         values.night_helped,
         values.night_takeaway,
         values.focus_task_ids,
+        values.location_label,
+        values.location_lat,
+        values.location_lng,
+        values.tags,
         entryId,
       ],
     });
@@ -399,8 +503,9 @@ journalRouter.put("/:date", async (req, res) => {
     await db.execute({
       sql: `INSERT INTO journal_entries
               (id, owner_id, entry_date, intention, thoughts, gratitude, self_care, self_care_other,
-               challenges, lighter_plan, feel_good, night_mood, night_helped, night_takeaway, focus_task_ids)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               challenges, lighter_plan, feel_good, night_mood, night_helped, night_takeaway, focus_task_ids,
+               location_label, location_lat, location_lng, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         entryId,
         ownerId,
@@ -417,6 +522,10 @@ journalRouter.put("/:date", async (req, res) => {
         values.night_helped,
         values.night_takeaway,
         values.focus_task_ids,
+        values.location_label,
+        values.location_lat,
+        values.location_lng,
+        values.tags,
       ],
     });
   }

@@ -23,6 +23,12 @@ export const journalUpsertSchema = z.object({
   nightTakeaway: z.string().trim().max(4000).optional().nullable(),
   focusTaskIds: z.array(z.string()).max(10).optional(),
   journalIds: z.array(z.string()).max(20).optional(),
+  /** Localização real digitada/escolhida no editor (busca via /api/context/geocode) — nunca inventada. */
+  locationLabel: z.string().trim().max(200).optional().nullable(),
+  locationLat: z.number().min(-90).max(90).optional().nullable(),
+  locationLng: z.number().min(-180).max(180).optional().nullable(),
+  /** Etiquetas livres do dia (Fase 17 — protótipo Apple Journal). */
+  tags: z.array(z.string().trim().min(1).max(40)).max(15).optional(),
 });
 export type JournalUpsertInput = z.infer<typeof journalUpsertSchema>;
 

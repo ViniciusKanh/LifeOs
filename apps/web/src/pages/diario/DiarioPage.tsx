@@ -35,19 +35,40 @@ import {
   Pencil,
   FolderInput,
   ArrowLeft,
+  MapPin,
+  Tag,
+  Map as MapIcon,
 } from "lucide-react";
-import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay, useJournalPin, useJournalDayActions } from "@/hooks/useJournal";
-import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
-import type { JournalMedia } from "@/types";
+import {
+  useJournal,
+  useJournalInsights,
+  useJournalDays,
+  useJournalCalendarMonth,
+  useJournalCollections,
+  useJournalOnThisDay,
+  useJournalPin,
+  useJournalDayActions,
+  useJournalLocations,
+  useJournalDaysByLocation,
+} from "@/hooks/useJournal";
+import type { JournalDaySummary, JournalCollectionInput, JournalLocationSummary } from "@/services/journalService";
+import type { JournalMedia, JournalEntryLink, GeocodeResult } from "@/types";
 import { compressImageToDataUri } from "@/utils/image";
 import { buildJournalMoments, type JournalMoment, type JournalMomentKind } from "@/utils/journalMoments";
 import type { JournalCollection } from "@/types";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
+import { useGoals } from "@/hooks/useGoals";
+import { useProjects } from "@/hooks/useProjects";
+import { contextService } from "@/services/contextService";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
 import { Card, EmptyState } from "@/components/ui/primitives";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
 import { API_URL } from "@/services/api";
+import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
+import L from "leaflet";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
 /* ============================================================
    Diário — inspirado no app Diário/Journal da Apple (macOS Tahoe):
@@ -431,6 +452,197 @@ function JournalAudioSection({
   );
 }
 
+/**
+ * Localização, etiquetas e vínculos do dia (Fase 17 — protótipo Apple
+ * Journal): busca real de local via /api/context/geocode (mesma API já
+ * usada em Contexto do Dia — sem custo, sem chave), etiquetas livres
+ * digitadas pelo usuário, e vínculo do dia a um projeto/meta real (nunca
+ * lista fictícia). Cada bloco só salva o que o usuário efetivamente
+ * escolheu — nunca inventa localização, tag ou vínculo.
+ */
+function LocationTagsLinksSection({
+  locationLabel,
+  tags,
+  links,
+  onSetLocation,
+  onClearLocation,
+  onChangeTags,
+  onAddLink,
+  onRemoveLink,
+}: {
+  locationLabel: string;
+  tags: string[];
+  links: JournalEntryLink[];
+  onSetLocation: (label: string, lat: number, lng: number) => void;
+  onClearLocation: () => void;
+  onChangeTags: (tags: string[]) => void;
+  onAddLink: (targetType: "project" | "goal", targetId: string) => void;
+  onRemoveLink: (linkId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GeocodeResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
+  const { goals } = useGoals();
+  const { projects } = useProjects();
+  const [linkTarget, setLinkTarget] = useState("");
+
+  useEffect(() => {
+    if (query.trim().length < 3) {
+      setResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setIsSearching(true);
+      contextService
+        .geocode(query.trim())
+        .then(setResults)
+        .catch(() => setResults([]))
+        .finally(() => setIsSearching(false));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const addTag = () => {
+    const value = tagDraft.trim();
+    if (!value || tags.includes(value)) {
+      setTagDraft("");
+      return;
+    }
+    onChangeTags([...tags, value]);
+    setTagDraft("");
+  };
+
+  const linkableOptions = [
+    ...goals.map((g) => ({ type: "goal" as const, id: g.id, label: `🎯 ${g.title}` })),
+    ...projects.map((p) => ({ type: "project" as const, id: p.id, label: `📁 ${p.name}` })),
+  ].filter((opt) => !links.some((l) => l.targetType === opt.type && l.targetId === opt.id));
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div>
+        <p className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
+          <MapPin size={12} /> Onde você está?
+        </p>
+        {locationLabel ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full bg-cat-blue/10 text-cat-blue">
+            {locationLabel}
+            <button type="button" onClick={onClearLocation} aria-label="Remover localização">
+              <X size={11} />
+            </button>
+          </span>
+        ) : (
+          <div className="relative">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar cidade ou lugar…"
+              className="w-full rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+            />
+            {isSearching && <Loader2 size={12} className="animate-spin absolute right-2.5 top-2.5 text-slate" />}
+            {results.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full rounded-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised shadow-lg overflow-hidden">
+                {results.map((r, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      const label = [r.name, r.region, r.country].filter(Boolean).join(", ");
+                      onSetLocation(label, r.latitude, r.longitude);
+                      setQuery("");
+                      setResults([]);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+                  >
+                    {[r.name, r.region, r.country].filter(Boolean).join(", ")}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
+          <Tag size={12} /> Etiquetas
+        </p>
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {tags.map((tag) => (
+            <span key={tag} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-cat-purple/10 text-cat-purple">
+              #{tag}
+              <button type="button" onClick={() => onChangeTags(tags.filter((t) => t !== tag))} aria-label={`Remover etiqueta ${tag}`}>
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <input
+          value={tagDraft}
+          onChange={(e) => setTagDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addTag();
+            }
+          }}
+          onBlur={addTag}
+          placeholder="Digite e pressione Enter…"
+          className="w-full rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+        />
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
+          <FolderInput size={12} /> Vincular a projeto/meta
+        </p>
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {links.map((link) => {
+            const opt = link.targetType === "goal" ? goals.find((g) => g.id === link.targetId) : projects.find((p) => p.id === link.targetId);
+            const label = opt ? (link.targetType === "goal" ? `🎯 ${(opt as { title: string }).title}` : `📁 ${(opt as { name: string }).name}`) : "…";
+            return (
+              <span key={link.id} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-cat-green/10 text-cat-green">
+                {label}
+                <button type="button" onClick={() => onRemoveLink(link.id)} aria-label="Remover vínculo">
+                  <X size={10} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+        {linkableOptions.length > 0 && (
+          <div className="flex gap-1.5">
+            <select
+              value={linkTarget}
+              onChange={(e) => setLinkTarget(e.target.value)}
+              className="flex-1 min-w-0 rounded-xl px-2 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+            >
+              <option value="">Selecionar…</option>
+              {linkableOptions.map((opt) => (
+                <option key={`${opt.type}:${opt.id}`} value={`${opt.type}:${opt.id}`}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!linkTarget}
+              onClick={() => {
+                const [type, id] = linkTarget.split(":");
+                if (type === "project" || type === "goal") onAddLink(type, id);
+                setLinkTarget("");
+              }}
+              className="shrink-0 rounded-xl px-3 py-2 text-xs font-semibold bg-cat-pink/10 text-cat-pink hover:bg-cat-pink/20 disabled:opacity-40 transition-colors"
+            >
+              <Plus size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Ícone e rótulo curto de cada tipo de momento (Fase 5) — o texto completo só aparece ao inserir na reflexão. */
 const MOMENT_META: Record<JournalMomentKind, { icon: React.ReactNode; label: string }> = {
   tasks: { icon: <Check size={12} />, label: "Tarefas concluídas" },
@@ -495,6 +707,10 @@ type FormState = {
   nightHelped: string;
   nightTakeaway: string;
   journalIds: string[];
+  locationLabel: string;
+  locationLat: number | null;
+  locationLng: number | null;
+  tags: string[];
 };
 
 const EMPTY_FORM: FormState = {
@@ -510,6 +726,10 @@ const EMPTY_FORM: FormState = {
   nightHelped: "",
   nightTakeaway: "",
   journalIds: [],
+  locationLabel: "",
+  locationLat: null,
+  locationLng: null,
+  tags: [],
 };
 
 /**
@@ -534,6 +754,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     isTogglingFavorite,
     deleteEntry,
     isDeletingEntry,
+    addLink,
+    removeLink,
   } = useJournal(date);
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
@@ -568,6 +790,10 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       nightHelped: entry.nightHelped ?? "",
       nightTakeaway: entry.nightTakeaway ?? "",
       journalIds: entry.journalIds,
+      locationLabel: entry.locationLabel ?? "",
+      locationLat: entry.locationLat,
+      locationLng: entry.locationLng,
+      tags: entry.tags,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.date]);
@@ -593,6 +819,10 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       nightHelped: state.nightHelped || null,
       nightTakeaway: state.nightTakeaway || null,
       journalIds: state.journalIds,
+      locationLabel: state.locationLabel || null,
+      locationLat: state.locationLat,
+      locationLng: state.locationLng,
+      tags: state.tags,
     }).catch(() => undefined);
   };
 
@@ -908,6 +1138,19 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               />
             </SectionCard>
 
+            <SectionCard icon={<MapPin size={16} />} title="Localização, etiquetas e vínculos" subtitle="Onde você estava, o que marcar e o que este dia conecta" className="xl:col-span-3">
+              <LocationTagsLinksSection
+                locationLabel={form.locationLabel}
+                tags={form.tags}
+                links={entry?.links ?? []}
+                onSetLocation={(label, lat, lng) => saveNow({ locationLabel: label, locationLat: lat, locationLng: lng })}
+                onClearLocation={() => saveNow({ locationLabel: "", locationLat: null, locationLng: null })}
+                onChangeTags={(tags) => saveNow({ tags })}
+                onAddLink={(targetType, targetId) => addLink({ targetType, targetId }).catch(() => undefined)}
+                onRemoveLink={(linkId) => removeLink(linkId).catch(() => undefined)}
+              />
+            </SectionCard>
+
             <SectionCard icon={<Sun size={16} />} title="Intenção do dia" subtitle="Como quero me sentir hoje?">
               <RichTextEditor value={form.intention} onChange={(v) => updateField({ intention: v })} onBlur={() => saveNow()} placeholder="Como quero me sentir hoje?" />
             </SectionCard>
@@ -1125,12 +1368,13 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   );
 }
 
-type ViewKey = "feed" | "insights" | "calendar" | "collections";
+type ViewKey = "feed" | "insights" | "calendar" | "places" | "collections";
 
 const TABS: Array<{ key: ViewKey; label: string }> = [
   { key: "feed", label: "Entradas" },
   { key: "insights", label: "Insights" },
   { key: "calendar", label: "Calendário" },
+  { key: "places", label: "Lugares" },
   { key: "collections", label: "Diários" },
 ];
 
@@ -1294,8 +1538,9 @@ function EntryFavoriteToggle({ isFavorite, onToggle }: { isFavorite: boolean; on
 
 /**
  * Menu "⋯" do card no feed — Editar, Mover para diário (lista real dos
- * diários existentes, com o vínculo atual real do dia), Exportar PDF e
- * Excluir. Fecha ao clicar fora, no mesmo padrão do ProfileMenu do topbar.
+ * diários existentes), Adicionar etiquetas, Vincular a projeto/meta
+ * (lista real do usuário), Alterar data, Exportar PDF e Excluir. Fecha
+ * ao clicar fora, no mesmo padrão do ProfileMenu do topbar.
  */
 function EntryCardMenu({
   day,
@@ -1304,6 +1549,9 @@ function EntryCardMenu({
   onExport,
   onMove,
   onDelete,
+  onSetTags,
+  onAddLink,
+  onMoveDate,
 }: {
   day: JournalDaySummary;
   collections: JournalCollection[];
@@ -1311,21 +1559,44 @@ function EntryCardMenu({
   onExport: () => void;
   onMove: (journalIds: string[]) => void;
   onDelete: () => void;
+  onSetTags: (tags: string[]) => void;
+  onAddLink: (targetType: "project" | "goal", targetId: string) => void;
+  onMoveDate: (newDate: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [showMove, setShowMove] = useState(false);
+  const [subView, setSubView] = useState<"move" | "tags" | "link" | "date" | null>(null);
+  const [tagDraft, setTagDraft] = useState("");
+  const [dateDraft, setDateDraft] = useState(day.date);
+  const [linkTarget, setLinkTarget] = useState("");
+  const { goals } = useGoals();
+  const { projects } = useProjects();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
-        setShowMove(false);
+        setSubView(null);
       }
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
+
+  const addTag = () => {
+    const value = tagDraft.trim();
+    if (!value || day.tags.includes(value)) {
+      setTagDraft("");
+      return;
+    }
+    onSetTags([...day.tags, value]);
+    setTagDraft("");
+  };
+
+  const linkableOptions = [
+    ...goals.map((g) => ({ type: "goal" as const, id: g.id, label: `🎯 ${g.title}` })),
+    ...projects.map((p) => ({ type: "project" as const, id: p.id, label: `📁 ${p.name}` })),
+  ];
 
   return (
     <div className="relative shrink-0" ref={ref} onClick={(e) => e.stopPropagation()}>
@@ -1337,8 +1608,8 @@ function EntryCardMenu({
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-56 rounded-xl shadow-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised overflow-hidden z-40 py-1">
-          {!showMove ? (
+        <div className="absolute right-0 mt-1 w-64 rounded-xl shadow-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised overflow-hidden z-40 py-1">
+          {subView === null && (
             <>
               <button
                 onClick={() => {
@@ -1350,10 +1621,21 @@ function EntryCardMenu({
                 <Pencil size={14} /> Editar
               </button>
               {collections.length > 0 && (
-                <button onClick={() => setShowMove(true)} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">
+                <button onClick={() => setSubView("move")} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">
                   <FolderInput size={14} /> Mover para diário
                 </button>
               )}
+              <button onClick={() => setSubView("tags")} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">
+                <Tag size={14} /> Adicionar etiquetas
+              </button>
+              {linkableOptions.length > 0 && (
+                <button onClick={() => setSubView("link")} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">
+                  <MapPin size={14} /> Vincular a projeto/meta
+                </button>
+              )}
+              <button onClick={() => setSubView("date")} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">
+                <CalendarDays size={14} /> Alterar data
+              </button>
               <button
                 onClick={() => {
                   setOpen(false);
@@ -1373,9 +1655,11 @@ function EntryCardMenu({
                 <Trash2 size={14} /> Excluir
               </button>
             </>
-          ) : (
+          )}
+
+          {subView === "move" && (
             <>
-              <button onClick={() => setShowMove(false)} className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-slate hover:bg-black/5 dark:hover:bg-white/5">
+              <button onClick={() => setSubView(null)} className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-slate hover:bg-black/5 dark:hover:bg-white/5">
                 <ArrowLeft size={12} /> Voltar
               </button>
               {collections.map((c) => {
@@ -1399,6 +1683,100 @@ function EntryCardMenu({
               })}
             </>
           )}
+
+          {subView === "tags" && (
+            <div className="px-3.5 py-2">
+              <button onClick={() => setSubView(null)} className="flex items-center gap-2 text-xs text-slate hover:text-inherit mb-2">
+                <ArrowLeft size={12} /> Voltar
+              </button>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {day.tags.map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-cat-purple/10 text-cat-purple">
+                    #{tag}
+                    <button onClick={() => onSetTags(day.tags.filter((t) => t !== tag))} aria-label={`Remover etiqueta ${tag}`}>
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <input
+                autoFocus
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+                onBlur={addTag}
+                placeholder="Digite e pressione Enter…"
+                className="w-full rounded-lg px-2.5 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+              />
+            </div>
+          )}
+
+          {subView === "link" && (
+            <div className="px-3.5 py-2">
+              <button onClick={() => setSubView(null)} className="flex items-center gap-2 text-xs text-slate hover:text-inherit mb-2">
+                <ArrowLeft size={12} /> Voltar
+              </button>
+              <div className="flex gap-1.5">
+                <select
+                  value={linkTarget}
+                  onChange={(e) => setLinkTarget(e.target.value)}
+                  className="flex-1 min-w-0 rounded-lg px-2 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+                >
+                  <option value="">Selecionar…</option>
+                  {linkableOptions.map((opt) => (
+                    <option key={`${opt.type}:${opt.id}`} value={`${opt.type}:${opt.id}`}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  disabled={!linkTarget}
+                  onClick={() => {
+                    const [type, id] = linkTarget.split(":");
+                    if (type === "project" || type === "goal") onAddLink(type, id);
+                    setOpen(false);
+                    setSubView(null);
+                  }}
+                  className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-cat-pink/10 text-cat-pink hover:bg-cat-pink/20 disabled:opacity-40 transition-colors"
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {subView === "date" && (
+            <div className="px-3.5 py-2">
+              <button onClick={() => setSubView(null)} className="flex items-center gap-2 text-xs text-slate hover:text-inherit mb-2">
+                <ArrowLeft size={12} /> Voltar
+              </button>
+              <div className="flex gap-1.5">
+                <input
+                  type="date"
+                  value={dateDraft}
+                  max={todayIso()}
+                  onChange={(e) => setDateDraft(e.target.value)}
+                  className="flex-1 min-w-0 rounded-lg px-2 py-1.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+                />
+                <button
+                  disabled={dateDraft === day.date}
+                  onClick={() => {
+                    onMoveDate(dateDraft);
+                    setOpen(false);
+                    setSubView(null);
+                  }}
+                  className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-cat-pink/10 text-cat-pink hover:bg-cat-pink/20 disabled:opacity-40 transition-colors"
+                >
+                  <Check size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1421,6 +1799,9 @@ function EntryCard({
   onMove,
   onExport,
   onDelete,
+  onSetTags,
+  onAddLink,
+  onMoveDate,
 }: {
   day: JournalDaySummary;
   collections: JournalCollection[];
@@ -1431,6 +1812,9 @@ function EntryCard({
   onMove: (journalIds: string[]) => void;
   onExport: () => void;
   onDelete: () => void;
+  onSetTags: (tags: string[]) => void;
+  onAddLink: (targetType: "project" | "goal", targetId: string) => void;
+  onMoveDate: (newDate: string) => void;
 }) {
   const dayCollections = collections.filter((c) => day.journalIds.includes(c.id));
   const hasMedia = day.photos.length > 0;
@@ -1465,7 +1849,17 @@ function EntryCard({
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           <EntryFavoriteToggle isFavorite={day.isFavorite} onToggle={onToggleFavorite} />
-          <EntryCardMenu day={day} collections={collections} onEdit={onOpen} onExport={onExport} onMove={onMove} onDelete={onDelete} />
+          <EntryCardMenu
+            day={day}
+            collections={collections}
+            onEdit={onOpen}
+            onExport={onExport}
+            onMove={onMove}
+            onDelete={onDelete}
+            onSetTags={onSetTags}
+            onAddLink={onAddLink}
+            onMoveDate={onMoveDate}
+          />
         </div>
       </div>
       {dayCollections.length > 0 && (
@@ -1506,7 +1900,22 @@ function EntryCard({
             {day.nightMood}/5 à noite
           </span>
         )}
+        {day.locationLabel && (
+          <span className="flex items-center gap-1">
+            <MapPin size={11} />
+            {day.locationLabel}
+          </span>
+        )}
       </div>
+      {day.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {day.tags.map((tag) => (
+            <span key={tag} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cat-purple/10 text-cat-purple">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1631,7 +2040,7 @@ function JournalFeedTab({
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays(journalFilter ?? undefined, favoritesOnly);
-  const { toggleFavorite, moveToJournals, deleteEntry } = useJournalDayActions();
+  const { toggleFavorite, moveToJournals, deleteEntry, setTags, moveDate, addLink } = useJournalDayActions();
   const today = todayIso();
   const hasTodayEntry = days.some((d) => d.date === today);
 
@@ -1702,6 +2111,9 @@ function JournalFeedTab({
                   onMove={(journalIds) => moveToJournals({ date: day.date, journalIds }).catch(() => undefined)}
                   onExport={() => downloadJournalPdf(day.date).catch(() => undefined)}
                   onDelete={() => handleDelete(day.date)}
+                  onSetTags={(tags) => setTags({ date: day.date, tags }).catch(() => undefined)}
+                  onAddLink={(targetType, targetId) => addLink({ date: day.date, targetType, targetId }).catch(() => undefined)}
+                  onMoveDate={(newDate) => moveDate({ date: day.date, newDate }).catch(() => undefined)}
                 />
               </div>
             );
@@ -1878,6 +2290,264 @@ function JournalCalendarTab({
   );
 }
 
+
+/**
+ * Calendário mensal compacto (Fase 17 — sidebar do feed "Entradas" no
+ * desktop): mesmos dados reais do mês (useJournalCalendarMonth) da aba
+ * "Calendário", só que menor e sem filtro, pra caber ao lado do feed.
+ */
+function MiniCalendarWidget({ onOpenDay }: { onOpenDay: (date: string) => void }) {
+  const [month, setMonth] = useState(() => todayIso().slice(0, 7));
+  const { days: markedDays } = useJournalCalendarMonth(month);
+  const marked = useMemo(() => new Set(markedDays), [markedDays]);
+
+  const [year, monthNum] = month.split("-").map(Number);
+  const monthIndex = monthNum - 1;
+  const firstWeekday = new Date(year, monthIndex, 1).getDay();
+  const total = daysInMonth(year, monthIndex);
+  const monthLabel = new Date(year, monthIndex, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const today = todayIso();
+
+  const changeMonth = (delta: number) => {
+    const d = new Date(year, monthIndex + delta, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const cells: Array<{ day: number; date: string } | null> = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= total; d++) {
+    cells.push({ day: d, date: `${year}-${String(monthNum).padStart(2, "0")}-${String(d).padStart(2, "0")}` });
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => changeMonth(-1)} className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.06]" aria-label="Mês anterior">
+          <ChevronLeft size={13} />
+        </button>
+        <p className="text-xs font-semibold capitalize">{monthLabel}</p>
+        <button
+          onClick={() => changeMonth(1)}
+          disabled={month >= today.slice(0, 7)}
+          className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:opacity-30"
+          aria-label="Próximo mês"
+        >
+          <ChevronRight size={13} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {WEEKDAYS.map((w, i) => (
+          <p key={i} className="text-center text-[9px] text-slate font-semibold">
+            {w.slice(0, 1)}
+          </p>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((cell, i) =>
+          cell ? (
+            <button
+              key={cell.date}
+              onClick={() => onOpenDay(cell.date)}
+              disabled={cell.date > today}
+              className={`aspect-square rounded-md flex flex-col items-center justify-center text-[10px] transition-colors disabled:opacity-30 ${
+                cell.date === today ? "bg-cat-pink text-white font-semibold" : "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              {cell.day}
+              {marked.has(cell.date) && <span className={`w-0.5 h-0.5 rounded-full ${cell.date === today ? "bg-white" : "bg-cat-pink"}`} />}
+            </button>
+          ) : (
+            <div key={`empty-${i}`} />
+          )
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** Lista "Meus diários" (Fase 17 — sidebar): reaproveita useJournalCollections, com contagem real de entradas. */
+function MyJournalsWidget({ collections, onOpenCollections }: { collections: JournalCollection[]; onOpenCollections: () => void }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-2.5">
+        <p className="text-xs font-semibold">Meus diários</p>
+        <button onClick={onOpenCollections} className="text-[11px] font-medium text-cat-pink hover:underline">
+          Ver todos
+        </button>
+      </div>
+      {collections.length === 0 ? (
+        <p className="text-[11px] text-slate">Nenhum diário criado ainda.</p>
+      ) : (
+        <div className="space-y-1.5 mb-2.5">
+          {collections.slice(0, 6).map((c) => (
+            <div key={c.id} className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 min-w-0 truncate">
+                {c.icon ?? "📔"} {c.name}
+              </span>
+              <span className="text-slate shrink-0 ml-2">{c.entry_count ?? 0}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={onOpenCollections}
+        className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-cat-pink border border-dashed border-cat-pink/30 rounded-lg py-1.5 hover:bg-cat-pink/5 transition-colors"
+      >
+        <Plus size={12} /> Novo diário
+      </button>
+    </Card>
+  );
+}
+
+/** Gráfico compacto real de entradas por mês (últimos 6 meses) — Fase 17, sidebar do feed. */
+function EntriesByMonthChart() {
+  const { insights } = useJournalInsights();
+  if (!insights || insights.entriesByMonth.every((m) => m.count === 0)) return null;
+  const data = insights.entriesByMonth.map((m) => ({
+    label: new Date(`${m.month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+    count: m.count,
+  }));
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-semibold mb-3">Entradas por mês</p>
+      <div className="h-28">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={{ fontSize: 11 }} />
+            <Bar dataKey="count" fill="#EC4899" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Sidebar do feed "Entradas" no desktop (Fase 17 — protótipo Apple
+ * Journal): calendário mensal, "Meus diários" e um gráfico compacto —
+ * só aparece em telas largas (lg+), nunca no mobile/tablet.
+ */
+function DiarioSidebar({ collections, onOpenDay, onOpenCollections }: { collections: JournalCollection[]; onOpenDay: (date: string) => void; onOpenCollections: () => void }) {
+  return (
+    <aside className="hidden lg:flex lg:flex-col gap-4 w-[280px] shrink-0">
+      <MiniCalendarWidget onOpenDay={onOpenDay} />
+      <MyJournalsWidget collections={collections} onOpenCollections={onOpenCollections} />
+      <EntriesByMonthChart />
+    </aside>
+  );
+}
+
+/** Pino customizado (círculo rosa) do mapa de "Lugares" — evita depender dos assets de ícone padrão do Leaflet (quebram com bundlers). */
+function placePinIcon(count: number) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="background:#EC4899;color:white;border-radius:9999px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,0.25);border:2px solid white;">${count}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
+
+/**
+ * Aba "Lugares" (Fase 17 — protótipo Apple Journal): locais reais onde o
+ * usuário escreveu, agrupados por texto de localização, com mapa
+ * (Leaflet + OpenStreetMap, sem custo/chave) quando há coordenadas reais,
+ * e a lista de entradas daquele local ao selecionar um.
+ */
+function JournalPlacesTab({ onOpenDay }: { onOpenDay: (date: string) => void }) {
+  const { items: locations, isLoading } = useJournalLocations();
+  const [selected, setSelected] = useState<string | null>(null);
+  const { items: daysAtLocation } = useJournalDaysByLocation(selected);
+
+  const withCoords = locations.filter((l): l is JournalLocationSummary & { lat: number; lng: number } => l.lat != null && l.lng != null);
+  const center: [number, number] = withCoords.length > 0 ? [withCoords[0].lat, withCoords[0].lng] : [-14.235, -51.925];
+
+  if (isLoading) return <p className="text-sm text-slate">Carregando…</p>;
+
+  if (locations.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhum local registrado ainda"
+        description="Adicione uma localização real ao escrever uma entrada (seção Localização, etiquetas e vínculos) e ela aparece aqui, com um mapa dos seus lugares."
+        ctaLabel="Escrever hoje"
+        onCta={() => onOpenDay(todayIso())}
+      />
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+      <div className="space-y-3">
+        {withCoords.length > 0 && (
+          <Card className="p-0 overflow-hidden">
+            <div className="h-72">
+              <MapContainer center={center} zoom={4} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
+                <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                {withCoords.map((loc) => (
+                  <Marker key={loc.label} position={[loc.lat, loc.lng]} icon={placePinIcon(loc.count)} eventHandlers={{ click: () => setSelected(loc.label) }}>
+                    <Popup>
+                      <strong>{loc.label}</strong>
+                      <br />
+                      {loc.count} {loc.count === 1 ? "entrada" : "entradas"}
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            </div>
+          </Card>
+        )}
+
+        {selected && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold flex items-center gap-1.5">
+                <MapPin size={14} className="text-cat-pink" /> Entradas em {selected}
+              </p>
+              <button onClick={() => setSelected(null)} className="text-xs text-slate hover:text-inherit">
+                Fechar
+              </button>
+            </div>
+            <div className="space-y-2">
+              {daysAtLocation.map((day) => (
+                <button
+                  key={day.date}
+                  onClick={() => onOpenDay(day.date)}
+                  className="w-full text-left rounded-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 hover:-translate-y-0.5 hover:shadow-md transition-all"
+                >
+                  <p className="text-xs font-semibold capitalize">{formatCardDate(day.date)}</p>
+                  <p className="text-xs text-slate line-clamp-2 mt-0.5">{day.preview}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-slate mb-2 flex items-center gap-1.5">
+          <MapIcon size={13} /> Todos os locais
+        </p>
+        <div className="space-y-1.5">
+          {locations.map((loc) => (
+            <button
+              key={loc.label}
+              onClick={() => setSelected(loc.label)}
+              className={`w-full flex items-center justify-between gap-2 text-left rounded-xl border px-3 py-2 text-xs transition-colors ${
+                selected === loc.label ? "border-cat-pink bg-cat-pink/5" : "border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+              }`}
+            >
+              <span className="flex items-center gap-1.5 min-w-0 truncate">
+                <MapPin size={12} className="shrink-0 text-cat-pink" />
+                <span className="truncate">{loc.label}</span>
+              </span>
+              <span className="text-slate shrink-0">{loc.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const COLLECTION_COLOR_OPTIONS: Array<{ value: "pink" | "blue" | "purple" | "green" | "teal"; label: string }> = [
   { value: "pink", label: "Rosa" },
@@ -2275,18 +2945,24 @@ function DiarioPageContent() {
       </div>
 
       {view === "feed" && (
-        <JournalFeedTab
-          onOpenDay={openDay}
-          onOpenInsights={() => setView("insights")}
-          collections={collections}
-          journalFilter={journalFilter}
-          onChangeFilter={setJournalFilter}
-        />
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
+          <div className="flex-1 min-w-0 w-full">
+            <JournalFeedTab
+              onOpenDay={openDay}
+              onOpenInsights={() => setView("insights")}
+              collections={collections}
+              journalFilter={journalFilter}
+              onChangeFilter={setJournalFilter}
+            />
+          </div>
+          <DiarioSidebar collections={collections} onOpenDay={openDay} onOpenCollections={() => setView("collections")} />
+        </div>
       )}
       {view === "insights" && <JournalInsightsTab />}
       {view === "calendar" && (
         <JournalCalendarTab onOpenDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={setJournalFilter} />
       )}
+      {view === "places" && <JournalPlacesTab onOpenDay={openDay} />}
       {view === "collections" && <JournalCollectionsTab />}
     </div>
   );

@@ -626,7 +626,22 @@ export interface JournalEntry {
   media: JournalMedia[];
   /** Dia marcado como favorito (Fase 6 do Diário — Apple Journal). */
   isFavorite: boolean;
+  /** Localização real do dia (busca via /api/context/geocode) — null quando não informada. */
+  locationLabel: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  /** Etiquetas reais do dia (Fase 17 — protótipo Apple Journal). */
+  tags: string[];
+  /** Projetos/metas reais vinculados a este dia (Fase 17). */
+  links: JournalEntryLink[];
   auto: JournalAutoData;
+}
+
+/** Vínculo real de uma entrada do Diário a um projeto ou meta do usuário (Fase 17). */
+export interface JournalEntryLink {
+  id: string;
+  targetType: "project" | "goal";
+  targetId: string;
 }
 
 /** Uma foto ou nota de voz anexada à entrada do dia do Diário. */
@@ -651,6 +666,8 @@ export interface JournalCollection {
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Total real de entradas neste diário — vem só da listagem (GET /api/journals). */
+  entry_count?: number;
 }
 
 export interface TimelineEvent {

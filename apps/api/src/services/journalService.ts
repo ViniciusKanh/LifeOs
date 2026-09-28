@@ -94,6 +94,8 @@ export interface JournalInsights {
     onOtherDays: number;
     sampleSize: { writingDays: number; otherDays: number };
   } | null;
+  /** Entradas reais por mês, últimos 6 meses (mais antigo primeiro) — usado pelo gráfico compacto do feed "Entradas". */
+  entriesByMonth: Array<{ month: string; count: number }>;
 }
 
 const WRITTEN_FIELDS = [
@@ -237,6 +239,21 @@ export async function getJournalInsights(db: Db, ownerId: string): Promise<Journ
         }
       : null;
 
+  // Últimos 6 meses (incluindo o atual) — sempre com todos os meses
+  // presentes, mesmo com 0 entradas, pra o gráfico nunca "pular" um mês.
+  const monthBuckets: Array<{ month: string; count: number }> = [];
+  const monthCursor = new Date();
+  monthCursor.setUTCDate(1);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(Date.UTC(monthCursor.getUTCFullYear(), monthCursor.getUTCMonth() - i, 1));
+    monthBuckets.push({ month: d.toISOString().slice(0, 7), count: 0 });
+  }
+  const bucketByMonth = new Map(monthBuckets.map((b) => [b.month, b]));
+  for (const date of sorted) {
+    const bucket = bucketByMonth.get(date.slice(0, 7));
+    if (bucket) bucket.count += 1;
+  }
+
   return {
     totalEntries: writtenRows.length,
     currentStreak,
@@ -245,6 +262,7 @@ export async function getJournalInsights(db: Db, ownerId: string): Promise<Journ
     avgWordsPerEntry,
     bestWeekday,
     moodCorrelation,
+    entriesByMonth: monthBuckets,
   };
 }
 
@@ -263,6 +281,10 @@ export interface JournalDaySummary {
   /** Até 4 fotos reais do dia (mesma ordem do editor), pra montar o mosaico do card no feed "Entradas" — nunca inventado, vazio quando não há foto. */
   photos: string[];
   isFavorite: boolean;
+  /** Localização real digitada/escolhida no editor daquele dia — null quando não informada. */
+  locationLabel: string | null;
+  /** Etiquetas reais do dia (Fase 17) — nunca inventadas. */
+  tags: string[];
 }
 
 /** Uma foto ou nota de voz anexada à entrada do dia (Fase 4 e Fase 13 do Diário — Apple Journal). */
@@ -434,6 +456,8 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
     coverPhoto: coverPhotoByEntry.get(String(row.id)) ?? null,
     photos: photosByEntry.get(String(row.id)) ?? [],
     isFavorite: Number(row.is_favorite ?? 0) === 1,
+    locationLabel: (row.location_label as string | null) ?? null,
+    tags: parseJsonArraySafe(row.tags as string | undefined),
   }));
 }
 
@@ -704,6 +728,19 @@ export async function setJournalFavorite(db: Db, ownerId: string, date: string, 
 }
 
 /**
+ * Atualização parcial só das etiquetas — usada pelo "Adicionar etiquetas"
+ * do menu do card no feed "Entradas". Ao contrário do PUT /:date (upsert
+ * completo), nunca toca em nenhum outro campo do dia.
+ */
+export async function setJournalTags(db: Db, ownerId: string, date: string, tags: string[]): Promise<void> {
+  const entryId = await ensureJournalEntryId(db, ownerId, date);
+  await db.execute({
+    sql: "UPDATE journal_entries SET tags = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [JSON.stringify(tags), entryId],
+  });
+}
+
+/**
  * Exclui a entrada do dia inteira (Fase 8 — privacidade/exclusão): fotos,
  * vínculos com diários (coleções) e o registro em si. Apaga explicitamente
  * as tabelas filhas em vez de confiar em ON DELETE CASCADE — o Turso/libSQL
@@ -720,8 +757,125 @@ export async function deleteJournalEntry(db: Db, ownerId: string, date: string):
 
   await db.execute({ sql: "DELETE FROM journal_entry_media WHERE entry_id = ? AND owner_id = ?", args: [row.id, ownerId] });
   await db.execute({ sql: "DELETE FROM journal_entry_journals WHERE entry_id = ?", args: [row.id] });
+  await db.execute({ sql: "DELETE FROM journal_entry_links WHERE entry_id = ?", args: [row.id] });
   await db.execute({ sql: "DELETE FROM journal_entries WHERE id = ? AND owner_id = ?", args: [row.id, ownerId] });
   return true;
+}
+
+export interface JournalEntryLink {
+  id: string;
+  targetType: "project" | "goal";
+  targetId: string;
+}
+
+/** Projetos/metas reais vinculados a uma entrada do Diário (menu "Vincular a projeto/meta"). */
+export async function getJournalEntryLinks(db: Db, entryId: string): Promise<JournalEntryLink[]> {
+  const res = await db.execute({
+    sql: "SELECT id, target_type, target_id FROM journal_entry_links WHERE entry_id = ? ORDER BY created_at ASC",
+    args: [entryId],
+  });
+  return (res.rows as unknown as Array<{ id: string; target_type: "project" | "goal"; target_id: string }>).map((r) => ({
+    id: r.id,
+    targetType: r.target_type,
+    targetId: r.target_id,
+  }));
+}
+
+/**
+ * Vincula a entrada do dia a um projeto ou meta REAL do usuário (nunca
+ * confia no id recebido sem checar posse — evita vincular a um
+ * projeto/meta de outra conta). Idempotente (UNIQUE ignora duplicata).
+ */
+export async function addJournalEntryLink(
+  db: Db,
+  ownerId: string,
+  date: string,
+  targetType: "project" | "goal",
+  targetId: string
+): Promise<boolean> {
+  const table = targetType === "project" ? "projects" : "goals";
+  const owned = await db.execute({ sql: `SELECT id FROM ${table} WHERE id = ? AND owner_id = ?`, args: [targetId, ownerId] });
+  if (owned.rows.length === 0) return false;
+
+  const entryId = await ensureJournalEntryId(db, ownerId, date);
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO journal_entry_links (id, entry_id, owner_id, target_type, target_id) VALUES (?, ?, ?, ?, ?)",
+    args: [nanoid(), entryId, ownerId, targetType, targetId],
+  });
+  return true;
+}
+
+/** Remove um vínculo de projeto/meta da entrada — só o dono pode remover o próprio vínculo. */
+export async function removeJournalEntryLink(db: Db, ownerId: string, linkId: string): Promise<boolean> {
+  const res = await db.execute({ sql: "DELETE FROM journal_entry_links WHERE id = ? AND owner_id = ?", args: [linkId, ownerId] });
+  return (res.rowsAffected ?? 0) > 0;
+}
+
+/**
+ * Move a entrada de um dia pra outra data (menu "Alterar data"). Recusa
+ * quando o dia de destino já tem entrada própria — nunca sobrescreve ou
+ * mescla dados de dois dias em silêncio; o usuário resolve manualmente.
+ */
+export async function moveJournalEntryDate(db: Db, ownerId: string, fromDate: string, toDate: string): Promise<{ ok: boolean; reason?: string }> {
+  const existingSource = await db.execute({ sql: "SELECT id FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, fromDate] });
+  const sourceRow = existingSource.rows[0] as unknown as { id: string } | undefined;
+  if (!sourceRow) return { ok: false, reason: "Não há entrada nesta data pra mover." };
+
+  const existingTarget = await db.execute({ sql: "SELECT id FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, toDate] });
+  if (existingTarget.rows.length > 0) return { ok: false, reason: "Já existe uma entrada na data de destino." };
+
+  await db.execute({
+    sql: "UPDATE journal_entries SET entry_date = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [toDate, sourceRow.id],
+  });
+  return { ok: true };
+}
+
+export interface JournalLocationSummary {
+  label: string;
+  count: number;
+  lat: number | null;
+  lng: number | null;
+  /** Data mais recente com essa localização (pra ordenar por relevância). */
+  lastDate: string;
+}
+
+/**
+ * Locais reais com pelo menos uma entrada escrita (aba "Lugares") —
+ * agrupa por texto da localização (mesmo texto = mesmo local) e usa a
+ * primeira coordenada real conhecida daquele local pro mapa. Nunca
+ * mostra local sem entrada de verdade associada.
+ */
+export async function getJournalLocations(db: Db, ownerId: string): Promise<JournalLocationSummary[]> {
+  const res = await db.execute({
+    sql: `SELECT location_label, location_lat, location_lng, entry_date
+          FROM journal_entries
+          WHERE owner_id = ? AND location_label IS NOT NULL AND location_label != ''
+          ORDER BY entry_date DESC`,
+    args: [ownerId],
+  });
+  const byLabel = new Map<string, JournalLocationSummary>();
+  for (const r of res.rows as unknown as Array<{ location_label: string; location_lat: number | null; location_lng: number | null; entry_date: string }>) {
+    const existing = byLabel.get(r.location_label);
+    if (existing) {
+      existing.count += 1;
+      if (existing.lat == null && r.location_lat != null) existing.lat = r.location_lat;
+      if (existing.lng == null && r.location_lng != null) existing.lng = r.location_lng;
+    } else {
+      byLabel.set(r.location_label, { label: r.location_label, count: 1, lat: r.location_lat, lng: r.location_lng, lastDate: r.entry_date });
+    }
+  }
+  return Array.from(byLabel.values()).sort((a, b) => b.count - a.count);
+}
+
+/** Dias reais (com conteúdo escrito) associados a um local exato — usado ao clicar num pino/local da aba "Lugares". */
+export async function getJournalDaysByLocation(db: Db, ownerId: string, label: string): Promise<JournalDaySummary[]> {
+  const res = await db.execute({
+    sql: "SELECT * FROM journal_entries WHERE owner_id = ? AND location_label = ? ORDER BY entry_date DESC",
+    args: [ownerId, label],
+  });
+  const rows = (res.rows as unknown as Array<Record<string, unknown>>).filter(hasWrittenContent);
+  return enrichEntrySummaries(db, ownerId, rows);
 }
 
 /**

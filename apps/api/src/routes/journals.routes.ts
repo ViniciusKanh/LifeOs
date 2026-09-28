@@ -21,10 +21,20 @@ const upsertJournalSchema = z.object({
   description: z.string().trim().max(300).optional().nullable(),
 });
 
+/**
+ * GET /api/journals — lista os diários (coleções) do usuário, com a
+ * contagem real de entradas de cada um (usada pela lista "Meus diários"
+ * do feed "Entradas") — nunca inventada, sempre via COUNT real.
+ */
 journalsRouter.get("/", async (req, res) => {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT * FROM journals WHERE owner_id = ? AND archived_at IS NULL ORDER BY sort_order ASC, created_at ASC",
+    sql: `SELECT j.*, (
+            SELECT COUNT(*) FROM journal_entry_journals jej WHERE jej.journal_id = j.id
+          ) AS entry_count
+          FROM journals j
+          WHERE j.owner_id = ? AND j.archived_at IS NULL
+          ORDER BY j.sort_order ASC, j.created_at ASC`,
     args: [req.user!.id],
   });
   return res.json(result.rows);

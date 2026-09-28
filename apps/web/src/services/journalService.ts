@@ -15,6 +15,10 @@ export interface JournalUpsertInput {
   nightTakeaway?: string | null;
   focusTaskIds?: string[];
   journalIds?: string[];
+  locationLabel?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
+  tags?: string[];
 }
 
 export interface JournalInsights {
@@ -29,6 +33,7 @@ export interface JournalInsights {
     onOtherDays: number;
     sampleSize: { writingDays: number; otherDays: number };
   } | null;
+  entriesByMonth: Array<{ month: string; count: number }>;
 }
 
 export interface JournalDaySummary {
@@ -44,6 +49,16 @@ export interface JournalDaySummary {
   coverPhoto: string | null;
   photos: string[];
   isFavorite: boolean;
+  locationLabel: string | null;
+  tags: string[];
+}
+
+export interface JournalLocationSummary {
+  label: string;
+  count: number;
+  lat: number | null;
+  lng: number | null;
+  lastDate: string;
 }
 
 export interface JournalDaysPage {
@@ -76,6 +91,7 @@ export const journalService = {
     api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, { caption }),
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
   toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
+  setTags: (date: string, tags: string[]) => api.patch<JournalEntry>(`/journal/${date}/tags`, { tags }),
   deleteEntry: (date: string) => api.delete<void>(`/journal/${date}`),
   moveToJournals: (date: string, journalIds: string[]) => api.patch<JournalEntry>(`/journal/${date}/journals`, { journalIds }),
   onThisDay: (date?: string) => api.get<{ items: JournalDaySummary[] }>(`/journal/on-this-day${date ? `?date=${date}` : ""}`),
@@ -83,6 +99,12 @@ export const journalService = {
   setPin: (pin: string) => api.post<void>("/journal/pin", { pin }),
   verifyPin: (pin: string) => api.post<{ valid: boolean }>("/journal/pin/verify", { pin }),
   removePin: (pin: string) => api.delete<void>("/journal/pin", { pin }),
+  moveDate: (date: string, newDate: string) => api.patch<JournalEntry>(`/journal/${date}/date`, { newDate }),
+  addLink: (date: string, targetType: "project" | "goal", targetId: string) =>
+    api.post<JournalEntry>(`/journal/${date}/links`, { targetType, targetId }),
+  removeLink: (date: string, linkId: string) => api.delete<JournalEntry>(`/journal/${date}/links/${linkId}`),
+  locations: () => api.get<{ items: JournalLocationSummary[] }>("/journal/locations"),
+  daysByLocation: (label: string) => api.get<{ items: JournalDaySummary[] }>(`/journal/locations/${encodeURIComponent(label)}/days`),
 };
 
 export type { JournalMedia };

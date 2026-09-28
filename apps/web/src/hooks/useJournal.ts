@@ -59,6 +59,32 @@ export function useJournal(date: string) {
     },
   });
 
+  const invalidateFeedAndCalendar = () => {
+    queryClient.invalidateQueries({ queryKey: ["journal", "days"] });
+    queryClient.invalidateQueries({ queryKey: ["journal", "calendar"] });
+    queryClient.invalidateQueries({ queryKey: ["journal", "locations"] });
+  };
+
+  /** "Alterar data" do menu do card — move a entrada inteira pra outro dia. */
+  const moveDate = useMutation({
+    mutationFn: (newDate: string) => journalService.moveDate(date, newDate),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["journal", data.date], data);
+      invalidateFeedAndCalendar();
+    },
+  });
+
+  /** "Vincular a projeto/meta" do menu do card. */
+  const addLink = useMutation({
+    mutationFn: ({ targetType, targetId }: { targetType: "project" | "goal"; targetId: string }) =>
+      journalService.addLink(date, targetType, targetId),
+    onSuccess: (data) => queryClient.setQueryData(key, data),
+  });
+  const removeLink = useMutation({
+    mutationFn: (linkId: string) => journalService.removeLink(date, linkId),
+    onSuccess: (data) => queryClient.setQueryData(key, data),
+  });
+
   return {
     entry: query.data ?? null,
     isLoading: query.isLoading,
@@ -74,7 +100,27 @@ export function useJournal(date: string) {
     isTogglingFavorite: toggleFavorite.isPending,
     deleteEntry: deleteEntry.mutateAsync,
     isDeletingEntry: deleteEntry.isPending,
+    moveDate: moveDate.mutateAsync,
+    isMovingDate: moveDate.isPending,
+    addLink: addLink.mutateAsync,
+    removeLink: removeLink.mutateAsync,
   };
+}
+
+/** Locais reais com entrada escrita (aba "Lugares") — agrupados por localização. */
+export function useJournalLocations() {
+  const query = useQuery({ queryKey: ["journal", "locations"], queryFn: journalService.locations });
+  return { items: query.data?.items ?? [], isLoading: query.isLoading };
+}
+
+/** Dias reais escritos num local exato (clique num pino/local da aba "Lugares"). */
+export function useJournalDaysByLocation(label: string | null) {
+  const query = useQuery({
+    queryKey: ["journal", "locations", label ?? ""],
+    queryFn: () => journalService.daysByLocation(label as string),
+    enabled: !!label,
+  });
+  return { items: query.data?.items ?? [], isLoading: query.isLoading };
 }
 
 /**
@@ -105,11 +151,27 @@ export function useJournalDayActions() {
     mutationFn: (date: string) => journalService.deleteEntry(date),
     onSuccess: (_data, date) => invalidateFeed(date),
   });
+  const setTags = useMutation({
+    mutationFn: ({ date, tags }: { date: string; tags: string[] }) => journalService.setTags(date, tags),
+    onSuccess: (_data, vars) => invalidateFeed(vars.date),
+  });
+  const moveDate = useMutation({
+    mutationFn: ({ date, newDate }: { date: string; newDate: string }) => journalService.moveDate(date, newDate),
+    onSuccess: (_data, vars) => invalidateFeed(vars.date),
+  });
+  const addLink = useMutation({
+    mutationFn: ({ date, targetType, targetId }: { date: string; targetType: "project" | "goal"; targetId: string }) =>
+      journalService.addLink(date, targetType, targetId),
+    onSuccess: (_data, vars) => invalidateFeed(vars.date),
+  });
 
   return {
     toggleFavorite: toggleFavorite.mutateAsync,
     moveToJournals: moveToJournals.mutateAsync,
     deleteEntry: deleteEntry.mutateAsync,
+    setTags: setTags.mutateAsync,
+    moveDate: moveDate.mutateAsync,
+    addLink: addLink.mutateAsync,
   };
 }
 
