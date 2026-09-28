@@ -31,6 +31,7 @@ import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
 import { Card, EmptyState } from "@/components/ui/primitives";
+import { RichTextEditor } from "@/components/journal/RichTextEditor";
 
 /* ============================================================
    Diário — inspirado no app Diário/Journal da Apple (macOS Tahoe):
@@ -118,32 +119,6 @@ function fmtMinutes(min: number) {
   const m = Math.round(min % 60);
   if (h <= 0) return `${m}min`;
   return m > 0 ? `${h}h${m}min` : `${h}h`;
-}
-
-/** Textarea com o mesmo visual dos <input> do Field, sem precisar de um componente novo pra isso. */
-function JournalTextarea({
-  value,
-  onChange,
-  onBlur,
-  placeholder,
-  rows = 3,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onBlur: () => void;
-  placeholder?: string;
-  rows?: number;
-}) {
-  return (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onBlur}
-      placeholder={placeholder}
-      rows={rows}
-      className="w-full resize-none rounded-xl px-3 py-2.5 text-sm leading-relaxed bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
-    />
-  );
 }
 
 function SectionCard({
@@ -478,7 +453,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <SectionCard icon={<Sun size={16} />} title="Intenção do dia" subtitle="Como quero me sentir hoje?">
-              <JournalTextarea value={form.intention} onChange={(v) => updateField({ intention: v })} onBlur={() => saveNow()} />
+              <RichTextEditor value={form.intention} onChange={(v) => updateField({ intention: v })} onBlur={() => saveNow()} placeholder="Como quero me sentir hoje?" />
             </SectionCard>
 
             <SectionCard
@@ -539,7 +514,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
             </SectionCard>
 
             <SectionCard icon={<Brain size={16} />} title="Pensamentos e reflexões" subtitle="O que está passando pela minha mente hoje?" className="xl:col-span-2">
-              <JournalTextarea value={form.thoughts} onChange={(v) => updateField({ thoughts: v })} onBlur={() => saveNow()} rows={4} />
+              <RichTextEditor value={form.thoughts} onChange={(v) => updateField({ thoughts: v })} onBlur={() => saveNow()} placeholder="O que está passando pela minha mente hoje?" minHeightClass="min-h-[104px]" />
             </SectionCard>
 
             <SectionCard icon={<Lightbulb size={16} />} title="Insight do dia" subtitle="Gerado pelo LifeOS Copilot a partir dos seus dados reais">
@@ -606,15 +581,15 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
             </SectionCard>
 
             <SectionCard icon={<Brain size={16} />} title="Desafios" subtitle="O que pode me gerar ansiedade hoje? Como posso lidar?">
-              <JournalTextarea value={form.challenges} onChange={(v) => updateField({ challenges: v })} onBlur={() => saveNow()} />
+              <RichTextEditor value={form.challenges} onChange={(v) => updateField({ challenges: v })} onBlur={() => saveNow()} placeholder="O que pode me gerar ansiedade hoje? Como posso lidar?" />
             </SectionCard>
 
             <SectionCard icon={<Sun size={16} />} title="Como posso tornar este dia mais leve?">
-              <JournalTextarea value={form.lighterPlan} onChange={(v) => updateField({ lighterPlan: v })} onBlur={() => saveNow()} />
+              <RichTextEditor value={form.lighterPlan} onChange={(v) => updateField({ lighterPlan: v })} onBlur={() => saveNow()} placeholder="Como posso tornar este dia mais leve?" />
             </SectionCard>
 
             <SectionCard icon={<Heart size={16} />} title="O que me fez bem hoje?" subtitle="Pequenos momentos que importam.">
-              <JournalTextarea value={form.feelGood} onChange={(v) => updateField({ feelGood: v })} onBlur={() => saveNow()} />
+              <RichTextEditor value={form.feelGood} onChange={(v) => updateField({ feelGood: v })} onBlur={() => saveNow()} placeholder="Pequenos momentos que importam." />
             </SectionCard>
 
             {book && (
@@ -679,11 +654,11 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
                 </div>
                 <div>
                   <p className="text-xs text-slate mb-2">O que me ajudou a reduzir a ansiedade hoje?</p>
-                  <JournalTextarea value={form.nightHelped} onChange={(v) => updateField({ nightHelped: v })} onBlur={() => saveNow()} rows={2} />
+                  <RichTextEditor value={form.nightHelped} onChange={(v) => updateField({ nightHelped: v })} onBlur={() => saveNow()} placeholder="O que me ajudou a reduzir a ansiedade hoje?" minHeightClass="min-h-[52px]" />
                 </div>
                 <div>
                   <p className="text-xs text-slate mb-2">O que levo para amanhã?</p>
-                  <JournalTextarea value={form.nightTakeaway} onChange={(v) => updateField({ nightTakeaway: v })} onBlur={() => saveNow()} rows={2} />
+                  <RichTextEditor value={form.nightTakeaway} onChange={(v) => updateField({ nightTakeaway: v })} onBlur={() => saveNow()} placeholder="O que levo para amanhã?" minHeightClass="min-h-[52px]" />
                 </div>
               </div>
             </Card>

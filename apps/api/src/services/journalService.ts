@@ -87,14 +87,35 @@ const WRITTEN_FIELDS = [
   "night_takeaway",
 ] as const;
 
+/**
+ * Remove marcação HTML do editor de texto rico (Fase 3), devolvendo texto
+ * puro pra contar palavras, detectar conteúdo real e montar preview — nunca
+ * expõe HTML cru pro usuário. Blocos (</p>, </li>, <br>, etc.) viram espaço
+ * pra não colar palavras de parágrafos/itens diferentes.
+ */
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return "";
+  return html
+    .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function countWords(text: string | null | undefined): number {
-  if (!text) return 0;
-  const trimmed = text.trim();
-  return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
+  const plain = stripHtml(text);
+  return plain.length === 0 ? 0 : plain.split(/\s+/).length;
 }
 
 function hasWrittenContent(row: Record<string, unknown>): boolean {
-  if (WRITTEN_FIELDS.some((f) => typeof row[f] === "string" && (row[f] as string).trim().length > 0)) return true;
+  if (WRITTEN_FIELDS.some((f) => typeof row[f] === "string" && stripHtml(row[f] as string).length > 0)) return true;
   const gratitude = typeof row.gratitude === "string" ? row.gratitude : "[]";
   const selfCare = typeof row.self_care === "string" ? row.self_care : "[]";
   try {
@@ -179,9 +200,9 @@ const PREVIEW_FIELD_ORDER = ["intention", "thoughts", "feel_good", "challenges",
 function buildPreview(row: Record<string, unknown>): string {
   for (const field of PREVIEW_FIELD_ORDER) {
     const value = row[field];
-    if (typeof value === "string" && value.trim().length > 0) {
-      const trimmed = value.trim();
-      return trimmed.length > 220 ? `${trimmed.slice(0, 220)}…` : trimmed;
+    const plain = typeof value === "string" ? stripHtml(value) : "";
+    if (plain.length > 0) {
+      return plain.length > 220 ? `${plain.slice(0, 220)}…` : plain;
     }
   }
   const gratitude = parseJsonArraySafe(row.gratitude as string | undefined);
