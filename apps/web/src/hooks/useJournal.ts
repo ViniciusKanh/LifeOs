@@ -23,11 +23,34 @@ export function useJournal(date: string) {
     },
   });
 
+  const onMediaChange = (data: Awaited<ReturnType<typeof journalService.get>>) => {
+    queryClient.setQueryData(key, data);
+    queryClient.invalidateQueries({ queryKey: ["journal", "days"] });
+    queryClient.invalidateQueries({ queryKey: ["journal", "calendar"] });
+  };
+
+  const addMedia = useMutation({
+    mutationFn: ({ dataUri, caption }: { dataUri: string; caption?: string | null }) => journalService.addMedia(date, dataUri, caption),
+    onSuccess: onMediaChange,
+  });
+  const updateMediaCaption = useMutation({
+    mutationFn: ({ mediaId, caption }: { mediaId: string; caption: string | null }) => journalService.updateMediaCaption(date, mediaId, caption),
+    onSuccess: onMediaChange,
+  });
+  const removeMedia = useMutation({
+    mutationFn: (mediaId: string) => journalService.removeMedia(date, mediaId),
+    onSuccess: onMediaChange,
+  });
+
   return {
     entry: query.data ?? null,
     isLoading: query.isLoading,
     save: save.mutateAsync,
     isSaving: save.isPending,
+    addMedia: addMedia.mutateAsync,
+    isAddingMedia: addMedia.isPending,
+    updateMediaCaption: updateMediaCaption.mutateAsync,
+    removeMedia: removeMedia.mutateAsync,
   };
 }
 

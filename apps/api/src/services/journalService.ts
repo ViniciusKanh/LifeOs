@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { pickDailyWisdom, type DailyWisdom } from "../config/dailyWisdom.js";
 
@@ -193,6 +194,16 @@ export interface JournalDaySummary {
   nightMood: number | null;
   mood: { mood: number; energy: number } | null;
   journalIds: string[];
+  photoCount: number;
+  coverPhoto: string | null;
+}
+
+/** Uma foto anexada à entrada do dia (Fase 4 do Diário — Apple Journal). */
+export interface JournalMedia {
+  id: string;
+  dataUri: string;
+  caption: string | null;
+  sortOrder: number;
 }
 
 const PREVIEW_FIELD_ORDER = ["intention", "thoughts", "feel_good", "challenges", "lighter_plan", "night_takeaway"] as const;
@@ -253,6 +264,8 @@ export async function listJournalDays(
 
   const moodByDate = new Map<string, { mood: number; energy: number }>();
   const journalIdsByEntry = new Map<string, string[]>();
+  const photoCountByEntry = new Map<string, number>();
+  const coverPhotoByEntry = new Map<string, string>();
   if (page.length > 0) {
     const dates = page.map((r) => String(r.entry_date));
     const placeholders = dates.map(() => "?").join(",");
@@ -282,6 +295,26 @@ export async function listJournalDays(
       list.push(r.journal_id);
       journalIdsByEntry.set(r.entry_id, list);
     }
+
+    const mediaCountRes = await db.execute({
+      sql: `SELECT entry_id, COUNT(*) AS total FROM journal_entry_media WHERE entry_id IN (${entryPlaceholders}) GROUP BY entry_id`,
+      args: entryIds,
+    });
+    for (const r of mediaCountRes.rows as unknown as Array<{ entry_id: string; total: number }>) {
+      photoCountByEntry.set(r.entry_id, Number(r.total));
+    }
+    const coverPhotoRes = await db.execute({
+      sql: `SELECT entry_id, data_uri FROM (
+              SELECT entry_id, data_uri,
+                     ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY sort_order ASC, created_at ASC) AS rn
+              FROM journal_entry_media
+              WHERE entry_id IN (${entryPlaceholders})
+            ) WHERE rn = 1`,
+      args: entryIds,
+    });
+    for (const r of coverPhotoRes.rows as unknown as Array<{ entry_id: string; data_uri: string }>) {
+      coverPhotoByEntry.set(r.entry_id, r.data_uri);
+    }
   }
 
   const items: JournalDaySummary[] = page.map((row) => ({
@@ -293,6 +326,8 @@ export async function listJournalDays(
     nightMood: (row.night_mood as number | null) ?? null,
     mood: moodByDate.get(String(row.entry_date)) ?? null,
     journalIds: journalIdsByEntry.get(String(row.id)) ?? [],
+    photoCount: photoCountByEntry.get(String(row.id)) ?? 0,
+    coverPhoto: coverPhotoByEntry.get(String(row.id)) ?? null,
   }));
 
   return { items, hasMore };
@@ -435,4 +470,83 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     summary: buildSummary({ tasksToday, habitsToday, waterMl, exerciseMinutes, reading, mood }),
     dailyQuote: pickDailyWisdom(date),
   };
+}
+
+/**
+ * Garante que exista uma linha em journal_entries pra esse dia (mesmo
+ * sem nenhum campo de texto preenchido ainda) e devolve o id — usado
+ * ao anexar a primeira foto do dia antes de qualquer texto ser salvo.
+ */
+export async function ensureJournalEntryId(db: Db, ownerId: string, date: string): Promise<string> {
+  const existing = await db.execute({
+    sql: "SELECT id FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
+    args: [ownerId, date],
+  });
+  const row = existing.rows[0] as unknown as { id: string } | undefined;
+  if (row) return row.id;
+
+  const id = nanoid();
+  await db.execute({
+    sql: "INSERT INTO journal_entries (id, owner_id, entry_date) VALUES (?, ?, ?)",
+    args: [id, ownerId, date],
+  });
+  return id;
+}
+
+/** Fotos da entrada do dia, na ordem em que aparecem na tela. */
+export async function getJournalMedia(db: Db, entryId: string): Promise<JournalMedia[]> {
+  const result = await db.execute({
+    sql: "SELECT id, data_uri, caption, sort_order FROM journal_entry_media WHERE entry_id = ? ORDER BY sort_order ASC, created_at ASC",
+    args: [entryId],
+  });
+  return (result.rows as unknown as Array<{ id: string; data_uri: string; caption: string | null; sort_order: number }>).map((r) => ({
+    id: r.id,
+    dataUri: r.data_uri,
+    caption: r.caption,
+    sortOrder: r.sort_order,
+  }));
+}
+
+/** Limite conservador de fotos por dia — suficiente pra um registro visual do dia sem deixar o banco inchar. */
+export const MAX_JOURNAL_PHOTOS_PER_DAY = 12;
+
+/** Adiciona uma foto à entrada do dia (criando a entrada se ainda não existir). Devolve null se o limite por dia já foi atingido. */
+export async function addJournalMedia(
+  db: Db,
+  ownerId: string,
+  entryId: string,
+  dataUri: string,
+  caption: string | null
+): Promise<JournalMedia | null> {
+  const countRes = await db.execute({
+    sql: "SELECT COUNT(*) AS total FROM journal_entry_media WHERE entry_id = ?",
+    args: [entryId],
+  });
+  const total = Number((countRes.rows[0] as unknown as { total: number }).total);
+  if (total >= MAX_JOURNAL_PHOTOS_PER_DAY) return null;
+
+  const id = nanoid();
+  await db.execute({
+    sql: "INSERT INTO journal_entry_media (id, entry_id, owner_id, data_uri, caption, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+    args: [id, entryId, ownerId, dataUri, caption, total],
+  });
+  return { id, dataUri, caption, sortOrder: total };
+}
+
+/** Atualiza a legenda de uma foto — sempre validando que ela pertence ao dono autenticado. */
+export async function updateJournalMediaCaption(db: Db, ownerId: string, mediaId: string, caption: string | null): Promise<boolean> {
+  const result = await db.execute({
+    sql: "UPDATE journal_entry_media SET caption = ? WHERE id = ? AND owner_id = ?",
+    args: [caption, mediaId, ownerId],
+  });
+  return result.rowsAffected > 0;
+}
+
+/** Remove uma foto — sempre validando que ela pertence ao dono autenticado. */
+export async function deleteJournalMedia(db: Db, ownerId: string, mediaId: string): Promise<boolean> {
+  const result = await db.execute({
+    sql: "DELETE FROM journal_entry_media WHERE id = ? AND owner_id = ?",
+    args: [mediaId, ownerId],
+  });
+  return result.rowsAffected > 0;
 }

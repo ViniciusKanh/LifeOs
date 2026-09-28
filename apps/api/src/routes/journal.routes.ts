@@ -2,8 +2,18 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { journalUpsertSchema } from "../validators/journal.schema.js";
-import { getJournalAutoData, getJournalInsights, listJournalDays, getJournalCalendarMonth } from "../services/journalService.js";
+import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema } from "../validators/journal.schema.js";
+import {
+  getJournalAutoData,
+  getJournalInsights,
+  listJournalDays,
+  getJournalCalendarMonth,
+  ensureJournalEntryId,
+  getJournalMedia,
+  addJournalMedia,
+  updateJournalMediaCaption,
+  deleteJournalMedia,
+} from "../services/journalService.js";
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
@@ -44,6 +54,7 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
         })
       ).rows.map((r) => (r as unknown as { journal_id: string }).journal_id)
     : [];
+  const media = row ? await getJournalMedia(db, row.id as string) : [];
   return {
     date,
     intention: row?.intention ?? null,
@@ -59,6 +70,7 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     nightTakeaway: row?.night_takeaway ?? null,
     focusTaskIds: parseJsonArray(row?.focus_task_ids),
     journalIds,
+    media,
     auto,
   };
 }
@@ -127,6 +139,57 @@ journalRouter.get("/:date", async (req, res) => {
   if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
   const db = getDb();
   return res.json(await buildJournalResponse(db, req.user!.id, date));
+});
+
+/**
+ * POST /api/journal/:date/media — anexa uma foto à entrada do dia (Fase 4).
+ * Cria a entrada vazia se ainda não existir (uma foto sozinha já conta como
+ * registro do dia). A foto chega já comprimida do cliente como data URI.
+ */
+journalRouter.post("/:date/media", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+
+  const parsed = journalMediaCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const entryId = await ensureJournalEntryId(db, ownerId, date);
+  const media = await addJournalMedia(db, ownerId, entryId, parsed.data.dataUri, parsed.data.caption ?? null);
+  if (!media) {
+    return res.status(400).json({ error: "Limite de fotos por dia atingido." });
+  }
+  return res.status(201).json(await buildJournalResponse(db, ownerId, date));
+});
+
+/** PATCH /api/journal/:date/media/:mediaId — atualiza a legenda de uma foto. */
+journalRouter.patch("/:date/media/:mediaId", async (req, res) => {
+  const { date, mediaId } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+
+  const parsed = journalMediaUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const ok = await updateJournalMediaCaption(db, ownerId, mediaId, parsed.data.caption ?? null);
+  if (!ok) return res.status(404).json({ error: "Foto não encontrada." });
+  return res.json(await buildJournalResponse(db, ownerId, date));
+});
+
+/** DELETE /api/journal/:date/media/:mediaId — remove uma foto da entrada do dia. */
+journalRouter.delete("/:date/media/:mediaId", async (req, res) => {
+  const { date, mediaId } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const ok = await deleteJournalMedia(db, ownerId, mediaId);
+  if (!ok) return res.status(404).json({ error: "Foto não encontrada." });
+  return res.json(await buildJournalResponse(db, ownerId, date));
 });
 
 /** PUT /api/journal/:date — cria ou atualiza a entrada do dia (upsert). */

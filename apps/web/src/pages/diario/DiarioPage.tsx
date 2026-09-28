@@ -23,9 +23,14 @@ import {
   CalendarDays,
   Type as TypeIcon,
   Plus,
+  Camera,
+  X,
+  Trash2,
 } from "lucide-react";
 import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
+import type { JournalMedia } from "@/types";
+import { compressImageToDataUri } from "@/utils/image";
 import type { JournalCollection } from "@/types";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
@@ -159,6 +164,116 @@ function StatChip({ icon, label, value, tone }: { icon: React.ReactNode; label: 
   );
 }
 
+/**
+ * Fotos do dia (Fase 4 do Diário — Apple Journal): grade de miniaturas com
+ * botão de adicionar, e um visualizador em tela cheia com legenda editável
+ * ao clicar numa foto. As fotos já chegam comprimidas do navegador (ver
+ * utils/image.ts), então cada uma é um upload pequeno independente do
+ * tamanho da foto original.
+ */
+function JournalPhotosSection({
+  media,
+  onAdd,
+  onRemove,
+  onUpdateCaption,
+  isUploading,
+  error,
+}: {
+  media: JournalMedia[];
+  onAdd: (files: FileList) => void;
+  onRemove: (mediaId: string) => void;
+  onUpdateCaption: (mediaId: string, caption: string) => void;
+  isUploading: boolean;
+  error: string | null;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [captionDraft, setCaptionDraft] = useState("");
+  const lightboxItem = media.find((m) => m.id === lightboxId) ?? null;
+  const canAddMore = media.length < 12;
+
+  const openLightbox = (item: JournalMedia) => {
+    setLightboxId(item.id);
+    setCaptionDraft(item.caption ?? "");
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+        {media.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => openLightbox(item)}
+            className="relative aspect-square rounded-xl overflow-hidden motion-safe:transition-transform motion-safe:hover:scale-[1.03] motion-safe:active:scale-[0.97]"
+          >
+            <img src={item.dataUri} alt={item.caption ?? "Foto do diário"} className="w-full h-full object-cover" />
+          </button>
+        ))}
+        {canAddMore && (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={isUploading}
+            className="aspect-square rounded-xl border-2 border-dashed border-paper-border dark:border-ink-border flex flex-col items-center justify-center gap-1 text-slate hover:border-cat-pink hover:text-cat-pink transition-colors disabled:opacity-60"
+          >
+            {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+            <span className="text-[9px]">Adicionar</span>
+          </button>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) onAdd(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      {error && <p className="text-xs text-rose-500 mt-2">{error}</p>}
+
+      {lightboxItem && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setLightboxId(null)}
+        >
+          <div className="max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end mb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(lightboxItem.id);
+                  setLightboxId(null);
+                }}
+                className="text-white/80 hover:text-white mr-3"
+                aria-label="Excluir foto"
+              >
+                <Trash2 size={18} />
+              </button>
+              <button type="button" onClick={() => setLightboxId(null)} className="text-white/80 hover:text-white" aria-label="Fechar">
+                <X size={20} />
+              </button>
+            </div>
+            <img src={lightboxItem.dataUri} alt={lightboxItem.caption ?? "Foto do diário"} className="w-full max-h-[65vh] object-contain rounded-xl" />
+            <input
+              value={captionDraft}
+              onChange={(e) => setCaptionDraft(e.target.value)}
+              onBlur={() => {
+                if (captionDraft !== (lightboxItem.caption ?? "")) onUpdateCaption(lightboxItem.id, captionDraft);
+              }}
+              placeholder="Adicionar legenda…"
+              className="w-full mt-3 rounded-lg px-3 py-2 text-sm bg-white/10 text-white placeholder:text-white/50 outline-none border border-white/20 focus:border-white/50 transition-colors"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 type FormState = {
   intention: string;
   thoughts: string;
@@ -196,7 +311,7 @@ const EMPTY_FORM: FormState = {
  * componente pai pra permitir abrir um dia direto do feed ou do calendário.
  */
 function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: React.Dispatch<React.SetStateAction<string>>; onBack: () => void }) {
-  const { entry, isLoading, save, isSaving } = useJournal(date);
+  const { entry, isLoading, save, isSaving, addMedia, isAddingMedia, updateMediaCaption, removeMedia } = useJournal(date);
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
@@ -285,6 +400,21 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     if (justSavedTimer.current) clearTimeout(justSavedTimer.current);
     setJustSaved(true);
     justSavedTimer.current = setTimeout(() => setJustSaved(false), 2200);
+  };
+
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  /** Comprime cada foto no navegador e envia uma por vez — evita disparar vários uploads de alguns MB em paralelo. */
+  const handleAddPhotos = async (files: FileList) => {
+    setPhotoError(null);
+    for (const file of Array.from(files)) {
+      try {
+        const dataUri = await compressImageToDataUri(file);
+        await addMedia({ dataUri });
+      } catch {
+        setPhotoError("Não foi possível enviar uma das fotos. Tente novamente.");
+      }
+    }
   };
 
   const combinedSelfCare = useMemo(() => {
@@ -452,6 +582,17 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <SectionCard icon={<Camera size={16} />} title="Fotos do dia" subtitle="Memórias visuais de hoje" className="xl:col-span-3">
+              <JournalPhotosSection
+                media={entry?.media ?? []}
+                onAdd={handleAddPhotos}
+                onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
+                onUpdateCaption={(mediaId, caption) => updateMediaCaption({ mediaId, caption: caption || null }).catch(() => undefined)}
+                isUploading={isAddingMedia}
+                error={photoError}
+              />
+            </SectionCard>
+
             <SectionCard icon={<Sun size={16} />} title="Intenção do dia" subtitle="Como quero me sentir hoje?">
               <RichTextEditor value={form.intention} onChange={(v) => updateField({ intention: v })} onBlur={() => saveNow()} placeholder="Como quero me sentir hoje?" />
             </SectionCard>
@@ -758,11 +899,18 @@ function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collect
       onClick={onOpen}
       className="w-full text-left rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-4 sm:p-5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99]"
     >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="text-sm font-semibold capitalize">{formatCardDate(day.date)}</p>
-        {day.mood && <span className="text-lg leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold capitalize">{formatCardDate(day.date)}</p>
+            {day.mood && <span className="text-lg leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
+          </div>
+          <p className="text-sm text-slate leading-relaxed line-clamp-3 mt-1">{day.preview}</p>
+        </div>
+        {day.coverPhoto && (
+          <img src={day.coverPhoto} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
+        )}
       </div>
-      <p className="text-sm text-slate leading-relaxed line-clamp-3">{day.preview}</p>
       {dayCollections.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {dayCollections.map((c) => (
@@ -777,6 +925,12 @@ function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collect
           <TypeIcon size={11} />
           {day.wordCount} palavras
         </span>
+        {day.photoCount > 0 && (
+          <span className="flex items-center gap-1">
+            <Camera size={11} />
+            {day.photoCount} {day.photoCount === 1 ? "foto" : "fotos"}
+          </span>
+        )}
         {day.gratitudeCount > 0 && (
           <span className="flex items-center gap-1">
             <Heart size={11} />

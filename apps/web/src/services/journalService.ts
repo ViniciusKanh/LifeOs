@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { JournalEntry, JournalCollection } from "@/types";
+import type { JournalEntry, JournalCollection, JournalMedia } from "@/types";
 
 export interface JournalUpsertInput {
   intention?: string | null;
@@ -33,6 +33,8 @@ export interface JournalDaySummary {
   nightMood: number | null;
   mood: { mood: number; energy: number } | null;
   journalIds: string[];
+  photoCount: number;
+  coverPhoto: string | null;
 }
 
 export interface JournalDaysPage {
@@ -55,7 +57,14 @@ export const journalService = {
   days: (before?: string, journalId?: string) => api.get<JournalDaysPage>(`/journal/days${daysQuery(before, journalId)}`),
   calendarMonth: (month: string, journalId?: string) =>
     api.get<{ days: string[] }>(`/journal/calendar?month=${month}${journalId ? `&journalId=${journalId}` : ""}`),
+  addMedia: (date: string, dataUri: string, caption?: string | null) =>
+    api.post<JournalEntry>(`/journal/${date}/media`, { dataUri, caption }),
+  updateMediaCaption: (date: string, mediaId: string, caption: string | null) =>
+    api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, { caption }),
+  removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
 };
+
+export type { JournalMedia };
 
 export interface JournalCollectionInput {
   name: string;

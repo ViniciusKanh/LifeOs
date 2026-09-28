@@ -622,7 +622,17 @@ export interface JournalEntry {
   focusTaskIds: string[];
   /** Ids dos diários (coleções) a que a entrada deste dia pertence — ver JournalCollection. */
   journalIds: string[];
+  /** Fotos anexadas à entrada do dia (Fase 4 do Diário — Apple Journal). */
+  media: JournalMedia[];
   auto: JournalAutoData;
+}
+
+/** Uma foto anexada à entrada do dia do Diário. */
+export interface JournalMedia {
+  id: string;
+  dataUri: string;
+  caption: string | null;
+  sortOrder: number;
 }
 
 /** Um "diário" — coleção nomeada (Pessoal, Viagens, Estudos...) pra organizar entradas do Diário. */
