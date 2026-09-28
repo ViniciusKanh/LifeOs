@@ -30,6 +30,7 @@ import {
   Lock,
   Mic,
   Square,
+  Download,
 } from "lucide-react";
 import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay, useJournalPin } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
@@ -42,6 +43,7 @@ import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
 import { Card, EmptyState } from "@/components/ui/primitives";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
+import { API_URL } from "@/services/api";
 
 /* ============================================================
    Diário — inspirado no app Diário/Journal da Apple (macOS Tahoe):
@@ -604,6 +606,30 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       .catch(() => undefined);
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  /** "Compartilhar entrada" (Fase 16): baixa um PDF só desta entrada, pra compartilhar ou imprimir — endpoint devolve binário, por isso não passa pelo wrapper JSON do api.ts. */
+  const handleExportPdf = async () => {
+    setIsExportingPdf(true);
+    try {
+      const res = await fetch(`${API_URL}/journal/${date}/export/pdf`, { credentials: "include" });
+      if (!res.ok) throw new Error("Falha ao gerar PDF.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `diario-${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setPhotoError("Não foi possível exportar o PDF desta entrada.");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   /** Botão "Salvar" explícito do masthead: força salvar tudo agora (o autosave já cobre isso, mas o usuário pediu um botão pra confirmar que os dados foram gravados). */
   const saveAllNow = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -771,6 +797,15 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
                   sem empurrar a linha das bolinhas dos dias da semana para o overflow. */}
               <span className="hidden sm:inline">{isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}</span>
             </span>
+            <button
+              onClick={handleExportPdf}
+              disabled={isExportingPdf}
+              aria-label="Exportar esta entrada em PDF"
+              title="Compartilhar / exportar PDF"
+              className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border text-slate hover:text-cat-pink hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-all disabled:opacity-50"
+            >
+              {isExportingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            </button>
             <button
               onClick={handleDeleteEntry}
               disabled={isDeletingEntry}

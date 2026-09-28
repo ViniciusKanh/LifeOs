@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema } from "../validators/journal.schema.js";
+import { buildJournalEntryPdf } from "../services/journalPdfService.js";
 import {
   getJournalAutoData,
   getJournalInsights,
@@ -221,6 +222,23 @@ journalRouter.delete("/:date", async (req, res) => {
   const db = getDb();
   await deleteJournalEntry(db, req.user!.id, date);
   return res.status(204).end();
+});
+
+/**
+ * GET /api/journal/:date/export/pdf — "Compartilhar entrada" (Fase 16):
+ * gera um PDF de uma única entrada do dia, com o mesmo conteúdo real do
+ * editor (texto, gratidão, fotos, humor/energia). Nunca inclui dados de
+ * outro dia nem de outro usuário — sempre o dono autenticado.
+ */
+journalRouter.get("/:date/export/pdf", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const db = getDb();
+  const entry = await buildJournalResponse(db, req.user!.id, date);
+  const pdf = await buildJournalEntryPdf(entry as unknown as Parameters<typeof buildJournalEntryPdf>[0]);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="diario-${date}.pdf"`);
+  return res.send(pdf);
 });
 
 /**
