@@ -15,6 +15,7 @@ import {
   deleteJournalMedia,
   setJournalFavorite,
   deleteJournalEntry,
+  getJournalOnThisDay,
 } from "../services/journalService.js";
 
 export const journalRouter = Router();
@@ -136,6 +137,18 @@ journalRouter.get("/calendar", async (req, res) => {
   const journalId = typeof req.query.journalId === "string" ? req.query.journalId : undefined;
   const db = getDb();
   return res.json({ days: await getJournalCalendarMonth(db, req.user!.id, month, journalId) });
+});
+
+/**
+ * GET /api/journal/on-this-day?date=YYYY-MM-DD — "Lembranças" (Fase 10):
+ * entradas reais de anos anteriores no mesmo dia/mês (padrão: hoje).
+ * Precisa vir ANTES de "/:date".
+ */
+journalRouter.get("/on-this-day", async (req, res) => {
+  const raw = typeof req.query.date === "string" ? req.query.date : undefined;
+  const date = raw && isValidDate(raw) ? raw : new Date().toISOString().slice(0, 10);
+  const db = getDb();
+  return res.json({ items: await getJournalOnThisDay(db, req.user!.id, date) });
 });
 
 journalRouter.get("/:date", async (req, res) => {

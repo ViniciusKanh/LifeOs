@@ -88,6 +88,15 @@ export function useJournalDays(journalId?: string, favoritesOnly?: boolean) {
   };
 }
 
+/** "Lembranças" (Fase 10 — On This Day): entradas reais de anos anteriores no mesmo dia/mês de hoje. */
+export function useJournalOnThisDay(date?: string) {
+  const query = useQuery({
+    queryKey: ["journal", "on-this-day", date ?? "today"],
+    queryFn: () => journalService.onThisDay(date),
+  });
+  return { items: query.data?.items ?? [], isLoading: query.isLoading };
+}
+
 /** Datas com entrada real no mês (YYYY-MM) — usado pelos pontinhos da aba "Calendário"; `journalId` filtra por diário. */
 export function useJournalCalendarMonth(month: string, journalId?: string) {
   const query = useQuery({

@@ -327,6 +327,17 @@ export async function listJournalDays(
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
 
+  const items = await enrichEntrySummaries(db, ownerId, page);
+  return { items, hasMore };
+}
+
+/**
+ * Enriquece linhas cruas de journal_entries com o mesmo dado real usado no
+ * feed "Entradas" (humor do dia, diários vinculados, contagem e capa de
+ * fotos) — compartilhado entre listJournalDays e getJournalOnThisDay
+ * (Fase 10) pra nunca duplicar essa lógica.
+ */
+async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<string, unknown>>): Promise<JournalDaySummary[]> {
   const moodByDate = new Map<string, { mood: number; energy: number }>();
   const journalIdsByEntry = new Map<string, string[]>();
   const photoCountByEntry = new Map<string, number>();
@@ -382,7 +393,7 @@ export async function listJournalDays(
     }
   }
 
-  const items: JournalDaySummary[] = page.map((row) => ({
+  return page.map((row) => ({
     date: String(row.entry_date),
     preview: buildPreview(row),
     wordCount: WRITTEN_FIELDS.reduce((s, f) => s + countWords(row[f] as string | null), 0),
@@ -395,8 +406,23 @@ export async function listJournalDays(
     coverPhoto: coverPhotoByEntry.get(String(row.id)) ?? null,
     isFavorite: Number(row.is_favorite ?? 0) === 1,
   }));
+}
 
-  return { items, hasMore };
+/**
+ * "Lembranças" (Fase 10 — On This Day do Apple Journal): entradas reais de
+ * anos anteriores no mesmo dia e mês de `date` (padrão: hoje). Nunca mistura
+ * com o ano atual, nunca inventa nada — só existe quando o usuário
+ * realmente escreveu algo naquele dia em um ano passado.
+ */
+export async function getJournalOnThisDay(db: Db, ownerId: string, date: string): Promise<JournalDaySummary[]> {
+  const result = await db.execute({
+    sql: `SELECT * FROM journal_entries
+          WHERE owner_id = ? AND entry_date != ? AND strftime('%m-%d', entry_date) = strftime('%m-%d', ?)
+          ORDER BY entry_date DESC`,
+    args: [ownerId, date, date],
+  });
+  const page = (result.rows as unknown as Array<Record<string, unknown>>).filter(hasWrittenContent);
+  return enrichEntrySummaries(db, ownerId, page);
 }
 
 /**

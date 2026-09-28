@@ -28,7 +28,7 @@ import {
   Trash2,
   Star,
 } from "lucide-react";
-import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections } from "@/hooks/useJournal";
+import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
 import type { JournalMedia } from "@/types";
 import { compressImageToDataUri } from "@/utils/image";
@@ -1087,6 +1087,51 @@ function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collect
 }
 
 /** Aba "Entradas" — feed cronológico real (só dias com conteúdo escrito), mais recente primeiro. */
+/** Quantos anos separam duas datas YYYY-MM-DD (aproximação por ano de calendário, suficiente pra rótulo). */
+function yearsAgo(date: string) {
+  const d = new Date(`${date}T00:00:00`);
+  const today = new Date(`${todayIso()}T00:00:00`);
+  return today.getFullYear() - d.getFullYear();
+}
+
+/**
+ * "Lembranças" (Fase 10 — On This Day do Apple Journal): entradas reais de
+ * anos anteriores no mesmo dia/mês de hoje. Só aparece quando existe pelo
+ * menos uma lembrança real — nunca inventa nada nem mostra sem dado.
+ */
+function OnThisDaySection({ onOpenDay }: { onOpenDay: (date: string) => void }) {
+  const { items, isLoading } = useJournalOnThisDay();
+  if (isLoading || items.length === 0) return null;
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-1.5 mb-2 text-sm font-semibold text-cat-pink">
+        <Sparkles size={14} />
+        Lembranças
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
+        {items.map((day) => (
+          <button
+            key={day.date}
+            onClick={() => onOpenDay(day.date)}
+            className="snap-start shrink-0 w-56 text-left rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3.5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarDays size={12} className="text-cat-pink shrink-0" />
+              <p className="text-[11px] font-medium text-cat-pink">
+                Há {yearsAgo(day.date)} {yearsAgo(day.date) === 1 ? "ano" : "anos"}
+              </p>
+              {day.mood && <span className="text-sm leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
+            </div>
+            <p className="text-xs font-semibold capitalize mb-1">{formatCardDate(day.date)}</p>
+            <p className="text-xs text-slate leading-relaxed line-clamp-3">{day.preview}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function JournalFeedTab({
   onOpenDay,
   collections,
@@ -1103,6 +1148,7 @@ function JournalFeedTab({
 
   return (
     <div className="max-w-2xl">
+      <OnThisDaySection onOpenDay={onOpenDay} />
       <div className="flex flex-wrap items-center gap-1.5 mb-1">
         <button
           onClick={() => setFavoritesOnly((v) => !v)}

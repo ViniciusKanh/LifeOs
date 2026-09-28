@@ -74,6 +74,7 @@ export const journalService = {
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
   toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
   deleteEntry: (date: string) => api.delete<void>(`/journal/${date}`),
+  onThisDay: (date?: string) => api.get<{ items: JournalDaySummary[] }>(`/journal/on-this-day${date ? `?date=${date}` : ""}`),
 };
 
 export type { JournalMedia };
