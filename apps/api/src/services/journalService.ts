@@ -629,3 +629,24 @@ export async function setJournalFavorite(db: Db, ownerId: string, date: string, 
     args: [isFavorite ? 1 : 0, entryId],
   });
 }
+
+/**
+ * Exclui a entrada do dia inteira (Fase 8 — privacidade/exclusão): fotos,
+ * vínculos com diários (coleções) e o registro em si. Apaga explicitamente
+ * as tabelas filhas em vez de confiar em ON DELETE CASCADE — o Turso/libSQL
+ * não garante `PRAGMA foreign_keys` ligado por conexão. Não faz nada (e
+ * devolve false) se o dia nunca teve entrada criada.
+ */
+export async function deleteJournalEntry(db: Db, ownerId: string, date: string): Promise<boolean> {
+  const existing = await db.execute({
+    sql: "SELECT id FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
+    args: [ownerId, date],
+  });
+  const row = existing.rows[0] as unknown as { id: string } | undefined;
+  if (!row) return false;
+
+  await db.execute({ sql: "DELETE FROM journal_entry_media WHERE entry_id = ? AND owner_id = ?", args: [row.id, ownerId] });
+  await db.execute({ sql: "DELETE FROM journal_entry_journals WHERE entry_id = ?", args: [row.id] });
+  await db.execute({ sql: "DELETE FROM journal_entries WHERE id = ? AND owner_id = ?", args: [row.id, ownerId] });
+  return true;
+}

@@ -47,6 +47,13 @@ export function useJournal(date: string) {
     onSuccess: onMediaChange,
   });
 
+  const deleteEntry = useMutation({
+    mutationFn: () => journalService.deleteEntry(date),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+    },
+  });
+
   return {
     entry: query.data ?? null,
     isLoading: query.isLoading,
@@ -58,6 +65,8 @@ export function useJournal(date: string) {
     removeMedia: removeMedia.mutateAsync,
     toggleFavorite: toggleFavorite.mutateAsync,
     isTogglingFavorite: toggleFavorite.isPending,
+    deleteEntry: deleteEntry.mutateAsync,
+    isDeletingEntry: deleteEntry.isPending,
   };
 }
 

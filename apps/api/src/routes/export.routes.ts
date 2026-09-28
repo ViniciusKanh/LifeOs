@@ -8,8 +8,9 @@ exportRouter.use(requireAuth);
 /**
  * Toda tabela que guarda dado do usuário (owner_id), na ordem em que
  * aparece nas migrations. Tabelas de junção sem owner_id próprio
- * (task_tags, task_dependencies, project_members) ficam de fora desta
- * v1 — são derivadas do que já está em `tasks`/`tags`/`projects`.
+ * (task_tags, task_dependencies, project_members, journal_entry_journals)
+ * ficam de fora desta v1 — são derivadas do que já está em
+ * `tasks`/`tags`/`projects`/`journals`+`journal_entries`.
  */
 const EXPORTABLE_TABLES = [
   "goals",
@@ -47,6 +48,9 @@ const EXPORTABLE_TABLES = [
   "analytics_snapshots",
   "personal_experiments",
   "personal_experiment_logs",
+  "journals",
+  "journal_entries",
+  "journal_entry_media",
 ] as const;
 
 /**

@@ -73,6 +73,7 @@ export const journalService = {
     api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, { caption }),
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
   toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
+  deleteEntry: (date: string) => api.delete<void>(`/journal/${date}`),
 };
 
 export type { JournalMedia };

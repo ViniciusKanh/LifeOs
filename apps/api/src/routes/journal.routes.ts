@@ -14,6 +14,7 @@ import {
   updateJournalMediaCaption,
   deleteJournalMedia,
   setJournalFavorite,
+  deleteJournalEntry,
 } from "../services/journalService.js";
 
 export const journalRouter = Router();
@@ -155,6 +156,19 @@ journalRouter.patch("/:date/favorite", async (req, res) => {
   const ownerId = req.user!.id;
   await setJournalFavorite(db, ownerId, date, req.body.isFavorite);
   return res.json(await buildJournalResponse(db, ownerId, date));
+});
+
+/**
+ * DELETE /api/journal/:date — exclui a entrada do dia inteira (Fase 8:
+ * privacidade/exclusão) — fotos, vínculos com diários e o registro em si.
+ * Idempotente: excluir um dia que nunca teve entrada não é erro.
+ */
+journalRouter.delete("/:date", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const db = getDb();
+  await deleteJournalEntry(db, req.user!.id, date);
+  return res.status(204).end();
 });
 
 /**

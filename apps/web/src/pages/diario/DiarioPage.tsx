@@ -369,8 +369,20 @@ const EMPTY_FORM: FormState = {
  * componente pai pra permitir abrir um dia direto do feed ou do calendário.
  */
 function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: React.Dispatch<React.SetStateAction<string>>; onBack: () => void }) {
-  const { entry, isLoading, save, isSaving, addMedia, isAddingMedia, updateMediaCaption, removeMedia, toggleFavorite, isTogglingFavorite } =
-    useJournal(date);
+  const {
+    entry,
+    isLoading,
+    save,
+    isSaving,
+    addMedia,
+    isAddingMedia,
+    updateMediaCaption,
+    removeMedia,
+    toggleFavorite,
+    isTogglingFavorite,
+    deleteEntry,
+    isDeletingEntry,
+  } = useJournal(date);
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
@@ -455,6 +467,14 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   /** Estrela do masthead: marca/desmarca o dia como favorito (Fase 6) — funciona mesmo num dia ainda sem nenhum texto escrito. */
   const handleToggleFavorite = () => {
     toggleFavorite(!(entry?.isFavorite ?? false)).catch(() => undefined);
+  };
+
+  /** Excluir este dia (Fase 8 — privacidade/exclusão): apaga texto, fotos e vínculos com diários; sem confirmação explícita, sem exclusão. */
+  const handleDeleteEntry = () => {
+    if (!confirm("Excluir esta entrada? Todo o texto e as fotos deste dia serão apagados permanentemente.")) return;
+    deleteEntry()
+      .then(() => onBack())
+      .catch(() => undefined);
   };
 
   /** Botão "Salvar" explícito do masthead: força salvar tudo agora (o autosave já cobre isso, mas o usuário pediu um botão pra confirmar que os dados foram gravados). */
@@ -618,6 +638,14 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               )}
               {isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}
             </span>
+            <button
+              onClick={handleDeleteEntry}
+              disabled={isDeletingEntry}
+              aria-label="Excluir esta entrada"
+              className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border text-slate hover:text-red-500 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-all disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+            </button>
             <button
               onClick={handleToggleFavorite}
               disabled={isTogglingFavorite}
