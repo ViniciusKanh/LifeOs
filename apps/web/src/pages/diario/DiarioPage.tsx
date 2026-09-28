@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -26,6 +26,7 @@ import {
   Camera,
   X,
   Trash2,
+  Star,
 } from "lucide-react";
 import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
@@ -368,7 +369,8 @@ const EMPTY_FORM: FormState = {
  * componente pai pra permitir abrir um dia direto do feed ou do calendário.
  */
 function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: React.Dispatch<React.SetStateAction<string>>; onBack: () => void }) {
-  const { entry, isLoading, save, isSaving, addMedia, isAddingMedia, updateMediaCaption, removeMedia } = useJournal(date);
+  const { entry, isLoading, save, isSaving, addMedia, isAddingMedia, updateMediaCaption, removeMedia, toggleFavorite, isTogglingFavorite } =
+    useJournal(date);
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
@@ -448,6 +450,11 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       persistNow(next);
       return next;
     });
+  };
+
+  /** Estrela do masthead: marca/desmarca o dia como favorito (Fase 6) — funciona mesmo num dia ainda sem nenhum texto escrito. */
+  const handleToggleFavorite = () => {
+    toggleFavorite(!(entry?.isFavorite ?? false)).catch(() => undefined);
   };
 
   /** Botão "Salvar" explícito do masthead: força salvar tudo agora (o autosave já cobre isso, mas o usuário pediu um botão pra confirmar que os dados foram gravados). */
@@ -611,6 +618,19 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               )}
               {isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}
             </span>
+            <button
+              onClick={handleToggleFavorite}
+              disabled={isTogglingFavorite}
+              aria-label={entry?.isFavorite ? "Remover dos favoritos" : "Marcar como favorito"}
+              aria-pressed={entry?.isFavorite ?? false}
+              className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border transition-all disabled:opacity-50 ${
+                entry?.isFavorite
+                  ? "border-amber-300 bg-amber-50 text-amber-500 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400"
+                  : "border-paper-border dark:border-ink-border text-slate hover:text-amber-500 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+              }`}
+            >
+              <Star size={14} className={entry?.isFavorite ? "fill-current" : undefined} />
+            </button>
             <button
               onClick={saveAllNow}
               disabled={isSaving}
@@ -981,6 +1001,7 @@ function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collect
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold capitalize">{formatCardDate(day.date)}</p>
             {day.mood && <span className="text-lg leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
+            {day.isFavorite && <Star size={13} className="text-amber-500 fill-current shrink-0" aria-label="Favorito" />}
           </div>
           <p className="text-sm text-slate leading-relaxed line-clamp-3 mt-1">{day.preview}</p>
         </div>
@@ -1043,16 +1064,29 @@ function JournalFeedTab({
   journalFilter: string | null;
   onChangeFilter: (id: string | null) => void;
 }) {
-  const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays(journalFilter ?? undefined);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays(journalFilter ?? undefined, favoritesOnly);
 
   return (
     <div className="max-w-2xl">
+      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+        <button
+          onClick={() => setFavoritesOnly((v) => !v)}
+          aria-pressed={favoritesOnly}
+          className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            favoritesOnly ? "bg-amber-400 text-white" : "bg-black/[0.04] dark:bg-white/[0.06] text-slate hover:text-inherit"
+          }`}
+        >
+          <Star size={11} className={favoritesOnly ? "fill-current" : undefined} />
+          Favoritos
+        </button>
+      </div>
       <JournalFilterChips collections={collections} active={journalFilter} onChange={onChangeFilter} />
       {isLoading ? (
         <p className="text-sm text-slate">Carregando…</p>
       ) : days.length === 0 ? (
         <EmptyState
-          title={journalFilter ? "Nenhuma entrada neste diário ainda" : "Seu diário está esperando a primeira entrada"}
+          title={favoritesOnly ? "Nenhum dia favoritado ainda" : journalFilter ? "Nenhuma entrada neste diário ainda" : "Seu diário está esperando a primeira entrada"}
           description="Escreva sobre sua intenção do dia, uma reflexão ou o que te fez bem — o LifeOS guarda tudo com data e monta seus Insights a partir disso."
           ctaLabel="Escrever hoje"
           onCta={() => onOpenDay(todayIso())}
@@ -1367,11 +1401,27 @@ export function DiarioPage() {
   const [date, setDate] = useState(todayIso());
   const [journalFilter, setJournalFilter] = useState<string | null>(null);
   const { collections } = useJournalCollections();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const openDay = (d: string) => {
     setDate(d);
     setView("day");
   };
+
+  // Deep-link "?date=YYYY-MM-DD" (ex.: resultado da busca global) — abre o
+  // dia pedido uma vez e limpa o parâmetro da URL em seguida.
+  useEffect(() => {
+    const requested = searchParams.get("date");
+    if (requested) {
+      openDay(requested);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("date");
+        return next;
+      }, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   if (view === "day") {
     return <DiaryDayEditor date={date} setDate={setDate} onBack={() => setView("feed")} />;

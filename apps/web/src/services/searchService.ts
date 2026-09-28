@@ -2,7 +2,7 @@ import { api } from "./api";
 
 export type GlobalSearchResult = {
   id: string;
-  type: "task" | "goal" | "habit" | "book" | "academic_project" | "project";
+  type: "task" | "goal" | "habit" | "book" | "academic_project" | "project" | "journal_entry";
   title: string;
   subtitle: string | null;
   link: string;

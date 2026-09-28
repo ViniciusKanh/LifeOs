@@ -94,7 +94,7 @@ const WRITTEN_FIELDS = [
  * expõe HTML cru pro usuário. Blocos (</p>, </li>, <br>, etc.) viram espaço
  * pra não colar palavras de parágrafos/itens diferentes.
  */
-function stripHtml(html: string | null | undefined): string {
+export function stripHtml(html: string | null | undefined): string {
   if (!html) return "";
   return html
     .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, " ")
@@ -196,6 +196,7 @@ export interface JournalDaySummary {
   journalIds: string[];
   photoCount: number;
   coverPhoto: string | null;
+  isFavorite: boolean;
 }
 
 /** Uma foto anexada à entrada do dia (Fase 4 do Diário — Apple Journal). */
@@ -240,7 +241,7 @@ function parseJsonArraySafe(value: string | undefined): string[] {
 export async function listJournalDays(
   db: Db,
   ownerId: string,
-  opts: { before?: string; limit?: number; journalId?: string } = {}
+  opts: { before?: string; limit?: number; journalId?: string; favoritesOnly?: boolean } = {}
 ): Promise<{ items: JournalDaySummary[]; hasMore: boolean }> {
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
   const conditions = ["owner_id = ?"];
@@ -252,6 +253,9 @@ export async function listJournalDays(
   if (opts.journalId) {
     conditions.push("id IN (SELECT entry_id FROM journal_entry_journals WHERE journal_id = ?)");
     args.push(opts.journalId);
+  }
+  if (opts.favoritesOnly) {
+    conditions.push("is_favorite = 1");
   }
 
   const result = await db.execute({
@@ -328,6 +332,7 @@ export async function listJournalDays(
     journalIds: journalIdsByEntry.get(String(row.id)) ?? [],
     photoCount: photoCountByEntry.get(String(row.id)) ?? 0,
     coverPhoto: coverPhotoByEntry.get(String(row.id)) ?? null,
+    isFavorite: Number(row.is_favorite ?? 0) === 1,
   }));
 
   return { items, hasMore };
@@ -549,4 +554,17 @@ export async function deleteJournalMedia(db: Db, ownerId: string, mediaId: strin
     args: [mediaId, ownerId],
   });
   return result.rowsAffected > 0;
+}
+
+/**
+ * Marca/desmarca o dia como favorito (Fase 6) — cria a entrada vazia se
+ * ainda não existir (favoritar sozinho já conta como registro do dia,
+ * igual a uma foto).
+ */
+export async function setJournalFavorite(db: Db, ownerId: string, date: string, isFavorite: boolean): Promise<void> {
+  const entryId = await ensureJournalEntryId(db, ownerId, date);
+  await db.execute({
+    sql: "UPDATE journal_entries SET is_favorite = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [isFavorite ? 1 : 0, entryId],
+  });
 }

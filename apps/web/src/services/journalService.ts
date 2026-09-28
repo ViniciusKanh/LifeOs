@@ -35,6 +35,7 @@ export interface JournalDaySummary {
   journalIds: string[];
   photoCount: number;
   coverPhoto: string | null;
+  isFavorite: boolean;
 }
 
 export interface JournalDaysPage {
@@ -42,10 +43,11 @@ export interface JournalDaysPage {
   hasMore: boolean;
 }
 
-function daysQuery(before?: string, journalId?: string) {
+function daysQuery(before?: string, journalId?: string, favoritesOnly?: boolean) {
   const params = new URLSearchParams();
   if (before) params.set("before", before);
   if (journalId) params.set("journalId", journalId);
+  if (favoritesOnly) params.set("favoritesOnly", "1");
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -54,7 +56,8 @@ export const journalService = {
   get: (date: string) => api.get<JournalEntry>(`/journal/${date}`),
   save: (date: string, input: JournalUpsertInput) => api.put<JournalEntry>(`/journal/${date}`, input),
   insights: () => api.get<JournalInsights>("/journal/insights"),
-  days: (before?: string, journalId?: string) => api.get<JournalDaysPage>(`/journal/days${daysQuery(before, journalId)}`),
+  days: (before?: string, journalId?: string, favoritesOnly?: boolean) =>
+    api.get<JournalDaysPage>(`/journal/days${daysQuery(before, journalId, favoritesOnly)}`),
   calendarMonth: (month: string, journalId?: string) =>
     api.get<{ days: string[] }>(`/journal/calendar?month=${month}${journalId ? `&journalId=${journalId}` : ""}`),
   addMedia: (date: string, dataUri: string, caption?: string | null) =>
@@ -62,6 +65,7 @@ export const journalService = {
   updateMediaCaption: (date: string, mediaId: string, caption: string | null) =>
     api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, { caption }),
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
+  toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
 };
 
 export type { JournalMedia };

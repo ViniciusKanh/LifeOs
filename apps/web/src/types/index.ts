@@ -624,6 +624,8 @@ export interface JournalEntry {
   journalIds: string[];
   /** Fotos anexadas à entrada do dia (Fase 4 do Diário — Apple Journal). */
   media: JournalMedia[];
+  /** Dia marcado como favorito (Fase 6 do Diário — Apple Journal). */
+  isFavorite: boolean;
   auto: JournalAutoData;
 }
 

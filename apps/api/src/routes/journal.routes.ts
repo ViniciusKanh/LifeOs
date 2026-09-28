@@ -13,6 +13,7 @@ import {
   addJournalMedia,
   updateJournalMediaCaption,
   deleteJournalMedia,
+  setJournalFavorite,
 } from "../services/journalService.js";
 
 export const journalRouter = Router();
@@ -71,6 +72,7 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     focusTaskIds: parseJsonArray(row?.focus_task_ids),
     journalIds,
     media,
+    isFavorite: Number(row?.is_favorite ?? 0) === 1,
     auto,
   };
 }
@@ -116,8 +118,9 @@ journalRouter.get("/days", async (req, res) => {
   const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
   const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
   const journalId = typeof req.query.journalId === "string" ? req.query.journalId : undefined;
+  const favoritesOnly = req.query.favoritesOnly === "1";
   const db = getDb();
-  return res.json(await listJournalDays(db, req.user!.id, { before, limit, journalId }));
+  return res.json(await listJournalDays(db, req.user!.id, { before, limit, journalId, favoritesOnly }));
 });
 
 /**
@@ -139,6 +142,19 @@ journalRouter.get("/:date", async (req, res) => {
   if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
   const db = getDb();
   return res.json(await buildJournalResponse(db, req.user!.id, date));
+});
+
+/** PATCH /api/journal/:date/favorite — marca/desmarca o dia como favorito (Fase 6). */
+journalRouter.patch("/:date/favorite", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  if (typeof req.body?.isFavorite !== "boolean") {
+    return res.status(400).json({ error: "isFavorite precisa ser um booleano." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  await setJournalFavorite(db, ownerId, date, req.body.isFavorite);
+  return res.json(await buildJournalResponse(db, ownerId, date));
 });
 
 /**

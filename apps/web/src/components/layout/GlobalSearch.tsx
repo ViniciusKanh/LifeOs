@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ListChecks, Target, Repeat, BookOpen, GraduationCap, GanttChartSquare, X, Sparkles } from "lucide-react";
+import { Search, ListChecks, Target, Repeat, BookOpen, GraduationCap, GanttChartSquare, NotebookPen, X, Sparkles } from "lucide-react";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import type { GlobalSearchResult } from "@/services/searchService";
 
@@ -11,6 +11,7 @@ const TYPE_META: Record<GlobalSearchResult["type"], { icon: typeof Search; tone:
   book: { icon: BookOpen, tone: "bg-cat-pink/10 text-cat-pink dark:bg-cat-pink/15 dark:text-cat-pink-dark" },
   academic_project: { icon: GraduationCap, tone: "bg-cat-teal/10 text-cat-teal dark:bg-cat-teal/15 dark:text-cat-teal-dark" },
   project: { icon: GanttChartSquare, tone: "bg-cat-blue/10 text-cat-blue dark:bg-cat-blue/15 dark:text-cat-blue-dark" },
+  journal_entry: { icon: NotebookPen, tone: "bg-cat-pink/10 text-cat-pink dark:bg-cat-pink/15 dark:text-cat-pink-dark" },
 };
 
 function ResultsList({ results, isSearching, query, onSelect }: {

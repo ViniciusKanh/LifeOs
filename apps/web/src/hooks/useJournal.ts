@@ -42,6 +42,11 @@ export function useJournal(date: string) {
     onSuccess: onMediaChange,
   });
 
+  const toggleFavorite = useMutation({
+    mutationFn: (isFavorite: boolean) => journalService.toggleFavorite(date, isFavorite),
+    onSuccess: onMediaChange,
+  });
+
   return {
     entry: query.data ?? null,
     isLoading: query.isLoading,
@@ -51,14 +56,16 @@ export function useJournal(date: string) {
     isAddingMedia: addMedia.isPending,
     updateMediaCaption: updateMediaCaption.mutateAsync,
     removeMedia: removeMedia.mutateAsync,
+    toggleFavorite: toggleFavorite.mutateAsync,
+    isTogglingFavorite: toggleFavorite.isPending,
   };
 }
 
-/** Feed cronológico do Diário (aba "Entradas") — página por página, mais recente primeiro; `journalId` filtra por um diário/coleção específico. */
-export function useJournalDays(journalId?: string) {
+/** Feed cronológico do Diário (aba "Entradas") — página por página, mais recente primeiro; `journalId` filtra por um diário/coleção específico, `favoritesOnly` só pelos dias marcados como favoritos (Fase 6). */
+export function useJournalDays(journalId?: string, favoritesOnly?: boolean) {
   const query = useInfiniteQuery({
-    queryKey: ["journal", "days", journalId ?? "all"],
-    queryFn: ({ pageParam }: { pageParam?: string }) => journalService.days(pageParam, journalId),
+    queryKey: ["journal", "days", journalId ?? "all", favoritesOnly ?? false],
+    queryFn: ({ pageParam }: { pageParam?: string }) => journalService.days(pageParam, journalId, favoritesOnly),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.items.at(-1)?.date : undefined),
   });
