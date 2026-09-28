@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { getDb } from "./client.js";
+import { getDb, closeDb } from "./client.js";
 
 /**
  * Executa todas as migrations em apps/api/src/db/migrations, em ordem
@@ -96,10 +96,16 @@ if (isDirectRun) {
   runMigrations()
     .then(() => {
       console.log("✓ migrations concluídas");
+      // Fecha a conexão do libSQL explicitamente antes de sair: chamar
+      // process.exit() com o client ainda aberto derruba o processo em
+      // alguns ambientes Windows (handle assíncrono do binding nativo
+      // ainda fechando) — fechar antes evita esse crash de saída.
+      closeDb();
       process.exit(0);
     })
     .catch((err) => {
       console.error("✗ falha ao rodar migrations:", err);
+      closeDb();
       process.exit(1);
     });
 }
