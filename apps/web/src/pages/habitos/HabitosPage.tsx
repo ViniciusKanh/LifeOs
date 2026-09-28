@@ -7,6 +7,8 @@ import {
   Clock,
   Flame,
   Heart,
+  ListChecks,
+  Loader2,
   Pencil,
   Plus,
   Sparkles,
@@ -87,11 +89,29 @@ function currentWeekDates() {
 type FilterTab = "Todos" | "Hoje" | "Concluidos" | "EmRisco";
 
 export function HabitosPage() {
-  const { habits, summaryByHabitId, stats, createHabit, updateHabit, removeHabit, checkIn } = useHabits();
+  const { habits, summaryByHabitId, stats, createHabit, updateHabit, removeHabit, checkIn, generateTasks, isGeneratingTasks } = useHabits();
   const insight = useHabitsInsight();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [filterTab, setFilterTab] = useState<FilterTab>("Todos");
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function handleGenerateTasks() {
+    try {
+      const result = await generateTasks();
+      if (result.created.length === 0) {
+        setToast(
+          result.skippedDone > 0
+            ? "Todos os hábitos de hoje já estão em dia — nenhuma tarefa nova."
+            : "Nenhum hábito ativo pra gerar tarefa."
+        );
+      } else {
+        setToast(`${result.created.length} ${result.created.length === 1 ? "tarefa gerada" : "tarefas geradas"} em Tarefas para hoje.`);
+      }
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Não foi possível gerar as tarefas.");
+    }
+  }
   const today = todayStr();
   const week = useMemo(() => currentWeekDates(), []);
   const entriesByHabitId = useHabitEntriesRange(habits, week[0].iso, week[6].iso);
@@ -199,9 +219,17 @@ export function HabitosPage() {
           <p className="font-display font-semibold text-2xl">Hábitos</p>
           <p className="text-sm text-slate mt-1">Pequenas ações, grandes resultados. Construa a vida que você deseja, um dia de cada vez.</p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <Plus size={14} /> Novo hábito
-        </Button>
+        <div className="flex items-center gap-2">
+          {habits.length > 0 && (
+            <Button variant="secondary" onClick={handleGenerateTasks} disabled={isGeneratingTasks} title="Cria em Tarefas uma tarefa pra cada hábito de hoje ainda não cumprido">
+              {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
+              Gerar tarefas de hoje
+            </Button>
+          )}
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus size={14} /> Novo hábito
+          </Button>
+        </div>
       </div>
 
       {habits.length === 0 ? (
@@ -550,6 +578,15 @@ export function HabitosPage() {
             await updateHabit({ id: editingHabit.id, patch: input });
           }}
         />
+      )}
+
+      {toast && (
+        <button
+          className="fixed bottom-5 right-5 z-[70] rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-left text-sm font-semibold shadow-card dark:border-ink-border dark:bg-ink-raised"
+          onClick={() => setToast(null)}
+        >
+          {toast}
+        </button>
       )}
     </div>
   );

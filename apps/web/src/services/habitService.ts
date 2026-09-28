@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { Habit, HabitStats, HabitSummary } from "@/types";
+import type { Habit, HabitStats, HabitSummary, Task } from "@/types";
 
 export const habitService = {
   list: () => api.get<Habit[]>("/habits"),
@@ -18,4 +18,7 @@ export const habitService = {
   },
   summary: () => api.get<HabitSummary[]>("/habits/summary"),
   stats: (days = 30) => api.get<HabitStats>(`/habits/stats?days=${days}`),
+  /** "Gerar tarefas de hoje" — cria em Tarefas uma tarefa por hábito ativo ainda não cumprido no dia (idempotente). */
+  generateTasks: (date?: string) =>
+    api.post<{ created: Task[]; skippedDone: number; skippedExisting: number }>("/habits/generate-tasks", date ? { date } : {}),
 };

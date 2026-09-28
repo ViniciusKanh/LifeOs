@@ -109,6 +109,35 @@ async function maybeSpawnNextOccurrence(db: ReturnType<typeof getDb>, taskId: st
   await recomputePriorityScore(db, newId, ownerId);
 }
 
+/**
+ * Integração hábito → tarefa → hábito: uma tarefa gerada a partir de um
+ * hábito (habit_id preenchido, ver POST /api/habits/generate-tasks) que é
+ * marcada "Concluído" faz o check-in automático daquele hábito no dia do
+ * due_date da tarefa (ou hoje, se a tarefa não tinha prazo) — mesmo upsert
+ * usado por POST /api/habits/:id/check-in, então marcar de novo não duplica
+ * nada. Só ADICIONA o check-in ao completar; desmarcar a tarefa depois não
+ * remove o check-in (evita apagar um registro de hábito sem confirmação).
+ */
+async function maybeCheckInLinkedHabit(db: ReturnType<typeof getDb>, taskId: string, ownerId: string) {
+  const result = await db.execute({
+    sql: "SELECT habit_id, due_date, status FROM tasks WHERE id = ? AND owner_id = ?",
+    args: [taskId, ownerId],
+  });
+  const task = result.rows[0] as unknown as { habit_id: string | null; due_date: string | null; status: string } | undefined;
+  if (!task || !task.habit_id || task.status !== "Concluído") return;
+
+  const habitRes = await db.execute({ sql: "SELECT target_count FROM habits WHERE id = ? AND owner_id = ?", args: [task.habit_id, ownerId] });
+  const targetCount = Number((habitRes.rows[0] as unknown as { target_count: number } | undefined)?.target_count ?? 1);
+  const entryDate = (task.due_date ?? new Date().toISOString()).slice(0, 10);
+
+  await db.execute({
+    sql: `INSERT INTO habit_entries (id, habit_id, owner_id, entry_date, count)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = MAX(habit_entries.count, excluded.count)`,
+    args: [nanoid(), task.habit_id, ownerId, entryDate, targetCount],
+  });
+}
+
 /** GET /api/tasks?status=&projectId= */
 tasksRouter.get("/", async (req, res) => {
   const db = getDb();
@@ -293,6 +322,7 @@ tasksRouter.patch("/:id", async (req, res) => {
   await recomputePriorityScore(db, req.params.id, req.user!.id);
   if (dataForUpdate.status === "Concluído") {
     await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
+    await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
   }
 
   const updated = await db.execute({
@@ -326,6 +356,7 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   }
   if (parsed.data.status === "Concluído") {
     await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
+    await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
   }
   return res.status(204).send();
 });

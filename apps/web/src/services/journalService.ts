@@ -16,7 +16,15 @@ export interface JournalUpsertInput {
   focusTaskIds?: string[];
 }
 
+export interface JournalInsights {
+  totalEntries: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalWords: number;
+}
+
 export const journalService = {
   get: (date: string) => api.get<JournalEntry>(`/journal/${date}`),
   save: (date: string, input: JournalUpsertInput) => api.put<JournalEntry>(`/journal/${date}`, input),
+  insights: () => api.get<JournalInsights>("/journal/insights"),
 };

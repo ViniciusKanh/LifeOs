@@ -19,31 +19,68 @@ import {
   Dumbbell,
   Flame,
   Quote,
+  Award,
+  CalendarDays,
+  Type as TypeIcon,
 } from "lucide-react";
-import { useJournal } from "@/hooks/useJournal";
+import { useJournal, useJournalInsights } from "@/hooks/useJournal";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
 import { Card } from "@/components/ui/primitives";
 
 /* ============================================================
-   Diário — "escreva o seu ser diário". Página em tom rosa (Journal/
-   aspecto emocional, conforme o design system), no aspecto de jornal
-   pedido pelo usuário: masthead com data, resumo automático do dia
-   (dado real, nunca inventado) e seções em cartões, responsivas de
-   celular a desktop (1 coluna no mobile, até 3 no desktop).
+   Diário — inspirado no app Diário/Journal da Apple (macOS Tahoe):
+   masthead com o gradiente suave do ícone do app, um painel de
+   "Insights" real sobre o hábito de escrever (sequência, recorde,
+   entradas, palavras — nunca inventado, sempre derivado de
+   journal_entries), cartões com uma leve resposta de hover/toque, e
+   seções responsivas de celular a desktop (1 coluna no mobile, até 3
+   no desktop).
 
    Automático (sempre ao vivo de outro módulo, nunca digitado aqui):
    humor/energia/sono (Saúde), insight do dia (Copilot), insights da
-   semana (Analytics — mesmo componente do Dashboard), foco sugerido e
-   concluído (Tarefas/Focus), hábitos e sequência (Hábitos), água,
-   exercício, páginas lidas e livro atual (Biblioteca).
+   semana (Analytics — mesmo componente do Dashboard), hábitos e
+   sequência (Hábitos), água, exercício, páginas lidas e livro atual
+   (Biblioteca), provérbio/versículo do dia (conteúdo curado).
 
    Manual (o "diário" de verdade, salvo em journal_entries): intenção,
    reflexões, gratidão, cuidado comigo, desafios, revisão da noite —
    com autosave: salva sozinho ~900ms depois de parar de digitar, e
    na hora ao sair do campo ou marcar um item.
    ============================================================ */
+
+/**
+ * Conta de 0 até `value` em ~700ms — o mesmo tipo de "contador subindo"
+ * que o painel Insights do Diário da Apple usa pros números de
+ * streak/palavras. Um único momento orquestrado na entrada do valor
+ * (não em cada hover), e pula direto pro valor final se o sistema
+ * pedir "reduzir movimento".
+ */
+function useCountUp(value: number, durationMs = 700) {
+  const [display, setDisplay] = useState(0);
+  const prefersReducedMotion = useMemo(
+    () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+    []
+  );
+  useEffect(() => {
+    if (prefersReducedMotion || value === 0) {
+      setDisplay(value);
+      return;
+    }
+    let raf: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(value * eased));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, durationMs, prefersReducedMotion]);
+  return display;
+}
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 const MOOD_EMOJI = ["😠", "😟", "😕", "🙂", "😀"];
@@ -101,7 +138,7 @@ function JournalTextarea({
       onBlur={onBlur}
       placeholder={placeholder}
       rows={rows}
-      className="w-full resize-none rounded-xl px-3 py-2.5 text-sm font-serif leading-relaxed bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+      className="w-full resize-none rounded-xl px-3 py-2.5 text-sm leading-relaxed bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
     />
   );
 }
@@ -120,7 +157,7 @@ function SectionCard({
   className?: string;
 }) {
   return (
-    <Card className={`p-4 sm:p-5 border-t-2 border-t-cat-pink/40 flex flex-col ${className ?? ""}`}>
+    <Card className={`p-4 sm:p-5 border-t-2 border-t-cat-pink/40 flex flex-col transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99] ${className ?? ""}`}>
       <div className="flex items-center gap-2 mb-1">
         <span className="text-cat-pink shrink-0">{icon}</span>
         <p className="text-sm font-semibold">{title}</p>
@@ -178,6 +215,11 @@ export function DiarioPage() {
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
+  const { insights } = useJournalInsights();
+  const streakCount = useCountUp(insights?.currentStreak ?? 0);
+  const longestCount = useCountUp(insights?.longestStreak ?? 0);
+  const entriesCount = useCountUp(insights?.totalEntries ?? 0);
+  const wordsCount = useCountUp(insights?.totalWords ?? 0);
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [justSaved, setJustSaved] = useState(false);
@@ -287,40 +329,38 @@ export function DiarioPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
-      {/* Masthead — visual de capa de jornal: filete duplo, olho da página e data em itálico */}
-      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/10 via-cat-pink/[0.03] to-transparent p-4 sm:p-6 sm:pt-5">
-        <div className="flex items-center justify-between gap-2 mb-2">
+      {/* Masthead — inspirado no app Diário/Journal da Apple: gradiente suave do
+          ícone do app, navegação de dia limpa, e um painel de Insights reais
+          sobre o hábito de escrever (sequência, recorde, entradas, palavras) */}
+      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/15 via-cat-purple/[0.06] to-transparent p-4 sm:p-6 sm:pt-5">
+        <div className="flex items-center justify-between gap-2 mb-4">
           <button
             onClick={() => setDate((d) => addDays(d, -1))}
-            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
             aria-label="Dia anterior"
           >
             <ChevronLeft size={15} />
           </button>
           <div className="text-center min-w-0">
-            <p className="text-[9px] sm:text-[10px] tracking-[0.25em] text-cat-pink/70 font-semibold mb-0.5">EDIÇÃO PESSOAL</p>
-            <p className="font-journal text-2xl sm:text-3xl md:text-5xl font-extrabold tracking-tight text-cat-pink truncate leading-none">Diário do Ser</p>
+            <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none">Diário</p>
             <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
           </div>
           <button
             onClick={() => setDate((d) => addDays(d, 1))}
             disabled={date >= todayIso()}
-            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] disabled:opacity-30"
+            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors disabled:opacity-30"
             aria-label="Próximo dia"
           >
             <ChevronRight size={15} />
           </button>
         </div>
 
-        {/* Filete duplo — moldura de capa de jornal */}
-        <div className="h-[3px] border-t-2 border-b border-cat-pink/40 mb-4 mt-3" />
-
         <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
           <div className="flex items-center gap-1.5 sm:gap-2">
             {WEEKDAYS.map((w, i) => (
               <span
                 key={i}
-                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${
+                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors ${
                   i === currentWeekday ? "bg-cat-pink text-white" : "text-slate border border-paper-border dark:border-ink-border"
                 }`}
               >
@@ -346,13 +386,25 @@ export function DiarioPage() {
             <button
               onClick={saveAllNow}
               disabled={isSaving}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 transition-colors disabled:opacity-50 shadow-sm"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 active:scale-95 transition-all disabled:opacity-50 shadow-sm"
             >
               <Save size={13} />
               Salvar
             </button>
           </div>
         </div>
+
+        {/* Insights — o mesmo tipo de painel do Diário da Apple, mas 100% derivado
+            de journal_entries reais (nunca inventado): sequência atual, recorde,
+            total de entradas e de palavras escritas. */}
+        {insights && (insights.totalEntries > 0 || insights.currentStreak > 0) && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <StatChip icon={<Flame size={14} />} label="Sequência atual" value={`${streakCount} ${streakCount === 1 ? "dia" : "dias"}`} tone="text-signal" />
+            <StatChip icon={<Award size={14} />} label="Recorde" value={`${longestCount} ${longestCount === 1 ? "dia" : "dias"}`} tone="text-cat-purple" />
+            <StatChip icon={<CalendarDays size={14} />} label="Entradas" value={`${entriesCount}`} tone="text-cat-blue" />
+            <StatChip icon={<TypeIcon size={14} />} label="Palavras" value={wordsCount.toLocaleString("pt-BR")} tone="text-cat-green" />
+          </div>
+        )}
 
         {auto && (
           <>
@@ -363,7 +415,7 @@ export function DiarioPage() {
               <StatChip icon={<Dumbbell size={14} />} label="Exercício" value={fmtMinutes(auto.exerciseMinutes)} tone="text-cat-green" />
               <StatChip icon={<BookOpen size={14} />} label="Leitura" value={`${auto.reading.pages}pág.`} tone="text-cat-pink" />
             </div>
-            <p className="font-serif text-sm sm:text-base text-[#3a3430] dark:text-[#EDEBE4]/90 italic mt-4 text-center leading-relaxed first-letter:font-journal first-letter:not-italic first-letter:text-3xl sm:first-letter:text-4xl first-letter:font-bold first-letter:mr-1 first-letter:float-left first-letter:leading-[0.8] first-letter:text-cat-pink">
+            <p className="text-sm sm:text-base text-[#3a3430] dark:text-[#EDEBE4]/90 mt-4 text-center leading-relaxed">
               {auto.summary}
             </p>
           </>
@@ -388,7 +440,7 @@ export function DiarioPage() {
             >
               {auto?.dailyQuote ? (
                 <blockquote className="flex flex-col gap-2">
-                  <p className="font-serif italic text-[15px] leading-relaxed text-[#3a3430] dark:text-[#EDEBE4]/90">
+                  <p className="italic text-[15px] leading-relaxed text-[#3a3430] dark:text-[#EDEBE4]/90">
                     “{auto.dailyQuote.text}”
                   </p>
                   <footer className="text-[11px] text-cat-pink font-semibold not-italic">— {auto.dailyQuote.source}</footer>
@@ -482,11 +534,13 @@ export function DiarioPage() {
                       className="w-full flex items-center gap-2.5 text-left rounded-lg px-1.5 py-1 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
                     >
                       <span
-                        className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                          checked ? "bg-cat-pink border-cat-pink text-white" : "border-paper-border dark:border-ink-border"
+                        className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-all duration-150 motion-safe:active:scale-90 ${
+                          checked
+                            ? "bg-cat-pink border-cat-pink text-white scale-100"
+                            : "border-paper-border dark:border-ink-border scale-90"
                         }`}
                       >
-                        {checked && <Check size={11} />}
+                        {checked && <Check size={11} className="motion-safe:animate-check-pop" />}
                       </span>
                       <span className="text-xs">{opt.label}</span>
                       {isAuto && <span className="text-[10px] text-cat-pink ml-auto shrink-0">hábito de hoje</span>}

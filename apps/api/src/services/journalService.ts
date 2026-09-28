@@ -70,6 +70,98 @@ function buildSummary(parts: {
  * evita duplicar dado que já existe em outro módulo, e monta a partir
  * disso a frase-resumo automática do dia.
  */
+export interface JournalInsights {
+  totalEntries: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalWords: number;
+}
+
+const WRITTEN_FIELDS = [
+  "intention",
+  "thoughts",
+  "challenges",
+  "lighter_plan",
+  "feel_good",
+  "night_helped",
+  "night_takeaway",
+] as const;
+
+function countWords(text: string | null | undefined): number {
+  if (!text) return 0;
+  const trimmed = text.trim();
+  return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
+}
+
+function hasWrittenContent(row: Record<string, unknown>): boolean {
+  if (WRITTEN_FIELDS.some((f) => typeof row[f] === "string" && (row[f] as string).trim().length > 0)) return true;
+  const gratitude = typeof row.gratitude === "string" ? row.gratitude : "[]";
+  const selfCare = typeof row.self_care === "string" ? row.self_care : "[]";
+  try {
+    if ((JSON.parse(gratitude) as unknown[]).length > 0) return true;
+  } catch {
+    /* ignora JSON inválido */
+  }
+  try {
+    if ((JSON.parse(selfCare) as unknown[]).length > 0) return true;
+  } catch {
+    /* ignora JSON inválido */
+  }
+  return false;
+}
+
+/**
+ * Estatísticas do hábito de escrever no diário — "Insights" real (nunca
+ * inventado): quantos dias distintos têm entrada com conteúdo de verdade
+ * (não conta um dia em que só os dados automáticos existem, sem nada
+ * escrito), sequência atual/recorde de dias seguidos escrevendo, e total
+ * de palavras somando os campos de texto de todas as entradas.
+ */
+export async function getJournalInsights(db: Db, ownerId: string): Promise<JournalInsights> {
+  const result = await db.execute({
+    sql: `SELECT entry_date, intention, thoughts, challenges, lighter_plan, feel_good, night_helped, night_takeaway, gratitude, self_care
+          FROM journal_entries WHERE owner_id = ? ORDER BY entry_date ASC`,
+    args: [ownerId],
+  });
+  const rows = result.rows as unknown as Array<Record<string, unknown>>;
+  const writtenRows = rows.filter(hasWrittenContent);
+
+  const totalWords = writtenRows.reduce(
+    (sum, row) => sum + WRITTEN_FIELDS.reduce((s, f) => s + countWords(row[f] as string | null), 0),
+    0
+  );
+
+  const dates = new Set(writtenRows.map((r) => String(r.entry_date)));
+  const sorted = [...dates].sort();
+  let longestStreak = 0;
+  let running = 0;
+  let prev: string | null = null;
+  for (const date of sorted) {
+    if (prev) {
+      const gapDays = Math.round((Date.parse(date) - Date.parse(prev)) / 86_400_000);
+      running = gapDays === 1 ? running + 1 : 1;
+    } else {
+      running = 1;
+    }
+    longestStreak = Math.max(longestStreak, running);
+    prev = date;
+  }
+
+  let currentStreak = 0;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const cursor = new Date(today);
+  if (!dates.has(cursor.toISOString().slice(0, 10))) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  while (dates.has(cursor.toISOString().slice(0, 10))) {
+    currentStreak += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return { totalEntries: writtenRows.length, currentStreak, longestStreak, totalWords };
+}
+
 export async function getJournalAutoData(db: Db, ownerId: string, date: string): Promise<JournalAutoData> {
   const [
     moodRes,

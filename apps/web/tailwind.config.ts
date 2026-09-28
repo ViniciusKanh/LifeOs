@@ -77,10 +77,6 @@ export default {
       fontFamily: {
         display: ["Bricolage Grotesque", "Inter", "system-ui", "sans-serif"],
         sans: ["Inter", "system-ui", "sans-serif"],
-        // Usadas só no Diário, pra dar a "pegada" de jornal impresso pedida
-        // pelo usuário: serif de leitura no corpo e um serif forte no masthead.
-        serif: ["Source Serif 4", "Georgia", "serif"],
-        journal: ["Playfair Display", "Georgia", "serif"],
       },
       borderRadius: {
         xl2: "1.25rem",
@@ -109,10 +105,18 @@ export default {
           "0%": { transform: "translateX(-120%) rotate(20deg)" },
           "100%": { transform: "translateX(220%) rotate(20deg)" },
         },
+        // Diário — o "tique" do checkbox de cuidado comigo estala ao marcar,
+        // um único micro-momento em resposta ao clique (nunca automático).
+        "check-pop": {
+          "0%": { transform: "scale(0.4)", opacity: "0" },
+          "60%": { transform: "scale(1.15)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "trophy-in": "trophy-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both",
         "trophy-shine": "trophy-shine 1.1s ease-out 0.15s 1",
+        "check-pop": "check-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both",
       },
     },
   },

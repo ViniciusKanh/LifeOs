@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { journalService, type JournalUpsertInput } from "@/services/journalService";
 
+/** Estatísticas reais do hábito de escrever no diário (streak, recorde, entradas, palavras) — usado pelo painel "Insights" do Diário. */
+export function useJournalInsights() {
+  const query = useQuery({ queryKey: ["journal", "insights"], queryFn: journalService.insights });
+  return { insights: query.data ?? null, isLoading: query.isLoading };
+}
+
 /** Uma entrada por data — reaproveitado pela tela Diário e, futuramente, por qualquer resumo do dia. */
 export function useJournal(date: string) {
   const queryClient = useQueryClient();
@@ -13,6 +19,7 @@ export function useJournal(date: string) {
     onSuccess: (data) => {
       queryClient.setQueryData(key, data);
       queryClient.invalidateQueries({ queryKey: ["analytics", "timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["journal", "insights"] });
     },
   });
 

@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { journalUpsertSchema } from "../validators/journal.schema.js";
-import { getJournalAutoData } from "../services/journalService.js";
+import { getJournalAutoData, getJournalInsights } from "../services/journalService.js";
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
@@ -53,6 +53,16 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     auto,
   };
 }
+
+/**
+ * GET /api/journal/insights — estatísticas reais do hábito de escrever no
+ * diário (streak, recorde, total de entradas e palavras). Precisa vir
+ * ANTES de "/:date", senão "insights" seria interpretado como uma data.
+ */
+journalRouter.get("/insights", async (req, res) => {
+  const db = getDb();
+  return res.json(await getJournalInsights(db, req.user!.id));
+});
 
 journalRouter.get("/:date", async (req, res) => {
   const { date } = req.params;

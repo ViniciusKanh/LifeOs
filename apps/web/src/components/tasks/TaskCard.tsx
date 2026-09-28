@@ -1,4 +1,4 @@
-import { Calendar, Repeat } from "lucide-react";
+import { Calendar, Repeat, Sparkles } from "lucide-react";
 import type { Task } from "@/types";
 import { describeRecurrenceRule } from "@/utils/recurrence";
 
@@ -48,6 +48,11 @@ export function TaskCard({
         {recurrenceLabel && (
           <span className="flex items-center gap-1 text-[10px] text-slate" title={recurrenceLabel}>
             <Repeat size={11} />
+          </span>
+        )}
+        {task.habit_id && (
+          <span className="flex items-center gap-1 text-[10px] text-cat-green" title="Gerada a partir de um hábito">
+            <Sparkles size={11} /> Hábito
           </span>
         )}
       </div>

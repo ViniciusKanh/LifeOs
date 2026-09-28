@@ -97,6 +97,80 @@ habitsRouter.post("/", async (req, res) => {
   return res.status(201).json(created.rows[0]);
 });
 
+const generateTasksSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato YYYY-MM-DD").optional(),
+});
+
+/**
+ * POST /api/habits/generate-tasks — "Gerar tarefas de hoje": cria, em
+ * Tarefas, uma tarefa com vencimento no dia pedido (hoje, por padrão) pra
+ * cada hábito ativo que ainda não foi cumprido naquele dia — assim o
+ * hábito vira algo que aparece pra fazer em Tarefas/Kanban/Hoje, em vez de
+ * só existir isolado na tela Hábitos. Concluir essa tarefa depois faz o
+ * check-in automático do hábito (ver maybeCheckInLinkedHabit em
+ * tasks.routes.ts) — a integração é nos dois sentidos.
+ *
+ * Idempotente: nunca gera duas tarefas pro mesmo hábito no mesmo dia (nem
+ * pula hábito já cumprido no dia), então clicar de novo no botão não
+ * duplica nada.
+ */
+habitsRouter.post("/generate-tasks", async (req, res) => {
+  const parsed = generateTasksSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const targetDate = parsed.data.date ?? new Date().toISOString().slice(0, 10);
+  const db = getDb();
+  const ownerId = req.user!.id;
+
+  const habitsRes = await db.execute({
+    sql: "SELECT id, name, icon, target_count FROM habits WHERE owner_id = ? AND archived_at IS NULL",
+    args: [ownerId],
+  });
+  const habits = habitsRes.rows as unknown as Array<{ id: string; name: string; icon: string | null; target_count: number }>;
+
+  if (habits.length === 0) {
+    return res.json({ created: [], skippedDone: 0, skippedExisting: 0 });
+  }
+
+  const doneRes = await db.execute({
+    sql: `SELECT habit_id FROM habit_entries WHERE owner_id = ? AND entry_date = ? AND count >= (SELECT target_count FROM habits WHERE habits.id = habit_entries.habit_id)`,
+    args: [ownerId, targetDate],
+  });
+  const doneHabitIds = new Set((doneRes.rows as unknown as Array<{ habit_id: string }>).map((r) => r.habit_id));
+
+  const existingRes = await db.execute({
+    sql: "SELECT habit_id FROM tasks WHERE owner_id = ? AND habit_id IS NOT NULL AND date(due_date) = date(?)",
+    args: [ownerId, targetDate],
+  });
+  const existingHabitIds = new Set((existingRes.rows as unknown as Array<{ habit_id: string }>).map((r) => r.habit_id));
+
+  const created: Array<Record<string, unknown>> = [];
+  let skippedDone = 0;
+  let skippedExisting = 0;
+
+  for (const habit of habits) {
+    if (doneHabitIds.has(habit.id)) {
+      skippedDone += 1;
+      continue;
+    }
+    if (existingHabitIds.has(habit.id)) {
+      skippedExisting += 1;
+      continue;
+    }
+    const id = nanoid();
+    await db.execute({
+      sql: `INSERT INTO tasks (id, owner_id, habit_id, title, status, priority, due_date)
+            VALUES (?, ?, ?, ?, 'Backlog', 'Média', ?)`,
+      args: [id, ownerId, habit.id, habit.name, targetDate],
+    });
+    const row = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ?", args: [id] });
+    created.push(row.rows[0] as unknown as Record<string, unknown>);
+  }
+
+  return res.json({ created, skippedDone, skippedExisting });
+});
+
 /** POST /api/habits/:id/check-in — registra (ou atualiza) o cumprimento do dia */
 habitsRouter.post("/:id/check-in", async (req, res) => {
   const parsed = checkInSchema.safeParse(req.body);

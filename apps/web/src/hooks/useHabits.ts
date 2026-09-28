@@ -36,6 +36,14 @@ export function useHabits() {
       triggerAchievementsCheck();
     },
   });
+  const generateTasks = useMutation({
+    mutationFn: (date?: string) => habitService.generateTasks(date),
+    onSuccess: () => {
+      // A tarefa gerada precisa aparecer em Tarefas/Kanban/Hoje na hora.
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    },
+  });
 
   const summaryByHabitId = new Map((summaryQuery.data ?? []).map((s) => [s.habitId, s]));
 
@@ -48,6 +56,8 @@ export function useHabits() {
     updateHabit: updateHabit.mutateAsync,
     removeHabit: removeHabit.mutateAsync,
     checkIn: checkIn.mutateAsync,
+    generateTasks: generateTasks.mutateAsync,
+    isGeneratingTasks: generateTasks.isPending,
   };
 }
 

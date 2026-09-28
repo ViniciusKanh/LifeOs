@@ -63,6 +63,8 @@ export interface Task {
   effort: number | null;
   priority_score: number | null;
   recurrence_rule: string | null;
+  /** Preenchido quando a tarefa foi gerada a partir de um hábito ("Gerar tarefas de hoje" em Hábitos) — concluir a tarefa faz o check-in automático do hábito do dia. */
+  habit_id: string | null;
 }
 
 /**
