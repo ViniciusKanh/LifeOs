@@ -582,6 +582,12 @@ export interface LifeInsights {
   weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
+export interface DailyWisdom {
+  text: string;
+  source: string;
+  kind: "versiculo" | "proverbio";
+}
+
 export interface JournalAutoData {
   mood: { mood: number; energy: number; stress: number | null } | null;
   sleep: { qualityScore: number | null; durationMinutes: number | null } | null;
@@ -592,10 +598,10 @@ export interface JournalAutoData {
   tasksToday: { done: number; total: number };
   habitsToday: { done: number; total: number; streak: { habitName: string; streak: number } | null };
   waterMl: number;
-  focusMinutes: number;
   exerciseMinutes: number;
   reading: { pages: number; minutes: number };
   summary: string;
+  dailyQuote: DailyWisdom;
 }
 
 export interface JournalEntry {

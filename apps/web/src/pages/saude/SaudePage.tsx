@@ -355,8 +355,9 @@ export function SaudePage() {
           waterToday={waterToday}
           waterTotal={waterTotal}
           waterPct={waterPct}
-          onQuickAdd={async (amountMl) => {
-            await addWater(amountMl);
+          selectedDate={selectedDate}
+          onQuickAdd={async (amountMl, recordedAt) => {
+            await addWater({ amountMl, recordedAt });
             setToast(`+${amountMl} ml registrados.`);
           }}
           onDelete={(id) => deleteByKind("water", id)}
@@ -369,6 +370,7 @@ export function SaudePage() {
           lastNightMinutes={lastNightMinutes}
           avgSleepMinutes={avgSleepMinutes}
           avgQuality={avgQuality}
+          selectedDate={selectedDate}
           onAddSleep={async (input) => {
             await addSleep(input);
             setToast("Noite registrada.");
@@ -381,6 +383,7 @@ export function SaudePage() {
           workouts={workouts}
           workoutsWeekly={workoutsWeekly}
           workoutsThisWeekMinutes={workoutsThisWeekMinutes}
+          selectedDate={selectedDate}
           onAddWorkout={async (input) => {
             await addWorkout(input);
             setToast("Exercicio registrado.");
@@ -391,6 +394,7 @@ export function SaudePage() {
         />
         <MoodCard
           mood={mood}
+          selectedDate={selectedDate}
           onAddMood={async (input) => {
             await addMood(input);
             setToast("Check-in de bem-estar salvo.");

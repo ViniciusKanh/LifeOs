@@ -54,6 +54,18 @@ export function dateTimeLocalToIso(value: string) {
   return new Date(value).toISOString();
 }
 
+/**
+ * Valor padrão pro campo "Quando" de um registro retroativo: se o dia
+ * selecionado na navegação da tela é hoje, usa a hora atual (comportamento
+ * de sempre); se é um dia passado (esqueceu de registrar), usa meio-dia
+ * daquele dia como ponto de partida — o usuário ajusta a hora exata se
+ * quiser, mas o registro já nasce no dia certo em vez de cair em "agora".
+ */
+export function defaultEntryDateTimeLocal(selectedDate: string) {
+  if (selectedDate === todayKey()) return toDateTimeLocal(new Date().toISOString());
+  return `${selectedDate}T12:00`;
+}
+
 export function optionalText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;

@@ -1,4 +1,5 @@
 import { getDb } from "../db/client.js";
+import { pickDailyWisdom, type DailyWisdom } from "../config/dailyWisdom.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -20,10 +21,11 @@ export interface JournalAutoData {
   tasksToday: { done: number; total: number };
   habitsToday: { done: number; total: number; streak: { habitName: string; streak: number } | null };
   waterMl: number;
-  focusMinutes: number;
   exerciseMinutes: number;
   reading: { pages: number; minutes: number };
   summary: string;
+  /** Frase de reflexão do dia (provérbio ou versículo) — conteúdo curado, não é dado do usuário nem gerado por IA (ver config/dailyWisdom.ts). */
+  dailyQuote: DailyWisdom;
 }
 
 function fmtMinutes(min: number): string {
@@ -42,7 +44,6 @@ function fmtMinutes(min: number): string {
 function buildSummary(parts: {
   tasksToday: { done: number; total: number };
   habitsToday: { done: number; total: number };
-  focusMinutes: number;
   waterMl: number;
   exerciseMinutes: number;
   reading: { pages: number; minutes: number };
@@ -51,7 +52,6 @@ function buildSummary(parts: {
   const clauses: string[] = [];
   if (parts.tasksToday.total > 0) clauses.push(`${parts.tasksToday.done} de ${parts.tasksToday.total} tarefas concluídas`);
   if (parts.habitsToday.total > 0) clauses.push(`${parts.habitsToday.done} de ${parts.habitsToday.total} hábitos em dia`);
-  if (parts.focusMinutes > 0) clauses.push(`${fmtMinutes(parts.focusMinutes)} de foco`);
   if (parts.exerciseMinutes > 0) clauses.push(`${fmtMinutes(parts.exerciseMinutes)} de exercício`);
   if (parts.reading.pages > 0) clauses.push(`${parts.reading.pages} páginas lidas`);
   if (parts.waterMl > 0) clauses.push(`${(parts.waterMl / 1000).toFixed(1)}L de água`);
@@ -81,7 +81,6 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     tasksTodayRes,
     habitsTodayRes,
     waterRes,
-    focusRes,
     exerciseRes,
     readingRes,
     bestStreakRes,
@@ -129,10 +128,6 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
       args: [ownerId, date],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS total FROM focus_sessions WHERE owner_id = ? AND date(started_at) = date(?)",
-      args: [ownerId, date],
-    }),
-    db.execute({
       sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS total FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?)",
       args: [ownerId, date],
     }),
@@ -169,7 +164,6 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     streak: bestStreakRow && bestStreakRow.streak >= 2 ? { habitName: bestStreakRow.name, streak: bestStreakRow.streak } : null,
   };
   const waterMl = Number((waterRes.rows[0] as unknown as { total: number } | undefined)?.total ?? 0);
-  const focusMinutes = Number((focusRes.rows[0] as unknown as { total: number } | undefined)?.total ?? 0);
   const exerciseMinutes = Number((exerciseRes.rows[0] as unknown as { total: number } | undefined)?.total ?? 0);
   const readingRow = readingRes.rows[0] as unknown as { pages: number; minutes: number } | undefined;
   const reading = { pages: Number(readingRow?.pages ?? 0), minutes: Number(readingRow?.minutes ?? 0) };
@@ -192,9 +186,9 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     tasksToday,
     habitsToday,
     waterMl,
-    focusMinutes,
     exerciseMinutes,
     reading,
-    summary: buildSummary({ tasksToday, habitsToday, focusMinutes, waterMl, exerciseMinutes, reading, mood }),
+    summary: buildSummary({ tasksToday, habitsToday, waterMl, exerciseMinutes, reading, mood }),
+    dailyQuote: pickDailyWisdom(date),
   };
 }

@@ -77,6 +77,10 @@ export default {
       fontFamily: {
         display: ["Bricolage Grotesque", "Inter", "system-ui", "sans-serif"],
         sans: ["Inter", "system-ui", "sans-serif"],
+        // Usadas só no Diário, pra dar a "pegada" de jornal impresso pedida
+        // pelo usuário: serif de leitura no corpo e um serif forte no masthead.
+        serif: ["Source Serif 4", "Georgia", "serif"],
+        journal: ["Playfair Display", "Georgia", "serif"],
       },
       borderRadius: {
         xl2: "1.25rem",

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Dumbbell, Droplets, Edit2, HeartPulse, LineChart as LineChartIcon, Moon, Sparkles, Sun, Trash2, Wand2 } from "lucide-react";
@@ -12,11 +12,13 @@ import {
   WATER_QUICK_ADD,
   SLEEP_GOAL_MINUTES,
   dateTimeLocalToIso,
+  defaultEntryDateTimeLocal,
   fmtDateTime,
   formatHM,
   optionalNumber,
   optionalText,
   parseHealthDate,
+  todayKey,
   toDateTimeLocal,
 } from "./healthUtils";
 import type { HealthEditTarget } from "./HealthHistoryModal";
@@ -25,6 +27,13 @@ const WORKOUT_TYPES = ["Caminhada", "Corrida", "Musculacao", "Ciclismo", "Nataca
 
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
+}
+
+/** Aviso discreto quando o campo "Quando" aponta pra um dia diferente de hoje — deixa claro que o registro vai retroativo, não pra hoje. */
+function RetroactiveHint({ whenLocal }: { whenLocal: string }) {
+  if (!whenLocal || whenLocal.slice(0, 10) === todayKey()) return null;
+  const label = new Date(`${whenLocal.slice(0, 10)}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" });
+  return <p className="mt-1 text-[10px] text-signal-deep">Registro retroativo — será salvo em {label}.</p>;
 }
 
 function chartTooltipStyle() {
@@ -40,6 +49,7 @@ export function WaterCard({
   waterToday,
   waterTotal,
   waterPct,
+  selectedDate,
   onQuickAdd,
   onDelete,
   onEdit,
@@ -48,19 +58,25 @@ export function WaterCard({
   waterToday: WaterEntry[];
   waterTotal: number;
   waterPct: number;
-  onQuickAdd: (amountMl: number) => Promise<void>;
+  selectedDate: string;
+  onQuickAdd: (amountMl: number, recordedAt: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (target: HealthEditTarget) => void;
   onOpenHistory: () => void;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [savingMl, setSavingMl] = useState<number | null>(null);
+  // "Quando" — pra dar pra registrar retroativo (um dia que esqueceu de
+  // registrar), sem que o registro do dia a dia normal mude de jeito nenhum:
+  // some sozinho pro horário certo sempre que o dia selecionado na tela muda.
+  const [whenLocal, setWhenLocal] = useState(() => defaultEntryDateTimeLocal(selectedDate));
+  useEffect(() => setWhenLocal(defaultEntryDateTimeLocal(selectedDate)), [selectedDate]);
 
   async function add(amountMl: number) {
     setMessage(null);
     setSavingMl(amountMl);
     try {
-      await onQuickAdd(amountMl);
+      await onQuickAdd(amountMl, dateTimeLocalToIso(whenLocal));
       setMessage(`+${amountMl} ml registrados`);
     } catch (err) {
       setMessage(errorMessage(err, "Nao foi possivel registrar sua agua."));
@@ -91,8 +107,20 @@ export function WaterCard({
         </div>
       </div>
 
-      <p className="mb-2 mt-5 text-xs font-semibold">Adicionar rapidamente</p>
-      <div className="mb-3 grid grid-cols-3 gap-2">
+      <div className="mt-5 flex items-end justify-between gap-3">
+        <p className="text-xs font-semibold">Adicionar rapidamente</p>
+        <label className="text-[11px] text-slate">
+          Quando
+          <input
+            type="datetime-local"
+            value={whenLocal}
+            onChange={(event) => setWhenLocal(event.target.value)}
+            className="mt-0.5 block rounded-lg border border-paper-border bg-paper px-2 py-1 text-xs outline-none focus:border-brand-500 dark:border-ink-border dark:bg-ink"
+          />
+        </label>
+      </div>
+      <RetroactiveHint whenLocal={whenLocal} />
+      <div className="mb-3 mt-2 grid grid-cols-3 gap-2">
         {WATER_QUICK_ADD.map((amountMl) => (
           <Button key={amountMl} variant="secondary" className="min-h-11 text-cat-blue" onClick={() => add(amountMl)} disabled={savingMl !== null}>
             {savingMl === amountMl ? "..." : `+${amountMl}ml`}
@@ -151,6 +179,7 @@ export function SleepCard({
   lastNightMinutes,
   avgSleepMinutes,
   avgQuality,
+  selectedDate,
   onAddSleep,
   onDelete,
   onEdit,
@@ -161,15 +190,22 @@ export function SleepCard({
   lastNightMinutes: number | null;
   avgSleepMinutes: number | null;
   avgQuality: number | null;
+  selectedDate: string;
   onAddSleep: (input: SleepEntryInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (target: HealthEditTarget) => void;
   onOpenHistory: () => void;
 }) {
-  const now = useMemo(() => new Date(), []);
-  const defaultWake = toDateTimeLocal(now.toISOString());
-  const defaultBed = toDateTimeLocal(new Date(now.getTime() - SLEEP_GOAL_MINUTES * 60_000).toISOString());
+  // Âncora do formulário: hora atual se o dia selecionado é hoje, senão
+  // meio-dia daquele dia — dá pra registrar uma noite de um dia passado que
+  // esqueceu de lançar, sem perder o atalho de "agora" no uso do dia a dia.
+  const defaultWake = useMemo(() => defaultEntryDateTimeLocal(selectedDate), [selectedDate]);
+  const defaultBed = useMemo(
+    () => toDateTimeLocal(new Date(new Date(`${defaultWake}:00`).getTime() - SLEEP_GOAL_MINUTES * 60_000).toISOString()),
+    [defaultWake]
+  );
   const [form, setForm] = useState({ wentToBedAt: defaultBed, wokeUpAt: defaultWake, quality: 3, notes: "" });
+  useEffect(() => setForm((f) => ({ ...f, wentToBedAt: defaultBed, wokeUpAt: defaultWake })), [defaultBed, defaultWake]);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -234,6 +270,7 @@ export function SleepCard({
         <Field label="Dormi as" type="datetime-local" value={form.wentToBedAt} onChange={(event) => setForm({ ...form, wentToBedAt: event.target.value })} />
         <Field label="Acordei as" type="datetime-local" value={form.wokeUpAt} onChange={(event) => setForm({ ...form, wokeUpAt: event.target.value })} />
       </div>
+      <RetroactiveHint whenLocal={form.wokeUpAt} />
       <Slider label="Qualidade do sono" value={form.quality} tone="purple" onChange={(value) => setForm({ ...form, quality: value })} />
       <textarea
         value={form.notes}
@@ -279,6 +316,7 @@ export function WorkoutCard({
   workouts,
   workoutsWeekly,
   workoutsThisWeekMinutes,
+  selectedDate,
   onAddWorkout,
   onDelete,
   onEdit,
@@ -287,18 +325,22 @@ export function WorkoutCard({
   workouts: Workout[];
   workoutsWeekly: Array<{ label: string; value: number }>;
   workoutsThisWeekMinutes: number;
+  selectedDate: string;
   onAddWorkout: (input: WorkoutInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (target: HealthEditTarget) => void;
   onOpenHistory: () => void;
 }) {
+  const defaultWhen = useMemo(() => defaultEntryDateTimeLocal(selectedDate), [selectedDate]);
   const [form, setForm] = useState({
     kind: "Caminhada",
     durationMinutes: "",
     distanceKm: "",
     intensity: "moderada" as const,
     notes: "",
+    performedAt: defaultWhen,
   });
+  useEffect(() => setForm((f) => ({ ...f, performedAt: defaultWhen })), [defaultWhen]);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -321,8 +363,9 @@ export function WorkoutCard({
         distanceKm: optionalNumber(form.distanceKm),
         intensity: form.intensity,
         notes: optionalText(form.notes),
+        performedAt: form.performedAt ? dateTimeLocalToIso(form.performedAt) : undefined,
       });
-      setForm({ kind: "Caminhada", durationMinutes: "", distanceKm: "", intensity: "moderada", notes: "" });
+      setForm({ kind: "Caminhada", durationMinutes: "", distanceKm: "", intensity: "moderada", notes: "", performedAt: defaultWhen });
       setMessage("Exercicio registrado.");
     } catch (err) {
       setMessage(errorMessage(err, "Nao foi possivel registrar o exercicio."));
@@ -372,7 +415,14 @@ export function WorkoutCard({
             <option value="intensa">Intensa</option>
           </select>
         </div>
+        <Field
+          label="Quando"
+          type="datetime-local"
+          value={form.performedAt}
+          onChange={(event) => setForm({ ...form, performedAt: event.target.value })}
+        />
       </div>
+      <RetroactiveHint whenLocal={form.performedAt} />
       <textarea
         value={form.notes}
         onChange={(event) => setForm({ ...form, notes: event.target.value })}
@@ -421,18 +471,22 @@ export function WorkoutCard({
 
 export function MoodCard({
   mood,
+  selectedDate,
   onAddMood,
   onDelete,
   onEdit,
   onOpenHistory,
 }: {
   mood: MoodEntry[];
+  selectedDate: string;
   onAddMood: (input: MoodEntryInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (target: HealthEditTarget) => void;
   onOpenHistory: () => void;
 }) {
-  const [form, setForm] = useState({ mood: 3, energy: 3, stress: 3, note: "" });
+  const defaultWhen = useMemo(() => defaultEntryDateTimeLocal(selectedDate), [selectedDate]);
+  const [form, setForm] = useState({ mood: 3, energy: 3, stress: 3, note: "", recordedAt: defaultWhen });
+  useEffect(() => setForm((f) => ({ ...f, recordedAt: defaultWhen })), [defaultWhen]);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -454,8 +508,14 @@ export function MoodCard({
     setMessage(null);
     try {
       setIsSaving(true);
-      await onAddMood({ mood: form.mood, energy: form.energy, stress: form.stress, note: optionalText(form.note) });
-      setForm({ mood: 3, energy: 3, stress: 3, note: "" });
+      await onAddMood({
+        mood: form.mood,
+        energy: form.energy,
+        stress: form.stress,
+        note: optionalText(form.note),
+        recordedAt: form.recordedAt ? dateTimeLocalToIso(form.recordedAt) : undefined,
+      });
+      setForm({ mood: 3, energy: 3, stress: 3, note: "", recordedAt: defaultWhen });
       setMessage("Check-in de bem-estar salvo.");
     } catch (err) {
       setMessage(errorMessage(err, "Nao foi possivel salvar o check-in."));
@@ -484,6 +544,13 @@ export function MoodCard({
         rows={2}
         className="mt-2 w-full resize-none rounded-xl border border-paper-border bg-paper px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-ink-border dark:bg-ink"
       />
+      <Field
+        label="Quando"
+        type="datetime-local"
+        value={form.recordedAt}
+        onChange={(event) => setForm({ ...form, recordedAt: event.target.value })}
+      />
+      <RetroactiveHint whenLocal={form.recordedAt} />
       <Button className="mt-2 w-full" onClick={submit} disabled={isSaving}>
         <SmileIcon /> {isSaving ? "Salvando..." : "Registrar"}
       </Button>

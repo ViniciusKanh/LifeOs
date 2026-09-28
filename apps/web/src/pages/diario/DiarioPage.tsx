@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Target,
   Brain,
   Lightbulb,
   Heart,
@@ -17,12 +16,11 @@ import {
   ListChecks,
   Repeat,
   Droplets,
-  Timer,
   Dumbbell,
   Flame,
+  Quote,
 } from "lucide-react";
 import { useJournal } from "@/hooks/useJournal";
-import { useTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
@@ -103,7 +101,7 @@ function JournalTextarea({
       onBlur={onBlur}
       placeholder={placeholder}
       rows={rows}
-      className="w-full resize-none rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+      className="w-full resize-none rounded-xl px-3 py-2.5 text-sm font-serif leading-relaxed bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
     />
   );
 }
@@ -177,7 +175,6 @@ const EMPTY_FORM: FormState = {
 export function DiarioPage() {
   const [date, setDate] = useState(todayIso());
   const { entry, isLoading, save, isSaving } = useJournal(date);
-  const { moveTask } = useTasks();
   const { habits, summaryByHabitId } = useHabits();
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
@@ -282,7 +279,6 @@ export function DiarioPage() {
     return best;
   }, [habits, summaryByHabitId]);
 
-  const focusTasks = entry?.auto.suggestedFocusTasks ?? [];
   const currentWeekday = new Date(`${date}T00:00:00`).getDay();
   const book = entry?.auto.currentBook;
   const mood = entry?.auto.mood;
@@ -303,7 +299,7 @@ export function DiarioPage() {
           </button>
           <div className="text-center min-w-0">
             <p className="text-[9px] sm:text-[10px] tracking-[0.25em] text-cat-pink/70 font-semibold mb-0.5">EDIÇÃO PESSOAL</p>
-            <p className="font-display text-2xl sm:text-3xl md:text-5xl font-bold italic tracking-tight text-cat-pink truncate leading-none">Diário do Ser</p>
+            <p className="font-journal text-2xl sm:text-3xl md:text-5xl font-extrabold tracking-tight text-cat-pink truncate leading-none">Diário do Ser</p>
             <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
           </div>
           <button
@@ -360,15 +356,16 @@ export function DiarioPage() {
 
         {auto && (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               <StatChip icon={<ListChecks size={14} />} label="Tarefas" value={`${auto.tasksToday.done}/${auto.tasksToday.total}`} tone="text-cat-blue" />
               <StatChip icon={<Repeat size={14} />} label="Hábitos" value={`${auto.habitsToday.done}/${auto.habitsToday.total}`} tone="text-cat-green" />
               <StatChip icon={<Droplets size={14} />} label="Água" value={`${(auto.waterMl / 1000).toFixed(1)}L`} tone="text-cat-blue" />
-              <StatChip icon={<Timer size={14} />} label="Foco" value={fmtMinutes(auto.focusMinutes)} tone="text-cat-purple" />
               <StatChip icon={<Dumbbell size={14} />} label="Exercício" value={fmtMinutes(auto.exerciseMinutes)} tone="text-cat-green" />
               <StatChip icon={<BookOpen size={14} />} label="Leitura" value={`${auto.reading.pages}pág.`} tone="text-cat-pink" />
             </div>
-            <p className="text-xs sm:text-sm text-slate italic mt-3 text-center">{auto.summary}</p>
+            <p className="font-serif text-sm sm:text-base text-[#3a3430] dark:text-[#EDEBE4]/90 italic mt-4 text-center leading-relaxed first-letter:font-journal first-letter:not-italic first-letter:text-3xl sm:first-letter:text-4xl first-letter:font-bold first-letter:mr-1 first-letter:float-left first-letter:leading-[0.8] first-letter:text-cat-pink">
+              {auto.summary}
+            </p>
           </>
         )}
       </div>
@@ -384,27 +381,21 @@ export function DiarioPage() {
               <JournalTextarea value={form.intention} onChange={(v) => updateField({ intention: v })} onBlur={() => saveNow()} />
             </SectionCard>
 
-            <SectionCard icon={<Target size={16} />} title="Foco do dia" subtitle="Sugerido a partir das suas tarefas reais">
-              {focusTasks.length === 0 ? (
-                <p className="text-xs text-slate">Nenhuma tarefa pendente para hoje — bom trabalho!</p>
+            <SectionCard
+              icon={<Quote size={16} />}
+              title={auto?.dailyQuote.kind === "versiculo" ? "Versículo do dia" : "Provérbio do dia"}
+              subtitle="Uma pausa para reflexão"
+            >
+              {auto?.dailyQuote ? (
+                <blockquote className="flex flex-col gap-2">
+                  <p className="font-serif italic text-[15px] leading-relaxed text-[#3a3430] dark:text-[#EDEBE4]/90">
+                    “{auto.dailyQuote.text}”
+                  </p>
+                  <footer className="text-[11px] text-cat-pink font-semibold not-italic">— {auto.dailyQuote.source}</footer>
+                </blockquote>
               ) : (
-                <div className="space-y-1.5">
-                  {focusTasks.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => moveTask({ id: t.id, status: "Concluído" })}
-                      className="w-full flex items-center gap-2.5 text-left rounded-lg px-1.5 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                    >
-                      <span className="w-4 h-4 rounded border border-paper-border dark:border-ink-border shrink-0" />
-                      <span className="text-xs truncate flex-1">{t.title}</span>
-                      <span className="text-[10px] text-slate shrink-0">{t.priority}</span>
-                    </button>
-                  ))}
-                </div>
+                <p className="text-xs text-slate">Carregando reflexão do dia…</p>
               )}
-              <Link to="/tarefas" className="text-xs text-cat-pink font-medium mt-2 inline-block">
-                Ver todas as tarefas →
-              </Link>
             </SectionCard>
 
             <SectionCard icon={<Heart size={16} />} title="Meu estado hoje" subtitle="Registrado em Saúde">
