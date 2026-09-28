@@ -630,13 +630,19 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           )}
 
           <div className="flex items-center gap-2.5 ml-auto">
-            <span className="flex items-center gap-1 text-[11px] text-slate">
+            <span
+              className="flex items-center gap-1 text-[11px] text-slate"
+              title={isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}
+            >
               {isSaving ? (
                 <Loader2 size={12} className="animate-spin" />
               ) : (
                 <Check size={12} className={justSaved ? "text-growth" : "text-slate/60"} />
               )}
-              {isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}
+              {/* Em telas estreitas o rótulo de status some (fica só o ícone com o mesmo
+                  texto em title) pra abrir espaço pros botões de excluir/favoritar/salvar
+                  sem empurrar a linha das bolinhas dos dias da semana para o overflow. */}
+              <span className="hidden sm:inline">{isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}</span>
             </span>
             <button
               onClick={handleDeleteEntry}
