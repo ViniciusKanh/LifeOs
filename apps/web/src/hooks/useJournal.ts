@@ -77,6 +77,42 @@ export function useJournal(date: string) {
   };
 }
 
+/**
+ * Ações leves de um dia a partir do card do feed "Entradas" — favoritar,
+ * mover para outro(s) diário(s) e excluir — sem buscar a entrada inteira
+ * (`useJournal(date)` é pesado demais pra usar dentro de cada card de uma
+ * lista). Só invalida o feed/calendário/insights e, se a entrada daquele
+ * dia estiver aberta em outra tela, o cache dela também é invalidado.
+ */
+export function useJournalDayActions() {
+  const queryClient = useQueryClient();
+  const invalidateFeed = (date: string) => {
+    queryClient.invalidateQueries({ queryKey: ["journal", "days"] });
+    queryClient.invalidateQueries({ queryKey: ["journal", "calendar"] });
+    queryClient.invalidateQueries({ queryKey: ["journal", "insights"] });
+    queryClient.invalidateQueries({ queryKey: ["journal", date] });
+  };
+
+  const toggleFavorite = useMutation({
+    mutationFn: ({ date, isFavorite }: { date: string; isFavorite: boolean }) => journalService.toggleFavorite(date, isFavorite),
+    onSuccess: (_data, vars) => invalidateFeed(vars.date),
+  });
+  const moveToJournals = useMutation({
+    mutationFn: ({ date, journalIds }: { date: string; journalIds: string[] }) => journalService.moveToJournals(date, journalIds),
+    onSuccess: (_data, vars) => invalidateFeed(vars.date),
+  });
+  const deleteEntry = useMutation({
+    mutationFn: (date: string) => journalService.deleteEntry(date),
+    onSuccess: (_data, date) => invalidateFeed(date),
+  });
+
+  return {
+    toggleFavorite: toggleFavorite.mutateAsync,
+    moveToJournals: moveToJournals.mutateAsync,
+    deleteEntry: deleteEntry.mutateAsync,
+  };
+}
+
 /** Feed cronológico do Diário (aba "Entradas") — página por página, mais recente primeiro; `journalId` filtra por um diário/coleção específico, `favoritesOnly` só pelos dias marcados como favoritos (Fase 6). */
 export function useJournalDays(journalId?: string, favoritesOnly?: boolean) {
   const query = useInfiniteQuery({

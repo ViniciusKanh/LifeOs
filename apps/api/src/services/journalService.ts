@@ -260,6 +260,8 @@ export interface JournalDaySummary {
   journalIds: string[];
   photoCount: number;
   coverPhoto: string | null;
+  /** Até 4 fotos reais do dia (mesma ordem do editor), pra montar o mosaico do card no feed "Entradas" — nunca inventado, vazio quando não há foto. */
+  photos: string[];
   isFavorite: boolean;
 }
 
@@ -347,6 +349,7 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
   const journalIdsByEntry = new Map<string, string[]>();
   const photoCountByEntry = new Map<string, number>();
   const coverPhotoByEntry = new Map<string, string>();
+  const photosByEntry = new Map<string, string[]>();
   if (page.length > 0) {
     const dates = page.map((r) => String(r.entry_date));
     const placeholders = dates.map(() => "?").join(",");
@@ -398,6 +401,24 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
     for (const r of coverPhotoRes.rows as unknown as Array<{ entry_id: string; data_uri: string }>) {
       coverPhotoByEntry.set(r.entry_id, r.data_uri);
     }
+
+    // Até 4 fotos reais por dia (mesma ordem do editor) pra montar o
+    // mosaico do card no feed "Entradas" — reaproveita a mesma tabela,
+    // só limitando a quantidade em vez de pegar 1.
+    const photosRes = await db.execute({
+      sql: `SELECT entry_id, data_uri FROM (
+              SELECT entry_id, data_uri,
+                     ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY sort_order ASC, created_at ASC) AS rn
+              FROM journal_entry_media
+              WHERE entry_id IN (${entryPlaceholders}) AND kind = 'photo'
+            ) WHERE rn <= 4`,
+      args: entryIds,
+    });
+    for (const r of photosRes.rows as unknown as Array<{ entry_id: string; data_uri: string }>) {
+      const list = photosByEntry.get(r.entry_id) ?? [];
+      list.push(r.data_uri);
+      photosByEntry.set(r.entry_id, list);
+    }
   }
 
   return page.map((row) => ({
@@ -411,6 +432,7 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
     journalIds: journalIdsByEntry.get(String(row.id)) ?? [],
     photoCount: photoCountByEntry.get(String(row.id)) ?? 0,
     coverPhoto: coverPhotoByEntry.get(String(row.id)) ?? null,
+    photos: photosByEntry.get(String(row.id)) ?? [],
     isFavorite: Number(row.is_favorite ?? 0) === 1,
   }));
 }

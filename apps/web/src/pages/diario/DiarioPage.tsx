@@ -31,8 +31,12 @@ import {
   Mic,
   Square,
   Download,
+  MoreHorizontal,
+  Pencil,
+  FolderInput,
+  ArrowLeft,
 } from "lucide-react";
-import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay, useJournalPin } from "@/hooks/useJournal";
+import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay, useJournalPin, useJournalDayActions } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
 import type { JournalMedia } from "@/types";
 import { compressImageToDataUri } from "@/utils/image";
@@ -100,6 +104,25 @@ function useCountUp(value: number, durationMs = 700) {
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 const MOOD_EMOJI = ["😠", "😟", "😕", "🙂", "😀"];
+
+/**
+ * "Compartilhar entrada" (Fase 16): baixa o PDF de um dia — endpoint devolve
+ * binário, por isso não passa pelo wrapper JSON do api.ts. Reaproveitado
+ * pelo botão do editor do dia e pelo menu do card no feed "Entradas".
+ */
+async function downloadJournalPdf(date: string) {
+  const res = await fetch(`${API_URL}/journal/${date}/export/pdf`, { credentials: "include" });
+  if (!res.ok) throw new Error("Falha ao gerar PDF.");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `diario-${date}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 const MOOD_LABEL = ["Raiva", "Ansiedade", "Frustração", "Alegria", "Bem"];
 const AUTOSAVE_DELAY_MS = 900;
 
@@ -608,21 +631,11 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
-  /** "Compartilhar entrada" (Fase 16): baixa um PDF só desta entrada, pra compartilhar ou imprimir — endpoint devolve binário, por isso não passa pelo wrapper JSON do api.ts. */
+  /** "Compartilhar entrada" (Fase 16): baixa um PDF só desta entrada, pra compartilhar ou imprimir. */
   const handleExportPdf = async () => {
     setIsExportingPdf(true);
     try {
-      const res = await fetch(`${API_URL}/journal/${date}/export/pdf`, { credentials: "include" });
-      if (!res.ok) throw new Error("Falha ao gerar PDF.");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `diario-${date}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await downloadJournalPdf(date);
     } catch {
       setPhotoError("Não foi possível exportar o PDF desta entrada.");
     } finally {
@@ -1193,29 +1206,270 @@ function formatCardDate(date: string) {
   return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 }
 
-/** Um card do feed "Entradas" — resumo de um dia real, nunca inventado, com o mesmo hover/press das seções do editor. */
-function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collections: JournalCollection[]; onOpen: () => void }) {
-  const dayCollections = collections.filter((c) => day.journalIds.includes(c.id));
+/** Ícone/emoji central de um card sem foto — usa o humor real do dia quando existe; cai num ícone neutro quando não há humor registrado. Nunca inventa humor. */
+function EntryCardMoodGlyph({ day }: { day: JournalDaySummary }) {
+  if (day.mood) return <span className="text-3xl leading-none">{MOOD_EMOJI[day.mood.mood - 1]}</span>;
+  return <BookOpen size={24} className="text-cat-pink/70" />;
+}
+
+/**
+ * Mosaico de mídia do card — 1 foto grande (16:9), 2 em coluna, 3 (uma
+ * grande + duas pequenas) ou 4+ em grade com "+N" na última quando há mais
+ * fotos do que as 4 carregadas. Sempre fotos reais da entrada — nunca
+ * imagem inventada — e nunca aparece se o dia não tiver foto nenhuma.
+ */
+function EntryCardMedia({ day, onOpenLightbox }: { day: JournalDaySummary; onOpenLightbox: (src: string) => void }) {
+  const photos = day.photos;
+  if (photos.length === 0) return null;
+  const openAt = (src: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOpenLightbox(src);
+  };
+  const extra = day.photoCount > photos.length ? day.photoCount - photos.length : 0;
+
+  if (photos.length === 1) {
+    return (
+      <button onClick={openAt(photos[0])} className="block w-full rounded-xl overflow-hidden mb-3 aspect-[16/9]">
+        <img src={photos[0]} alt="" className="w-full h-full object-cover" />
+      </button>
+    );
+  }
+  if (photos.length === 2) {
+    return (
+      <div className="grid grid-cols-2 gap-1.5 rounded-xl overflow-hidden mb-3 aspect-[16/9]">
+        {photos.map((src, i) => (
+          <button key={i} onClick={openAt(src)} className="overflow-hidden">
+            <img src={src} alt="" className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+    );
+  }
+  if (photos.length === 3) {
+    return (
+      <div className="grid grid-cols-2 gap-1.5 rounded-xl overflow-hidden mb-3 aspect-[16/9]">
+        <button onClick={openAt(photos[0])} className="row-span-2 overflow-hidden">
+          <img src={photos[0]} alt="" className="w-full h-full object-cover" />
+        </button>
+        <div className="grid grid-rows-2 gap-1.5">
+          {photos.slice(1).map((src, i) => (
+            <button key={i} onClick={openAt(src)} className="overflow-hidden">
+              <img src={src} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 grid-rows-2 gap-1.5 rounded-xl overflow-hidden mb-3 aspect-[16/9]">
+      {photos.slice(0, 4).map((src, i) => (
+        <button key={i} onClick={openAt(src)} className="relative overflow-hidden">
+          <img src={src} alt="" className="w-full h-full object-cover" />
+          {i === 3 && extra > 0 && (
+            <span className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-sm font-semibold">+{extra}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Estrela clicável do card — favorita/desfavorita o dia direto no feed, sem abrir o editor. */
+function EntryFavoriteToggle({ isFavorite, onToggle }: { isFavorite: boolean; onToggle: () => void }) {
   return (
     <button
-      onClick={onOpen}
-      className="w-full text-left rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-4 sm:p-5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99]"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      aria-pressed={isFavorite}
+      aria-label={isFavorite ? "Remover dos favoritos" : "Marcar como favorito"}
+      className="p-1.5 rounded-lg text-slate hover:bg-black/5 dark:hover:bg-white/10 transition-colors shrink-0"
     >
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold capitalize">{formatCardDate(day.date)}</p>
-            {day.mood && <span className="text-lg leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
-            {day.isFavorite && <Star size={13} className="text-amber-500 fill-current shrink-0" aria-label="Favorito" />}
-          </div>
-          <p className="text-sm text-slate leading-relaxed line-clamp-3 mt-1">{day.preview}</p>
+      <Star size={15} className={isFavorite ? "text-amber-500 fill-current" : undefined} />
+    </button>
+  );
+}
+
+/**
+ * Menu "⋯" do card no feed — Editar, Mover para diário (lista real dos
+ * diários existentes, com o vínculo atual real do dia), Exportar PDF e
+ * Excluir. Fecha ao clicar fora, no mesmo padrão do ProfileMenu do topbar.
+ */
+function EntryCardMenu({
+  day,
+  collections,
+  onEdit,
+  onExport,
+  onMove,
+  onDelete,
+}: {
+  day: JournalDaySummary;
+  collections: JournalCollection[];
+  onEdit: () => void;
+  onExport: () => void;
+  onMove: (journalIds: string[]) => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setShowMove(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  return (
+    <div className="relative shrink-0" ref={ref} onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Mais opções"
+        className="p-1.5 rounded-lg text-slate hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 rounded-xl shadow-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised overflow-hidden z-40 py-1">
+          {!showMove ? (
+            <>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onEdit();
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <Pencil size={14} /> Editar
+              </button>
+              {collections.length > 0 && (
+                <button onClick={() => setShowMove(true)} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">
+                  <FolderInput size={14} /> Mover para diário
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onExport();
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <Download size={14} /> Exportar PDF
+              </button>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onDelete();
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
+              >
+                <Trash2 size={14} /> Excluir
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setShowMove(false)} className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-slate hover:bg-black/5 dark:hover:bg-white/5">
+                <ArrowLeft size={12} /> Voltar
+              </button>
+              {collections.map((c) => {
+                const active = day.journalIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => onMove(active ? day.journalIds.filter((id) => id !== c.id) : [...day.journalIds, c.id])}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                  >
+                    <span
+                      className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                        active ? "bg-cat-pink border-cat-pink" : "border-paper-border dark:border-ink-border"
+                      }`}
+                    >
+                      {active && <Check size={11} className="text-white" />}
+                    </span>
+                    {c.icon} {c.name}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </div>
-        {day.coverPhoto && (
-          <img src={day.coverPhoto} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
-        )}
+      )}
+    </div>
+  );
+}
+
+/**
+ * Um card do feed "Entradas" — memória editorial de um dia real: mídia
+ * (quando existe), texto e uma linha de contexto discreta, sempre só com
+ * os dados que existem de verdade. Sem foto, ganha um selo de humor/ícone
+ * pra não ficar um card vazio; o dia de hoje ganha um leve destaque.
+ */
+function EntryCard({
+  day,
+  collections,
+  isToday,
+  onOpen,
+  onOpenLightbox,
+  onToggleFavorite,
+  onMove,
+  onExport,
+  onDelete,
+}: {
+  day: JournalDaySummary;
+  collections: JournalCollection[];
+  isToday: boolean;
+  onOpen: () => void;
+  onOpenLightbox: (src: string) => void;
+  onToggleFavorite: () => void;
+  onMove: (journalIds: string[]) => void;
+  onExport: () => void;
+  onDelete: () => void;
+}) {
+  const dayCollections = collections.filter((c) => day.journalIds.includes(c.id));
+  const hasMedia = day.photos.length > 0;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpen();
+      }}
+      className={`w-full text-left cursor-pointer rounded-2xl border bg-paper-raised dark:bg-ink-raised p-4 sm:p-5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99] ${
+        isToday ? "border-cat-pink/40 ring-1 ring-cat-pink/15" : "border-paper-border dark:border-ink-border"
+      }`}
+    >
+      <EntryCardMedia day={day} onOpenLightbox={onOpenLightbox} />
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 flex items-start gap-3">
+          {!hasMedia && (
+            <span className="shrink-0 w-11 h-11 rounded-full bg-cat-pink/10 flex items-center justify-center mt-0.5">
+              <EntryCardMoodGlyph day={day} />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold capitalize">{formatCardDate(day.date)}</p>
+              {hasMedia && day.mood && <span className="text-base leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
+            </div>
+            <p className={`text-sm text-slate leading-relaxed mt-1 ${hasMedia ? "line-clamp-2" : "line-clamp-4"}`}>{day.preview}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <EntryFavoriteToggle isFavorite={day.isFavorite} onToggle={onToggleFavorite} />
+          <EntryCardMenu day={day} collections={collections} onEdit={onOpen} onExport={onExport} onMove={onMove} onDelete={onDelete} />
+        </div>
       </div>
       {dayCollections.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
+        <div className="flex flex-wrap gap-1 mt-2.5">
           {dayCollections.map((c) => (
             <span key={c.id} className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${COLLECTION_COLOR_CLASSES[c.color ?? "pink"]}`}>
               {c.icon} {c.name}
@@ -1253,7 +1507,7 @@ function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collect
           </span>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1303,22 +1557,94 @@ function OnThisDaySection({ onOpenDay }: { onOpenDay: (date: string) => void }) 
   );
 }
 
+/**
+ * Agrupamento do feed por proximidade — "Hoje"/"Ontem" já ficam claros no
+ * próprio card (formatCardDate), então só "Esta semana"/"Anteriores" viram
+ * um cabeçalho de seção visível, evitando repetir "Hoje" duas vezes.
+ */
+function feedGroupKey(date: string): "hoje" | "ontem" | "semana" | "antigas" {
+  const diffDays = Math.round((new Date(`${todayIso()}T00:00:00`).getTime() - new Date(`${date}T00:00:00`).getTime()) / 86_400_000);
+  if (diffDays <= 0) return "hoje";
+  if (diffDays === 1) return "ontem";
+  if (diffDays <= 6) return "semana";
+  return "antigas";
+}
+const FEED_GROUP_LABEL: Partial<Record<ReturnType<typeof feedGroupKey>, string>> = { semana: "Esta semana", antigas: "Anteriores" };
+
+/**
+ * Faixa compacta de Insights reais acima do feed — só sequência, total de
+ * entradas e de palavras (sempre vindos de useJournalInsights, os mesmos
+ * números da aba Insights). Nunca um dashboard grande aqui.
+ */
+function FeedInsightsStrip({ onOpenInsights }: { onOpenInsights: () => void }) {
+  const { insights, isLoading } = useJournalInsights();
+  if (isLoading || !insights || insights.totalEntries === 0) return null;
+  return (
+    <button
+      onClick={onOpenInsights}
+      className="w-full flex items-center justify-between gap-3 rounded-xl bg-cat-pink/5 dark:bg-cat-pink/10 px-4 py-2.5 mb-4 text-left hover:bg-cat-pink/10 transition-colors"
+    >
+      <div className="flex items-center gap-4 text-xs font-medium text-slate flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <Flame size={13} className="text-signal" />
+          {insights.currentStreak} {insights.currentStreak === 1 ? "dia" : "dias"} de sequência
+        </span>
+        <span className="flex items-center gap-1.5">
+          <CalendarDays size={13} className="text-cat-blue" />
+          {insights.totalEntries} {insights.totalEntries === 1 ? "entrada" : "entradas"}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <TypeIcon size={13} className="text-cat-green" />
+          {insights.totalWords.toLocaleString("pt-BR")} palavras
+        </span>
+      </div>
+      <span className="text-xs font-semibold text-cat-pink whitespace-nowrap shrink-0">Ver Insights →</span>
+    </button>
+  );
+}
+
+/** Lightbox simples pra abrir uma foto do feed em tamanho grande — fecha ao clicar fora ou no X. */
+function MediaLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
+      <button onClick={onClose} aria-label="Fechar" className="absolute top-4 right-4 text-white/80 hover:text-white p-2">
+        <X size={22} />
+      </button>
+      <img src={src} alt="" className="max-w-full max-h-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
+    </div>
+  );
+}
+
 function JournalFeedTab({
   onOpenDay,
+  onOpenInsights,
   collections,
   journalFilter,
   onChangeFilter,
 }: {
   onOpenDay: (date: string) => void;
+  onOpenInsights: () => void;
   collections: JournalCollection[];
   journalFilter: string | null;
   onChangeFilter: (id: string | null) => void;
 }) {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays(journalFilter ?? undefined, favoritesOnly);
+  const { toggleFavorite, moveToJournals, deleteEntry } = useJournalDayActions();
+  const today = todayIso();
+  const hasTodayEntry = days.some((d) => d.date === today);
+
+  const handleDelete = (date: string) => {
+    if (!confirm("Excluir esta entrada? Todo o texto e as fotos deste dia serão apagados permanentemente.")) return;
+    deleteEntry(date).catch(() => undefined);
+  };
+
+  let lastGroup: ReturnType<typeof feedGroupKey> | null = null;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-3xl">
+      <FeedInsightsStrip onOpenInsights={onOpenInsights} />
       <OnThisDaySection onOpenDay={onOpenDay} />
       <div className="flex flex-wrap items-center gap-1.5 mb-1">
         <button
@@ -1344,9 +1670,42 @@ function JournalFeedTab({
         />
       ) : (
         <div className="space-y-3">
-          {days.map((day) => (
-            <DayCard key={day.date} day={day} collections={collections} onOpen={() => onOpenDay(day.date)} />
-          ))}
+          {!hasTodayEntry && !favoritesOnly && !journalFilter && (
+            <button
+              onClick={() => onOpenDay(today)}
+              className="w-full text-left rounded-2xl border border-dashed border-cat-pink/30 bg-cat-pink/5 dark:bg-cat-pink/10 p-4 sm:p-5 hover:bg-cat-pink/10 transition-colors flex items-center gap-3"
+            >
+              <span className="shrink-0 w-11 h-11 rounded-full bg-cat-pink/15 flex items-center justify-center">
+                <Plus size={18} className="text-cat-pink" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Continuar escrevendo</p>
+                <p className="text-xs text-slate mt-0.5">Você ainda não escreveu nada hoje.</p>
+              </div>
+            </button>
+          )}
+          {days.map((day) => {
+            const group = feedGroupKey(day.date);
+            const label = FEED_GROUP_LABEL[group];
+            const showHeader = group !== lastGroup && !!label;
+            lastGroup = group;
+            return (
+              <div key={day.date}>
+                {showHeader && <p className="text-xs font-semibold text-slate uppercase tracking-wide mb-2 mt-1">{label}</p>}
+                <EntryCard
+                  day={day}
+                  collections={collections}
+                  isToday={day.date === today}
+                  onOpen={() => onOpenDay(day.date)}
+                  onOpenLightbox={setLightbox}
+                  onToggleFavorite={() => toggleFavorite({ date: day.date, isFavorite: !day.isFavorite }).catch(() => undefined)}
+                  onMove={(journalIds) => moveToJournals({ date: day.date, journalIds }).catch(() => undefined)}
+                  onExport={() => downloadJournalPdf(day.date).catch(() => undefined)}
+                  onDelete={() => handleDelete(day.date)}
+                />
+              </div>
+            );
+          })}
           {hasNextPage && (
             <button
               onClick={() => fetchNextPage()}
@@ -1358,6 +1717,7 @@ function JournalFeedTab({
           )}
         </div>
       )}
+      {lightbox && <MediaLightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
@@ -1915,7 +2275,13 @@ function DiarioPageContent() {
       </div>
 
       {view === "feed" && (
-        <JournalFeedTab onOpenDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={setJournalFilter} />
+        <JournalFeedTab
+          onOpenDay={openDay}
+          onOpenInsights={() => setView("insights")}
+          collections={collections}
+          journalFilter={journalFilter}
+          onChangeFilter={setJournalFilter}
+        />
       )}
       {view === "insights" && <JournalInsightsTab />}
       {view === "calendar" && (

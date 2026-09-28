@@ -42,6 +42,7 @@ export interface JournalDaySummary {
   journalIds: string[];
   photoCount: number;
   coverPhoto: string | null;
+  photos: string[];
   isFavorite: boolean;
 }
 
@@ -76,6 +77,7 @@ export const journalService = {
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
   toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
   deleteEntry: (date: string) => api.delete<void>(`/journal/${date}`),
+  moveToJournals: (date: string, journalIds: string[]) => api.patch<JournalEntry>(`/journal/${date}/journals`, { journalIds }),
   onThisDay: (date?: string) => api.get<{ items: JournalDaySummary[] }>(`/journal/on-this-day${date ? `?date=${date}` : ""}`),
   pinStatus: () => api.get<{ hasPin: boolean }>("/journal/pin/status"),
   setPin: (pin: string) => api.post<void>("/journal/pin", { pin }),

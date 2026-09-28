@@ -212,6 +212,27 @@ journalRouter.patch("/:date/favorite", async (req, res) => {
 });
 
 /**
+ * PATCH /api/journal/:date/journals — move/associa o dia a um conjunto de
+ * diários (coleções), sem tocar em nenhum outro campo da entrada — ao
+ * contrário do PUT /:date (que é um upsert completo e zeraria o resto do
+ * dia se recebesse só journalIds). Usado pelo menu "Mover para diário" do
+ * card no feed "Entradas".
+ */
+journalRouter.patch("/:date/journals", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const journalIds = req.body?.journalIds;
+  if (!Array.isArray(journalIds) || !journalIds.every((id) => typeof id === "string")) {
+    return res.status(400).json({ error: "journalIds precisa ser uma lista de strings." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const entryId = await ensureJournalEntryId(db, ownerId, date);
+  await syncEntryJournals(db, ownerId, entryId, journalIds);
+  return res.json(await buildJournalResponse(db, ownerId, date));
+});
+
+/**
  * DELETE /api/journal/:date — exclui a entrada do dia inteira (Fase 8:
  * privacidade/exclusão) — fotos, vínculos com diários e o registro em si.
  * Idempotente: excluir um dia que nunca teve entrada não é erro.
