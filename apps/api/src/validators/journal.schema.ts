@@ -53,3 +53,15 @@ export const journalPinSetSchema = z.object({
 export const journalPinVerifySchema = z.object({
   pin: z.string().min(1).max(8),
 });
+
+/** Fase 13 (Diário): nota de voz — gravada no navegador (MediaRecorder), enviada como data URI. Limite generoso pra alguns minutos de áudio comprimido. */
+const JOURNAL_AUDIO_DATA_URI = z
+  .string()
+  .max(8_000_000, "Áudio muito grande — grave uma nota mais curta.")
+  .regex(/^data:audio\/(webm|ogg|mp4|mpeg|wav);base64,/, "Formato de áudio inválido.");
+
+export const journalAudioCreateSchema = z.object({
+  dataUri: JOURNAL_AUDIO_DATA_URI,
+  durationSeconds: z.number().int().min(1).max(1800),
+  caption: z.string().trim().max(200).optional().nullable(),
+});

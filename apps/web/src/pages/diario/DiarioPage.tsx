@@ -28,6 +28,8 @@ import {
   Trash2,
   Star,
   Lock,
+  Mic,
+  Square,
 } from "lucide-react";
 import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay, useJournalPin } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
@@ -282,6 +284,128 @@ function JournalPhotosSection({
   );
 }
 
+/** Formata segundos como m:ss — usado no cronômetro de gravação e na duração das notas de voz salvas. */
+function formatDuration(totalSeconds: number) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * "Notas de voz" (Fase 13 do Diário — Apple Journal): grava áudio direto no
+ * navegador (MediaRecorder) e anexa à entrada do dia, junto com as fotos.
+ * Sem suporte do navegador, a seção avisa e some — nunca quebra a tela.
+ */
+function JournalAudioSection({
+  media,
+  onAdd,
+  onRemove,
+  isUploading,
+}: {
+  media: JournalMedia[];
+  onAdd: (dataUri: string, durationSeconds: number) => void;
+  onRemove: (mediaId: string) => void;
+  isUploading: boolean;
+}) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAtRef = useRef(0);
+
+  const supported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
+  const canAddMore = media.length < 12;
+
+  const stopStream = () => {
+    recorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  const startRecording = async () => {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const durationSeconds = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") onAdd(reader.result, durationSeconds);
+        };
+        reader.readAsDataURL(blob);
+        stopStream();
+      };
+      recorderRef.current = recorder;
+      startedAtRef.current = Date.now();
+      recorder.start();
+      setIsRecording(true);
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } catch {
+      setError("Não foi possível acessar o microfone.");
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    setIsRecording(false);
+  };
+
+  useEffect(() => () => stopStream(), []);
+
+  if (!supported) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        {isRecording ? (
+          <button
+            type="button"
+            onClick={stopRecording}
+            className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold bg-signal text-white hover:bg-signal/90 active:scale-95 transition-all"
+          >
+            <Square size={14} className="fill-current" />
+            Parar ({formatDuration(elapsed)})
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={startRecording}
+            disabled={isUploading || !canAddMore}
+            className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold border border-paper-border dark:border-ink-border text-cat-pink hover:bg-cat-pink/10 active:scale-95 transition-all disabled:opacity-50"
+          >
+            {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Mic size={14} />}
+            Gravar nota de voz
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs text-rose-500">{error}</p>}
+      {!canAddMore && <p className="text-xs text-slate">Limite de itens de mídia do dia atingido.</p>}
+
+      {media.length > 0 && (
+        <div className="space-y-2">
+          {media.map((item) => (
+            <div key={item.id} className="flex items-center gap-2 rounded-lg border border-paper-border dark:border-ink-border px-3 py-2">
+              <audio controls src={item.dataUri} className="h-8 flex-1 min-w-0" />
+              <span className="text-[11px] text-slate shrink-0">{item.durationSeconds ? formatDuration(item.durationSeconds) : ""}</span>
+              <button type="button" onClick={() => onRemove(item.id)} className="text-slate hover:text-signal shrink-0" aria-label="Excluir nota de voz">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Ícone e rótulo curto de cada tipo de momento (Fase 5) — o texto completo só aparece ao inserir na reflexão. */
 const MOMENT_META: Record<JournalMomentKind, { icon: React.ReactNode; label: string }> = {
   tasks: { icon: <Check size={12} />, label: "Tarefas concluídas" },
@@ -377,6 +501,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     isSaving,
     addMedia,
     isAddingMedia,
+    addAudioMedia,
+    isAddingAudioMedia,
     updateMediaCaption,
     removeMedia,
     toggleFavorite,
@@ -716,12 +842,21 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <SectionCard icon={<Camera size={16} />} title="Fotos do dia" subtitle="Memórias visuais de hoje" className="xl:col-span-3">
               <JournalPhotosSection
-                media={entry?.media ?? []}
+                media={(entry?.media ?? []).filter((m) => m.kind !== "audio")}
                 onAdd={handleAddPhotos}
                 onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
                 onUpdateCaption={(mediaId, caption) => updateMediaCaption({ mediaId, caption: caption || null }).catch(() => undefined)}
                 isUploading={isAddingMedia}
                 error={photoError}
+              />
+            </SectionCard>
+
+            <SectionCard icon={<Mic size={16} />} title="Notas de voz" subtitle="Registre um pensamento falado" className="xl:col-span-3">
+              <JournalAudioSection
+                media={(entry?.media ?? []).filter((m) => m.kind === "audio")}
+                onAdd={(dataUri, durationSeconds) => addAudioMedia({ dataUri, durationSeconds }).catch(() => undefined)}
+                onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
+                isUploading={isAddingAudioMedia}
               />
             </SectionCard>
 

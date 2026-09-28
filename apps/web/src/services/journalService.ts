@@ -69,6 +69,8 @@ export const journalService = {
     api.get<{ days: string[] }>(`/journal/calendar?month=${month}${journalId ? `&journalId=${journalId}` : ""}`),
   addMedia: (date: string, dataUri: string, caption?: string | null) =>
     api.post<JournalEntry>(`/journal/${date}/media`, { dataUri, caption }),
+  addAudioMedia: (date: string, dataUri: string, durationSeconds: number, caption?: string | null) =>
+    api.post<JournalEntry>(`/journal/${date}/media/audio`, { dataUri, durationSeconds, caption }),
   updateMediaCaption: (date: string, mediaId: string, caption: string | null) =>
     api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, { caption }),
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),

@@ -629,11 +629,13 @@ export interface JournalEntry {
   auto: JournalAutoData;
 }
 
-/** Uma foto anexada à entrada do dia do Diário. */
+/** Uma foto ou nota de voz anexada à entrada do dia do Diário. */
 export interface JournalMedia {
   id: string;
+  kind: "photo" | "audio";
   dataUri: string;
   caption: string | null;
+  durationSeconds: number | null;
   sortOrder: number;
 }
 

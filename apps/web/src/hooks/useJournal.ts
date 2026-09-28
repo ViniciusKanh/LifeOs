@@ -33,6 +33,11 @@ export function useJournal(date: string) {
     mutationFn: ({ dataUri, caption }: { dataUri: string; caption?: string | null }) => journalService.addMedia(date, dataUri, caption),
     onSuccess: onMediaChange,
   });
+  const addAudioMedia = useMutation({
+    mutationFn: ({ dataUri, durationSeconds, caption }: { dataUri: string; durationSeconds: number; caption?: string | null }) =>
+      journalService.addAudioMedia(date, dataUri, durationSeconds, caption),
+    onSuccess: onMediaChange,
+  });
   const updateMediaCaption = useMutation({
     mutationFn: ({ mediaId, caption }: { mediaId: string; caption: string | null }) => journalService.updateMediaCaption(date, mediaId, caption),
     onSuccess: onMediaChange,
@@ -61,6 +66,8 @@ export function useJournal(date: string) {
     isSaving: save.isPending,
     addMedia: addMedia.mutateAsync,
     isAddingMedia: addMedia.isPending,
+    addAudioMedia: addAudioMedia.mutateAsync,
+    isAddingAudioMedia: addAudioMedia.isPending,
     updateMediaCaption: updateMediaCaption.mutateAsync,
     removeMedia: removeMedia.mutateAsync,
     toggleFavorite: toggleFavorite.mutateAsync,

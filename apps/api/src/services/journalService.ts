@@ -263,11 +263,13 @@ export interface JournalDaySummary {
   isFavorite: boolean;
 }
 
-/** Uma foto anexada à entrada do dia (Fase 4 do Diário — Apple Journal). */
+/** Uma foto ou nota de voz anexada à entrada do dia (Fase 4 e Fase 13 do Diário — Apple Journal). */
 export interface JournalMedia {
   id: string;
+  kind: "photo" | "audio";
   dataUri: string;
   caption: string | null;
+  durationSeconds: number | null;
   sortOrder: number;
 }
 
@@ -375,8 +377,10 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
       journalIdsByEntry.set(r.entry_id, list);
     }
 
+    // Fase 13: contagem e capa consideram só fotos ("kind = 'photo'") — notas
+    // de voz não viram thumbnail nem entram na contagem de "X fotos" do card.
     const mediaCountRes = await db.execute({
-      sql: `SELECT entry_id, COUNT(*) AS total FROM journal_entry_media WHERE entry_id IN (${entryPlaceholders}) GROUP BY entry_id`,
+      sql: `SELECT entry_id, COUNT(*) AS total FROM journal_entry_media WHERE entry_id IN (${entryPlaceholders}) AND kind = 'photo' GROUP BY entry_id`,
       args: entryIds,
     });
     for (const r of mediaCountRes.rows as unknown as Array<{ entry_id: string; total: number }>) {
@@ -387,7 +391,7 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
               SELECT entry_id, data_uri,
                      ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY sort_order ASC, created_at ASC) AS rn
               FROM journal_entry_media
-              WHERE entry_id IN (${entryPlaceholders})
+              WHERE entry_id IN (${entryPlaceholders}) AND kind = 'photo'
             ) WHERE rn = 1`,
       args: entryIds,
     });
@@ -602,30 +606,34 @@ export async function ensureJournalEntryId(db: Db, ownerId: string, date: string
   return id;
 }
 
-/** Fotos da entrada do dia, na ordem em que aparecem na tela. */
+/** Fotos e notas de voz da entrada do dia, na ordem em que aparecem na tela. */
 export async function getJournalMedia(db: Db, entryId: string): Promise<JournalMedia[]> {
   const result = await db.execute({
-    sql: "SELECT id, data_uri, caption, sort_order FROM journal_entry_media WHERE entry_id = ? ORDER BY sort_order ASC, created_at ASC",
+    sql: "SELECT id, kind, data_uri, caption, duration_seconds, sort_order FROM journal_entry_media WHERE entry_id = ? ORDER BY sort_order ASC, created_at ASC",
     args: [entryId],
   });
-  return (result.rows as unknown as Array<{ id: string; data_uri: string; caption: string | null; sort_order: number }>).map((r) => ({
+  return (result.rows as unknown as Array<{ id: string; kind: string; data_uri: string; caption: string | null; duration_seconds: number | null; sort_order: number }>).map((r) => ({
     id: r.id,
+    kind: r.kind === "audio" ? "audio" : "photo",
     dataUri: r.data_uri,
     caption: r.caption,
+    durationSeconds: r.duration_seconds,
     sortOrder: r.sort_order,
   }));
 }
 
-/** Limite conservador de fotos por dia — suficiente pra um registro visual do dia sem deixar o banco inchar. */
+/** Limite conservador de itens de mídia (fotos + notas de voz) por dia — suficiente pra um registro rico do dia sem deixar o banco inchar. */
 export const MAX_JOURNAL_PHOTOS_PER_DAY = 12;
 
-/** Adiciona uma foto à entrada do dia (criando a entrada se ainda não existir). Devolve null se o limite por dia já foi atingido. */
+/** Adiciona uma foto ou nota de voz à entrada do dia (criando a entrada se ainda não existir). Devolve null se o limite por dia já foi atingido. */
 export async function addJournalMedia(
   db: Db,
   ownerId: string,
   entryId: string,
   dataUri: string,
-  caption: string | null
+  caption: string | null,
+  kind: "photo" | "audio" = "photo",
+  durationSeconds: number | null = null
 ): Promise<JournalMedia | null> {
   const countRes = await db.execute({
     sql: "SELECT COUNT(*) AS total FROM journal_entry_media WHERE entry_id = ?",
@@ -636,10 +644,10 @@ export async function addJournalMedia(
 
   const id = nanoid();
   await db.execute({
-    sql: "INSERT INTO journal_entry_media (id, entry_id, owner_id, data_uri, caption, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-    args: [id, entryId, ownerId, dataUri, caption, total],
+    sql: "INSERT INTO journal_entry_media (id, entry_id, owner_id, data_uri, caption, kind, duration_seconds, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    args: [id, entryId, ownerId, dataUri, caption, kind, durationSeconds, total],
   });
-  return { id, dataUri, caption, sortOrder: total };
+  return { id, kind, dataUri, caption, durationSeconds, sortOrder: total };
 }
 
 /** Atualiza a legenda de uma foto — sempre validando que ela pertence ao dono autenticado. */

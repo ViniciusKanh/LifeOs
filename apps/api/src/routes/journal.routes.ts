@@ -2,7 +2,7 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema } from "../validators/journal.schema.js";
+import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema } from "../validators/journal.schema.js";
 import {
   getJournalAutoData,
   getJournalInsights,
@@ -242,6 +242,29 @@ journalRouter.post("/:date/media", async (req, res) => {
   const media = await addJournalMedia(db, ownerId, entryId, parsed.data.dataUri, parsed.data.caption ?? null);
   if (!media) {
     return res.status(400).json({ error: "Limite de fotos por dia atingido." });
+  }
+  return res.status(201).json(await buildJournalResponse(db, ownerId, date));
+});
+
+/**
+ * POST /api/journal/:date/media/audio — anexa uma nota de voz à entrada
+ * do dia (Fase 13). Gravada no navegador (MediaRecorder) e enviada já
+ * como data URI, igual ao padrão das fotos.
+ */
+journalRouter.post("/:date/media/audio", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+
+  const parsed = journalAudioCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const entryId = await ensureJournalEntryId(db, ownerId, date);
+  const media = await addJournalMedia(db, ownerId, entryId, parsed.data.dataUri, parsed.data.caption ?? null, "audio", parsed.data.durationSeconds);
+  if (!media) {
+    return res.status(400).json({ error: "Limite de itens de mídia por dia atingido." });
   }
   return res.status(201).json(await buildJournalResponse(db, ownerId, date));
 });
