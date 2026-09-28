@@ -1,6 +1,9 @@
 import { nanoid } from "nanoid";
+import bcrypt from "bcryptjs";
 import { getDb } from "../db/client.js";
 import { pickDailyWisdom, type DailyWisdom } from "../config/dailyWisdom.js";
+
+const JOURNAL_PIN_SALT_ROUNDS = 12;
 
 type Db = ReturnType<typeof getDb>;
 
@@ -689,4 +692,49 @@ export async function deleteJournalEntry(db: Db, ownerId: string, date: string):
   await db.execute({ sql: "DELETE FROM journal_entry_journals WHERE entry_id = ?", args: [row.id] });
   await db.execute({ sql: "DELETE FROM journal_entries WHERE id = ? AND owner_id = ?", args: [row.id, ownerId] });
   return true;
+}
+
+/**
+ * Bloqueio de privacidade do Diário (Fase 12): PIN exclusivo desta área,
+ * independente da senha da conta, com hash bcrypt guardado em
+ * user_settings — nunca texto puro, nunca exposto ao frontend.
+ */
+export async function getJournalPinStatus(db: Db, ownerId: string): Promise<{ hasPin: boolean }> {
+  const result = await db.execute({
+    sql: "SELECT journal_pin_hash FROM user_settings WHERE user_id = ?",
+    args: [ownerId],
+  });
+  const row = result.rows[0] as unknown as { journal_pin_hash: string | null } | undefined;
+  return { hasPin: !!row?.journal_pin_hash };
+}
+
+export async function setJournalPin(db: Db, ownerId: string, pin: string): Promise<void> {
+  const hash = await bcrypt.hash(pin, JOURNAL_PIN_SALT_ROUNDS);
+  const updated = await db.execute({
+    sql: "UPDATE user_settings SET journal_pin_hash = ? WHERE user_id = ?",
+    args: [hash, ownerId],
+  });
+  if (updated.rowsAffected === 0) {
+    await db.execute({
+      sql: "INSERT INTO user_settings (user_id, journal_pin_hash) VALUES (?, ?)",
+      args: [ownerId, hash],
+    });
+  }
+}
+
+export async function verifyJournalPin(db: Db, ownerId: string, pin: string): Promise<boolean> {
+  const result = await db.execute({
+    sql: "SELECT journal_pin_hash FROM user_settings WHERE user_id = ?",
+    args: [ownerId],
+  });
+  const row = result.rows[0] as unknown as { journal_pin_hash: string | null } | undefined;
+  if (!row?.journal_pin_hash) return false;
+  return bcrypt.compare(pin, row.journal_pin_hash);
+}
+
+export async function removeJournalPin(db: Db, ownerId: string): Promise<void> {
+  await db.execute({
+    sql: "UPDATE user_settings SET journal_pin_hash = NULL WHERE user_id = ?",
+    args: [ownerId],
+  });
 }

@@ -75,6 +75,10 @@ export const journalService = {
   toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
   deleteEntry: (date: string) => api.delete<void>(`/journal/${date}`),
   onThisDay: (date?: string) => api.get<{ items: JournalDaySummary[] }>(`/journal/on-this-day${date ? `?date=${date}` : ""}`),
+  pinStatus: () => api.get<{ hasPin: boolean }>("/journal/pin/status"),
+  setPin: (pin: string) => api.post<void>("/journal/pin", { pin }),
+  verifyPin: (pin: string) => api.post<{ valid: boolean }>("/journal/pin/verify", { pin }),
+  removePin: (pin: string) => api.delete<void>("/journal/pin", { pin }),
 };
 
 export type { JournalMedia };

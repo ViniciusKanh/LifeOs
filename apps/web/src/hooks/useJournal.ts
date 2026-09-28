@@ -106,6 +106,36 @@ export function useJournalCalendarMonth(month: string, journalId?: string) {
   return { days: query.data?.days ?? [], isLoading: query.isLoading };
 }
 
+/** Bloqueio de privacidade do Diário (Fase 12): status do PIN e ações de definir/verificar/remover — nunca guarda o PIN em texto puro. */
+export function useJournalPin() {
+  const queryClient = useQueryClient();
+  const key = ["journal", "pin", "status"];
+  const query = useQuery({ queryKey: key, queryFn: journalService.pinStatus });
+
+  const setPin = useMutation({
+    mutationFn: (pin: string) => journalService.setPin(pin),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+  const verifyPin = useMutation({
+    mutationFn: (pin: string) => journalService.verifyPin(pin),
+  });
+  const removePin = useMutation({
+    mutationFn: (pin: string) => journalService.removePin(pin),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+
+  return {
+    hasPin: query.data?.hasPin ?? false,
+    isLoading: query.isLoading,
+    setPin: setPin.mutateAsync,
+    isSettingPin: setPin.isPending,
+    verifyPin: verifyPin.mutateAsync,
+    isVerifyingPin: verifyPin.isPending,
+    removePin: removePin.mutateAsync,
+    isRemovingPin: removePin.isPending,
+  };
+}
+
 /** Diários (coleções) do usuário — CRUD completo, usado na aba "Diários" e no seletor do editor do dia. */
 export function useJournalCollections() {
   const queryClient = useQueryClient();

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema } from "../validators/journal.schema.js";
+import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema } from "../validators/journal.schema.js";
 import {
   getJournalAutoData,
   getJournalInsights,
@@ -16,6 +16,10 @@ import {
   setJournalFavorite,
   deleteJournalEntry,
   getJournalOnThisDay,
+  getJournalPinStatus,
+  setJournalPin,
+  verifyJournalPin,
+  removeJournalPin,
 } from "../services/journalService.js";
 
 export const journalRouter = Router();
@@ -137,6 +141,41 @@ journalRouter.get("/calendar", async (req, res) => {
   const journalId = typeof req.query.journalId === "string" ? req.query.journalId : undefined;
   const db = getDb();
   return res.json({ days: await getJournalCalendarMonth(db, req.user!.id, month, journalId) });
+});
+
+/** GET /api/journal/pin/status — se o Diário tem PIN de privacidade ativo (Fase 12). Nunca expõe o hash. */
+journalRouter.get("/pin/status", async (req, res) => {
+  const db = getDb();
+  return res.json(await getJournalPinStatus(db, req.user!.id));
+});
+
+/** POST /api/journal/pin — define ou troca o PIN do Diário (Fase 12). */
+journalRouter.post("/pin", async (req, res) => {
+  const parsed = journalPinSetSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "PIN inválido." });
+  const db = getDb();
+  await setJournalPin(db, req.user!.id, parsed.data.pin);
+  return res.status(204).end();
+});
+
+/** POST /api/journal/pin/verify — confere o PIN pra desbloquear o Diário nesta sessão (Fase 12). */
+journalRouter.post("/pin/verify", async (req, res) => {
+  const parsed = journalPinVerifySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "PIN inválido." });
+  const db = getDb();
+  const valid = await verifyJournalPin(db, req.user!.id, parsed.data.pin);
+  return res.json({ valid });
+});
+
+/** DELETE /api/journal/pin — remove o bloqueio de privacidade do Diário (Fase 12); exige o PIN atual. */
+journalRouter.delete("/pin", async (req, res) => {
+  const parsed = journalPinVerifySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "PIN inválido." });
+  const db = getDb();
+  const valid = await verifyJournalPin(db, req.user!.id, parsed.data.pin);
+  if (!valid) return res.status(401).json({ error: "PIN incorreto." });
+  await removeJournalPin(db, req.user!.id);
+  return res.status(204).end();
 });
 
 /**

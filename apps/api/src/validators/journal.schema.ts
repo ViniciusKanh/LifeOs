@@ -44,3 +44,12 @@ export const journalMediaCreateSchema = z.object({
 export const journalMediaUpdateSchema = z.object({
   caption: z.string().trim().max(200).optional().nullable(),
 });
+
+/** Fase 12 (Diário): PIN de privacidade — só dígitos, 4 a 8 caracteres. */
+export const journalPinSetSchema = z.object({
+  pin: z.string().regex(/^\d{4,8}$/, "O PIN deve ter de 4 a 8 dígitos."),
+});
+
+export const journalPinVerifySchema = z.object({
+  pin: z.string().min(1).max(8),
+});

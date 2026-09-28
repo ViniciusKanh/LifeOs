@@ -27,8 +27,9 @@ import {
   X,
   Trash2,
   Star,
+  Lock,
 } from "lucide-react";
-import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay } from "@/hooks/useJournal";
+import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections, useJournalOnThisDay, useJournalPin } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
 import type { JournalMedia } from "@/types";
 import { compressImageToDataUri } from "@/utils/image";
@@ -1440,6 +1441,177 @@ function JournalCollectionForm({
 }
 
 /** Aba "Diários" — gerenciar as coleções (criar, editar, arquivar). Arquivar nunca apaga entradas já vinculadas. */
+const JOURNAL_UNLOCK_KEY = "lifeos_journal_unlocked";
+
+/**
+ * Cartão de configuração do bloqueio de privacidade do Diário (Fase 12):
+ * definir/trocar/remover o PIN. O PIN é exclusivo do Diário, independente
+ * da senha da conta, e nunca é salvo em texto puro (bcrypt no backend).
+ */
+function JournalPinSettingsCard() {
+  const { hasPin, isLoading, setPin, isSettingPin, removePin, isRemovingPin } = useJournalPin();
+  const [mode, setMode] = useState<"idle" | "set" | "remove">("idle");
+  const [pinInput, setPinInput] = useState("");
+  const [confirmInput, setConfirmInput] = useState("");
+  const [currentInput, setCurrentInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setMode("idle");
+    setPinInput("");
+    setConfirmInput("");
+    setCurrentInput("");
+    setError(null);
+  };
+
+  const handleSetPin = () => {
+    if (!/^\d{4,8}$/.test(pinInput)) return setError("O PIN deve ter de 4 a 8 dígitos.");
+    if (pinInput !== confirmInput) return setError("Os PINs não coincidem.");
+    setPin(pinInput)
+      .then(() => {
+        sessionStorage.setItem(JOURNAL_UNLOCK_KEY, "1");
+        reset();
+      })
+      .catch(() => setError("Não foi possível salvar o PIN."));
+  };
+
+  const handleRemovePin = () => {
+    removePin(currentInput)
+      .then(() => {
+        sessionStorage.removeItem(JOURNAL_UNLOCK_KEY);
+        reset();
+      })
+      .catch(() => setError("PIN incorreto."));
+  };
+
+  if (isLoading) return null;
+
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Lock size={15} className="text-cat-pink" />
+        <p className="text-sm font-semibold">Bloqueio de privacidade</p>
+      </div>
+      <p className="text-xs text-slate mb-3">
+        {hasPin ? "Seu Diário está protegido por PIN — só abre nesta sessão depois de digitado." : "Peça um PIN antes de abrir o Diário, independente da senha da sua conta."}
+      </p>
+
+      {mode === "idle" && (
+        <button
+          onClick={() => setMode(hasPin ? "remove" : "set")}
+          className="text-xs font-medium text-cat-pink hover:underline"
+        >
+          {hasPin ? "Remover PIN" : "Definir PIN"}
+        </button>
+      )}
+
+      {mode === "set" && (
+        <div className="space-y-2">
+          <input
+            type="password"
+            inputMode="numeric"
+            placeholder="Novo PIN (4 a 8 dígitos)"
+            value={pinInput}
+            onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            className="w-full rounded-lg border border-paper-border dark:border-ink-border bg-transparent px-3 py-2 text-sm"
+          />
+          <input
+            type="password"
+            inputMode="numeric"
+            placeholder="Confirme o PIN"
+            value={confirmInput}
+            onChange={(e) => setConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            className="w-full rounded-lg border border-paper-border dark:border-ink-border bg-transparent px-3 py-2 text-sm"
+          />
+          {error && <p className="text-xs text-signal">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={handleSetPin} disabled={isSettingPin} className="text-xs font-semibold text-white bg-cat-pink rounded-lg px-3 py-1.5 disabled:opacity-50">
+              Salvar
+            </button>
+            <button onClick={reset} className="text-xs text-slate">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {mode === "remove" && (
+        <div className="space-y-2">
+          <input
+            type="password"
+            inputMode="numeric"
+            placeholder="PIN atual"
+            value={currentInput}
+            onChange={(e) => setCurrentInput(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            className="w-full rounded-lg border border-paper-border dark:border-ink-border bg-transparent px-3 py-2 text-sm"
+          />
+          {error && <p className="text-xs text-signal">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={handleRemovePin} disabled={isRemovingPin} className="text-xs font-semibold text-white bg-signal rounded-lg px-3 py-1.5 disabled:opacity-50">
+              Remover
+            </button>
+            <button onClick={reset} className="text-xs text-slate">Cancelar</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Portão de privacidade do Diário (Fase 12): se houver PIN definido e a
+ * sessão ainda não desbloqueou (sessionStorage — some ao fechar a aba),
+ * pede o PIN antes de mostrar qualquer conteúdo real do Diário.
+ */
+function JournalPinGate({ children }: { children: React.ReactNode }) {
+  const { hasPin, isLoading, verifyPin, isVerifyingPin } = useJournalPin();
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(JOURNAL_UNLOCK_KEY) === "1");
+  const [pinInput, setPinInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  if (isLoading) return null;
+  if (!hasPin || unlocked) return <>{children}</>;
+
+  const handleUnlock = () => {
+    verifyPin(pinInput)
+      .then((res) => {
+        if (res.valid) {
+          sessionStorage.setItem(JOURNAL_UNLOCK_KEY, "1");
+          setUnlocked(true);
+        } else {
+          setError("PIN incorreto.");
+        }
+      })
+      .catch(() => setError("Não foi possível verificar o PIN."));
+  };
+
+  return (
+    <div className="mx-auto max-w-sm px-4 py-16 sm:py-24 text-center">
+      <div className="w-12 h-12 rounded-2xl bg-cat-pink/10 text-cat-pink flex items-center justify-center mx-auto mb-4">
+        <Lock size={20} />
+      </div>
+      <p className="text-lg font-semibold mb-1">Diário bloqueado</p>
+      <p className="text-sm text-slate mb-5">Digite seu PIN para continuar.</p>
+      <input
+        type="password"
+        inputMode="numeric"
+        autoFocus
+        placeholder="PIN"
+        value={pinInput}
+        onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 8))}
+        onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+        className="w-full text-center text-lg tracking-widest rounded-lg border border-paper-border dark:border-ink-border bg-transparent px-3 py-2.5 mb-2"
+      />
+      {error && <p className="text-xs text-signal mb-2">{error}</p>}
+      <button
+        onClick={handleUnlock}
+        disabled={isVerifyingPin || pinInput.length < 4}
+        className="w-full text-sm font-semibold text-white bg-cat-pink rounded-lg px-3 py-2.5 disabled:opacity-50"
+      >
+        Desbloquear
+      </button>
+    </div>
+  );
+}
+
 function JournalCollectionsTab() {
   const { collections, isLoading, create, update, remove, isSaving } = useJournalCollections();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1448,6 +1620,8 @@ function JournalCollectionsTab() {
 
   return (
     <div className="max-w-lg space-y-4">
+      <JournalPinSettingsCard />
+
       <Card className="p-4 sm:p-5">
         <p className="text-sm font-semibold mb-3">Novo diário</p>
         <JournalCollectionForm onSubmit={(input) => create(input)} isSaving={isSaving} />
@@ -1512,6 +1686,14 @@ function JournalCollectionsTab() {
  * leva ao editor imersivo do dia (DiaryDayEditor, o antigo Diário).
  */
 export function DiarioPage() {
+  return (
+    <JournalPinGate>
+      <DiarioPageContent />
+    </JournalPinGate>
+  );
+}
+
+function DiarioPageContent() {
   const [view, setView] = useState<ViewKey | "day">("feed");
   const [date, setDate] = useState(todayIso());
   const [journalFilter, setJournalFilter] = useState<string | null>(null);
