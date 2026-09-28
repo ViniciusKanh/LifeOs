@@ -31,6 +31,7 @@ import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth
 import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
 import type { JournalMedia } from "@/types";
 import { compressImageToDataUri } from "@/utils/image";
+import { buildJournalMoments, type JournalMoment, type JournalMomentKind } from "@/utils/journalMoments";
 import type { JournalCollection } from "@/types";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
@@ -124,6 +125,11 @@ function fmtMinutes(min: number) {
   const m = Math.round(min % 60);
   if (h <= 0) return `${m}min`;
   return m > 0 ? `${h}h${m}min` : `${h}h`;
+}
+
+/** Escapa texto simples antes de inserir como HTML — usado ao inserir a frase de um "momento" (Fase 5) na reflexão do dia. */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function SectionCard({
@@ -274,6 +280,57 @@ function JournalPhotosSection({
   );
 }
 
+/** Ícone e rótulo curto de cada tipo de momento (Fase 5) — o texto completo só aparece ao inserir na reflexão. */
+const MOMENT_META: Record<JournalMomentKind, { icon: React.ReactNode; label: string }> = {
+  tasks: { icon: <Check size={12} />, label: "Tarefas concluídas" },
+  habits: { icon: <Repeat size={12} />, label: "Hábitos mantidos" },
+  water: { icon: <Droplets size={12} />, label: "Água" },
+  exercise: { icon: <Dumbbell size={12} />, label: "Exercício" },
+  reading: { icon: <BookOpen size={12} />, label: "Leitura" },
+};
+
+/**
+ * "Sugestões de hoje" (Fase 5 — Momentos): chips derivados de dados reais
+ * de outros módulos no dia. Tocar insere a frase pronta na reflexão —
+ * assim a integração entre módulos vira texto no Diário sem o usuário
+ * precisar redigitar o que já registrou em outro lugar.
+ */
+function JournalMomentsRow({ moments, addedIds, onInsert }: { moments: JournalMoment[]; addedIds: Set<string>; onInsert: (moment: JournalMoment) => void }) {
+  if (moments.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles size={14} className="text-cat-purple" />
+        <p className="text-xs font-semibold">Sugestões de hoje</p>
+        <p className="text-[11px] text-slate italic">toque para adicionar à reflexão</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {moments.map((moment) => {
+          const added = addedIds.has(moment.id);
+          const meta = MOMENT_META[moment.kind];
+          return (
+            <button
+              key={moment.id}
+              type="button"
+              disabled={added}
+              onClick={() => onInsert(moment)}
+              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors motion-safe:active:scale-95 ${
+                added
+                  ? "border-transparent bg-cat-purple/10 text-cat-purple/60 cursor-default"
+                  : "border-paper-border dark:border-ink-border hover:border-cat-purple hover:text-cat-purple"
+              }`}
+            >
+              {meta.icon}
+              {meta.label}
+              {added && <Check size={12} />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type FormState = {
   intention: string;
   thoughts: string;
@@ -403,6 +460,24 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   };
 
   const [photoError, setPhotoError] = useState<string | null>(null);
+
+  const moments = useMemo(() => (entry ? buildJournalMoments(entry.auto) : []), [entry]);
+  const addedMomentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const moment of moments) {
+      if (form.thoughts.includes(escapeHtml(moment.text))) ids.add(moment.id);
+    }
+    return ids;
+  }, [moments, form.thoughts]);
+
+  /** Insere a frase pronta do momento como um novo parágrafo na reflexão e salva na hora. */
+  const handleInsertMoment = (moment: JournalMoment) => {
+    const safeText = escapeHtml(moment.text);
+    const trimmed = form.thoughts.trim();
+    const isEmpty = trimmed.length === 0 || trimmed === "<p></p>";
+    const nextThoughts = isEmpty ? `<p>${safeText}</p>` : `${form.thoughts}<p>${safeText}</p>`;
+    saveNow({ thoughts: nextThoughts });
+  };
 
   /** Comprime cada foto no navegador e envia uma por vez — evita disparar vários uploads de alguns MB em paralelo. */
   const handleAddPhotos = async (files: FileList) => {
@@ -580,6 +655,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       ) : (
         <div className="space-y-4">
           <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
+
+          <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <SectionCard icon={<Camera size={16} />} title="Fotos do dia" subtitle="Memórias visuais de hoje" className="xl:col-span-3">
