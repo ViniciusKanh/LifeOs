@@ -753,7 +753,7 @@ export interface CustomAchievementMetricOption {
 
 /* -------------------------- Notificações / Gatilhos -------------------------- */
 
-export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight";
+export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight" | "journal_reminder";
 
 export type NotificationAlertLevel = "soft" | "medium" | "critical";
 

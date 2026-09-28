@@ -5,6 +5,7 @@ import {
   Clock3,
   Mail,
   Mails,
+  NotebookPen,
   Pencil,
   Play,
   Plus,
@@ -37,6 +38,7 @@ const EVENT_ICON: Record<NotificationTriggerEvent, typeof BellRing> = {
   achievement_unlocked: Trophy,
   weekly_summary: Mails,
   daily_insight: Sparkles,
+  journal_reminder: NotebookPen,
 };
 
 const EVENT_TONE: Record<NotificationTriggerEvent, "blue" | "purple" | "green" | "pink" | "teal" | "amber"> = {
@@ -45,6 +47,7 @@ const EVENT_TONE: Record<NotificationTriggerEvent, "blue" | "purple" | "green" |
   achievement_unlocked: "purple",
   weekly_summary: "teal",
   daily_insight: "pink",
+  journal_reminder: "pink",
 };
 
 const ALERT_LABEL: Record<NotificationAlertLevel, string> = {
