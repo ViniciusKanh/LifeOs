@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { journalService, type JournalUpsertInput } from "@/services/journalService";
+import { journalService, journalCollectionsService, type JournalUpsertInput, type JournalCollectionInput } from "@/services/journalService";
 
 /** Estatísticas reais do hábito de escrever no diário (streak, recorde, entradas, palavras) — usado pelo painel "Insights" do Diário. */
 export function useJournalInsights() {
@@ -31,11 +31,11 @@ export function useJournal(date: string) {
   };
 }
 
-/** Feed cronológico do Diário (aba "Entradas") — página por página, mais recente primeiro. */
-export function useJournalDays() {
+/** Feed cronológico do Diário (aba "Entradas") — página por página, mais recente primeiro; `journalId` filtra por um diário/coleção específico. */
+export function useJournalDays(journalId?: string) {
   const query = useInfiniteQuery({
-    queryKey: ["journal", "days"],
-    queryFn: ({ pageParam }: { pageParam?: string }) => journalService.days(pageParam),
+    queryKey: ["journal", "days", journalId ?? "all"],
+    queryFn: ({ pageParam }: { pageParam?: string }) => journalService.days(pageParam, journalId),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.items.at(-1)?.date : undefined),
   });
@@ -49,8 +49,42 @@ export function useJournalDays() {
   };
 }
 
-/** Datas com entrada real no mês (YYYY-MM) — usado pelos pontinhos da aba "Calendário". */
-export function useJournalCalendarMonth(month: string) {
-  const query = useQuery({ queryKey: ["journal", "calendar", month], queryFn: () => journalService.calendarMonth(month) });
+/** Datas com entrada real no mês (YYYY-MM) — usado pelos pontinhos da aba "Calendário"; `journalId` filtra por diário. */
+export function useJournalCalendarMonth(month: string, journalId?: string) {
+  const query = useQuery({
+    queryKey: ["journal", "calendar", month, journalId ?? "all"],
+    queryFn: () => journalService.calendarMonth(month, journalId),
+  });
   return { days: query.data?.days ?? [], isLoading: query.isLoading };
+}
+
+/** Diários (coleções) do usuário — CRUD completo, usado na aba "Diários" e no seletor do editor do dia. */
+export function useJournalCollections() {
+  const queryClient = useQueryClient();
+  const key = ["journal", "collections"];
+  const query = useQuery({ queryKey: key, queryFn: journalCollectionsService.list });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: key });
+
+  const create = useMutation({
+    mutationFn: (input: JournalCollectionInput) => journalCollectionsService.create(input),
+    onSuccess: invalidate,
+  });
+  const update = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<JournalCollectionInput> }) => journalCollectionsService.update(id, input),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => journalCollectionsService.remove(id),
+    onSuccess: invalidate,
+  });
+
+  return {
+    collections: query.data ?? [],
+    isLoading: query.isLoading,
+    create: create.mutateAsync,
+    update: update.mutateAsync,
+    remove: remove.mutateAsync,
+    isSaving: create.isPending || update.isPending,
+  };
 }

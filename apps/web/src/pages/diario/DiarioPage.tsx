@@ -24,8 +24,9 @@ import {
   Type as TypeIcon,
   Plus,
 } from "lucide-react";
-import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth } from "@/hooks/useJournal";
-import type { JournalDaySummary } from "@/services/journalService";
+import { useJournal, useJournalInsights, useJournalDays, useJournalCalendarMonth, useJournalCollections } from "@/hooks/useJournal";
+import type { JournalDaySummary, JournalCollectionInput } from "@/services/journalService";
+import type { JournalCollection } from "@/types";
 import { useHabits } from "@/hooks/useHabits";
 import { useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
@@ -195,6 +196,7 @@ type FormState = {
   nightMood: number | null;
   nightHelped: string;
   nightTakeaway: string;
+  journalIds: string[];
 };
 
 const EMPTY_FORM: FormState = {
@@ -209,6 +211,7 @@ const EMPTY_FORM: FormState = {
   nightMood: null,
   nightHelped: "",
   nightTakeaway: "",
+  journalIds: [],
 };
 
 /**
@@ -223,6 +226,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
   const { insights } = useJournalInsights();
+  const { collections } = useJournalCollections();
   const streakCount = useCountUp(insights?.currentStreak ?? 0);
   const longestCount = useCountUp(insights?.longestStreak ?? 0);
   const entriesCount = useCountUp(insights?.totalEntries ?? 0);
@@ -250,6 +254,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       nightMood: entry.nightMood,
       nightHelped: entry.nightHelped ?? "",
       nightTakeaway: entry.nightTakeaway ?? "",
+      journalIds: entry.journalIds,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.date]);
@@ -274,6 +279,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       nightMood: state.nightMood,
       nightHelped: state.nightHelped || null,
       nightTakeaway: state.nightTakeaway || null,
+      journalIds: state.journalIds,
     }).catch(() => undefined);
   };
 
@@ -317,6 +323,12 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     if ((entry?.auto.autoSelfCare ?? []).includes(key)) return;
     const has = form.selfCare.includes(key);
     saveNow({ selfCare: has ? form.selfCare.filter((k) => k !== key) : [...form.selfCare, key] });
+  };
+
+  /** Marca/desmarca a que diário(s) o dia pertence — salva na hora, igual a um toggle de checkbox. */
+  const toggleJournalCollection = (id: string) => {
+    const has = form.journalIds.includes(id);
+    saveNow({ journalIds: has ? form.journalIds.filter((j) => j !== id) : [...form.journalIds, id] });
   };
 
   const streakHighlight: StreakHighlight | null = useMemo(() => {
@@ -370,6 +382,26 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
             <ChevronRight size={15} />
           </button>
         </div>
+
+        {collections.length > 0 && (
+          <div className="flex flex-wrap justify-center gap-1.5 mb-4">
+            {collections.map((col) => {
+              const active = form.journalIds.includes(col.id);
+              return (
+                <button
+                  key={col.id}
+                  onClick={() => toggleJournalCollection(col.id)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                    active ? COLLECTION_COLOR_CLASSES[col.color ?? "pink"] : "bg-black/[0.04] dark:bg-white/[0.06] text-slate hover:text-inherit"
+                  }`}
+                >
+                  {col.icon && <span>{col.icon}</span>}
+                  {col.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -662,24 +694,72 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   );
 }
 
-const TABS: Array<{ key: "feed" | "insights" | "calendar"; label: string }> = [
+type ViewKey = "feed" | "insights" | "calendar" | "collections";
+
+const TABS: Array<{ key: ViewKey; label: string }> = [
   { key: "feed", label: "Entradas" },
   { key: "insights", label: "Insights" },
   { key: "calendar", label: "Calendário" },
+  { key: "collections", label: "Diários" },
 ];
 
-function TabBar({ active, onChange }: { active: "feed" | "insights" | "calendar"; onChange: (t: "feed" | "insights" | "calendar") => void }) {
+function TabBar({ active, onChange }: { active: ViewKey; onChange: (t: ViewKey) => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-1 w-fit">
+    <div className="flex items-center gap-1 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-1 w-fit overflow-x-auto">
       {TABS.map((tab) => (
         <button
           key={tab.key}
           onClick={() => onChange(tab.key)}
-          className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+          className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
             active === tab.key ? "bg-white dark:bg-ink-raised text-cat-pink shadow-sm" : "text-slate hover:text-inherit"
           }`}
         >
           {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const COLLECTION_COLOR_CLASSES: Record<string, string> = {
+  pink: "bg-cat-pink/15 text-cat-pink",
+  blue: "bg-cat-blue/15 text-cat-blue dark:text-cat-blue-dark",
+  purple: "bg-cat-purple/15 text-cat-purple dark:text-cat-purple-dark",
+  green: "bg-cat-green/15 text-cat-green dark:text-cat-green-dark",
+  teal: "bg-cat-teal/15 text-cat-teal dark:text-cat-teal-dark",
+};
+
+/** Chips de filtro por diário (coleção) — "Todos" + um chip por diário criado; usado em Entradas e Calendário. */
+function JournalFilterChips({
+  collections,
+  active,
+  onChange,
+}: {
+  collections: JournalCollection[];
+  active: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  if (collections.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mb-4">
+      <button
+        onClick={() => onChange(null)}
+        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+          active === null ? "bg-cat-pink text-white" : "bg-black/[0.04] dark:bg-white/[0.06] text-slate hover:text-inherit"
+        }`}
+      >
+        Todos
+      </button>
+      {collections.map((col) => (
+        <button
+          key={col.id}
+          onClick={() => onChange(col.id)}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
+            active === col.id ? "bg-cat-pink text-white" : "bg-black/[0.04] dark:bg-white/[0.06] text-slate hover:text-inherit"
+          }`}
+        >
+          {col.icon && <span>{col.icon}</span>}
+          {col.name}
         </button>
       ))}
     </div>
@@ -696,7 +776,8 @@ function formatCardDate(date: string) {
 }
 
 /** Um card do feed "Entradas" — resumo de um dia real, nunca inventado, com o mesmo hover/press das seções do editor. */
-function DayCard({ day, onOpen }: { day: JournalDaySummary; onOpen: () => void }) {
+function DayCard({ day, collections, onOpen }: { day: JournalDaySummary; collections: JournalCollection[]; onOpen: () => void }) {
+  const dayCollections = collections.filter((c) => day.journalIds.includes(c.id));
   return (
     <button
       onClick={onOpen}
@@ -707,6 +788,15 @@ function DayCard({ day, onOpen }: { day: JournalDaySummary; onOpen: () => void }
         {day.mood && <span className="text-lg leading-none shrink-0">{MOOD_EMOJI[day.mood.mood - 1]}</span>}
       </div>
       <p className="text-sm text-slate leading-relaxed line-clamp-3">{day.preview}</p>
+      {dayCollections.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {dayCollections.map((c) => (
+            <span key={c.id} className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${COLLECTION_COLOR_CLASSES[c.color ?? "pink"]}`}>
+              {c.icon} {c.name}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px] text-slate">
         <span className="flex items-center gap-1">
           <TypeIcon size={11} />
@@ -736,35 +826,46 @@ function DayCard({ day, onOpen }: { day: JournalDaySummary; onOpen: () => void }
 }
 
 /** Aba "Entradas" — feed cronológico real (só dias com conteúdo escrito), mais recente primeiro. */
-function JournalFeedTab({ onOpenDay }: { onOpenDay: (date: string) => void }) {
-  const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays();
-
-  if (isLoading) return <p className="text-sm text-slate">Carregando…</p>;
-
-  if (days.length === 0) {
-    return (
-      <EmptyState
-        title="Seu diário está esperando a primeira entrada"
-        description="Escreva sobre sua intenção do dia, uma reflexão ou o que te fez bem — o LifeOS guarda tudo com data e monta seus Insights a partir disso."
-        ctaLabel="Escrever hoje"
-        onCta={() => onOpenDay(todayIso())}
-      />
-    );
-  }
+function JournalFeedTab({
+  onOpenDay,
+  collections,
+  journalFilter,
+  onChangeFilter,
+}: {
+  onOpenDay: (date: string) => void;
+  collections: JournalCollection[];
+  journalFilter: string | null;
+  onChangeFilter: (id: string | null) => void;
+}) {
+  const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays(journalFilter ?? undefined);
 
   return (
-    <div className="space-y-3 max-w-2xl">
-      {days.map((day) => (
-        <DayCard key={day.date} day={day} onOpen={() => onOpenDay(day.date)} />
-      ))}
-      {hasNextPage && (
-        <button
-          onClick={() => fetchNextPage()}
-          disabled={isFetchingNextPage}
-          className="w-full text-center text-sm text-cat-pink font-medium py-3 hover:underline disabled:opacity-50"
-        >
-          {isFetchingNextPage ? "Carregando…" : "Carregar mais"}
-        </button>
+    <div className="max-w-2xl">
+      <JournalFilterChips collections={collections} active={journalFilter} onChange={onChangeFilter} />
+      {isLoading ? (
+        <p className="text-sm text-slate">Carregando…</p>
+      ) : days.length === 0 ? (
+        <EmptyState
+          title={journalFilter ? "Nenhuma entrada neste diário ainda" : "Seu diário está esperando a primeira entrada"}
+          description="Escreva sobre sua intenção do dia, uma reflexão ou o que te fez bem — o LifeOS guarda tudo com data e monta seus Insights a partir disso."
+          ctaLabel="Escrever hoje"
+          onCta={() => onOpenDay(todayIso())}
+        />
+      ) : (
+        <div className="space-y-3">
+          {days.map((day) => (
+            <DayCard key={day.date} day={day} collections={collections} onOpen={() => onOpenDay(day.date)} />
+          ))}
+          {hasNextPage && (
+            <button
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="w-full text-center text-sm text-cat-pink font-medium py-3 hover:underline disabled:opacity-50"
+            >
+              {isFetchingNextPage ? "Carregando…" : "Carregar mais"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -816,9 +917,19 @@ function daysInMonth(year: number, monthIndex: number) {
 }
 
 /** Aba "Calendário" — grade do mês com pontinho nos dias que têm entrada real; clicar abre o dia. */
-function JournalCalendarTab({ onOpenDay }: { onOpenDay: (date: string) => void }) {
+function JournalCalendarTab({
+  onOpenDay,
+  collections,
+  journalFilter,
+  onChangeFilter,
+}: {
+  onOpenDay: (date: string) => void;
+  collections: JournalCollection[];
+  journalFilter: string | null;
+  onChangeFilter: (id: string | null) => void;
+}) {
   const [month, setMonth] = useState(() => todayIso().slice(0, 7));
-  const { days: markedDays, isLoading } = useJournalCalendarMonth(month);
+  const { days: markedDays, isLoading } = useJournalCalendarMonth(month, journalFilter ?? undefined);
   const marked = useMemo(() => new Set(markedDays), [markedDays]);
 
   const [year, monthNum] = month.split("-").map(Number);
@@ -841,6 +952,7 @@ function JournalCalendarTab({ onOpenDay }: { onOpenDay: (date: string) => void }
 
   return (
     <div className="max-w-md">
+      <JournalFilterChips collections={collections} active={journalFilter} onChange={onChangeFilter} />
       <div className="flex items-center justify-between mb-4">
         <button onClick={() => changeMonth(-1)} className="w-8 h-8 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]" aria-label="Mês anterior">
           <ChevronLeft size={15} />
@@ -880,6 +992,162 @@ function JournalCalendarTab({ onOpenDay }: { onOpenDay: (date: string) => void }
   );
 }
 
+
+const COLLECTION_COLOR_OPTIONS: Array<{ value: "pink" | "blue" | "purple" | "green" | "teal"; label: string }> = [
+  { value: "pink", label: "Rosa" },
+  { value: "blue", label: "Azul" },
+  { value: "purple", label: "Roxo" },
+  { value: "green", label: "Verde" },
+  { value: "teal", label: "Turquesa" },
+];
+
+/** Formulário compacto de criar/editar um diário — mesmo componente pros dois casos. */
+function JournalCollectionForm({
+  initial,
+  onSubmit,
+  onCancel,
+  isSaving,
+}: {
+  initial?: JournalCollection;
+  onSubmit: (input: JournalCollectionInput) => void;
+  onCancel?: () => void;
+  isSaving: boolean;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [icon, setIcon] = useState(initial?.icon ?? "");
+  const [color, setColor] = useState<"pink" | "blue" | "purple" | "green" | "teal">(initial?.color ?? "pink");
+  const [description, setDescription] = useState(initial?.description ?? "");
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        onSubmit({ name: name.trim(), icon: icon.trim() || null, color, description: description.trim() || null });
+        if (!initial) {
+          setName("");
+          setIcon("");
+          setDescription("");
+        }
+      }}
+      className="flex flex-col gap-2.5"
+    >
+      <div className="flex gap-2">
+        <input
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+          placeholder="🦋"
+          maxLength={4}
+          className="w-14 shrink-0 text-center rounded-xl px-2 py-2 text-lg bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+        />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nome do diário (ex.: Viagens)"
+          className="flex-1 rounded-xl px-3 py-2 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+        />
+      </div>
+      <input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Descrição (opcional)"
+        className="w-full rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+      />
+      <div className="flex items-center gap-1.5">
+        {COLLECTION_COLOR_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setColor(opt.value)}
+            aria-label={opt.label}
+            className={`w-6 h-6 rounded-full ${COLLECTION_COLOR_CLASSES[opt.value]} ${
+              color === opt.value ? "ring-2 ring-offset-2 ring-cat-pink dark:ring-offset-ink-raised" : ""
+            }`}
+          />
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={isSaving || !name.trim()}
+          className="rounded-lg px-3.5 py-1.5 text-xs font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 active:scale-95 transition-all disabled:opacity-50"
+        >
+          {initial ? "Salvar" : "Criar diário"}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="text-xs text-slate hover:text-inherit">
+            Cancelar
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** Aba "Diários" — gerenciar as coleções (criar, editar, arquivar). Arquivar nunca apaga entradas já vinculadas. */
+function JournalCollectionsTab() {
+  const { collections, isLoading, create, update, remove, isSaving } = useJournalCollections();
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  if (isLoading) return <p className="text-sm text-slate">Carregando…</p>;
+
+  return (
+    <div className="max-w-lg space-y-4">
+      <Card className="p-4 sm:p-5">
+        <p className="text-sm font-semibold mb-3">Novo diário</p>
+        <JournalCollectionForm onSubmit={(input) => create(input)} isSaving={isSaving} />
+      </Card>
+
+      {collections.length === 0 ? (
+        <p className="text-sm text-slate">
+          Nenhum diário criado ainda — todas as suas entradas aparecem juntas em "Entradas" até você organizar por diário.
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {collections.map((col) =>
+            editingId === col.id ? (
+              <Card key={col.id} className="p-4 sm:p-5">
+                <JournalCollectionForm
+                  initial={col}
+                  isSaving={isSaving}
+                  onCancel={() => setEditingId(null)}
+                  onSubmit={(input) => {
+                    update({ id: col.id, input });
+                    setEditingId(null);
+                  }}
+                />
+              </Card>
+            ) : (
+              <Card key={col.id} className="p-3.5 sm:p-4 flex items-center gap-3">
+                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${COLLECTION_COLOR_CLASSES[col.color ?? "pink"]}`}>
+                  {col.icon || "📔"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">{col.name}</p>
+                  {col.description && <p className="text-xs text-slate truncate">{col.description}</p>}
+                </div>
+                <button onClick={() => setEditingId(col.id)} className="text-xs text-cat-pink font-medium shrink-0">
+                  Editar
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Arquivar "${col.name}"? As entradas já vinculadas continuam existindo, só não aparecem mais como um diário ativo.`)) {
+                      remove(col.id);
+                    }
+                  }}
+                  className="text-xs text-slate hover:text-signal shrink-0"
+                >
+                  Arquivar
+                </button>
+              </Card>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Diário — ponto de entrada da tela: navegação por abas no espírito do
  * app Diário da Apple (Entradas / Insights / Calendário), todas 100%
@@ -889,8 +1157,10 @@ function JournalCalendarTab({ onOpenDay }: { onOpenDay: (date: string) => void }
  * leva ao editor imersivo do dia (DiaryDayEditor, o antigo Diário).
  */
 export function DiarioPage() {
-  const [view, setView] = useState<"feed" | "insights" | "calendar" | "day">("feed");
+  const [view, setView] = useState<ViewKey | "day">("feed");
   const [date, setDate] = useState(todayIso());
+  const [journalFilter, setJournalFilter] = useState<string | null>(null);
+  const { collections } = useJournalCollections();
 
   const openDay = (d: string) => {
     setDate(d);
@@ -921,9 +1191,14 @@ export function DiarioPage() {
         <TabBar active={view} onChange={setView} />
       </div>
 
-      {view === "feed" && <JournalFeedTab onOpenDay={openDay} />}
+      {view === "feed" && (
+        <JournalFeedTab onOpenDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={setJournalFilter} />
+      )}
       {view === "insights" && <JournalInsightsTab />}
-      {view === "calendar" && <JournalCalendarTab onOpenDay={openDay} />}
+      {view === "calendar" && (
+        <JournalCalendarTab onOpenDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={setJournalFilter} />
+      )}
+      {view === "collections" && <JournalCollectionsTab />}
     </div>
   );
 }

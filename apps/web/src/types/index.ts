@@ -620,7 +620,23 @@ export interface JournalEntry {
   nightHelped: string | null;
   nightTakeaway: string | null;
   focusTaskIds: string[];
+  /** Ids dos diários (coleções) a que a entrada deste dia pertence — ver JournalCollection. */
+  journalIds: string[];
   auto: JournalAutoData;
+}
+
+/** Um "diário" — coleção nomeada (Pessoal, Viagens, Estudos...) pra organizar entradas do Diário. */
+export interface JournalCollection {
+  id: string;
+  owner_id: string;
+  name: string;
+  icon: string | null;
+  color: "pink" | "blue" | "purple" | "green" | "teal" | null;
+  description: string | null;
+  sort_order: number;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TimelineEvent {

@@ -171,6 +171,7 @@ export interface JournalDaySummary {
   selfCareCount: number;
   nightMood: number | null;
   mood: { mood: number; energy: number } | null;
+  journalIds: string[];
 }
 
 const PREVIEW_FIELD_ORDER = ["intention", "thoughts", "feel_good", "challenges", "lighter_plan", "night_takeaway"] as const;
@@ -207,14 +208,22 @@ function parseJsonArraySafe(value: string | undefined): string[] {
 export async function listJournalDays(
   db: Db,
   ownerId: string,
-  opts: { before?: string; limit?: number } = {}
+  opts: { before?: string; limit?: number; journalId?: string } = {}
 ): Promise<{ items: JournalDaySummary[]; hasMore: boolean }> {
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
-  const beforeClause = opts.before ? "AND entry_date < ?" : "";
-  const args = opts.before ? [ownerId, opts.before] : [ownerId];
+  const conditions = ["owner_id = ?"];
+  const args: Array<string | number> = [ownerId];
+  if (opts.before) {
+    conditions.push("entry_date < ?");
+    args.push(opts.before);
+  }
+  if (opts.journalId) {
+    conditions.push("id IN (SELECT entry_id FROM journal_entry_journals WHERE journal_id = ?)");
+    args.push(opts.journalId);
+  }
 
   const result = await db.execute({
-    sql: `SELECT * FROM journal_entries WHERE owner_id = ? ${beforeClause} ORDER BY entry_date DESC LIMIT ?`,
+    sql: `SELECT * FROM journal_entries WHERE ${conditions.join(" AND ")} ORDER BY entry_date DESC LIMIT ?`,
     args: [...args, limit + 1],
   });
   const rows = (result.rows as unknown as Array<Record<string, unknown>>).filter(hasWrittenContent);
@@ -222,6 +231,7 @@ export async function listJournalDays(
   const page = rows.slice(0, limit);
 
   const moodByDate = new Map<string, { mood: number; energy: number }>();
+  const journalIdsByEntry = new Map<string, string[]>();
   if (page.length > 0) {
     const dates = page.map((r) => String(r.entry_date));
     const placeholders = dates.map(() => "?").join(",");
@@ -239,6 +249,18 @@ export async function listJournalDays(
     for (const r of moodRes.rows as unknown as Array<{ d: string; mood: number; energy: number }>) {
       moodByDate.set(r.d, { mood: r.mood, energy: r.energy });
     }
+
+    const entryIds = page.map((r) => String(r.id));
+    const entryPlaceholders = entryIds.map(() => "?").join(",");
+    const journalLinksRes = await db.execute({
+      sql: `SELECT entry_id, journal_id FROM journal_entry_journals WHERE entry_id IN (${entryPlaceholders})`,
+      args: entryIds,
+    });
+    for (const r of journalLinksRes.rows as unknown as Array<{ entry_id: string; journal_id: string }>) {
+      const list = journalIdsByEntry.get(r.entry_id) ?? [];
+      list.push(r.journal_id);
+      journalIdsByEntry.set(r.entry_id, list);
+    }
   }
 
   const items: JournalDaySummary[] = page.map((row) => ({
@@ -249,6 +271,7 @@ export async function listJournalDays(
     selfCareCount: parseJsonArraySafe(row.self_care as string | undefined).length,
     nightMood: (row.night_mood as number | null) ?? null,
     mood: moodByDate.get(String(row.entry_date)) ?? null,
+    journalIds: journalIdsByEntry.get(String(row.id)) ?? [],
   }));
 
   return { items, hasMore };
@@ -259,10 +282,12 @@ export async function listJournalDays(
  * usado só pra marcar os pontinhos da aba "Calendário", nunca inventa
  * presença de entrada.
  */
-export async function getJournalCalendarMonth(db: Db, ownerId: string, month: string): Promise<string[]> {
+export async function getJournalCalendarMonth(db: Db, ownerId: string, month: string, journalId?: string): Promise<string[]> {
+  const journalClause = journalId ? "AND id IN (SELECT entry_id FROM journal_entry_journals WHERE journal_id = ?)" : "";
+  const args = journalId ? [ownerId, `${month}%`, journalId] : [ownerId, `${month}%`];
   const result = await db.execute({
-    sql: "SELECT * FROM journal_entries WHERE owner_id = ? AND entry_date LIKE ? ORDER BY entry_date ASC",
-    args: [ownerId, `${month}%`],
+    sql: `SELECT * FROM journal_entries WHERE owner_id = ? AND entry_date LIKE ? ${journalClause} ORDER BY entry_date ASC`,
+    args,
   });
   const rows = (result.rows as unknown as Array<Record<string, unknown>>).filter(hasWrittenContent);
   return rows.map((r) => String(r.entry_date));

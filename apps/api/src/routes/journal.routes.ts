@@ -36,6 +36,14 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     getJournalAutoData(db, ownerId, date),
   ]);
   const row = entryRes.rows[0] as unknown as Record<string, unknown> | undefined;
+  const journalIds = row
+    ? (
+        await db.execute({
+          sql: "SELECT journal_id FROM journal_entry_journals WHERE entry_id = ?",
+          args: [row.id as string],
+        })
+      ).rows.map((r) => (r as unknown as { journal_id: string }).journal_id)
+    : [];
   return {
     date,
     intention: row?.intention ?? null,
@@ -50,8 +58,30 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     nightHelped: row?.night_helped ?? null,
     nightTakeaway: row?.night_takeaway ?? null,
     focusTaskIds: parseJsonArray(row?.focus_task_ids),
+    journalIds,
     auto,
   };
+}
+
+/**
+ * Sincroniza os diários (coleções) vinculados a uma entrada — substitui a
+ * associação inteira pelas ids recebidas, ignorando ids que não existam
+ * ou não pertençam a este usuário (nunca vincula diário de outro dono).
+ */
+async function syncEntryJournals(db: ReturnType<typeof getDb>, ownerId: string, entryId: string, journalIds: string[]) {
+  await db.execute({ sql: "DELETE FROM journal_entry_journals WHERE entry_id = ?", args: [entryId] });
+  if (journalIds.length === 0) return;
+  const ownedRes = await db.execute({
+    sql: `SELECT id FROM journals WHERE owner_id = ? AND archived_at IS NULL AND id IN (${journalIds.map(() => "?").join(",")})`,
+    args: [ownerId, ...journalIds],
+  });
+  const ownedIds = (ownedRes.rows as unknown as Array<{ id: string }>).map((r) => r.id);
+  for (const journalId of ownedIds) {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO journal_entry_journals (entry_id, journal_id) VALUES (?, ?)",
+      args: [entryId, journalId],
+    });
+  }
 }
 
 /**
@@ -73,8 +103,9 @@ journalRouter.get("/days", async (req, res) => {
   const before = typeof req.query.before === "string" && isValidDate(req.query.before) ? req.query.before : undefined;
   const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
   const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+  const journalId = typeof req.query.journalId === "string" ? req.query.journalId : undefined;
   const db = getDb();
-  return res.json(await listJournalDays(db, req.user!.id, { before, limit }));
+  return res.json(await listJournalDays(db, req.user!.id, { before, limit, journalId }));
 });
 
 /**
@@ -86,8 +117,9 @@ journalRouter.get("/calendar", async (req, res) => {
   if (typeof month !== "string" || !/^\d{4}-\d{2}$/.test(month)) {
     return res.status(400).json({ error: "Mês inválido. Use o formato YYYY-MM." });
   }
+  const journalId = typeof req.query.journalId === "string" ? req.query.journalId : undefined;
   const db = getDb();
-  return res.json({ days: await getJournalCalendarMonth(db, req.user!.id, month) });
+  return res.json({ days: await getJournalCalendarMonth(db, req.user!.id, month, journalId) });
 });
 
 journalRouter.get("/:date", async (req, res) => {
@@ -131,6 +163,8 @@ journalRouter.put("/:date", async (req, res) => {
     focus_task_ids: JSON.stringify(data.focusTaskIds ?? []),
   };
 
+  const entryId = existingRow?.id ?? nanoid();
+
   if (existingRow) {
     await db.execute({
       sql: `UPDATE journal_entries SET
@@ -151,7 +185,7 @@ journalRouter.put("/:date", async (req, res) => {
         values.night_helped,
         values.night_takeaway,
         values.focus_task_ids,
-        existingRow.id,
+        entryId,
       ],
     });
   } else {
@@ -161,7 +195,7 @@ journalRouter.put("/:date", async (req, res) => {
                challenges, lighter_plan, feel_good, night_mood, night_helped, night_takeaway, focus_task_ids)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
-        nanoid(),
+        entryId,
         ownerId,
         date,
         values.intention,
@@ -178,6 +212,10 @@ journalRouter.put("/:date", async (req, res) => {
         values.focus_task_ids,
       ],
     });
+  }
+
+  if (data.journalIds !== undefined) {
+    await syncEntryJournals(db, ownerId, entryId, data.journalIds);
   }
 
   return res.json(await buildJournalResponse(db, ownerId, date));

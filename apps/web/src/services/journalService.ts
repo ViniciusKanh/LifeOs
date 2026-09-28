@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { JournalEntry } from "@/types";
+import type { JournalEntry, JournalCollection } from "@/types";
 
 export interface JournalUpsertInput {
   intention?: string | null;
@@ -14,6 +14,7 @@ export interface JournalUpsertInput {
   nightHelped?: string | null;
   nightTakeaway?: string | null;
   focusTaskIds?: string[];
+  journalIds?: string[];
 }
 
 export interface JournalInsights {
@@ -31,6 +32,7 @@ export interface JournalDaySummary {
   selfCareCount: number;
   nightMood: number | null;
   mood: { mood: number; energy: number } | null;
+  journalIds: string[];
 }
 
 export interface JournalDaysPage {
@@ -38,10 +40,33 @@ export interface JournalDaysPage {
   hasMore: boolean;
 }
 
+function daysQuery(before?: string, journalId?: string) {
+  const params = new URLSearchParams();
+  if (before) params.set("before", before);
+  if (journalId) params.set("journalId", journalId);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const journalService = {
   get: (date: string) => api.get<JournalEntry>(`/journal/${date}`),
   save: (date: string, input: JournalUpsertInput) => api.put<JournalEntry>(`/journal/${date}`, input),
   insights: () => api.get<JournalInsights>("/journal/insights"),
-  days: (before?: string) => api.get<JournalDaysPage>(`/journal/days${before ? `?before=${before}` : ""}`),
-  calendarMonth: (month: string) => api.get<{ days: string[] }>(`/journal/calendar?month=${month}`),
+  days: (before?: string, journalId?: string) => api.get<JournalDaysPage>(`/journal/days${daysQuery(before, journalId)}`),
+  calendarMonth: (month: string, journalId?: string) =>
+    api.get<{ days: string[] }>(`/journal/calendar?month=${month}${journalId ? `&journalId=${journalId}` : ""}`),
+};
+
+export interface JournalCollectionInput {
+  name: string;
+  icon?: string | null;
+  color?: "pink" | "blue" | "purple" | "green" | "teal" | null;
+  description?: string | null;
+}
+
+export const journalCollectionsService = {
+  list: () => api.get<JournalCollection[]>("/journals"),
+  create: (input: JournalCollectionInput) => api.post<JournalCollection>("/journals", input),
+  update: (id: string, input: Partial<JournalCollectionInput>) => api.patch<JournalCollection>(`/journals/${id}`, input),
+  remove: (id: string) => api.delete<void>(`/journals/${id}`),
 };

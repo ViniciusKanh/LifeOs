@@ -18,5 +18,6 @@ export const journalUpsertSchema = z.object({
   nightHelped: z.string().trim().max(2000).optional().nullable(),
   nightTakeaway: z.string().trim().max(2000).optional().nullable(),
   focusTaskIds: z.array(z.string()).max(10).optional(),
+  journalIds: z.array(z.string()).max(20).optional(),
 });
 export type JournalUpsertInput = z.infer<typeof journalUpsertSchema>;
