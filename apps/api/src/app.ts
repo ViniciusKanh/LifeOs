@@ -105,6 +105,12 @@ app.use("/api/admin", adminRouter);
 // de verdade (Express tenta os middlewares na ordem em que foram
 // registrados, e "/api" também "bate" com "/api/push/...").
 app.use("/api/push", pushRouter);
+// cronRouter também precisa vir ANTES de libraryRouter/educationRouter
+// pelo mesmo motivo do pushRouter acima: eles são montados no prefixo
+// genérico "/api" com requireAuth incondicional, e isso barraria
+// /api/cron/* (que usa segredo próprio, sem sessão de usuário — ver
+// cron.routes.ts) antes mesmo de chegar no roteador de verdade.
+app.use("/api/cron", cronRouter);
 app.use("/api", libraryRouter);
 app.use("/api", educationRouter);
 app.use("/api/health", healthRouter);
@@ -129,10 +135,6 @@ app.use("/api/goal-forecast", goalForecastRouter);
 app.use("/api/data-health", dataHealthRouter);
 app.use("/api/journal", journalRouter);
 app.use("/api/journals", journalsRouter);
-// Sem requireAuth — protegido por segredo próprio (ver cron.routes.ts),
-// chamado por um agendador externo, nunca por um usuário logado.
-app.use("/api/cron", cronRouter);
-
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
