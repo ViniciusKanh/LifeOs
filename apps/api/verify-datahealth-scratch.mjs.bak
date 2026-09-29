@@ -1,0 +1,19 @@
+import { computeDataHealthScore, classifyScore } from "./src/services/dataHealthScoreService.ts";
+import { checkTaskConsistency, findPossibleDuplicates, checkGoalConsistency } from "./src/services/dataQualityRules.ts";
+
+console.log("classifyScore:", classifyScore(95), classifyScore(80), classifyScore(65), classifyScore(30));
+console.log("computeDataHealthScore(all 100):", computeDataHealthScore({completeness:100,consistency:100,integrity:100,freshness:100,sync:100,history:100}));
+console.log("computeDataHealthScore(completeness 0):", computeDataHealthScore({completeness:0,consistency:100,integrity:100,freshness:100,sync:100,history:100}));
+
+const now = new Date().toISOString();
+const tasks = [{ id: "1", title: "x", status: "Backlog", due_date: "2000-01-01", start_date: null, estimate_minutes: null, project_id: null, created_at: now, completed_at: null }];
+console.log("checkTaskConsistency:", JSON.stringify(checkTaskConsistency(tasks, "/tarefas")));
+
+const dupGoals = [
+  { id: "a", title: "Meta Duplicada", created_at: "2026-01-01T10:00:00Z" },
+  { id: "b", title: "Meta Duplicada", created_at: "2026-01-01T10:05:00Z" },
+];
+console.log("findPossibleDuplicates:", JSON.stringify(findPossibleDuplicates(dupGoals, "goals", "/metas")));
+
+const goals = [{ id: "g1", title: "g", kind: "percentage", target_value: 100, current_value: 150, category: null, due_date: null, status: "active", created_at: now }];
+console.log("checkGoalConsistency:", JSON.stringify(checkGoalConsistency(goals, "/metas")));
