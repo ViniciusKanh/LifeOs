@@ -13,7 +13,9 @@ export function useProfile() {
 
   const updateProfile = useMutation({
     mutationFn: authService.updateProfile,
-    onSuccess: (user) => queryClient.setQueryData(["auth", "me"], user),
+    // PATCH /auth/me não devolve os campos derivados (google_linked, has_password) —
+    // mescla com o que já está em cache em vez de substituir e perdê-los.
+    onSuccess: (user) => queryClient.setQueryData(["auth", "me"], (old: object | undefined) => ({ ...(old ?? {}), ...user })),
   });
 
   const changePassword = useMutation({
@@ -21,7 +23,27 @@ export function useProfile() {
       authService.changePassword(currentPassword, newPassword),
   });
 
+  const refreshMe = () => queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+
+  const setPassword = useMutation({
+    mutationFn: (newPassword: string) => authService.setPassword(newPassword),
+    onSuccess: refreshMe,
+  });
+
+  const unlinkGoogle = useMutation({
+    mutationFn: (password: string) => authService.unlinkGoogle(password),
+    onSuccess: refreshMe,
+  });
+
   return {
+    setPassword: setPassword.mutateAsync,
+    isSettingPassword: setPassword.isPending,
+    setPasswordError: setPassword.error as ApiError | null,
+    setPasswordSuccess: setPassword.isSuccess,
+    unlinkGoogle: unlinkGoogle.mutateAsync,
+    isUnlinkingGoogle: unlinkGoogle.isPending,
+    unlinkGoogleError: unlinkGoogle.error as ApiError | null,
+    resetUnlinkGoogle: unlinkGoogle.reset,
     updateProfile: updateProfile.mutateAsync,
     isUpdatingProfile: updateProfile.isPending,
     updateProfileError: updateProfile.error as ApiError | null,

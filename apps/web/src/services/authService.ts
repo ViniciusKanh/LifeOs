@@ -8,6 +8,8 @@ export interface RegisterResult {
 
 /** URL de navegação (não fetch — precisa ser um redirect de página inteira) que inicia o login/cadastro com Google. */
 export const GOOGLE_LOGIN_START_URL = `${API_URL}/auth/google/start`;
+/** Vincular o Google à conta já logada (Perfil) — navegação de página inteira, não fetch. */
+export const GOOGLE_LINK_START_URL = `${API_URL}/auth/google/link/start`;
 
 export const authService = {
   me: () => api.get<CurrentUser>("/auth/me"),
@@ -37,4 +39,7 @@ export const authService = {
   }) => api.patch<CurrentUser>("/auth/me", patch),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post<{ message: string }>("/auth/change-password", { currentPassword, newPassword }),
+  /** Primeira senha de quem só entrava com o Google. */
+  setPassword: (newPassword: string) => api.post<{ message: string }>("/auth/set-password", { newPassword }),
+  unlinkGoogle: (password: string) => api.post<{ message: string }>("/auth/google/unlink", { password }),
 };

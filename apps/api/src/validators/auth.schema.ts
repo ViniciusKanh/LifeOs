@@ -80,3 +80,13 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/** Primeira senha de quem só entrava com o Google. */
+export const setPasswordSchema = z.object({
+  newPassword: PASSWORD_RULE,
+});
+
+/** Desvincular o Google exige confirmar a senha atual. */
+export const unlinkGoogleSchema = z.object({
+  password: z.string().min(1, "Informe sua senha para confirmar"),
+});

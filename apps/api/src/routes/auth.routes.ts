@@ -7,6 +7,8 @@ import {
   buildGoogleAuthUrl,
   exchangeGoogleCode,
   googleRedirectUri,
+  readOAuthState,
+  resolveAppUrl,
   signOAuthState,
   verifyOAuthStateDetailed,
 } from "../services/googleAuthService.js";
@@ -27,6 +29,8 @@ import {
   resendVerificationSchema,
   updateProfileSchema,
   changePasswordSchema,
+  setPasswordSchema,
+  unlinkGoogleSchema,
 } from "../validators/auth.schema.js";
 import { requireAuth, SESSION_COOKIE_NAME } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
@@ -39,7 +43,6 @@ import {
 } from "../services/emailService.js";
 import type { User } from "../types/index.js";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:5173";
 
 export const authRouter = Router();
 
@@ -106,7 +109,7 @@ authRouter.post("/register", rateLimit(), async (req, res) => {
     args: [nanoid(), id, hash, expiresAt],
   });
 
-  const verifyUrl = `${APP_URL}/verificar-email?token=${raw}`;
+  const verifyUrl = `${resolveAppUrl(req)}/verificar-email?token=${raw}`;
   const verification = verificationEmail(verifyUrl);
   const sent = await sendMail({ to: email, ...verification }).catch((err) => {
     console.error("[email] falha ao enviar verificação de e-mail:", err);
@@ -181,7 +184,7 @@ authRouter.post("/logout", (_req, res) => {
 authRouter.get("/me", requireAuth, async (req, res) => {
   const db = getDb();
   const result = await db.execute({
-    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, google_id
+    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, google_id, password_set
           FROM users WHERE id = ?`,
     args: [req.user!.id],
   });
@@ -197,8 +200,8 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   }
   // google_id nunca é exposto (é só um identificador interno do Google) — só se
   // a conta está vinculada, pra frontend mostrar "Conectado com Google" no perfil.
-  const { google_id, ...user } = row as Record<string, unknown>;
-  return res.json({ ...user, google_linked: !!google_id });
+  const { google_id, password_set, ...user } = row as Record<string, unknown>;
+  return res.json({ ...user, google_linked: !!google_id, has_password: Number(password_set ?? 1) === 1 });
 });
 
 /** PATCH /api/auth/me — o próprio usuário edita seu perfil (nunca outro id) */
@@ -266,7 +269,7 @@ authRouter.post("/change-password", requireAuth, rateLimit({ max: 5 }), async (r
 
   const newHash = await hashPassword(parsed.data.newPassword);
   await db.execute({
-    sql: "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?",
+    sql: "UPDATE users SET password_hash = ?, password_set = 1, updated_at = datetime('now') WHERE id = ?",
     args: [newHash, req.user!.id],
   });
 
@@ -278,6 +281,74 @@ authRouter.post("/change-password", requireAuth, rateLimit({ max: 5 }), async (r
   }
 
   return res.json({ message: "Senha atualizada com sucesso." });
+});
+
+/**
+ * POST /api/auth/set-password — define a PRIMEIRA senha de quem só entrava
+ * com o Google (password_set = 0). Quem já tem senha usa change-password,
+ * que sempre exige a senha atual.
+ */
+authRouter.post("/set-password", requireAuth, rateLimit({ max: 5 }), async (req, res) => {
+  const parsed = setPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const db = getDb();
+  const row = (await db.execute({ sql: "SELECT email, password_set FROM users WHERE id = ?", args: [req.user!.id] })).rows[0] as unknown as
+    | { email: string; password_set: number }
+    | undefined;
+  if (!row) return res.status(401).json({ error: "Sessão inválida. Faça login novamente." });
+  if (Number(row.password_set) === 1) {
+    return res.status(409).json({ error: "Sua conta já tem senha. Use “Alterar senha”." });
+  }
+  const newHash = await hashPassword(parsed.data.newPassword);
+  await db.execute({
+    sql: "UPDATE users SET password_hash = ?, password_set = 1, updated_at = datetime('now') WHERE id = ?",
+    args: [newHash, req.user!.id],
+  });
+  const notice = passwordChangedEmail();
+  sendMail({ to: row.email, ...notice }).catch((err) => console.error("[email] falha ao enviar aviso de nova senha:", err));
+  return res.json({ message: "Senha definida. Agora você também pode entrar com e-mail e senha." });
+});
+
+/**
+ * GET /api/auth/google/link/start — vincula uma conta Google ao usuário
+ * LOGADO (a partir do Perfil). O id do usuário vai dentro do state
+ * assinado, então o callback sabe a quem vincular sem confiar em nada
+ * vindo do navegador.
+ */
+authRouter.get("/google/link/start", requireAuth, async (req, res) => {
+  const db = getDb();
+  const config = await getGoogleOAuthConfig(db);
+  if (!config) return res.redirect(`${resolveAppUrl(req)}/perfil?google=nao_configurado`);
+  const state = signOAuthState("google_link", { uid: req.user!.id });
+  return res.redirect(buildGoogleAuthUrl(config, googleRedirectUri(req), state));
+});
+
+/**
+ * POST /api/auth/google/unlink — desvincula o Google. Só é permitido se a
+ * conta tiver senha cadastrada (senão o usuário ficaria sem forma de
+ * entrar) e exige a senha atual como confirmação.
+ */
+authRouter.post("/google/unlink", requireAuth, rateLimit({ max: 5 }), async (req, res) => {
+  const parsed = unlinkGoogleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const db = getDb();
+  const row = (await db.execute({ sql: "SELECT password_hash, password_set, google_id FROM users WHERE id = ?", args: [req.user!.id] })).rows[0] as unknown as
+    | { password_hash: string; password_set: number; google_id: string | null }
+    | undefined;
+  if (!row) return res.status(401).json({ error: "Sessão inválida. Faça login novamente." });
+  if (!row.google_id) return res.status(409).json({ error: "Sua conta não está vinculada ao Google." });
+  if (Number(row.password_set) !== 1) {
+    return res.status(409).json({ error: "Defina uma senha antes de desvincular o Google — senão você ficaria sem como entrar." });
+  }
+  if (!(await verifyPassword(parsed.data.password, row.password_hash))) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+  await db.execute({ sql: "UPDATE users SET google_id = NULL, updated_at = datetime('now') WHERE id = ?", args: [req.user!.id] });
+  return res.json({ message: "Conta Google desvinculada." });
 });
 
 /** POST /api/auth/forgot-password */
@@ -309,7 +380,7 @@ authRouter.post("/forgot-password", rateLimit({ max: 5 }), async (req, res) => {
     args: [nanoid(), user.id, hash, expiresAt],
   });
 
-  const resetUrl = `${APP_URL}/redefinir-senha?token=${raw}`;
+  const resetUrl = `${resolveAppUrl(req)}/redefinir-senha?token=${raw}`;
   const email = passwordResetEmail(resetUrl);
   const sent = await sendMail({ to: parsed.data.email, ...email }).catch((err) => {
     console.error("[email] falha ao enviar reset de senha:", err);
@@ -350,7 +421,7 @@ authRouter.post("/reset-password", rateLimit({ max: 10 }), async (req, res) => {
 
   const newHash = await hashPassword(parsed.data.newPassword);
   await db.execute({
-    sql: "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?",
+    sql: "UPDATE users SET password_hash = ?, password_set = 1, updated_at = datetime('now') WHERE id = ?",
     args: [newHash, record.user_id],
   });
   await db.execute({
@@ -442,7 +513,7 @@ authRouter.post("/resend-verification", rateLimit({ max: 5 }), async (req, res) 
     args: [nanoid(), user.id, hash, expiresAt],
   });
 
-  const verifyUrl = `${APP_URL}/verificar-email?token=${raw}`;
+  const verifyUrl = `${resolveAppUrl(req)}/verificar-email?token=${raw}`;
   const verification = verificationEmail(verifyUrl);
   const sent = await sendMail({ to: parsed.data.email, ...verification }).catch((err) => {
     console.error("[email] falha ao reenviar verificação de e-mail:", err);
@@ -508,15 +579,19 @@ authRouter.get("/google/callback", async (req, res) => {
   // redirect de volta do Google (ver comentário em signOAuthState).
   res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" });
 
-  const failRedirect = (reason: string) => res.redirect(`${APP_URL}/login?google_error=${encodeURIComponent(reason)}`);
+  const appUrl = resolveAppUrl(req);
+  const failRedirect = (reason: string) => res.redirect(`${appUrl}/login?google_error=${encodeURIComponent(reason)}`);
 
   // Erros específicos por etapa (em vez de um único "state_invalido" genérico)
   // para dar um diagnóstico claro caso o problema volte a acontecer.
   if (error) return failRedirect(`google_${error}`);
   if (!code) return failRedirect("code_ausente");
   if (!state) return failRedirect("state_ausente");
-  const stateCheck = verifyOAuthStateDetailed(state, "google_oauth");
+  const stateCheck = readOAuthState(state);
   if (!stateCheck.ok) return failRedirect(stateCheck.reason);
+  const isLinkFlow = stateCheck.purpose === "google_link";
+  if (!isLinkFlow && stateCheck.purpose !== "google_oauth") return failRedirect("state_propósito_invalido");
+  const profileRedirect = (status: string) => res.redirect(`${appUrl}/perfil?google=${encodeURIComponent(status)}`);
 
   const db = getDb();
   const config = await getGoogleOAuthConfig(db);
@@ -528,6 +603,21 @@ authRouter.get("/google/callback", async (req, res) => {
   } catch (err) {
     console.error("[google-oauth] falha na troca de código:", err);
     return failRedirect("falha_google");
+  }
+
+  // Vínculo iniciado pelo Perfil: associa a conta Google ao usuário que
+  // estava logado quando o fluxo começou (uid vem do state assinado, nunca
+  // da query), mesmo que o e-mail do Google seja diferente do cadastro.
+  if (isLinkFlow) {
+    if (!stateCheck.uid) return profileRedirect("erro");
+    const owner = await db.execute({ sql: "SELECT id, google_id FROM users WHERE google_id = ?", args: [profile.sub] });
+    const ownerRow = owner.rows[0] as unknown as { id: string } | undefined;
+    if (ownerRow && ownerRow.id !== stateCheck.uid) return profileRedirect("em_uso");
+    const upd = await db.execute({
+      sql: "UPDATE users SET google_id = ?, updated_at = datetime('now') WHERE id = ?",
+      args: [profile.sub, stateCheck.uid],
+    });
+    return profileRedirect(upd.rowsAffected > 0 ? "vinculado" : "erro");
   }
 
   const byGoogleId = await db.execute({ sql: "SELECT * FROM users WHERE google_id = ?", args: [profile.sub] });
@@ -551,8 +641,8 @@ authRouter.get("/google/callback", async (req, res) => {
       const adminEmail = (process.env.ADMIN_EMAIL ?? "").toLowerCase();
       const role = profile.email.toLowerCase() === adminEmail ? "admin" : "user";
       await db.execute({
-        sql: `INSERT INTO users (id, name, email, password_hash, role, avatar_url, google_id, email_verified)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO users (id, name, email, password_hash, role, avatar_url, google_id, email_verified, password_set)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
         args: [id, profile.name, profile.email, randomPasswordHash, role, profile.picture, profile.sub, profile.emailVerified ? 1 : 0],
       });
       await db.execute({ sql: "INSERT INTO user_settings (user_id) VALUES (?)", args: [id] });
@@ -565,5 +655,5 @@ authRouter.get("/google/callback", async (req, res) => {
 
   const token = signSessionToken({ sub: user.id, role: user.role });
   res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 30 * 24 * 60 * 60 * 1000 });
-  return res.redirect(`${APP_URL}/dashboard`);
+  return res.redirect(`${appUrl}/dashboard`);
 });

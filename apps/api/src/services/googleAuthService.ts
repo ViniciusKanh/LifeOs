@@ -60,10 +60,29 @@ export function googleRedirectUri(req: { protocol: string; get(name: string): st
  * chegar de volta. O cookie continua sendo setado como camada extra,
  * mas não é mais obrigatório pra aceitar o retorno do Google.
  */
-export function signOAuthState(purpose: string): string {
+export function signOAuthState(purpose: string, extra: { uid?: string } = {}): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET não configurado");
-  return jwt.sign({ purpose }, secret, { expiresIn: "10m" });
+  return jwt.sign({ purpose, ...extra }, secret, { expiresIn: "10m" });
+}
+
+/**
+ * Lê o state assinado sem exigir um propósito fixo — o mesmo callback
+ * atende login ("google_oauth") e vínculo a partir do Perfil
+ * ("google_link", que carrega o id do usuário logado em `uid`).
+ */
+export function readOAuthState(
+  state: string
+): { ok: true; purpose: string; uid: string | null } | { ok: false; reason: "chave_ausente" | "state_expirado" | "state_assinatura_invalida" } {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return { ok: false, reason: "chave_ausente" };
+  try {
+    const payload = jwt.verify(state, secret) as { purpose?: string; uid?: string };
+    return { ok: true, purpose: payload.purpose ?? "", uid: typeof payload.uid === "string" ? payload.uid : null };
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) return { ok: false, reason: "state_expirado" };
+    return { ok: false, reason: "state_assinatura_invalida" };
+  }
 }
 
 export type OAuthStateCheck = { ok: true } | { ok: false; reason: "chave_ausente" | "state_expirado" | "state_assinatura_invalida" | "state_propósito_invalido" };
@@ -158,4 +177,27 @@ export async function exchangeGoogleCode(config: GoogleOAuthConfig, code: string
     name: profile.name?.trim() || profile.email.split("@")[0],
     picture: profile.picture ?? null,
   };
+}
+
+/**
+ * URL pública do FRONTEND para redirecionar depois do OAuth e montar links
+ * de e-mail. Prioriza APP_URL, mas ignora um APP_URL apontando para
+ * localhost quando a requisição veio de um domínio público — foi isso que
+ * mandava o login com Google em produção para "localhost:5173" (APP_URL
+ * ausente na Vercel caía no padrão de desenvolvimento). Em produção na
+ * Vercel front e API compartilham o domínio, então o próprio host da
+ * requisição é a URL certa.
+ */
+export function resolveAppUrl(req: { protocol: string; get(name: string): string | undefined }): string {
+  const host = (req.get("x-forwarded-host") ?? req.get("host") ?? "").split(",")[0].trim();
+  const isLocalRequest = !host || /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
+  const configured = process.env.APP_URL?.trim().replace(/\/+$/, "");
+
+  if (configured && (isLocalRequest || !/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(configured))) {
+    return configured;
+  }
+  if (isLocalRequest) return configured ?? "http://localhost:5173";
+
+  const proto = (req.get("x-forwarded-proto") ?? req.protocol ?? "https").split(",")[0].trim();
+  return `${proto}://${host}`;
 }

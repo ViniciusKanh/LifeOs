@@ -218,7 +218,9 @@ adminRouter.get("/audit-logs", async (req, res) => {
 adminRouter.get("/users", async (_req, res) => {
   const db = getDb();
   const result = await db.execute(
-    `SELECT id, name, email, role, avatar_url, created_at, updated_at FROM users ORDER BY created_at ASC`
+    `SELECT id, name, email, role, avatar_url, created_at, updated_at,
+            CASE WHEN google_id IS NOT NULL THEN 1 ELSE 0 END AS google_linked
+       FROM users ORDER BY created_at ASC`
   );
   return res.json(result.rows);
 });

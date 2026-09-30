@@ -116,7 +116,14 @@ export function AdminUsuariosPage() {
                             {u.name}
                             {u.id === currentUser?.id && <span className="text-slate font-normal"> (você)</span>}
                           </p>
-                          <p className="text-xs text-slate truncate">{u.email}</p>
+                          <p className="text-xs text-slate truncate">
+                            {u.email}
+                            {Number(u.google_linked) === 1 && (
+                              <span className="ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-cat-green/10 text-cat-green align-middle">
+                                Google
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
                     </td>

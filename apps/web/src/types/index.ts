@@ -11,6 +11,8 @@ export interface CurrentUser {
   created_at: string;
   /** true quando a conta está vinculada a um login com Google (users.google_id preenchido). */
   google_linked: boolean;
+  /** false quando a conta só entra pelo Google (nunca definiu senha) — nesse caso não pode desvincular. */
+  has_password: boolean;
 }
 
 export interface AdminUser {
@@ -21,6 +23,8 @@ export interface AdminUser {
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
+  /** 1 quando a conta está vinculada ao Google (o google_id em si nunca é exposto). */
+  google_linked: number;
 }
 
 export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth";

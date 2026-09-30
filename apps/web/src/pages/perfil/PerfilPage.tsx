@@ -31,6 +31,7 @@ import { useWeeklyEmail } from "@/hooks/useReviews";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
+import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
 import { api } from "@/services/api";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
@@ -85,6 +86,10 @@ export function PerfilPage() {
     changePasswordError,
     changePasswordSuccess,
     resetChangePassword,
+    setPassword,
+    isSettingPassword,
+    setPasswordError,
+    setPasswordSuccess,
   } = useProfile();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,7 +137,9 @@ export function PerfilPage() {
       return;
     }
     setPasswordMismatch(false);
-    await changePassword({ currentPassword, newPassword });
+    // Conta que só entrava pelo Google define a primeira senha sem "senha atual".
+    if (user.has_password) await changePassword({ currentPassword, newPassword });
+    else await setPassword(newPassword);
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
@@ -261,7 +268,7 @@ export function PerfilPage() {
                   <p className="text-xs text-slate">Login com Google</p>
                   <p className="text-sm font-semibold truncate">{user.google_linked ? "Conectado" : "Não conectado"}</p>
                   <p className="text-[11px] text-slate">
-                    {user.google_linked ? "Você também pode entrar com sua conta Google." : "Entre uma vez com o Google pra vincular."}
+                    {user.google_linked ? "Você também pode entrar com sua conta Google." : "Vincule no card “Conta Google”."}
                   </p>
                 </div>
               </div>
@@ -291,19 +298,23 @@ export function PerfilPage() {
             <div className="flex items-center gap-2.5 mb-4">
               <IconBadge tone="purple" size={32} icon={<Lock size={15} />} />
               <div>
-                <p className="text-sm font-semibold">Alterar senha</p>
-                <p className="text-xs text-slate">Mantenha sua conta segura com uma senha forte.</p>
+                <p className="text-sm font-semibold">{user.has_password ? "Alterar senha" : "Definir senha"}</p>
+                <p className="text-xs text-slate">
+                  {user.has_password ? "Mantenha sua conta segura com uma senha forte." : "Crie uma senha para entrar também com e-mail e senha."}
+                </p>
               </div>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-3">
-              <div className="relative">
-                <Field
-                  label="Senha atual"
-                  type={showPasswords ? "text" : "password"}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                />
-              </div>
+              {user.has_password && (
+                <div className="relative">
+                  <Field
+                    label="Senha atual"
+                    type={showPasswords ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </div>
+              )}
               <div className="relative">
                 <Field
                   label="Nova senha"
@@ -353,12 +364,20 @@ export function PerfilPage() {
                 error={passwordMismatch ? "As senhas não coincidem" : undefined}
               />
               {changePasswordError && <p className="text-xs text-drop">{changePasswordError.message}</p>}
+              {setPasswordError && <p className="text-xs text-drop">{setPasswordError.message}</p>}
               {changePasswordSuccess && <p className="text-xs text-growth">Senha atualizada com sucesso.</p>}
-              <Button type="submit" disabled={isChangingPassword || !currentPassword || !newPassword} className="w-full">
-                {isChangingPassword ? "Salvando..." : "Atualizar senha"}
+              {setPasswordSuccess && <p className="text-xs text-growth">Senha definida. Agora você também pode entrar com e-mail e senha.</p>}
+              <Button
+                type="submit"
+                disabled={isChangingPassword || isSettingPassword || (user.has_password && !currentPassword) || !newPassword}
+                className="w-full"
+              >
+                {isChangingPassword || isSettingPassword ? "Salvando..." : user.has_password ? "Atualizar senha" : "Definir senha"}
               </Button>
             </form>
           </Card>
+
+          <GoogleAccountCard user={user} />
 
           <PushNotificationsCard />
           <WeeklyEmailCard />
