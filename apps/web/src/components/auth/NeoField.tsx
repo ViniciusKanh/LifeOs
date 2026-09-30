@@ -2,14 +2,14 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 /**
- * Campo do estilo neumórfico das telas de autenticação: rótulo flutuante e
- * borda "elétrica" animada no foco. forwardRef é obrigatório para o
+ * Campo das telas de autenticação: ícone à esquerda, rótulo flutuante e
+ * anel em gradiente do logo no foco. forwardRef é obrigatório para o
  * react-hook-form enxergar o valor (mesmo motivo do Field em primitives).
  */
 export const NeoField = React.forwardRef<
   HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string; togglePassword?: boolean }
->(function NeoField({ label, error, togglePassword, type, id, ...props }, ref) {
+  React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string; togglePassword?: boolean; icon?: React.ReactNode }
+>(function NeoField({ label, error, togglePassword, type, id, icon, ...props }, ref) {
   const autoId = React.useId();
   const inputId = id ?? autoId;
   const [visible, setVisible] = useState(false);
@@ -18,8 +18,8 @@ export const NeoField = React.forwardRef<
   return (
     <div>
       <div className="neo-field" data-invalid={!!error}>
-        <div className="neo-field__glow" />
         <div className="neo-field__border" />
+        {icon && <span className="neo-field__icon">{icon}</span>}
         <input
           id={inputId}
           ref={ref}

@@ -1,118 +1,129 @@
 /* ============================================================
-   Telas de autenticação do LifeOS — estilo "neumórfico" (superfície
-   única com relevo por sombra dupla), cartão que vira em 3D entre
-   Entrar/Criar conta e borda "elétrica" animada no foco dos campos,
-   com as cores da marca (violeta → coral) em vez do azul do modelo.
-   Tokens em variáveis CSS para o modo escuro redefinir só as cores.
+   Telas de autenticação do LifeOS — identidade tirada do próprio logo:
+   gradiente ciano → azul → violeta, seta circular de "progresso" e
+   barras crescentes. Fundo claro e limpo (como o logo), cartão de vidro
+   branco com anel em gradiente, campos brancos com foco em gradiente
+   (estático, sem giro) e CTA sólido com brilho que atravessa no hover.
    ============================================================ */
 
 .auth-scope {
-  --auth-surface: #efebf7;
-  --auth-shadow-dark: rgba(152, 139, 186, 0.55);
-  --auth-shadow-light: rgba(255, 255, 255, 0.95);
-  --auth-text: #1e2537;
-  --auth-muted: #6e7391;
-  --auth-accent: #7c4dff;
-  --auth-accent-2: #ff7a45;
-  background: var(--auth-surface);
+  --lg-cyan: #19d3e0;
+  --lg-blue: #1e88ff;
+  --lg-violet: #8b5cf6;
+  --lg-grad: linear-gradient(120deg, var(--lg-cyan) 0%, var(--lg-blue) 48%, var(--lg-violet) 100%);
+  --auth-bg: #f5f8fd;
+  --auth-card: rgba(255, 255, 255, 0.82);
+  --auth-field: #ffffff;
+  --auth-line: #e2e8f2;
+  --auth-text: #26303d;
+  --auth-muted: #6b778c;
+  --auth-accent: var(--lg-blue);
+  background: var(--auth-bg);
   color: var(--auth-text);
 }
 
 .dark .auth-scope {
-  --auth-surface: #16131f;
-  --auth-shadow-dark: rgba(0, 0, 0, 0.6);
-  --auth-shadow-light: rgba(62, 54, 88, 0.35);
-  --auth-text: #e7eaf2;
-  --auth-muted: #9aa0bd;
-  --auth-accent: #9f7bff;
+  --auth-bg: #0a0f1c;
+  --auth-card: rgba(17, 24, 42, 0.78);
+  --auth-field: #0f1629;
+  --auth-line: #24304a;
+  --auth-text: #e8edf7;
+  --auth-muted: #93a0b8;
+  --auth-accent: #4aa8ff;
 }
 
-.neo-raised {
-  background: var(--auth-surface);
-  box-shadow: 18px 18px 38px var(--auth-shadow-dark), -18px -18px 38px var(--auth-shadow-light);
+.text-logo-gradient {
+  background: var(--lg-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
-.neo-raised-sm {
-  background: var(--auth-surface);
-  box-shadow: 7px 7px 14px var(--auth-shadow-dark), -7px -7px 14px var(--auth-shadow-light);
-}
-
-.neo-inset {
-  background: var(--auth-surface);
-  box-shadow: inset 6px 6px 12px var(--auth-shadow-dark), inset -6px -6px 12px var(--auth-shadow-light);
-}
-
-/* Círculos flutuando no fundo */
-.auth-bubble {
-  position: fixed;
+/* Manchas de cor animadas no fundo (mesma paleta do logo). */
+.auth-blob {
+  position: absolute;
   border-radius: 9999px;
-  background: var(--auth-surface);
-  box-shadow: 15px 15px 30px var(--auth-shadow-dark), -15px -15px 30px var(--auth-shadow-light);
-  animation: auth-float 6s ease-in-out infinite;
+  filter: blur(80px);
+  opacity: 0.5;
   pointer-events: none;
-  z-index: 0;
+}
+.dark .auth-blob { opacity: 0.35; }
+
+.auth-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(30, 136, 255, 0.14) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
 }
 
-@keyframes auth-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-18px); }
+/* Cartão de vidro com anel em gradiente */
+.auth-card {
+  position: relative;
+  background: var(--auth-card);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow: 0 30px 70px -25px rgba(30, 136, 255, 0.35), 0 10px 30px -15px rgba(38, 48, 61, 0.2);
+}
+.auth-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(140deg, rgba(25, 211, 224, 0.7), rgba(30, 136, 255, 0.25) 40%, rgba(139, 92, 246, 0.7));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
-/* Campo com borda elétrica */
+/* Campo */
 .neo-field {
   position: relative;
-  height: 56px;
-}
-
-.neo-field__border,
-.neo-field__glow {
-  position: absolute;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.neo-field__border {
-  inset: -2px;
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-.neo-field__border::before {
-  content: "";
-  position: absolute;
-  width: 170%;
-  height: 170%;
-  left: -35%;
-  top: -35%;
-  background: conic-gradient(from 0deg, transparent 0deg, transparent 30deg, var(--auth-accent-2) 45deg, var(--auth-accent) 70deg, #2f80ff 88deg, transparent 110deg, transparent 360deg);
-  animation: auth-spin 1.1s linear infinite;
-}
-
-.neo-field__border::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
+  height: 58px;
   border-radius: 16px;
-  background: var(--auth-surface);
+  background: var(--auth-field);
+  border: 1.5px solid var(--auth-line);
+  transition: border-color 0.2s ease, box-shadow 0.25s ease;
 }
+.neo-field:hover { border-color: #c9d4e6; }
+.dark .neo-field:hover { border-color: #33415f; }
 
-.neo-field__glow {
-  inset: -4px;
-  border-radius: 20px;
-  filter: blur(8px);
-  background: conic-gradient(from 0deg, transparent, var(--auth-accent), transparent 40%);
+/* Anel em gradiente que aparece suavemente no foco (sem giro). */
+.neo-field__border {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 16px;
+  padding: 2px;
+  background: var(--lg-grad);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  z-index: 3;
 }
-
+.neo-field:focus-within { box-shadow: 0 0 0 5px rgba(30, 136, 255, 0.1), 0 8px 20px -12px rgba(30, 136, 255, 0.5); }
 .neo-field:focus-within .neo-field__border { opacity: 1; }
-.neo-field:focus-within .neo-field__glow { opacity: 0.45; animation: auth-spin 1.1s linear infinite; }
-.neo-field[data-invalid="true"] .neo-field__border::before {
-  background: conic-gradient(from 0deg, transparent 0deg, transparent 30deg, #ff4757 60deg, transparent 110deg, transparent 360deg);
-}
+.neo-field[data-invalid="true"] { border-color: #ff4757; }
+.neo-field[data-invalid="true"]:focus-within { box-shadow: 0 0 0 5px rgba(255, 71, 87, 0.1); }
+.neo-field[data-invalid="true"] .neo-field__border { background: #ff4757; }
 
-@keyframes auth-spin {
-  to { transform: rotate(360deg); }
+.neo-field__icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--auth-muted);
+  z-index: 3;
+  transition: color 0.2s ease;
+  pointer-events: none;
 }
+.neo-field:focus-within .neo-field__icon { color: var(--auth-accent); }
 
 .neo-field input {
   position: absolute;
@@ -122,25 +133,17 @@
   border: none;
   outline: none;
   border-radius: 16px;
+  background: transparent;
   color: var(--auth-text);
   font-size: 15px;
-  padding: 18px 48px 4px 18px;
+  padding: 20px 48px 4px 46px;
   z-index: 2;
-  background: var(--auth-surface);
-  box-shadow: inset 6px 6px 12px var(--auth-shadow-dark), inset -6px -6px 12px var(--auth-shadow-light);
-  transition: box-shadow 0.25s ease;
 }
-
-.neo-field input:focus {
-  box-shadow: inset 3px 3px 7px var(--auth-shadow-dark), inset -3px -3px 7px var(--auth-shadow-light);
-}
-
-/* O foco já é indicado pela borda elétrica; o anel padrão ficaria duplicado. */
-.neo-field input:focus-visible { --tw-ring-shadow: 0 0 #0000; }
+.neo-field input:focus-visible { box-shadow: none; }
 
 .neo-field label {
   position: absolute;
-  left: 18px;
+  left: 46px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 3;
@@ -149,76 +152,63 @@
   pointer-events: none;
   transition: all 0.2s ease;
 }
-
 .neo-field input:focus + label,
 .neo-field input:not(:placeholder-shown) + label {
-  top: 14px;
-  font-size: 10.5px;
+  top: 15px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--auth-accent);
 }
 
-/* Botão principal: relevo que "acende" com o gradiente da marca no hover */
+/* CTA: gradiente do logo + brilho atravessando no hover */
 .neo-btn {
   position: relative;
-  isolation: isolate;
   overflow: hidden;
-  color: var(--auth-accent);
-  background: var(--auth-surface);
-  box-shadow: 8px 8px 16px var(--auth-shadow-dark), -8px -8px 16px var(--auth-shadow-light);
-  transition: transform 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+  color: #fff;
+  background: var(--lg-grad);
+  background-size: 160% 100%;
+  box-shadow: 0 12px 26px -10px rgba(30, 136, 255, 0.65);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background-position 0.5s ease;
 }
-
-.neo-btn::before {
+.neo-btn::after {
   content: "";
   position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(110deg, #7c4dff, #ff7a45, #7c4dff);
-  background-size: 200% 100%;
-  transform: translateY(100%);
-  transition: transform 0.35s ease;
+  top: 0;
+  left: -60%;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: skewX(-18deg);
 }
-
 .neo-btn:hover:not(:disabled),
 .neo-btn:focus-visible {
-  color: #fff;
-  transform: translateY(-3px);
-  box-shadow: 0 12px 26px rgba(124, 77, 255, 0.35);
+  transform: translateY(-2px);
+  background-position: 100% 0;
+  box-shadow: 0 18px 34px -12px rgba(139, 92, 246, 0.6);
 }
+.neo-btn:hover:not(:disabled)::after { animation: auth-sweep 0.9s ease; }
+.neo-btn:active:not(:disabled) { transform: scale(0.98); }
+.neo-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+@keyframes auth-sweep { to { left: 120%; } }
 
-.neo-btn:hover:not(:disabled)::before,
-.neo-btn:focus-visible::before {
-  transform: translateY(0);
-  animation: auth-shine 1.5s linear infinite;
-}
-
-.neo-btn:active:not(:disabled) { transform: scale(0.97); }
-.neo-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-@keyframes auth-shine {
-  from { background-position: 0 50%; }
-  to { background-position: 200% 50%; }
-}
-
+/* Botão redondo de trocar Entrar/Criar conta */
 .neo-switch {
+  position: relative;
   color: var(--auth-accent);
-  background: var(--auth-surface);
-  box-shadow: 7px 7px 14px var(--auth-shadow-dark), -7px -7px 14px var(--auth-shadow-light);
-  transition: 0.35s ease;
+  background: var(--auth-field);
+  border: 1.5px solid var(--auth-line);
+  box-shadow: 0 8px 18px -10px rgba(30, 136, 255, 0.5);
+  transition: transform 0.35s ease, color 0.3s ease, background 0.3s ease, border-color 0.3s ease;
 }
-
 .neo-switch:hover,
 .neo-switch:focus-visible {
   color: #fff;
-  background: linear-gradient(135deg, #7c4dff, #ff7a45);
-  transform: rotate(180deg) scale(1.08);
-  box-shadow: 0 8px 25px rgba(124, 77, 255, 0.35);
+  background: var(--lg-grad);
+  border-color: transparent;
+  transform: rotate(180deg) scale(1.06);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-bubble,
-  .neo-field__border::before,
-  .neo-field:focus-within .neo-field__glow { animation: none; }
+  .neo-btn:hover:not(:disabled)::after { animation: none; }
 }

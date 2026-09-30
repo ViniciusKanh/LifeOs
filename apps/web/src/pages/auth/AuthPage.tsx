@@ -3,12 +3,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowLeft, Loader2, MailCheck, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Mail, MailCheck, Plus, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { loginFormSchema, registerFormSchema, type LoginFormValues, type RegisterFormValues } from "@/lib/validation";
 import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
 import { NeoField } from "@/components/auth/NeoField";
 import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
+import { AuthShowcase } from "@/components/auth/AuthShowcase";
 import "@/styles/auth.css";
 
 /**
@@ -31,13 +32,20 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google_access_denied: "Você cancelou o login com o Google.",
 };
 
+/** Logo real do app com um halo girando no gradiente dele (ciano → azul → violeta). */
 function Logo() {
   return (
-    <motion.div whileHover={{ y: -5, rotate: 8 }} className="neo-raised-sm mx-auto mb-4 w-20 h-20 rounded-full flex items-center justify-center">
-      <span className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px] shadow-glow-brand">
-        <img src="/logo/icon-64.png" alt="LifeOS" className="w-full h-full rounded-[14px] object-cover bg-white" />
-      </span>
-    </motion.div>
+    <div className="relative mx-auto mb-5 w-[84px] h-[84px]">
+      <motion.span
+        aria-hidden
+        className="absolute -inset-2 rounded-[30px] opacity-60 blur-md bg-[conic-gradient(from_0deg,#19d3e0,#1e88ff,#8b5cf6,#19d3e0)]"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+      />
+      <motion.div whileHover={{ y: -4, rotate: -4 }} className="relative w-full h-full rounded-[26px] bg-white shadow-lg flex items-center justify-center p-2.5">
+        <img src="/logo/icon-192.png" alt="LifeOS" className="w-full h-full object-contain" />
+      </motion.div>
+    </div>
   );
 }
 
@@ -51,7 +59,7 @@ function Face({ children, hidden, back }: { children: ReactNode; hidden: boolean
     <div
       ref={ref}
       aria-hidden={hidden}
-      className="neo-raised [grid-area:1/1] rounded-[32px] px-6 py-8 sm:px-9 sm:py-10 flex flex-col justify-center"
+      className="auth-card [grid-area:1/1] rounded-[32px] px-6 py-8 sm:px-9 sm:py-10 flex flex-col justify-center"
       style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: back ? "rotateY(180deg)" : undefined }}
     >
       {children}
@@ -111,7 +119,9 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
   return (
     <>
       <Logo />
-      <h1 className="text-center font-display font-bold text-[26px] tracking-tight">Bem-vindo de volta</h1>
+      <h1 className="text-center font-display font-extrabold text-[28px] tracking-tight">
+        Bem-vindo ao Life<span className="text-logo-gradient">OS</span>
+      </h1>
       <p className="text-center text-[13px] text-[var(--auth-muted)] mt-1 mb-7">Entre para continuar transformando sua rotina em progresso.</p>
 
       {googleError && (
@@ -121,12 +131,12 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-        <NeoField label="E-mail" type="email" autoComplete="email" {...register("email")} error={errors.email?.message} />
-        <NeoField label="Senha" togglePassword autoComplete="current-password" {...register("password")} error={errors.password?.message} />
+        <NeoField label="E-mail" type="email" autoComplete="email" icon={<Mail size={17} />} {...register("email")} error={errors.email?.message} />
+        <NeoField label="Senha" togglePassword icon={<Lock size={17} />} autoComplete="current-password" {...register("password")} error={errors.password?.message} />
 
         <div className="flex items-center justify-between text-[13px] text-[var(--auth-muted)] px-1">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="accent-[#7C4DFF]" {...register("rememberMe")} />
+            <input type="checkbox" className="accent-[#1E88FF]" {...register("rememberMe")} />
             Lembrar de mim
           </label>
           <Link to="/esqueci-senha" className="text-[var(--auth-accent)] hover:underline">
@@ -180,7 +190,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
   if (sentTo) {
     return (
       <div className="text-center">
-        <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="neo-raised-sm mx-auto mb-5 w-20 h-20 rounded-full flex items-center justify-center text-growth">
+        <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mx-auto mb-5 w-20 h-20 rounded-full flex items-center justify-center text-white bg-[linear-gradient(135deg,#19d3e0,#1e88ff,#8b5cf6)] shadow-lg">
           <MailCheck size={30} />
         </motion.div>
         <h1 className="font-display font-bold text-2xl">Confirme seu e-mail</h1>
@@ -202,22 +212,24 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
   return (
     <>
       <Logo />
-      <h1 className="text-center font-display font-bold text-[26px] tracking-tight">Criar sua conta</h1>
+      <h1 className="text-center font-display font-extrabold text-[28px] tracking-tight">
+        Comece seu <span className="text-logo-gradient">progresso</span>
+      </h1>
       <p className="text-center text-[13px] text-[var(--auth-muted)] mt-1 mb-7">Planejar → Executar → Registrar → Medir → Melhorar.</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-        <NeoField label="Nome completo" autoComplete="name" {...register("name")} error={errors.name?.message} />
-        <NeoField label="E-mail" type="email" autoComplete="email" {...register("email")} error={errors.email?.message} />
-        <NeoField label="Senha" togglePassword autoComplete="new-password" {...register("password")} error={errors.password?.message} />
+        <NeoField label="Nome completo" autoComplete="name" icon={<User size={17} />} {...register("name")} error={errors.name?.message} />
+        <NeoField label="E-mail" type="email" autoComplete="email" icon={<Mail size={17} />} {...register("email")} error={errors.email?.message} />
+        <NeoField label="Senha" togglePassword icon={<Lock size={17} />} autoComplete="new-password" {...register("password")} error={errors.password?.message} />
         {password.length > 0 && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden px-1">
             <PasswordStrengthPanel password={password} />
           </motion.div>
         )}
-        <NeoField label="Confirmar senha" togglePassword autoComplete="new-password" {...register("confirmPassword")} error={errors.confirmPassword?.message} />
+        <NeoField label="Confirmar senha" togglePassword icon={<Lock size={17} />} autoComplete="new-password" {...register("confirmPassword")} error={errors.confirmPassword?.message} />
 
         <label className="flex items-start gap-2 text-xs text-[var(--auth-muted)] px-1 cursor-pointer">
-          <input type="checkbox" className="mt-0.5 accent-[#7C4DFF]" {...register("acceptTerms")} />
+          <input type="checkbox" className="mt-0.5 accent-[#1E88FF]" {...register("acceptTerms")} />
           <span>Aceito os Termos de Uso e a Política de Privacidade.</span>
         </label>
         {errors.acceptTerms && <p className="text-xs text-drop px-1">{errors.acceptTerms.message}</p>}
@@ -243,30 +255,40 @@ export function AuthPage() {
   const isRegister = location.pathname.startsWith("/cadastro");
 
   return (
-    <div className="auth-scope relative min-h-screen w-full flex flex-col items-center justify-center px-4 py-10 overflow-x-hidden">
-      <span className="auth-bubble w-[190px] h-[190px] top-[7%] left-[7%]" aria-hidden />
-      <span className="auth-bubble w-[130px] h-[130px] right-[8%] bottom-[8%]" style={{ animationDelay: "1.5s" }} aria-hidden />
-      <span className="auth-bubble w-[55px] h-[55px] right-[20%] top-[22%]" style={{ animationDelay: "3s" }} aria-hidden />
+    <div className="auth-scope relative min-h-screen w-full flex flex-col items-center justify-center px-4 py-10 overflow-hidden">
+      {/* Fundo: pontos suaves + manchas de cor do logo se movendo devagar */}
+      <div className="auth-grid" aria-hidden />
+      <motion.span aria-hidden className="auth-blob w-[420px] h-[420px] -top-32 -left-24 bg-[#19d3e0]" animate={reduce ? undefined : { x: [0, 60, 0], y: [0, 40, 0] }} transition={{ duration: 16, repeat: Infinity }} />
+      <motion.span aria-hidden className="auth-blob w-[460px] h-[460px] -bottom-40 -right-24 bg-[#8b5cf6]" animate={reduce ? undefined : { x: [0, -50, 0], y: [0, -30, 0] }} transition={{ duration: 18, repeat: Infinity }} />
+      <motion.span aria-hidden className="auth-blob w-[300px] h-[300px] top-1/3 left-1/2 bg-[#1e88ff]" animate={reduce ? undefined : { scale: [1, 1.2, 1] }} transition={{ duration: 12, repeat: Infinity }} />
 
-      <p className="relative z-10 mb-6 text-xs font-semibold tracking-[0.2em] uppercase text-[var(--auth-muted)]">
-        LifeOS · Transforme sua rotina em progresso
-      </p>
-
-      <div className="relative z-10 w-full max-w-[420px]" style={{ perspective: 1600 }}>
-        <motion.div
-          className="grid"
-          style={{ transformStyle: "preserve-3d" }}
-          initial={false}
-          animate={{ rotateY: isRegister ? 180 : 0 }}
-          transition={reduce ? { duration: 0 } : { duration: 1, ease: [0.68, -0.55, 0.27, 1.55] }}
-        >
-          <Face hidden={isRegister}>
-            <LoginForm onSwitch={() => navigate("/cadastro")} />
-          </Face>
-          <Face hidden={!isRegister} back>
-            <RegisterForm onSwitch={() => navigate("/login")} />
-          </Face>
+      <div className="relative z-10 w-full max-w-[1120px] grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,420px)] gap-8 xl:gap-12 items-stretch">
+        {/* Apresentação do projeto — só em telas largas; no celular o foco é o formulário. */}
+        <motion.div className="hidden lg:block" initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
+          <AuthShowcase />
         </motion.div>
+
+        <div className="flex flex-col justify-center">
+          <p className="lg:hidden mb-6 text-center text-xs font-semibold tracking-[0.2em] uppercase text-[var(--auth-muted)]">
+            LifeOS · Transforme sua rotina em progresso
+          </p>
+          <div className="w-full max-w-[420px] mx-auto" style={{ perspective: 1600 }}>
+            <motion.div
+              className="grid"
+              style={{ transformStyle: "preserve-3d" }}
+              initial={false}
+              animate={{ rotateY: isRegister ? 180 : 0 }}
+              transition={reduce ? { duration: 0 } : { duration: 1, ease: [0.68, -0.55, 0.27, 1.55] }}
+            >
+              <Face hidden={isRegister}>
+                <LoginForm onSwitch={() => navigate("/cadastro")} />
+              </Face>
+              <Face hidden={!isRegister} back>
+                <RegisterForm onSwitch={() => navigate("/login")} />
+              </Face>
+            </motion.div>
+          </div>
+        </div>
       </div>
     </div>
   );
