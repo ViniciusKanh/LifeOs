@@ -10,6 +10,8 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, "A senha precisa de uma letra minúscula")
     .regex(/[A-Z]/, "A senha precisa de uma letra maiúscula")
     .regex(/[0-9]/, "A senha precisa de um número"),
+  // Consentimento obrigatório (LGPD): sem aceitar o Termo e a Política, não há cadastro.
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: "É preciso aceitar o Termo de Uso e a Política de Privacidade." }) }),
 });
 
 export const loginSchema = z.object({
@@ -89,4 +91,32 @@ export const setPasswordSchema = z.object({
 /** Desvincular o Google exige confirmar a senha atual. */
 export const unlinkGoogleSchema = z.object({
   password: z.string().min(1, "Informe sua senha para confirmar"),
+});
+
+/** 2ª etapa do login: 6 dígitos do app ou um código de recuperação (XXXX-XXXX). */
+const MFA_CODE = z
+  .string()
+  .trim()
+  .min(6, "Informe o código.")
+  .max(20)
+  .regex(/^(\d{6}|[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})$/, "Código inválido.");
+
+export const mfaLoginSchema = z.object({
+  mfaToken: z.string().min(10),
+  code: MFA_CODE,
+});
+
+export const mfaCodeSchema = z.object({ code: MFA_CODE });
+
+export const mfaDisableSchema = z.object({
+  code: MFA_CODE,
+  password: z.string().max(200).optional(),
+});
+
+export const acceptTermsSchema = z.object({ version: z.string().min(1).max(20) });
+
+export const deleteAccountSchema = z.object({
+  confirmEmail: z.string().min(3).max(200),
+  password: z.string().max(200).optional(),
+  code: z.string().max(20).optional(),
 });

@@ -15,7 +15,6 @@ import {
 import {
   hashPassword,
   verifyPassword,
-  signSessionToken,
   generatePasswordResetToken,
   generateVerificationToken,
   hashToken,
@@ -31,8 +30,25 @@ import {
   changePasswordSchema,
   setPasswordSchema,
   unlinkGoogleSchema,
+  mfaLoginSchema,
+  mfaCodeSchema,
+  mfaDisableSchema,
+  acceptTermsSchema,
+  deleteAccountSchema,
 } from "../validators/auth.schema.js";
 import { requireAuth, SESSION_COOKIE_NAME } from "../middleware/auth.js";
+import { COOKIE_BASE, clearSession, invalidateAuthState, issueSession, revokeAllSessions } from "../services/sessionService.js";
+import {
+  beginEnrollment,
+  confirmEnrollment,
+  disableMfa,
+  getMfaStatus,
+  readMfaLoginToken,
+  regenerateRecoveryCodes,
+  signMfaLoginToken,
+  verifyUserMfa,
+} from "../services/mfaService.js";
+import { CURRENT_TERMS_VERSION } from "../config/legal.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
   sendMail,
@@ -46,19 +62,16 @@ import type { User } from "../types/index.js";
 
 export const authRouter = Router();
 
-// Em produção com o proxy documentado em DEPLOY.md (front reescrevendo
-// /api/* para o backend), front e back são same-site e "lax" funciona
-// normalmente. Só quem optar por publicar os dois em domínios
-// realmente separados, sem proxy, precisa de COOKIE_SAMESITE=none
-// (exige HTTPS nos dois lados — sempre o caso na Vercel).
-const COOKIE_SAMESITE = (process.env.COOKIE_SAMESITE as "lax" | "strict" | "none" | undefined) ?? "lax";
-
-const COOKIE_BASE = {
-  httpOnly: true,
-  sameSite: COOKIE_SAMESITE,
-  secure: process.env.NODE_ENV === "production" || COOKIE_SAMESITE === "none",
-  path: "/",
-};
+/** Finaliza um login bem-sucedido (senha, Google ou 2ª etapa do MFA). */
+async function completeLogin(
+  db: ReturnType<typeof getDb>,
+  res: import("express").Response,
+  user: { id: string; role: "user" | "admin"; session_version?: number | null },
+  remember: boolean
+) {
+  await db.execute({ sql: "UPDATE users SET last_login_at = datetime('now'), last_seen_at = datetime('now') WHERE id = ?", args: [user.id] });
+  issueSession(res, user, remember);
+}
 
 /** POST /api/auth/register */
 authRouter.post("/register", rateLimit(), async (req, res) => {
@@ -90,9 +103,10 @@ authRouter.post("/register", rateLimit(), async (req, res) => {
   // verificadas (email_verified tem DEFAULT 1 na tabela). Sem sessão
   // criada aqui: só depois de clicar no link de confirmação.
   await db.execute({
-    sql: `INSERT INTO users (id, name, email, password_hash, role, email_verified)
-          VALUES (?, ?, ?, ?, ?, 0)`,
-    args: [id, name, email, passwordHash, role],
+    sql: `INSERT INTO users (id, name, email, password_hash, role, email_verified, terms_version, terms_accepted_at)
+          VALUES (?, ?, ?, ?, ?, 0, ?, datetime('now'))`,
+    // O cadastro exige aceitar o Termo e a Política (registerSchema.acceptTerms).
+    args: [id, name, email, passwordHash, role, CURRENT_TERMS_VERSION],
   });
 
   await db.execute({
@@ -167,16 +181,46 @@ authRouter.post("/login", rateLimit(), async (req, res) => {
     });
   }
 
-  const token = signSessionToken({ sub: user.id, role: user.role });
-  const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-  res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge });
+  // Com MFA ligado, a senha certa ainda não cria sessão: devolve um token
+  // curto (5 min) e o login termina em POST /login/mfa com o código do app.
+  if (Number((user as any).mfa_enabled) === 1) {
+    return res.json({ mfaRequired: true, mfaToken: signMfaLoginToken(user.id, rememberMe) });
+  }
 
+  await completeLogin(db, res, { id: user.id, role: user.role, session_version: (user as any).session_version }, rememberMe);
   return res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+/** POST /api/auth/login/mfa — 2ª etapa: código do app autenticador ou de recuperação. */
+authRouter.post("/login/mfa", rateLimit({ max: 10 }), async (req, res) => {
+  const parsed = mfaLoginSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const pending = readMfaLoginToken(parsed.data.mfaToken);
+  if (!pending) return res.status(401).json({ error: "A verificação expirou. Entre com sua senha novamente.", code: "MFA_EXPIRED" });
+
+  const db = getDb();
+  const check = await verifyUserMfa(db, pending.userId, parsed.data.code);
+  if (!check.ok) return res.status(401).json({ error: "Código inválido. Confira o app autenticador e tente de novo." });
+
+  const row = (await db.execute({ sql: "SELECT id, name, email, role, session_version FROM users WHERE id = ?", args: [pending.userId] })).rows[0] as unknown as
+    | { id: string; name: string; email: string; role: "user" | "admin"; session_version: number }
+    | undefined;
+  if (!row) return res.status(401).json({ error: "Conta não encontrada." });
+
+  await completeLogin(db, res, row, pending.remember);
+  return res.json({ id: row.id, name: row.name, email: row.email, role: row.role, usedRecoveryCode: check.usedRecovery });
+});
+
+/** POST /api/auth/logout-all — encerra a sessão em todos os dispositivos. */
+authRouter.post("/logout-all", requireAuth, async (req, res) => {
+  await revokeAllSessions(req.user!.id);
+  clearSession(res);
+  return res.status(204).send();
 });
 
 /** POST /api/auth/logout */
 authRouter.post("/logout", (_req, res) => {
-  res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+  clearSession(res);
   return res.status(204).send();
 });
 
@@ -184,7 +228,8 @@ authRouter.post("/logout", (_req, res) => {
 authRouter.get("/me", requireAuth, async (req, res) => {
   const db = getDb();
   const result = await db.execute({
-    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, google_id, password_set
+    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, google_id, password_set,
+                 mfa_enabled, terms_version, terms_accepted_at
           FROM users WHERE id = ?`,
     args: [req.user!.id],
   });
@@ -200,8 +245,17 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   }
   // google_id nunca é exposto (é só um identificador interno do Google) — só se
   // a conta está vinculada, pra frontend mostrar "Conectado com Google" no perfil.
-  const { google_id, password_set, ...user } = row as Record<string, unknown>;
-  return res.json({ ...user, google_linked: !!google_id, has_password: Number(password_set ?? 1) === 1 });
+  const { google_id, password_set, mfa_enabled, terms_version, ...user } = row as Record<string, unknown>;
+  return res.json({
+    ...user,
+    google_linked: !!google_id,
+    has_password: Number(password_set ?? 1) === 1,
+    mfa_enabled: Number(mfa_enabled ?? 0) === 1,
+    terms_version: terms_version ?? null,
+    terms_current_version: CURRENT_TERMS_VERSION,
+    // true quando o usuário ainda não aceitou a versão vigente do termo.
+    terms_pending: terms_version !== CURRENT_TERMS_VERSION,
+  });
 });
 
 /** PATCH /api/auth/me — o próprio usuário edita seu perfil (nunca outro id) */
@@ -272,6 +326,10 @@ authRouter.post("/change-password", requireAuth, rateLimit({ max: 5 }), async (r
     sql: "UPDATE users SET password_hash = ?, password_set = 1, updated_at = datetime('now') WHERE id = ?",
     args: [newHash, req.user!.id],
   });
+  // Senha nova encerra as sessões de outros dispositivos; esta continua (novo token).
+  await revokeAllSessions(req.user!.id);
+  const fresh = (await db.execute({ sql: "SELECT session_version FROM users WHERE id = ?", args: [req.user!.id] })).rows[0] as unknown as { session_version: number };
+  issueSession(res, { id: req.user!.id, role: req.user!.role, session_version: fresh.session_version }, true);
 
   const userRow = await db.execute({ sql: "SELECT email FROM users WHERE id = ?", args: [req.user!.id] });
   const userEmail = (userRow.rows[0] as { email?: string } | undefined)?.email;
@@ -351,6 +409,108 @@ authRouter.post("/google/unlink", requireAuth, rateLimit({ max: 5 }), async (req
   return res.json({ message: "Conta Google desvinculada." });
 });
 
+/* ============================ MFA (app autenticador) ============================ */
+
+/** GET /api/auth/mfa/status */
+authRouter.get("/mfa/status", requireAuth, async (req, res) => {
+  return res.json(await getMfaStatus(getDb(), req.user!.id));
+});
+
+/** POST /api/auth/mfa/setup — gera QR code e segredo pendente (ainda não ativa nada). */
+authRouter.post("/mfa/setup", requireAuth, rateLimit({ max: 10 }), async (req, res) => {
+  const db = getDb();
+  const row = (await db.execute({ sql: "SELECT email, mfa_enabled FROM users WHERE id = ?", args: [req.user!.id] })).rows[0] as unknown as
+    | { email: string; mfa_enabled: number }
+    | undefined;
+  if (!row) return res.status(401).json({ error: "Sessão inválida." });
+  if (Number(row.mfa_enabled) === 1) return res.status(409).json({ error: "A verificação em duas etapas já está ativa." });
+  return res.json(await beginEnrollment(db, req.user!.id, row.email));
+});
+
+/** POST /api/auth/mfa/enable — confirma o 1º código e ativa. Devolve os códigos de recuperação (uma vez só). */
+authRouter.post("/mfa/enable", requireAuth, rateLimit({ max: 10 }), async (req, res) => {
+  const parsed = mfaCodeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Código inválido." });
+  const codes = await confirmEnrollment(getDb(), req.user!.id, parsed.data.code);
+  if (!codes) return res.status(400).json({ error: "Código incorreto. Confira se o relógio do celular está certo e tente de novo." });
+  return res.json({ recoveryCodes: codes });
+});
+
+/** POST /api/auth/mfa/disable — exige um código válido e, se a conta tem senha, a senha. */
+authRouter.post("/mfa/disable", requireAuth, rateLimit({ max: 5 }), async (req, res) => {
+  const parsed = mfaDisableSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const db = getDb();
+  const row = (await db.execute({ sql: "SELECT password_hash, password_set FROM users WHERE id = ?", args: [req.user!.id] })).rows[0] as unknown as
+    | { password_hash: string; password_set: number }
+    | undefined;
+  if (!row) return res.status(401).json({ error: "Sessão inválida." });
+  if (Number(row.password_set) === 1 && !(await verifyPassword(parsed.data.password ?? "", row.password_hash))) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+  if (!(await verifyUserMfa(db, req.user!.id, parsed.data.code)).ok) return res.status(401).json({ error: "Código inválido." });
+  await disableMfa(db, req.user!.id);
+  return res.json({ ok: true });
+});
+
+/** POST /api/auth/mfa/recovery-codes — gera novos códigos (os antigos deixam de valer). */
+authRouter.post("/mfa/recovery-codes", requireAuth, rateLimit({ max: 5 }), async (req, res) => {
+  const parsed = mfaCodeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Código inválido." });
+  const db = getDb();
+  if (!(await verifyUserMfa(db, req.user!.id, parsed.data.code)).ok) return res.status(401).json({ error: "Código inválido." });
+  return res.json({ recoveryCodes: await regenerateRecoveryCodes(db, req.user!.id) });
+});
+
+/* ============================ Termos e conta ============================ */
+
+/** POST /api/auth/accept-terms — registra o aceite da versão vigente do Termo e da Política. */
+authRouter.post("/accept-terms", requireAuth, async (req, res) => {
+  const parsed = acceptTermsSchema.safeParse(req.body);
+  if (!parsed.success || parsed.data.version !== CURRENT_TERMS_VERSION) {
+    return res.status(400).json({ error: "Versão do termo desatualizada. Recarregue a página." });
+  }
+  await getDb().execute({
+    sql: "UPDATE users SET terms_version = ?, terms_accepted_at = datetime('now') WHERE id = ?",
+    args: [CURRENT_TERMS_VERSION, req.user!.id],
+  });
+  return res.json({ ok: true, version: CURRENT_TERMS_VERSION });
+});
+
+/**
+ * DELETE /api/auth/me — o próprio usuário exclui a conta e TODOS os dados
+ * (LGPD, art. 18, VI). Confirma com o e-mail digitado, a senha (se houver)
+ * e o código do MFA (se ativo). As tabelas usam ON DELETE CASCADE.
+ */
+authRouter.delete("/me", requireAuth, rateLimit({ max: 5 }), async (req, res) => {
+  const parsed = deleteAccountSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const db = getDb();
+  const row = (await db.execute({ sql: "SELECT email, role, password_hash, password_set, mfa_enabled FROM users WHERE id = ?", args: [req.user!.id] })).rows[0] as unknown as
+    | { email: string; role: string; password_hash: string; password_set: number; mfa_enabled: number }
+    | undefined;
+  if (!row) return res.status(401).json({ error: "Sessão inválida." });
+  if (parsed.data.confirmEmail.trim().toLowerCase() !== row.email.toLowerCase()) {
+    return res.status(400).json({ error: "O e-mail digitado não confere com o da conta." });
+  }
+  if (Number(row.password_set) === 1 && !(await verifyPassword(parsed.data.password ?? "", row.password_hash))) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+  if (Number(row.mfa_enabled) === 1 && !(await verifyUserMfa(db, req.user!.id, parsed.data.code ?? "")).ok) {
+    return res.status(401).json({ error: "Código de verificação inválido." });
+  }
+  if (row.role === "admin") {
+    const admins = await db.execute("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
+    if (Number((admins.rows[0] as unknown as { c: number }).c) <= 1) {
+      return res.status(409).json({ error: "Você é o único administrador. Promova outra pessoa antes de excluir a conta." });
+    }
+  }
+  await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [req.user!.id] });
+  invalidateAuthState(req.user!.id);
+  clearSession(res);
+  return res.status(204).send();
+});
+
 /** POST /api/auth/forgot-password */
 authRouter.post("/forgot-password", rateLimit({ max: 5 }), async (req, res) => {
   const parsed = forgotPasswordSchema.safeParse(req.body);
@@ -424,6 +584,7 @@ authRouter.post("/reset-password", rateLimit({ max: 10 }), async (req, res) => {
     sql: "UPDATE users SET password_hash = ?, password_set = 1, updated_at = datetime('now') WHERE id = ?",
     args: [newHash, record.user_id],
   });
+  await revokeAllSessions(record.user_id);
   await db.execute({
     sql: "UPDATE password_reset_tokens SET used_at = datetime('now') WHERE id = ?",
     args: [record.id],
@@ -471,8 +632,7 @@ authRouter.post("/verify-email", rateLimit({ max: 10 }), async (req, res) => {
     return res.status(404).json({ error: "Usuário não encontrado." });
   }
 
-  const token = signSessionToken({ sub: user.id, role: user.role });
-  res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  await completeLogin(db, res, user, true);
 
   // E-mail de boas-vindas só depois da confirmação — melhor esforço,
   // não bloqueia a resposta.
@@ -653,7 +813,13 @@ authRouter.get("/google/callback", async (req, res) => {
     }
   }
 
-  const token = signSessionToken({ sub: user.id, role: user.role });
-  res.cookie(SESSION_COOKIE_NAME, token, { ...COOKIE_BASE, maxAge: 30 * 24 * 60 * 60 * 1000 });
+  // Google também respeita o MFA: sem sessão até o código do app ser confirmado.
+  const secState = (await db.execute({ sql: "SELECT mfa_enabled, session_version FROM users WHERE id = ?", args: [user.id] })).rows[0] as unknown as
+    | { mfa_enabled: number; session_version: number }
+    | undefined;
+  if (Number(secState?.mfa_enabled ?? 0) === 1) {
+    return res.redirect(`${appUrl}/login?mfa=${encodeURIComponent(signMfaLoginToken(user.id, true))}`);
+  }
+  await completeLogin(db, res, { ...user, session_version: secState?.session_version ?? 0 }, true);
   return res.redirect(`${appUrl}/dashboard`);
 });

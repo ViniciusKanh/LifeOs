@@ -10,6 +10,7 @@ describe("Autenticação", () => {
       name: "Pessoa Nova",
       email,
       password: "SenhaForte123!",
+      acceptTerms: true,
     });
     expect(registerRes.status).toBe(201);
 
@@ -25,12 +26,17 @@ describe("Autenticação", () => {
 
   it("recusa cadastro com e-mail já usado", async () => {
     const email = `duplicado-${Date.now()}@teste.lifeos`;
-    const payload = { name: "Alguém", email, password: "SenhaForte123!" };
+    const payload = { name: "Alguém", email, password: "SenhaForte123!", acceptTerms: true };
     const first = await request(app).post("/api/auth/register").send(payload);
     expect(first.status).toBe(201);
 
     const second = await request(app).post("/api/auth/register").send(payload);
     expect(second.status).toBe(409);
+  });
+
+  it("recusa cadastro sem aceitar o Termo e a Política de Privacidade", async () => {
+    const res = await request(app).post("/api/auth/register").send({ name: "Sem aceite", email: `sem-aceite-${Date.now()}@teste.lifeos`, password: "SenhaForte123!" });
+    expect(res.status).toBe(400);
   });
 
   it("recusa login com senha errada", async () => {

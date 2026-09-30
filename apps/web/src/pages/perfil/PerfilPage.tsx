@@ -33,6 +33,8 @@ import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
 import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
+import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
+import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 import { api } from "@/services/api";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
@@ -275,13 +277,34 @@ export function PerfilPage() {
                 <p className="text-xs text-slate">Dicas para manter sua conta sempre segura.</p>
               </div>
             </div>
-            <div className="rounded-xl p-4 bg-growth/5 border border-growth/20 flex items-center gap-3">
-              <IconBadge tone="green" size={36} icon={<ShieldCheck size={17} />} />
-              <div>
-                <p className="text-sm font-semibold">Sua conta está segura!</p>
-                <p className="text-xs text-slate mt-0.5">Continue usando uma senha forte e mantenha seus dados atualizados.</p>
+            {user.mfa_enabled ? (
+              <div className="rounded-xl p-4 bg-growth/5 border border-growth/20 flex items-center gap-3">
+                <IconBadge tone="green" size={36} icon={<ShieldCheck size={17} />} />
+                <div>
+                  <p className="text-sm font-semibold">Sua conta está bem protegida</p>
+                  <p className="text-xs text-slate mt-0.5">Verificação em duas etapas ativa. Guarde seus códigos de recuperação em local seguro.</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-xl p-4 bg-signal/10 border border-signal/25 flex items-center gap-3">
+                <IconBadge tone="amber" size={36} icon={<ShieldCheck size={17} />} />
+                <div>
+                  <p className="text-sm font-semibold">Proteja mais sua conta</p>
+                  <p className="text-xs text-slate mt-0.5">Ative a verificação em duas etapas no card ao lado — leva menos de 1 minuto.</p>
+                </div>
+              </div>
+            )}
+            <p className="text-[11px] text-slate mt-3">
+              Leia a{" "}
+              <Link to="/privacidade" className="text-brand-600 dark:text-brand-100 hover:underline">
+                Política de Privacidade
+              </Link>{" "}
+              e o{" "}
+              <Link to="/termos" className="text-brand-600 dark:text-brand-100 hover:underline">
+                Termo de Uso
+              </Link>
+              {user.terms_version ? ` (versão aceita: ${user.terms_version}).` : "."}
+            </p>
           </Card>
         </div>
 
@@ -348,9 +371,11 @@ export function PerfilPage() {
           </Card>
 
           <GoogleAccountCard user={user} />
+          <MfaSettingsCard user={user} />
 
           <PushNotificationsCard />
           <WeeklyEmailCard />
+          <DeleteAccountCard user={user} />
 
           <Card className="p-5">
             <div className="flex items-center gap-2.5 mb-3">

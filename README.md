@@ -1,60 +1,97 @@
-# LifeOS
+<div align="center">
 
-[![CI](https://github.com/ViniciusKanh/LifeOs/actions/workflows/ci.yml/badge.svg)](https://github.com/ViniciusKanh/LifeOs/actions/workflows/ci.yml)
+<img src="apps/web/public/logo/horizontal.png" alt="LifeOS" width="320" />
 
-**Transforme sua rotina em progresso.**
+### Transforme sua rotina em progresso.
 
-LifeOS é um sistema operacional pessoal para produtividade, estudos, saúde e
-autoconhecimento: reúne em um único produto o que hoje fica espalhado entre um
-app de tarefas, uma planilha de hábitos, um caderno de metas e um app de
-saúde separado — com todos os módulos conversando entre si através de um
-único indicador central, o **Life Score**.
+Sistema operacional pessoal para produtividade, estudos, saúde, hábitos, leitura e Personal Analytics.
 
-O conceito por trás de cada módulo é sempre o mesmo ciclo:
+[**Acessar o app**](https://lifeos-sigma-five.vercel.app) ·
+[Política de Privacidade](docs/PRIVACY.md) ·
+[Termo de Uso](docs/TERMS.md) ·
+[Deploy](DEPLOY.md)
 
-**Planejar → Executar → Registrar → Medir → Melhorar.**
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)
+![Turso](https://img.shields.io/badge/Turso-libSQL-4FF8D2?logo=turso&logoColor=black)
+![Gemini](https://img.shields.io/badge/IA-Gemini-8E75B2?logo=googlegemini&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-ready-5A0FC8?logo=pwa&logoColor=white)
 
-> Todas as métricas, gráficos e insights do produto são calculados a partir
-> de dados reais gravados pelo próprio usuário — nunca há números
-> estimados ou fictícios. Sem dado suficiente, o indicador mostra 0 (ou
-> "sem dados ainda"), nunca um valor inventado.
+</div>
 
 ---
 
-## Visão geral do produto (o que o LifeOS entrega)
+## Sumário
 
-| Módulo | O que resolve |
+- [O que é o LifeOS](#o-que-é-o-lifeos)
+- [Módulos](#módulos)
+- [Stack](#stack)
+- [Arquitetura](#arquitetura)
+- [Começando](#começando)
+- [Variáveis de ambiente](#variáveis-de-ambiente)
+- [Scripts](#scripts)
+- [Banco de dados e migrations](#banco-de-dados-e-migrations)
+- [Segurança](#segurança)
+- [Administração](#administração)
+- [Privacidade e Termos](#privacidade-e-termos)
+- [Deploy](#deploy)
+- [Referência da API](#referência-da-api)
+- [Testes](#testes)
+- [Roteiro](#roteiro)
+
+---
+
+## O que é o LifeOS
+
+O LifeOS reúne em um só produto o que normalmente fica espalhado entre um app
+de tarefas, uma planilha de hábitos, um caderno de metas, um app de leitura e
+um app de saúde — e faz esses módulos **conversarem entre si**. Cada registro
+alimenta métricas, histórico (Timeline) e insights.
+
+O ciclo por trás de cada módulo é sempre o mesmo:
+
+**Planejar → Executar → Registrar → Medir → Melhorar.**
+
+> **Regra de ouro dos números:** todas as métricas, gráficos e insights são
+> calculados a partir de dados reais gravados pelo próprio usuário. Sem dado
+> suficiente, o indicador mostra "sem dados ainda" — nunca um valor inventado.
+
+---
+
+## Módulos
+
+| Área | Módulos |
 |---|---|
-| **Dashboard + Life Score** | Visão executiva da rotina: radar de 7 dimensões (Produtividade, Profissional, Saúde, Educação, Leitura, Hábitos, Metas) calculado em tempo real. |
-| **Hoje** (Daily Command Center) | Resumo do dia: prioridades, tarefas vencendo, hábitos pendentes e um atalho para Focus Mode — a primeira tela que o usuário vê. |
-| **Tarefas + Kanban** | Kanban reutilizável com modal completo (descrição, prioridade, data de início/término) e **cronômetro de tempo dedicado** por tarefa. |
-| **Área Profissional** | Projetos e workspaces com o mesmo motor de tarefas/Kanban acima. |
-| **Educação** | Hierarquia Formação → Curso/Período → Disciplina, mais TCC/Dissertação/Tese como **projetos acadêmicos com Kanban próprio**. O sistema identifica sozinho se o usuário está *cursando disciplinas* ou já em *fase de projeto/TCC*, a partir do estado real dos dados — nunca de uma escolha manual. |
-| **Biblioteca** | Cadastro de livros por ISBN (Google Books / Open Library), status de leitura, sessões de leitura e anotações. |
-| **Saúde e Bem-estar** | Água, sono, exercícios e humor/energia — tratado explicitamente como bem-estar pessoal, nunca como diagnóstico médico. |
-| **Hábitos** | Streaks e consistência, com cuidado para não pressionar o usuário com sequências quebradas. |
-| **Metas** | Metas numéricas, percentuais, binárias ou baseadas em tarefas, com progresso real calculado a partir dos dados que as alimentam. |
-| **Focus Mode / Pomodoro** | Sessões de foco cronometradas, vinculáveis a uma tarefa ou projeto. |
-| **Analytics** | Métricas do período, radar de equilíbrio da rotina e **insights reais** (correlação sono × produtividade do dia seguinte, humor × minutos de foco, melhor dia da semana, melhor horário de foco) — sempre com amostra mínima antes de exibir qualquer correlação. |
-| **Timeline** | Linha do tempo cronológica agregando tarefas concluídas, hábitos, treinos, leituras, sessões de foco e disciplinas concluídas. |
-| **Weekly Review** | Revisão semanal com métricas computadas automaticamente + reflexão do usuário. |
-| **Perfil** | Foto (aceita qualquer tamanho de imagem — o recorte/compressão acontece no navegador), nome e troca de senha. |
-| **Configurações (admin)** | Gemini API, Turso e SMTP configurados com segurança, mais gestão de usuários — restrito ao administrador. |
-| **Notificações** | Sino no cabeçalho com alertas em tempo real: tarefas atrasadas, tarefas vencendo hoje, hábitos não marcados e Weekly Review pendente. |
+| **Visão geral** | Dashboard com **Life Score** (radar de 7 dimensões), **Hoje** (centro de comando do dia), Contexto do Dia, Semana, Inbox |
+| **Execução** | Tarefas + Kanban (anexos, cronômetro por tarefa), Projetos (página de detalhe), Calendário, Área Profissional, Capacity Planner, Deadline Radar |
+| **Foco** | Focus Mode / Pomodoro vinculado a tarefas e projetos |
+| **Educação** | Formação → Curso → Disciplina, trabalhos, TCC/dissertação/tese com Kanban próprio |
+| **Biblioteca** | Cadastro por ISBN (Google Books / Open Library), sessões de leitura, notas e insights |
+| **Saúde e bem-estar** | Água, sono, exercícios, humor e energia (bem-estar pessoal, nunca diagnóstico) |
+| **Hábitos e metas** | Streaks e consistência, metas numéricas/percentuais/por etapas, Goal Forecast |
+| **Reflexão** | Diário (texto rico, mídia e IA), Weekly Review, Experimentos Pessoais, Gatilhos |
+| **Medir e melhorar** | Analytics, Signals, Data Health, Timeline automática, Life Map, Conquistas (gamificação baseada em conquistas reais) |
+| **IA** | **LifeOS Copilot** (Gemini) — separa *dado real*, *inferência* e *sugestão*; qualquer ação que altere dados pede confirmação |
+| **Conta** | Perfil, vínculo com Google, **verificação em duas etapas (MFA)**, exportação e exclusão de dados |
+| **Admin** | Integrações (Gemini, Turso, SMTP, Google OAuth), **gestão de usuários** e auditoria |
 
-### Diferenciais de UX
+Interface responsiva (desktop, notebook, tablet e celular), tema claro/escuro,
+navegação inferior no mobile e PWA instalável.
 
-- Cabeçalho fixo com notificações e menu de perfil; navegação lateral
-  reorganizada por prioridade de uso; tema claro/escuro completo.
-- Upload de foto de perfil com recorte no navegador (`ImageCropModal`):
-  aceita qualquer imagem, por maior que seja, e sempre envia ao servidor uma
-  versão comprimida (512×512, JPEG) — sem depender de o usuário redimensionar
-  a imagem antes.
-- Kanban genérico (`KanbanBoard<T>`) reaproveitado por Tarefas, Área
-  Profissional e pelos projetos acadêmicos de Educação — mesma UX de
-  arrastar-e-soltar em todo o produto, sem duplicar código.
-- Modal de tarefa único, com cronômetro embutido, usado em qualquer lugar do
-  produto que tenha um Kanban.
+---
+
+## Stack
+
+| Camada | Tecnologias |
+|---|---|
+| **Frontend** (`apps/web`) | React 18, TypeScript estrito, Vite, Tailwind CSS, TanStack Query, React Router, React Hook Form + Zod, Motion, Lucide, TipTap |
+| **Backend** (`apps/api`) | Node.js, Express, TypeScript, Zod, JSON Web Token (cookie httpOnly), bcryptjs, Nodemailer, web-push, qrcode |
+| **Banco** | Turso / libSQL (SQLite em arquivo no desenvolvimento) |
+| **IA** | Google Gemini (chave configurada pelo admin, criptografada no banco) |
+| **Hospedagem** | Vercel — site estático + API como função serverless no mesmo projeto |
+| **Testes** | Vitest + Supertest |
 
 ---
 
@@ -64,151 +101,238 @@ Monorepo com npm workspaces:
 
 ```
 LifeOS/
+├── api/index.ts            entrada da função serverless na Vercel
 ├── apps/
-│   ├── web/     React + TypeScript + Vite + Tailwind (frontend)
-│   └── api/     Node + Express + TypeScript (backend)
-├── .env.example
-└── package.json
+│   ├── web/                frontend React
+│   │   └── src/
+│   │       ├── pages/        uma pasta por módulo (hoje, tarefas, saude, legal, admin…)
+│   │       ├── components/   ui/ (design system), layout/, auth/, profile/, legal/, admin/…
+│   │       ├── hooks/        um hook por domínio (useTasks, useAuth, useAdmin…)
+│   │       ├── services/     clientes da API, um por domínio
+│   │       ├── content/      textos fixos (ex.: legal.ts — Termos e Privacidade)
+│   │       └── types/        tipos compartilhados do frontend
+│   └── api/                backend Express
+│       ├── src/
+│       │   ├── db/           cliente libSQL, runner e migrations (aditivas)
+│       │   ├── middleware/   requireAuth, requireAdmin, rateLimit
+│       │   ├── routes/       um router por domínio
+│       │   ├── services/     regras de negócio (métricas, sessão, MFA/TOTP, cripto…)
+│       │   ├── validators/   schemas Zod de entrada
+│       │   └── config/       constantes (versão dos termos etc.)
+│       └── tests/            Vitest + Supertest
+├── docs/                   PRIVACY.md, TERMS.md e documentos de produto
+├── scripts/                utilitários (ex.: gerar docs legais)
+├── vercel.json
+└── .env.example
 ```
 
-### apps/web
-
-```
-src/
-├── pages/          páginas por módulo (auth, dashboard, hoje, tarefas,
-│                    educacao, saude, habitos, metas, foco, analytics,
-│                    timeline, weekly-review, perfil, configuracoes...)
-├── components/
-│   ├── ui/         design system (Button, Card, Field, EmptyState, ImageCropModal)
-│   ├── layout/     AppShell, NotificationsBell, ProfileMenu
-│   ├── kanban/      KanbanBoard genérico
-│   └── tasks/       TaskCard, TaskModal
-├── hooks/          um hook por domínio (useTasks, useHabits, useGoals,
-│                    useFocus, useAnalytics, useReviews, useEducations...)
-├── services/       clientes de API, um por domínio
-├── types/          tipos compartilhados do frontend
-└── lib/            validação (zod) e utilidades
-```
-
-### apps/api
-
-```
-src/
-├── db/
-│   ├── client.ts        cliente libSQL (Turso ou arquivo local)
-│   ├── migrate.ts        runner de migrations (aditivas, nunca destrutivas)
-│   ├── seed.ts           dados de demonstração (nunca em produção)
-│   └── migrations/       0001...0010, uma por domínio
-├── middleware/
-│   ├── auth.ts           extrai/valida a sessão (cookie httpOnly)
-│   ├── requireAdmin.ts   restringe rotas administrativas
-│   └── rateLimit.ts      limitação de tentativas em endpoints sensíveis
-├── routes/         um router por domínio (ver referência de API abaixo)
-├── services/       metricsService (Life Score/Analytics), authService,
-│                    cryptoService (AES-256-GCM)
-├── validators/     schemas zod de entrada, um por domínio
-└── types/          tipos compartilhados do backend
-```
+Princípios: regras de negócio ficam em `services/` (nunca nos componentes),
+toda query filtra por `owner_id`, componentes do design system são reaproveitados
+em todas as telas e os comentários de código são em português.
 
 ---
 
-## Segurança — regras que não podem ser quebradas
+## Começando
 
-1. **Isolamento por usuário.** Toda tabela de dados do usuário tem uma
-   coluna `owner_id`, e toda query de leitura/escrita nessas tabelas passa
-   por `WHERE owner_id = req.user.id`. `req.user` só existe depois do
-   middleware `requireAuth`, que decodifica o JWT do cookie — nunca se
-   aceita um id de usuário vindo do corpo da requisição.
-2. **Senhas** são hasheadas com bcrypt (12 rounds), nunca armazenadas em
-   texto puro.
-3. **Sessão** vive em cookie `httpOnly`, nunca em `localStorage` — reduz
-   superfície de XSS.
-4. **Credenciais administrativas** (Gemini API Key, Turso Auth Token, senha
-   SMTP) são criptografadas com AES-256-GCM antes de ir para o banco
-   (`services/cryptoService.ts`) e a API nunca devolve o valor bruto de
-   volta — apenas um preview mascarado (`••••••••••••AB23`).
-5. **Papel de administrador** vem de uma coluna `role` no banco, verificada
-   no backend (`requireAdmin`) — nunca por comparação de e-mail no frontend.
-6. **Auditoria.** Toda alteração em `admin_settings` grava uma linha em
-   `audit_logs` (quem, o quê, quando, IP) — nunca a credencial em si.
-7. **Golden rule dos números.** Life Score, Analytics, Insights e progresso
-   de metas nunca são estimados — toda dimensão vem de uma consulta real
-   contra o banco; sem dado suficiente, o valor é 0/`null`, nunca um
-   placeholder.
-
----
-
-## Configuração
-
-### 1. Variáveis de ambiente
+**Pré-requisitos:** Node.js 20+ e npm 10+.
 
 ```bash
-cp .env.example apps/api/.env
-cp .env.example apps/web/.env   # apenas VITE_API_URL é usada aqui
-```
-
-Gere segredos fortes para `JWT_SECRET` e `CREDENTIALS_ENCRYPTION_KEY`
-(32 bytes em hex):
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Em desenvolvimento, `DATABASE_URL=file:./data/lifeos.db` já funciona sem
-precisar de conta Turso. Para produção, troque por
-`DATABASE_URL=libsql://seu-banco.turso.io` e preencha `DATABASE_AUTH_TOKEN`
-(ou configure ambos direto na tela **Configurações** do admin, já
-criptografados).
-
-### 2. Instalação
-
-```bash
+git clone https://github.com/ViniciusKanh/LifeOs.git
+cd LifeOs
 npm install
+
+cp .env.example apps/api/.env      # configure os segredos (ver abaixo)
+cp .env.example apps/web/.env      # só VITE_API_URL é usada no frontend
+
+npm run migrate                    # cria/atualiza as tabelas
+npm run seed                       # (opcional) usuário demo: demo@lifeos.app / Demo1234
+npm run dev                        # API na porta 3333 + Web na 5173
 ```
 
-### 3. Banco de dados
+Acesse http://localhost:5173. Cadastre-se com o e-mail definido em
+`ADMIN_EMAIL` para receber automaticamente o papel de administrador.
 
-```bash
-npm run migrate          # cria/atualiza todas as tabelas
-npm run seed             # (opcional) usuário demo: demo@lifeos.app / Demo1234
-```
+> No Windows (PowerShell), se `npm run dev` não iniciar os dois processos,
+> use dois terminais: `npm run dev:api` e `npm run dev:web`.
 
-### 4. Rodar em desenvolvimento
+---
 
-```bash
-npm run dev               # API (porta 3333) + Web (porta 5173) juntos
-# ou separadamente:
-npm run dev:api
-npm run dev:web
-```
+## Variáveis de ambiente
 
-Acesse http://localhost:5173.
+Todas ficam em `apps/api/.env` (local) ou nas *Environment Variables* do
+projeto na Vercel (produção). **Nunca faça commit do `.env`.**
 
-### 5. Build de produção
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `JWT_SECRET` | ✅ | Segredo que assina as sessões. Gere com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `CREDENTIALS_ENCRYPTION_KEY` | ✅ | 32 bytes em hex. Criptografa credenciais das integrações **e os segredos de MFA** (AES-256-GCM). Não troque depois de ter usuários com MFA ativo. |
+| `DATABASE_URL` | ✅ | `file:./data/lifeos.db` no desenvolvimento; `libsql://seu-banco.turso.io` em produção |
+| `DATABASE_AUTH_TOKEN` | produção | Token do Turso |
+| `ADMIN_EMAIL` | ✅ | E-mail promovido automaticamente a `role = 'admin'` |
+| `APP_URL` | produção | URL pública do app (links de e-mail, redefinição de senha, redirect do Google). Ex.: `https://lifeos-sigma-five.vercel.app` |
+| `WEB_ORIGIN` | dev | Origem permitida no CORS (`http://localhost:5173`) |
+| `GOOGLE_REDIRECT_BASE_URL` | opcional | Base fixa do redirect do Google OAuth (por padrão usa o host da requisição) |
+| `CRON_SECRET` | produção | Protege os endpoints de cron (e-mail semanal e gatilhos) |
+| `COOKIE_SAMESITE` | opcional | `lax` (padrão) ou `none` se API e web estiverem em domínios diferentes |
+| `AUTH_RATE_LIMIT_WINDOW_MS` / `AUTH_RATE_LIMIT_MAX` | opcional | Limite de tentativas nos endpoints de autenticação |
+| `JWT_EXPIRES_IN` | legado | Não controla mais a duração da sessão (ver [Sessões](#sessões-e-permanecer-conectado)) |
+| `PORT` | opcional | Porta da API (padrão 3333) |
+| `VITE_API_URL` | web/dev | URL da API usada pelo frontend (`http://localhost:3333/api`). Em produção é `/api`. |
 
-```bash
-npm run build
-```
+Gemini, SMTP e Google OAuth **não** vão no `.env`: são configurados pelo admin
+em **Configurações** e ficam criptografados no banco.
+
+---
+
+## Scripts
+
+| Comando | O que faz |
+|---|---|
+| `npm run dev` | API + Web em modo desenvolvimento |
+| `npm run dev:api` / `npm run dev:web` | Apenas um dos lados |
+| `npm run build` | Build de produção do frontend e da API |
+| `npm run migrate` | Aplica migrations pendentes |
+| `npm run seed` | Dados de demonstração (nunca em produção) |
+| `npm run test --workspace apps/api` | Testes do backend |
+| `npm run lint --workspace apps/web` | Checagem de tipos do frontend |
+| `npm run docs:legal` | Regenera `docs/PRIVACY.md` e `docs/TERMS.md` a partir de `apps/web/src/content/legal.ts` |
+
+---
+
+## Banco de dados e migrations
+
+- Migrations em `apps/api/src/db/migrations`, numeradas (`0001_…` até a mais
+  recente) e sempre **aditivas**: nunca apagam tabelas nem dados.
+- O runner guarda o que já foi aplicado; rodar `npm run migrate` de novo é seguro.
+- Em produção, a função serverless inclui as migrations (`vercel.json → includeFiles`).
+- Todas as tabelas de dados do usuário têm `owner_id` com `ON DELETE CASCADE`
+  para `users` — excluir uma conta apaga todos os dados dela.
+
+| Domínio | Tabelas principais |
+|---|---|
+| Contas e segurança | `users`, `user_settings`, `mfa_recovery_codes`, `password_reset_tokens`, `admin_settings`, `audit_logs` |
+| Execução | `projects`, `tasks`, `subtasks`, `tags`, `task_dependencies`, `time_entries`, `events` |
+| Hábitos e metas | `habits`, `habit_entries`, `goals`, `goal_progress` |
+| Biblioteca | `books`, `book_notes`, `reading_sessions` |
+| Educação | `educations`, `courses`, `subjects`, `academic_projects` |
+| Saúde | `water_entries`, `sleep_entries`, `workouts`, `mood_entries` |
+| Foco e reflexão | `focus_sessions`, `daily_reviews`, `weekly_reviews`, diário e experimentos |
+| Medição | `achievements`, `user_achievements`, `life_scores`, `analytics_snapshots`, `ai_interactions`, `notifications` |
+
+---
+
+## Segurança
+
+1. **Isolamento por usuário** — toda query filtra por `owner_id = req.user.id`;
+   o id do usuário nunca vem do corpo da requisição.
+2. **Senhas** com bcrypt (12 rounds). Nunca em texto puro.
+3. **Sessão em cookie `httpOnly` + `Secure` + `SameSite`** — nada de tokens em
+   `localStorage`.
+4. **Credenciais administrativas** (Gemini, Turso, SMTP, Google) criptografadas
+   com AES-256-GCM; a API só devolve um preview mascarado.
+5. **Papel de admin** vem da coluna `role`, verificada no backend
+   (`requireAdmin`) e relida do banco a cada requisição — nunca por e-mail no frontend.
+6. **Queries parametrizadas**, validação Zod em todas as entradas, rate limit
+   nos endpoints de autenticação e logs sem segredos.
+7. **Auditoria** — ações administrativas gravam `audit_logs` (quem, o quê, quando, IP).
+
+### Verificação em duas etapas (MFA)
+
+- TOTP (RFC 6238) compatível com Google Authenticator, Microsoft Authenticator,
+  Authy, 1Password etc. Ativação em **Perfil → Verificação em duas etapas** (QR code
+  ou chave manual).
+- O segredo é criptografado no banco; o mesmo código não pode ser reutilizado
+  (proteção contra replay).
+- **8 códigos de recuperação** de uso único (armazenados como hash).
+- Vale também para o login com Google: com MFA ativo, o código é pedido depois do Google.
+- Desativar exige senha + código. Se a pessoa perder o celular e os códigos,
+  o admin pode remover o MFA pela tela de Usuários.
+
+### Sessões e "Permanecer conectado"
+
+- Marcado (padrão): sessão de **30 dias**, renovada automaticamente enquanto o app é usado.
+- Desmarcado: sessão de **12 horas**.
+- Trocar/redefinir a senha, remover MFA ou usar **"Sair de todos os
+  dispositivos"** invalida imediatamente todas as outras sessões (`session_version`).
+
+---
+
+## Administração
+
+Disponível apenas para `role = 'admin'` (validado no backend), em
+**Configurações → Usuários** (`/admin/usuarios`):
+
+- Lista com status de cada conta: MFA, Google, e-mail verificado, termos e último acesso.
+- Painel de detalhes com **o que a pessoa usa no app** — somente **contagens por
+  módulo** e espaço de mídia. O conteúdo dos registros nunca é exibido.
+- Ações: **remover MFA**, **enviar e-mail de redefinição de senha**, **gerar senha
+  provisória** (exibida uma única vez), **encerrar sessões**, alterar perfil e
+  **excluir conta** (com confirmação digitando o e-mail).
+- O admin não pode executar essas ações sobre a própria conta, e o último
+  administrador não pode ser removido.
+- Tudo fica registrado no histórico administrativo.
+
+---
+
+## Privacidade e Termos
+
+- **Política de Privacidade:** [`docs/PRIVACY.md`](docs/PRIVACY.md) · no app em
+  [`/privacidade`](https://lifeos-sigma-five.vercel.app/privacidade)
+- **Termo de Uso:** [`docs/TERMS.md`](docs/TERMS.md) · no app em
+  [`/termos`](https://lifeos-sigma-five.vercel.app/termos)
+
+Os textos seguem a LGPD (Lei nº 13.709/2018) e servem como URL de privacidade
+na publicação da Microsoft Store. A fonte única é
+`apps/web/src/content/legal.ts`; a versão precisa bater com
+`CURRENT_TERMS_VERSION` em `apps/api/src/config/legal.ts`. Ao mudar a versão,
+todos os usuários precisam aceitar de novo no próximo acesso. Depois de editar,
+rode `npm run docs:legal`.
+
+O aceite é obrigatório no cadastro e fica registrado (versão + data). O usuário
+pode exportar os dados e excluir a conta a qualquer momento em **Perfil**.
+
+---
+
+## Deploy
+
+O projeto é publicado como **um único projeto na Vercel** (site estático + API
+serverless). O passo a passo completo — variáveis, Turso, migrations, Google
+OAuth e cron — está em [`DEPLOY.md`](DEPLOY.md).
+
+Checklist rápido:
+
+1. Criar o banco no Turso e rodar `npm run migrate` apontando para ele.
+2. Configurar as variáveis de ambiente na Vercel (tabela acima), incluindo `APP_URL`.
+3. Fazer push para `main` — a Vercel faz o build automaticamente.
+4. Entrar com o `ADMIN_EMAIL` e configurar Gemini, SMTP e Google em **Configurações**.
 
 ---
 
 ## Referência da API
 
-Todas as rotas exigem sessão autenticada (cookie httpOnly), exceto onde
-indicado. Rotas de admin exigem, além da sessão, `role = 'admin'`.
+Todas as rotas exigem sessão autenticada, exceto onde indicado. Rotas de admin
+exigem também `role = 'admin'`.
 
-### Autenticação — `/api/auth`
+### Autenticação e conta — `/api/auth`
 
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/register` | Cria conta (com limite de tentativas) |
-| POST | `/login` | Autentica e define o cookie de sessão |
-| POST | `/logout` | Encerra a sessão |
-| GET | `/me` | Dados do usuário autenticado |
-| PATCH | `/me` | Atualiza nome/avatar do próprio perfil |
-| POST | `/change-password` | Troca de senha autenticada |
-| POST | `/forgot-password` | Solicita recuperação de senha |
-| POST | `/reset-password` | Efetiva a nova senha a partir do token |
+| POST | `/register` | Cria conta (exige `acceptTerms: true`) — público, com rate limit |
+| POST | `/login` | Autentica; com MFA ativo devolve `{ mfaRequired, mfaToken }` — público |
+| POST | `/login/mfa` | Conclui o login com código TOTP ou de recuperação — público |
+| POST | `/logout` | Encerra a sessão atual |
+| POST | `/logout-all` | Encerra a sessão em todos os dispositivos |
+| GET \| PATCH | `/me` | Dados do usuário / atualiza nome e avatar |
+| DELETE | `/me` | Exclui a própria conta (e-mail + senha + código MFA, se ativo) |
+| POST | `/accept-terms` | Registra o aceite da versão atual dos termos |
+| POST | `/change-password` | Troca a senha e encerra as outras sessões |
+| POST | `/forgot-password` \| `/reset-password` | Recuperação de senha por e-mail — público |
+| GET | `/mfa/status` | Status do MFA e códigos restantes |
+| POST | `/mfa/setup` \| `/mfa/enable` | Gera o QR code / confirma a ativação (devolve códigos de recuperação) |
+| POST | `/mfa/disable` | Desativa (senha + código) |
+| POST | `/mfa/recovery-codes` | Gera novos códigos de recuperação |
+| GET | `/google/start` \| `/google/callback` | Login com Google — público |
+| GET \| POST | `/google/link/start` \| `/google/unlink` | Vincula/desvincula a conta Google (desvincular exige senha) |
 
 ### Tarefas — `/api/tasks`
 
@@ -327,54 +451,44 @@ indicado. Rotas de admin exigem, além da sessão, `role = 'admin'`.
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET \| PUT | `/settings` | Lê/grava credenciais (Gemini, Turso, SMTP) — sempre criptografadas |
+| GET \| PUT | `/settings` | Lê/grava credenciais (Gemini, Turso, SMTP, Google) — sempre criptografadas |
 | DELETE | `/settings/:integration/:keyName` | Remove uma credencial |
 | POST | `/settings/:integration/test` | Testa a conexão de uma integração |
-| GET | `/audit-logs` | Histórico de alterações administrativas |
+| GET | `/audit-logs` | Histórico de ações administrativas |
 | GET \| POST | `/users` | Lista/cria usuários |
-| PATCH | `/users/:id/role` | Promove/rebaixa um usuário |
-| DELETE | `/users/:id` | Remove usuário |
+| GET | `/users/:id/overview` | Status + contagens de uso por módulo (sem conteúdo) |
+| PATCH | `/users/:id/role` | Promove/rebaixa |
+| POST | `/users/:id/mfa/reset` | Remove o MFA e encerra as sessões |
+| POST | `/users/:id/password-reset` | Envia e-mail de redefinição |
+| POST | `/users/:id/temp-password` | Gera senha provisória (exibida uma vez) |
+| POST | `/users/:id/revoke-sessions` | Encerra todas as sessões |
+| DELETE | `/users/:id` | Exclui a conta e todos os dados |
 
 ---
-
-## Modelagem do banco (visão geral)
-
-| Domínio | Tabelas |
-|---|---|
-| Usuários e admin | `users`, `user_settings`, `admin_settings`, `password_reset_tokens`, `audit_logs` |
-| Metas e hábitos | `goals`, `goal_progress`, `habits`, `habit_entries` |
-| Projetos e tarefas | `projects`, `project_members`, `task_statuses`, `tasks`, `subtasks`, `tags`, `task_tags`, `task_dependencies`, `time_entries` |
-| Biblioteca | `books`, `book_notes`, `reading_sessions` |
-| Educação | `educations`, `courses`, `subjects`, `academic_projects` (com `education_id` ligando o projeto acadêmico à formação) |
-| Saúde | `health_entries`, `water_entries`, `sleep_entries`, `workouts`, `mood_entries` |
-| Foco e revisões | `focus_sessions`, `daily_reviews`, `weekly_reviews` |
-| Calendário | `events`, `notifications` |
-| Gamificação/Analytics | `achievements`, `user_achievements`, `life_scores`, `analytics_snapshots`, `ai_interactions` |
-
-Todas as migrations estão em `apps/api/src/db/migrations`, numeradas na
-ordem correta de dependência, e são sempre **aditivas** (nunca alteram ou
-apagam dados existentes de uma migration anterior).
-
----
-
-## Roteiro (próximos passos)
-
-- IA/LifeOS Copilot com Gemini (replanejamento do dia, diagnóstico de
-  produtividade a partir do Life Score e dos Insights).
-- Integrações externas: Google Calendar/Outlook, Google Fit/Apple Health,
-  GitHub, Notion/Todoist/ClickUp, Strava.
-- Gantt para projetos/Educação, além do Kanban já existente.
-- `services/emailService.ts` com SMTP real para recuperação de senha (hoje
-  o token é logado em desenvolvimento).
-- PWA final (estratégia de cache mais completa) e empacotamento para a
-  Microsoft Store.
 
 ## Testes
 
 ```bash
-npm run test --workspace apps/api
+npm run test --workspace apps/api          # backend (Vitest + Supertest)
+npm run lint --workspace apps/web          # tipos do frontend
 ```
 
-Estrutura de testes com Vitest já configurada no backend; priorize
-autenticação, isolamento entre usuários, cálculo do Life Score/Insights e
-permissões administrativas.
+Os testes cobrem autenticação, MFA (ativação, login, replay, códigos de
+recuperação), ações administrativas, aceite de termos, isolamento entre
+usuários e cálculos de métricas.
+
+---
+
+## Roteiro
+
+- Empacotamento PWA para a **Microsoft Store** (PWABuilder).
+- Integrações externas: Google Calendar/Outlook, Google Fit, Strava, GitHub.
+- Notificações push mais ricas e modo offline.
+
+---
+
+<div align="center">
+
+Feito por **Vinicius Santos** · <a href="mailto:viniciussouza742@gmail.com">viniciussouza742@gmail.com</a>
+
+</div>

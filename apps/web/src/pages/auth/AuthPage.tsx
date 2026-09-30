@@ -3,13 +3,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowLeft, Loader2, Lock, Mail, MailCheck, Plus, User } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Mail, MailCheck, Plus, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { loginFormSchema, registerFormSchema, type LoginFormValues, type RegisterFormValues } from "@/lib/validation";
 import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
 import { NeoField } from "@/components/auth/NeoField";
 import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { AuthShowcase } from "@/components/auth/AuthShowcase";
+import { MfaCodeVerifier } from "@/components/auth/MfaCodeVerifier";
 import "@/styles/auth.css";
 
 /**
@@ -88,33 +89,76 @@ function SubmitButton({ busy, children }: { busy: boolean; children: ReactNode }
 }
 
 function LoginForm({ onSwitch }: { onSwitch: () => void }) {
-  const { login, isLoggingIn, loginError, resendVerification, isResendingVerification, resendVerificationSuccess } = useAuth();
+  const { login, loginMfa, isLoggingIn, loginError, resendVerification, isResendingVerification, resendVerificationSuccess } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [googleError] = useState(() => searchParams.get("google_error"));
+  // Token da 2ª etapa do MFA: vem da resposta do login ou do retorno do Google (?mfa=).
+  const [mfaToken, setMfaToken] = useState<string | null>(() => searchParams.get("mfa"));
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginFormValues>({ resolver: zodResolver(loginFormSchema), defaultValues: { rememberMe: false } });
+  } = useForm<LoginFormValues>({ resolver: zodResolver(loginFormSchema), defaultValues: { rememberMe: true } });
   const isUnverified = loginError?.status === 403;
 
   // Remove o parâmetro da URL depois de ler, pra um F5 não reexibir o erro.
   useEffect(() => {
-    if (searchParams.get("google_error")) setSearchParams((prev) => (prev.delete("google_error"), prev), { replace: true });
+    if (searchParams.get("google_error") || searchParams.get("mfa")) {
+      setSearchParams(
+        (prev) => {
+          prev.delete("google_error");
+          prev.delete("mfa");
+          return prev;
+        },
+        { replace: true }
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onSubmit = async (values: LoginFormValues) => {
     setPendingEmail(null);
     try {
-      await login(values);
+      const result = await login(values);
+      if ("mfaRequired" in result) {
+        setMfaToken(result.mfaToken);
+        return;
+      }
       navigate("/dashboard");
     } catch (err) {
       if ((err as { status?: number })?.status === 403) setPendingEmail(values.email);
     }
   };
+
+  if (mfaToken) {
+    return (
+      <div className="text-center">
+        <div className="relative mx-auto mb-5 w-[76px] h-[76px] rounded-[24px] flex items-center justify-center text-white bg-[linear-gradient(135deg,#19d3e0,#1e88ff,#8b5cf6)] shadow-[0_12px_30px_-10px_rgba(30,136,255,0.7)]">
+          <ShieldCheck size={32} />
+        </div>
+        <h1 className="font-display font-extrabold text-[26px] tracking-tight">Verificação em duas etapas</h1>
+        <p className="text-[13px] text-[var(--auth-muted)] mt-1 mb-2">Digite o código de 6 dígitos do seu app autenticador.</p>
+        <MfaCodeVerifier
+          onVerify={async (code) => {
+            try {
+              await loginMfa({ mfaToken, code });
+            } catch (err) {
+              // Token de 5 min expirado: volta para a senha.
+              if ((err as { status?: number; message?: string })?.message?.includes("expirou")) setTimeout(() => setMfaToken(null), 1800);
+              throw err;
+            }
+          }}
+          onSuccess={() => navigate("/dashboard")}
+          successLabel="Acesso liberado"
+        />
+        <button type="button" onClick={() => setMfaToken(null)} className="mt-5 inline-flex items-center gap-1.5 text-xs text-[var(--auth-muted)] hover:text-[var(--auth-accent)]">
+          <ArrowLeft size={13} /> Voltar para o login
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -137,7 +181,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
         <div className="flex items-center justify-between text-[13px] text-[var(--auth-muted)] px-1">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="accent-[#1E88FF]" {...register("rememberMe")} />
-            Lembrar de mim
+            Permanecer conectado
           </label>
           <Link to="/esqueci-senha" className="text-[var(--auth-accent)] hover:underline">
             Esqueci a senha
@@ -230,7 +274,17 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
 
         <label className="flex items-start gap-2 text-xs text-[var(--auth-muted)] px-1 cursor-pointer">
           <input type="checkbox" className="mt-0.5 accent-[#1E88FF]" {...register("acceptTerms")} />
-          <span>Aceito os Termos de Uso e a Política de Privacidade.</span>
+          <span>
+            Li e aceito o{" "}
+            <Link to="/termos" target="_blank" className="font-semibold text-[var(--auth-accent)] hover:underline">
+              Termo de Uso
+            </Link>{" "}
+            e a{" "}
+            <Link to="/privacidade" target="_blank" className="font-semibold text-[var(--auth-accent)] hover:underline">
+              Política de Privacidade
+            </Link>
+            , inclusive o tratamento de dados de saúde e do Diário para as funções do app.
+          </span>
         </label>
         {errors.acceptTerms && <p className="text-xs text-drop px-1">{errors.acceptTerms.message}</p>}
         {registerError && (

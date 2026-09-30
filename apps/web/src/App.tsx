@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/primitives";
  */
 // Login e Cadastro são o MESMO componente (cartão que vira em 3D): as duas
 // rotas apontam para AuthPage, então trocar entre elas só gira o cartão.
+const LegalPage = lazy(() => import("@/pages/legal/LegalPage").then((m) => ({ default: m.LegalPage })));
 const AuthPage = lazy(() => import("@/pages/auth/AuthPage").then((m) => ({ default: m.AuthPage })));
 const ForgotPasswordPage = lazy(() =>
   import("@/pages/auth/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage }))
@@ -122,6 +123,9 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<AuthPage />} />
         <Route path="/cadastro" element={<AuthPage />} />
+        {/* Documentos legais públicos (também são a URL de privacidade da Microsoft Store). */}
+        <Route path="/privacidade" element={<LegalPage />} />
+        <Route path="/termos" element={<LegalPage />} />
         <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
         <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
         <Route path="/verificar-email" element={<VerifyEmailPage />} />

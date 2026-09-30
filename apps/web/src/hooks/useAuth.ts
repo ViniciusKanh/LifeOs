@@ -16,7 +16,15 @@ export function useAuth() {
   const loginMutation = useMutation({
     mutationFn: ({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) =>
       authService.login(email, password, rememberMe),
-    onSuccess: (user) => queryClient.setQueryData(["auth", "me"], user),
+    // Com MFA, a 1ª etapa não cria sessão — o "me" só é atualizado na 2ª (loginMfa).
+    onSuccess: (result) => {
+      if (!("mfaRequired" in result)) queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
+  });
+
+  const loginMfaMutation = useMutation({
+    mutationFn: ({ mfaToken, code }: { mfaToken: string; code: string }) => authService.loginMfa(mfaToken, code),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["auth", "me"] }),
   });
 
   // Sem onSuccess de login automático: o cadastro agora fica pendente
@@ -48,6 +56,7 @@ export function useAuth() {
     login: loginMutation.mutateAsync,
     loginError: loginMutation.error as ApiError | null,
     isLoggingIn: loginMutation.isPending,
+    loginMfa: loginMfaMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     registerError: registerMutation.error as ApiError | null,
     isRegistering: registerMutation.isPending,

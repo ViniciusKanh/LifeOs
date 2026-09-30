@@ -13,6 +13,30 @@ export interface CurrentUser {
   google_linked: boolean;
   /** false quando a conta só entra pelo Google (nunca definiu senha) — nesse caso não pode desvincular. */
   has_password: boolean;
+  /** Verificação em duas etapas (app autenticador) ativa. */
+  mfa_enabled: boolean;
+  terms_version: string | null;
+  terms_current_version: string;
+  /** true quando ainda não aceitou a versão vigente do Termo/Política. */
+  terms_pending: boolean;
+}
+
+/** Resposta do login quando a conta tem MFA: a sessão só nasce na 2ª etapa. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  mfaToken: string;
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  enabledAt: string | null;
+  recoveryCodesRemaining: number;
+}
+
+export interface MfaSetup {
+  secret: string;
+  otpauthUri: string;
+  qrDataUrl: string;
 }
 
 export interface AdminUser {
@@ -25,6 +49,23 @@ export interface AdminUser {
   updated_at: string;
   /** 1 quando a conta está vinculada ao Google (o google_id em si nunca é exposto). */
   google_linked: number;
+  email_verified: number;
+  password_set: number;
+  mfa_enabled: number;
+  last_login_at: string | null;
+  last_seen_at: string | null;
+  terms_version: string | null;
+}
+
+/** Visão do admin sobre uma conta: status + contagens de uso (nunca conteúdo). */
+export interface AdminUserOverview {
+  user: AdminUser & { mfa_enabled_at: string | null; terms_accepted_at: string | null };
+  termsCurrentVersion: string;
+  recoveryCodesRemaining: number;
+  usage: Array<{ key: string; label: string; count: number }>;
+  totalRecords: number;
+  mediaBytes: number;
+  audit: Array<{ action: string; created_at: string; actor_name: string | null }>;
 }
 
 export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth";

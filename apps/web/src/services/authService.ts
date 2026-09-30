@@ -1,5 +1,5 @@
 import { api, API_URL } from "./api";
-import type { CurrentUser } from "@/types";
+import type { CurrentUser, MfaChallenge, MfaSetup, MfaStatus } from "@/types";
 
 export interface RegisterResult {
   message: string;
@@ -15,12 +15,24 @@ export const authService = {
   me: () => api.get<CurrentUser>("/auth/me"),
   /** Só diz se o login com Google está configurado — nunca expõe credenciais. */
   googleStatus: () => api.get<{ available: boolean }>("/auth/google/status"),
+  /** Com MFA ativo, devolve { mfaRequired, mfaToken } e o login termina em loginMfa. */
   login: (email: string, password: string, rememberMe: boolean) =>
-    api.post<CurrentUser>("/auth/login", { email, password, rememberMe }),
+    api.post<CurrentUser | MfaChallenge>("/auth/login", { email, password, rememberMe }),
+  loginMfa: (mfaToken: string, code: string) =>
+    api.post<CurrentUser & { usedRecoveryCode?: boolean }>("/auth/login/mfa", { mfaToken, code }),
+  logoutAll: () => api.post<void>("/auth/logout-all"),
+  mfaStatus: () => api.get<MfaStatus>("/auth/mfa/status"),
+  mfaSetup: () => api.post<MfaSetup>("/auth/mfa/setup"),
+  mfaEnable: (code: string) => api.post<{ recoveryCodes: string[] }>("/auth/mfa/enable", { code }),
+  mfaDisable: (code: string, password?: string) => api.post<{ ok: boolean }>("/auth/mfa/disable", { code, password }),
+  mfaRegenerateCodes: (code: string) => api.post<{ recoveryCodes: string[] }>("/auth/mfa/recovery-codes", { code }),
+  acceptTerms: (version: string) => api.post<{ ok: boolean }>("/auth/accept-terms", { version }),
+  deleteAccount: (input: { confirmEmail: string; password?: string; code?: string }) => api.delete<void>("/auth/me", input),
   // Cadastro não loga mais direto: a conta nasce pendente de
   // confirmação por e-mail (ver /verificar-email).
   register: (name: string, email: string, password: string) =>
-    api.post<RegisterResult>("/auth/register", { name, email, password }),
+    // O formulário só envia depois de o usuário marcar o aceite (registerFormSchema.acceptTerms).
+    api.post<RegisterResult>("/auth/register", { name, email, password, acceptTerms: true }),
   verifyEmail: (token: string) => api.post<CurrentUser>("/auth/verify-email", { token }),
   resendVerification: (email: string) =>
     api.post<{ message: string }>("/auth/resend-verification", { email }),

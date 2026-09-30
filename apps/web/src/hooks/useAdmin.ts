@@ -67,12 +67,37 @@ export function useAdminUsers() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: USERS_KEY }),
   });
 
+  // Ações de segurança do admin sobre uma conta — todas revalidadas no backend (requireAdmin + assertNotSelf).
+  const invalidateUser = (id: string) => {
+    queryClient.invalidateQueries({ queryKey: USERS_KEY });
+    queryClient.invalidateQueries({ queryKey: [...USERS_KEY, id, "overview"] });
+  };
+  const resetMfa = useMutation({ mutationFn: adminService.resetUserMfa, onSuccess: (_d, id) => invalidateUser(id) });
+  const sendPasswordReset = useMutation({ mutationFn: adminService.sendPasswordReset, onSuccess: (_d, id) => invalidateUser(id) });
+  const tempPassword = useMutation({ mutationFn: adminService.tempPassword, onSuccess: (_d, id) => invalidateUser(id) });
+  const revokeSessions = useMutation({ mutationFn: adminService.revokeSessions, onSuccess: (_d, id) => invalidateUser(id) });
+
   return {
     users: usersQuery.data ?? [],
+    isError: usersQuery.isError,
+    resetMfa: resetMfa.mutateAsync,
+    sendPasswordReset: sendPasswordReset.mutateAsync,
+    tempPassword: tempPassword.mutateAsync,
+    revokeSessions: revokeSessions.mutateAsync,
     isLoading: usersQuery.isLoading,
     createUser: createUser.mutateAsync,
     createUserError: createUser.error,
     updateUserRole: updateUserRole.mutate,
     removeUser: removeUser.mutateAsync,
   };
+}
+
+/** Visão detalhada de uma conta (status + contagens de uso, nunca conteúdo). */
+export function useAdminUserOverview(id: string | null) {
+  const query = useQuery({
+    queryKey: [...USERS_KEY, id, "overview"],
+    queryFn: () => adminService.userOverview(id as string),
+    enabled: Boolean(id),
+  });
+  return { overview: query.data ?? null, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch };
 }

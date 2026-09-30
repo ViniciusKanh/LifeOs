@@ -15,6 +15,7 @@ import { QuickCaptureButton } from "./QuickCaptureButton";
 import { Sidebar, NavGroups, useSidebarCollapsed } from "./Sidebar";
 import { AppFooter } from "./AppFooter";
 import { MobileMagicNav } from "./MobileMagicNav";
+import { TermsGate } from "@/components/legal/TermsGate";
 import { DEFAULT_QUOTE, findNavItem, visibleGroups } from "./navConfig";
 
 /**
@@ -167,6 +168,7 @@ export function AppShell() {
 
         <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} />
 
+        <TermsGate />
         <AchievementToast />
         <OnboardingFlow />
         <CopilotAssistant />

@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { AdminIntegration, AdminSetting, AdminUser } from "@/types";
+import type { AdminIntegration, AdminSetting, AdminUser, AdminUserOverview } from "@/types";
 
 export const adminService = {
   listSettings: () => api.get<AdminSetting[]>("/admin/settings"),
@@ -28,4 +28,9 @@ export const adminService = {
   updateUserRole: (id: string, role: "user" | "admin") =>
     api.patch<AdminUser>(`/admin/users/${id}/role`, { role }),
   removeUser: (id: string) => api.delete<void>(`/admin/users/${id}`),
+  userOverview: (id: string) => api.get<AdminUserOverview>(`/admin/users/${id}/overview`),
+  resetUserMfa: (id: string) => api.post<{ ok: boolean }>(`/admin/users/${id}/mfa/reset`),
+  sendPasswordReset: (id: string) => api.post<{ ok: boolean }>(`/admin/users/${id}/password-reset`),
+  tempPassword: (id: string) => api.post<{ tempPassword: string }>(`/admin/users/${id}/temp-password`),
+  revokeSessions: (id: string) => api.post<{ ok: boolean }>(`/admin/users/${id}/revoke-sessions`),
 };

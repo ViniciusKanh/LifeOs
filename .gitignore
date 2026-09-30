@@ -15,3 +15,6 @@ apps/api/*.db-shm
 
 Claude outputs/
 _to_delete/
+
+# Arquivos temporários do Vite/Vitest
+*.timestamp-*.mjs
