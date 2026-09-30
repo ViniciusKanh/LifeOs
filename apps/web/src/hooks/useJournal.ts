@@ -30,7 +30,8 @@ export function useJournal(date: string) {
   };
 
   const addMedia = useMutation({
-    mutationFn: ({ dataUri, caption }: { dataUri: string; caption?: string | null }) => journalService.addMedia(date, dataUri, caption),
+    mutationFn: (input: { dataUri: string; caption?: string | null; story?: string | null; fileName?: string | null }) =>
+      journalService.addMedia(date, input),
     onSuccess: onMediaChange,
   });
   const addAudioMedia = useMutation({
@@ -38,10 +39,19 @@ export function useJournal(date: string) {
       journalService.addAudioMedia(date, dataUri, durationSeconds, caption),
     onSuccess: onMediaChange,
   });
-  const updateMediaCaption = useMutation({
-    mutationFn: ({ mediaId, caption }: { mediaId: string; caption: string | null }) => journalService.updateMediaCaption(date, mediaId, caption),
+  const updateMedia = useMutation({
+    mutationFn: ({ mediaId, ...patch }: { mediaId: string; caption?: string | null; story?: string | null }) =>
+      journalService.updateMedia(date, mediaId, patch),
     onSuccess: onMediaChange,
   });
+
+  // IA (Gemini): sugerir não grava nada; aplicar/descartar sim.
+  const suggestOrganization = useMutation({ mutationFn: () => journalService.suggestOrganization(date) });
+  const applyOrganization = useMutation({
+    mutationFn: (input: Parameters<typeof journalService.applyOrganization>[1]) => journalService.applyOrganization(date, input),
+    onSuccess: onMediaChange,
+  });
+  const clearOrganization = useMutation({ mutationFn: () => journalService.clearOrganization(date), onSuccess: onMediaChange });
   const removeMedia = useMutation({
     mutationFn: (mediaId: string) => journalService.removeMedia(date, mediaId),
     onSuccess: onMediaChange,
@@ -94,7 +104,12 @@ export function useJournal(date: string) {
     isAddingMedia: addMedia.isPending,
     addAudioMedia: addAudioMedia.mutateAsync,
     isAddingAudioMedia: addAudioMedia.isPending,
-    updateMediaCaption: updateMediaCaption.mutateAsync,
+    updateMedia: updateMedia.mutateAsync,
+    suggestOrganization: suggestOrganization.mutateAsync,
+    isSuggestingOrganization: suggestOrganization.isPending,
+    applyOrganization: applyOrganization.mutateAsync,
+    isApplyingOrganization: applyOrganization.isPending,
+    clearOrganization: clearOrganization.mutateAsync,
     removeMedia: removeMedia.mutateAsync,
     toggleFavorite: toggleFavorite.mutateAsync,
     isTogglingFavorite: toggleFavorite.isPending,

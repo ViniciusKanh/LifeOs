@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { JournalEntry, JournalCollection, JournalMedia } from "@/types";
+import type { JournalEntry, JournalCollection, JournalMedia, JournalAiSuggestion } from "@/types";
 
 export interface JournalUpsertInput {
   intention?: string | null;
@@ -83,12 +83,17 @@ export const journalService = {
     api.get<JournalDaysPage>(`/journal/days${daysQuery(before, journalId, favoritesOnly)}`),
   calendarMonth: (month: string, journalId?: string) =>
     api.get<{ days: string[] }>(`/journal/calendar?month=${month}${journalId ? `&journalId=${journalId}` : ""}`),
-  addMedia: (date: string, dataUri: string, caption?: string | null) =>
-    api.post<JournalEntry>(`/journal/${date}/media`, { dataUri, caption }),
+  addMedia: (date: string, input: { dataUri: string; caption?: string | null; story?: string | null; fileName?: string | null }) =>
+    api.post<JournalEntry>(`/journal/${date}/media`, input),
   addAudioMedia: (date: string, dataUri: string, durationSeconds: number, caption?: string | null) =>
     api.post<JournalEntry>(`/journal/${date}/media/audio`, { dataUri, durationSeconds, caption }),
-  updateMediaCaption: (date: string, mediaId: string, caption: string | null) =>
-    api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, { caption }),
+  updateMedia: (date: string, mediaId: string, patch: { caption?: string | null; story?: string | null }) =>
+    api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, patch),
+  // IA: a sugestão NÃO é salva; applyOrganization grava só o que o usuário confirmou.
+  suggestOrganization: (date: string) => api.post<JournalAiSuggestion>(`/journal/${date}/ai/organize`),
+  applyOrganization: (date: string, input: Omit<JournalAiSuggestion, "suggestedTags"> & { tagsToAdd?: string[] }) =>
+    api.post<JournalEntry>(`/journal/${date}/ai/organize/apply`, input),
+  clearOrganization: (date: string) => api.delete<JournalEntry>(`/journal/${date}/ai/organize`),
   removeMedia: (date: string, mediaId: string) => api.delete<JournalEntry>(`/journal/${date}/media/${mediaId}`),
   toggleFavorite: (date: string, isFavorite: boolean) => api.patch<JournalEntry>(`/journal/${date}/favorite`, { isFavorite }),
   setTags: (date: string, tags: string[]) => api.patch<JournalEntry>(`/journal/${date}/tags`, { tags }),

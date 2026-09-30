@@ -53,7 +53,8 @@ import {
 } from "@/hooks/useJournal";
 import type { JournalDaySummary, JournalCollectionInput, JournalLocationSummary } from "@/services/journalService";
 import type { JournalMedia, JournalEntryLink, GeocodeResult } from "@/types";
-import { compressImageToDataUri } from "@/utils/image";
+import { JournalMediaSection } from "@/components/journal/JournalMediaSection";
+import { JournalAiOrganizer } from "@/components/journal/JournalAiOrganizer";
 import { buildJournalMoments, type JournalMoment, type JournalMomentKind } from "@/utils/journalMoments";
 import type { JournalCollection } from "@/types";
 import { useHabits } from "@/hooks/useHabits";
@@ -217,116 +218,6 @@ function StatChip({ icon, label, value, tone }: { icon: React.ReactNode; label: 
         <p className="text-[10px] text-slate leading-tight truncate">{label}</p>
       </div>
     </div>
-  );
-}
-
-/**
- * Fotos do dia (Fase 4 do Diário — Apple Journal): grade de miniaturas com
- * botão de adicionar, e um visualizador em tela cheia com legenda editável
- * ao clicar numa foto. As fotos já chegam comprimidas do navegador (ver
- * utils/image.ts), então cada uma é um upload pequeno independente do
- * tamanho da foto original.
- */
-function JournalPhotosSection({
-  media,
-  onAdd,
-  onRemove,
-  onUpdateCaption,
-  isUploading,
-  error,
-}: {
-  media: JournalMedia[];
-  onAdd: (files: FileList) => void;
-  onRemove: (mediaId: string) => void;
-  onUpdateCaption: (mediaId: string, caption: string) => void;
-  isUploading: boolean;
-  error: string | null;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [lightboxId, setLightboxId] = useState<string | null>(null);
-  const [captionDraft, setCaptionDraft] = useState("");
-  const lightboxItem = media.find((m) => m.id === lightboxId) ?? null;
-  const canAddMore = media.length < 12;
-
-  const openLightbox = (item: JournalMedia) => {
-    setLightboxId(item.id);
-    setCaptionDraft(item.caption ?? "");
-  };
-
-  return (
-    <>
-      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-        {media.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => openLightbox(item)}
-            className="relative aspect-square rounded-xl overflow-hidden motion-safe:transition-transform motion-safe:hover:scale-[1.03] motion-safe:active:scale-[0.97]"
-          >
-            <img src={item.dataUri} alt={item.caption ?? "Foto do diário"} className="w-full h-full object-cover" />
-          </button>
-        ))}
-        {canAddMore && (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={isUploading}
-            className="aspect-square rounded-xl border-2 border-dashed border-paper-border dark:border-ink-border flex flex-col items-center justify-center gap-1 text-slate hover:border-cat-pink hover:text-cat-pink transition-colors disabled:opacity-60"
-          >
-            {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
-            <span className="text-[9px]">Adicionar</span>
-          </button>
-        )}
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files && e.target.files.length > 0) onAdd(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      {error && <p className="text-xs text-rose-500 mt-2">{error}</p>}
-
-      {lightboxItem && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setLightboxId(null)}
-        >
-          <div className="max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-end mb-2">
-              <button
-                type="button"
-                onClick={() => {
-                  onRemove(lightboxItem.id);
-                  setLightboxId(null);
-                }}
-                className="text-white/80 hover:text-white mr-3"
-                aria-label="Excluir foto"
-              >
-                <Trash2 size={18} />
-              </button>
-              <button type="button" onClick={() => setLightboxId(null)} className="text-white/80 hover:text-white" aria-label="Fechar">
-                <X size={20} />
-              </button>
-            </div>
-            <img src={lightboxItem.dataUri} alt={lightboxItem.caption ?? "Foto do diário"} className="w-full max-h-[65vh] object-contain rounded-xl" />
-            <input
-              value={captionDraft}
-              onChange={(e) => setCaptionDraft(e.target.value)}
-              onBlur={() => {
-                if (captionDraft !== (lightboxItem.caption ?? "")) onUpdateCaption(lightboxItem.id, captionDraft);
-              }}
-              placeholder="Adicionar legenda…"
-              className="w-full mt-3 rounded-lg px-3 py-2 text-sm bg-white/10 text-white placeholder:text-white/50 outline-none border border-white/20 focus:border-white/50 transition-colors"
-            />
-          </div>
-        </div>
-      )}
-    </>
   );
 }
 
@@ -748,8 +639,13 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     isAddingMedia,
     addAudioMedia,
     isAddingAudioMedia,
-    updateMediaCaption,
+    updateMedia,
     removeMedia,
+    suggestOrganization,
+    isSuggestingOrganization,
+    applyOrganization,
+    isApplyingOrganization,
+    clearOrganization,
     toggleFavorite,
     isTogglingFavorite,
     deleteEntry,
@@ -900,19 +796,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     const isEmpty = trimmed.length === 0 || trimmed === "<p></p>";
     const nextThoughts = isEmpty ? `<p>${safeText}</p>` : `${form.thoughts}<p>${safeText}</p>`;
     saveNow({ thoughts: nextThoughts });
-  };
-
-  /** Comprime cada foto no navegador e envia uma por vez — evita disparar vários uploads de alguns MB em paralelo. */
-  const handleAddPhotos = async (files: FileList) => {
-    setPhotoError(null);
-    for (const file of Array.from(files)) {
-      try {
-        const dataUri = await compressImageToDataUri(file);
-        await addMedia({ dataUri });
-      } catch {
-        setPhotoError("Não foi possível enviar uma das fotos. Tente novamente.");
-      }
-    }
   };
 
   const combinedSelfCare = useMemo(() => {
@@ -1118,14 +1001,29 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            <SectionCard icon={<Camera size={16} />} title="Fotos do dia" subtitle="Memórias visuais de hoje" className="xl:col-span-3">
-              <JournalPhotosSection
-                media={(entry?.media ?? []).filter((m) => m.kind !== "audio")}
-                onAdd={handleAddPhotos}
+            <SectionCard icon={<Camera size={16} />} title="Fotos, vídeos e documentos" subtitle="Cada mídia guarda a história que você contar sobre ela" className="xl:col-span-3">
+              <JournalMediaSection
+                media={entry?.media ?? []}
+                onUpload={(input) => addMedia(input)}
+                onUpdate={(mediaId, patch) => updateMedia({ mediaId, ...patch })}
                 onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
-                onUpdateCaption={(mediaId, caption) => updateMediaCaption({ mediaId, caption: caption || null }).catch(() => undefined)}
-                isUploading={isAddingMedia}
-                error={photoError}
+              />
+              {photoError && <p className="text-xs text-drop mt-2">{photoError}</p>}
+            </SectionCard>
+
+            <SectionCard icon={<Sparkles size={16} />} title="Organização do dia" subtitle="O Gemini agrupa seus textos por temas — você confirma antes de salvar" className="xl:col-span-3">
+              <JournalAiOrganizer
+                saved={entry?.ai ?? null}
+                media={entry?.media ?? []}
+                onSuggest={() => suggestOrganization()}
+                onApply={async (input) => {
+                  const updated = await applyOrganization(input);
+                  // As etiquetas escolhidas entram no form local, senão o próximo autosave as sobrescreveria.
+                  setForm((prev) => ({ ...prev, tags: updated.tags }));
+                }}
+                onClear={() => clearOrganization()}
+                isSuggesting={isSuggestingOrganization}
+                isApplying={isApplyingOrganization}
               />
             </SectionCard>
 

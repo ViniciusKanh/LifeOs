@@ -287,14 +287,36 @@ export interface JournalDaySummary {
   tags: string[];
 }
 
-/** Uma foto ou nota de voz anexada à entrada do dia (Fase 4 e Fase 13 do Diário — Apple Journal). */
+/** Tipos de mídia do Diário: foto (Fase 4), áudio (Fase 13), vídeo e PDF (uploads com história). */
+export type JournalMediaKind = "photo" | "audio" | "video" | "document";
+
+/** Uma mídia anexada à entrada do dia, com a "história" que o usuário contou sobre ela. */
 export interface JournalMedia {
   id: string;
-  kind: "photo" | "audio";
+  kind: JournalMediaKind;
   dataUri: string;
   caption: string | null;
+  /** Texto livre do usuário contando a história daquele upload. */
+  story: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  /** Categoria sugerida pelo Gemini e confirmada pelo usuário ("Salvar organização"). */
+  aiCategory: string | null;
   durationSeconds: number | null;
   sortOrder: number;
+}
+
+/** Deduz o tipo de mídia a partir do MIME real do data URI. */
+export function journalMediaKindFromMime(mime: string | null): JournalMediaKind {
+  if (!mime) return "photo";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf") return "document";
+  return "photo";
+}
+
+function normalizeMediaKind(kind: unknown): JournalMediaKind {
+  return kind === "audio" || kind === "video" || kind === "document" ? kind : "photo";
 }
 
 const PREVIEW_FIELD_ORDER = ["intention", "thoughts", "feel_good", "challenges", "lighter_plan", "night_takeaway"] as const;
@@ -652,34 +674,40 @@ export async function ensureJournalEntryId(db: Db, ownerId: string, date: string
   return id;
 }
 
-/** Fotos e notas de voz da entrada do dia, na ordem em que aparecem na tela. */
+/** Mídias da entrada do dia (fotos, vídeos, PDFs e notas de voz), na ordem em que aparecem na tela. */
 export async function getJournalMedia(db: Db, entryId: string): Promise<JournalMedia[]> {
   const result = await db.execute({
-    sql: "SELECT id, kind, data_uri, caption, duration_seconds, sort_order FROM journal_entry_media WHERE entry_id = ? ORDER BY sort_order ASC, created_at ASC",
+    sql: `SELECT id, kind, data_uri, caption, story, file_name, mime_type, ai_category, duration_seconds, sort_order
+          FROM journal_entry_media WHERE entry_id = ? ORDER BY sort_order ASC, created_at ASC`,
     args: [entryId],
   });
-  return (result.rows as unknown as Array<{ id: string; kind: string; data_uri: string; caption: string | null; duration_seconds: number | null; sort_order: number }>).map((r) => ({
-    id: r.id,
-    kind: r.kind === "audio" ? "audio" : "photo",
-    dataUri: r.data_uri,
-    caption: r.caption,
-    durationSeconds: r.duration_seconds,
-    sortOrder: r.sort_order,
+  return (result.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id as string,
+    kind: normalizeMediaKind(r.kind),
+    dataUri: r.data_uri as string,
+    caption: (r.caption as string | null) ?? null,
+    story: (r.story as string | null) ?? null,
+    fileName: (r.file_name as string | null) ?? null,
+    mimeType: (r.mime_type as string | null) ?? null,
+    aiCategory: (r.ai_category as string | null) ?? null,
+    durationSeconds: r.duration_seconds == null ? null : Number(r.duration_seconds),
+    sortOrder: Number(r.sort_order ?? 0),
   }));
 }
 
 /** Limite conservador de itens de mídia (fotos + notas de voz) por dia — suficiente pra um registro rico do dia sem deixar o banco inchar. */
 export const MAX_JOURNAL_PHOTOS_PER_DAY = 12;
 
-/** Adiciona uma foto ou nota de voz à entrada do dia (criando a entrada se ainda não existir). Devolve null se o limite por dia já foi atingido. */
+/** Adiciona uma mídia à entrada do dia (criando a entrada se ainda não existir). Devolve null se o limite por dia já foi atingido. */
 export async function addJournalMedia(
   db: Db,
   ownerId: string,
   entryId: string,
   dataUri: string,
   caption: string | null,
-  kind: "photo" | "audio" = "photo",
-  durationSeconds: number | null = null
+  kind: JournalMediaKind = "photo",
+  durationSeconds: number | null = null,
+  extra: { story?: string | null; fileName?: string | null; mimeType?: string | null } = {}
 ): Promise<JournalMedia | null> {
   const countRes = await db.execute({
     sql: "SELECT COUNT(*) AS total FROM journal_entry_media WHERE entry_id = ?",
@@ -689,20 +717,42 @@ export async function addJournalMedia(
   if (total >= MAX_JOURNAL_PHOTOS_PER_DAY) return null;
 
   const id = nanoid();
+  const story = extra.story ?? null;
+  const fileName = extra.fileName ?? null;
+  const mimeType = extra.mimeType ?? null;
   await db.execute({
-    sql: "INSERT INTO journal_entry_media (id, entry_id, owner_id, data_uri, caption, kind, duration_seconds, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    args: [id, entryId, ownerId, dataUri, caption, kind, durationSeconds, total],
+    sql: `INSERT INTO journal_entry_media (id, entry_id, owner_id, data_uri, caption, story, file_name, mime_type, kind, duration_seconds, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, entryId, ownerId, dataUri, caption, story, fileName, mimeType, kind, durationSeconds, total],
   });
-  return { id, kind, dataUri, caption, durationSeconds, sortOrder: total };
+  return { id, kind, dataUri, caption, story, fileName, mimeType, aiCategory: null, durationSeconds, sortOrder: total };
 }
 
-/** Atualiza a legenda de uma foto — sempre validando que ela pertence ao dono autenticado. */
-export async function updateJournalMediaCaption(db: Db, ownerId: string, mediaId: string, caption: string | null): Promise<boolean> {
+/** Atualiza legenda e/ou história de uma mídia — sempre validando que ela pertence ao dono autenticado. */
+export async function updateJournalMediaDetails(
+  db: Db,
+  ownerId: string,
+  mediaId: string,
+  patch: { caption?: string | null; story?: string | null }
+): Promise<boolean> {
+  const sets: string[] = [];
+  const args: Array<string | null> = [];
+  if (patch.caption !== undefined) { sets.push("caption = ?"); args.push(patch.caption); }
+  if (patch.story !== undefined) { sets.push("story = ?"); args.push(patch.story); }
+  if (sets.length === 0) {
+    const exists = await db.execute({ sql: "SELECT id FROM journal_entry_media WHERE id = ? AND owner_id = ?", args: [mediaId, ownerId] });
+    return exists.rows.length > 0;
+  }
   const result = await db.execute({
-    sql: "UPDATE journal_entry_media SET caption = ? WHERE id = ? AND owner_id = ?",
-    args: [caption, mediaId, ownerId],
+    sql: `UPDATE journal_entry_media SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`,
+    args: [...args, mediaId, ownerId],
   });
   return result.rowsAffected > 0;
+}
+
+/** Compatibilidade: atualiza só a legenda (usado pelas chamadas antigas). */
+export async function updateJournalMediaCaption(db: Db, ownerId: string, mediaId: string, caption: string | null): Promise<boolean> {
+  return updateJournalMediaDetails(db, ownerId, mediaId, { caption });
 }
 
 /** Remove uma foto — sempre validando que ela pertence ao dono autenticado. */

@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { FocusTask, Task, TimeEntry } from "@/types";
+import type { FocusTask, Task, TaskAttachment, TimeEntry } from "@/types";
 
 export interface TaskInput {
   title: string;
@@ -19,6 +19,7 @@ export interface TaskInput {
 
 export const taskService = {
   list: () => api.get<Task[]>("/tasks"),
+  get: (id: string) => api.get<Task>(`/tasks/${id}`),
   // Usado pelo Kanban de projetos acadêmicos (Educação): tarefas de
   // um único projeto (academic_projects.project_id), sem afetar a
   // listagem geral de Tarefas.
@@ -27,6 +28,14 @@ export const taskService = {
   move: (id: string, status: string) => api.patch<void>(`/tasks/${id}/move`, { status }),
   update: (id: string, patch: Partial<TaskInput>) => api.patch<Task>(`/tasks/${id}`, patch),
   remove: (id: string) => api.delete<void>(`/tasks/${id}`),
+
+  // Anexos (imagens comprimidas no cliente e PDFs) — alimentam também os "Documentos" do projeto.
+  listAttachments: (id: string) => api.get<TaskAttachment[]>(`/tasks/${id}/attachments`),
+  addAttachment: (id: string, input: { dataUri: string; fileName?: string | null; caption?: string | null }) =>
+    api.post<TaskAttachment>(`/tasks/${id}/attachments`, input),
+  updateAttachment: (id: string, attachmentId: string, caption: string | null) =>
+    api.patch<{ ok: boolean }>(`/tasks/${id}/attachments/${attachmentId}`, { caption }),
+  removeAttachment: (id: string, attachmentId: string) => api.delete<void>(`/tasks/${id}/attachments/${attachmentId}`),
 
   // Priorização automática ("Foque nisso agora"): top-N tarefas em
   // aberto ordenadas pelo score de foco (prazo + prioridade +

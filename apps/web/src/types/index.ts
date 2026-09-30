@@ -84,6 +84,14 @@ export interface FocusTask {
 
 export type ProjectKind = "personal" | "workspace" | "professional" | "academic";
 
+export type ProjectStatus = "planning" | "active" | "paused" | "completed" | "cancelled";
+export type ProjectPriority = "Baixa" | "Média" | "Alta" | "Crítica";
+
+export interface ProjectLink {
+  label: string;
+  url: string;
+}
+
 export interface Project {
   id: string;
   owner_id: string;
@@ -97,6 +105,62 @@ export interface Project {
   done_count: number;
   created_at: string;
   updated_at: string;
+  // Cadastro completo (migration 0043) — tudo opcional.
+  status: ProjectStatus;
+  priority: ProjectPriority | null;
+  start_date: string | null;
+  due_date: string | null;
+  objective: string | null;
+  scope: string | null;
+  success_criteria: string | null;
+  client: string | null;
+  area: string | null;
+  budget: number | null;
+  repository_url: string | null;
+  links: ProjectLink[];
+  tags: string[];
+  completed_at: string | null;
+}
+
+/** Indicadores do projeto — sempre derivados das tarefas, anexos e Diário. */
+export interface ProjectOverview {
+  totals: {
+    tasks: number;
+    done: number;
+    open: number;
+    overdue: number;
+    dueThisWeek: number;
+    progressPct: number;
+    estimateMinutes: number;
+    timeSpentMinutes: number;
+    attachments: number;
+    journalEntries: number;
+  };
+  byStatus: Array<{ status: string; count: number }>;
+  byPriority: Array<{ priority: string; count: number }>;
+  upcoming: Array<{ id: string; title: string; dueDate: string; status: string; priority: string }>;
+  recentlyCompleted: Array<{ id: string; title: string; completedAt: string }>;
+  journalEntries: Array<{ date: string; preview: string | null }>;
+  daysToDeadline: number | null;
+}
+
+/** Anexo de tarefa (imagem ou PDF). */
+export interface TaskAttachment {
+  id: string;
+  taskId: string;
+  kind: "image" | "document";
+  dataUri: string;
+  fileName: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  caption: string | null;
+  createdAt: string;
+}
+
+/** Documento do projeto = anexo de uma tarefa vinculada, com o contexto da tarefa. */
+export interface ProjectDocument extends TaskAttachment {
+  taskTitle: string;
+  taskStatus: string;
 }
 
 export interface GanttTask {
@@ -634,6 +698,8 @@ export interface JournalEntry {
   tags: string[];
   /** Projetos/metas reais vinculados a este dia (Fase 17). */
   links: JournalEntryLink[];
+  /** Organização por IA confirmada (null quando nunca foi salva). */
+  ai: JournalAiOrganization | null;
   auto: JournalAutoData;
 }
 
@@ -645,13 +711,43 @@ export interface JournalEntryLink {
 }
 
 /** Uma foto ou nota de voz anexada à entrada do dia do Diário. */
+export type JournalMediaKind = "photo" | "audio" | "video" | "document";
+
+/** Mídia do Diário (foto, vídeo, PDF ou nota de voz) com a história contada pelo usuário. */
 export interface JournalMedia {
   id: string;
-  kind: "photo" | "audio";
+  kind: JournalMediaKind;
   dataUri: string;
   caption: string | null;
+  story: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  /** Categoria sugerida pela IA e confirmada pelo usuário. */
+  aiCategory: string | null;
   durationSeconds: number | null;
   sortOrder: number;
+}
+
+/** Organização por temas feita pelo Gemini (salva só após confirmação do usuário). */
+export interface JournalAiCategory {
+  name: string;
+  points: string[];
+}
+
+export interface JournalAiOrganization {
+  title: string | null;
+  summary: string | null;
+  categories: JournalAiCategory[];
+  organizedAt: string;
+}
+
+/** Sugestão devolvida pela IA — ainda NÃO salva. */
+export interface JournalAiSuggestion {
+  title: string | null;
+  summary: string | null;
+  categories: JournalAiCategory[];
+  mediaCategories: Array<{ id: string; category: string }>;
+  suggestedTags: string[];
 }
 
 /** Um "diário" — coleção nomeada (Pessoal, Viagens, Estudos...) pra organizar entradas do Diário. */

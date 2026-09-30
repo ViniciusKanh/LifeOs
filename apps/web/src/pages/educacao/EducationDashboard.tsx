@@ -980,10 +980,9 @@ function AcademicProjectKanban({ project }: { project: AcademicProject }) {
 
   const handleSave = async (input: Parameters<typeof createTask>[0]) => {
     if (modalState.task) {
-      await updateTask({ id: modalState.task.id, patch: input });
-    } else {
-      await createTask(input);
+      return updateTask({ id: modalState.task.id, patch: input });
     }
+    return createTask(input);
   };
 
   return (

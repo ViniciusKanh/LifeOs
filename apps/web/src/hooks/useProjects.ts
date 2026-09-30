@@ -76,3 +76,27 @@ export function useProjectForecast(projectId: string | undefined) {
 
   return { forecast: query.data?.forecast ?? null, reason: query.data?.reason ?? null, isLoading: query.isLoading };
 }
+
+/**
+ * Detalhe do projeto: metadados + indicadores + tarefas + documentos.
+ * Tudo vem do backend já filtrado pelo dono autenticado.
+ */
+export function useProjectDetail(projectId: string | undefined) {
+  const enabled = !!projectId;
+  const project = useQuery({ queryKey: ["projects", "detail", projectId], queryFn: () => projectsService.get(projectId as string), enabled });
+  const overview = useQuery({ queryKey: ["projects", "overview", projectId], queryFn: () => projectsService.overview(projectId as string), enabled });
+  const tasks = useQuery({ queryKey: ["projects", "tasks", projectId], queryFn: () => projectsService.tasks(projectId as string), enabled });
+  const documents = useQuery({ queryKey: ["projects", "documents", projectId], queryFn: () => projectsService.documents(projectId as string), enabled });
+
+  return {
+    project: project.data ?? null,
+    isLoading: project.isLoading,
+    error: project.error as Error | null,
+    overview: overview.data ?? null,
+    isOverviewLoading: overview.isLoading,
+    tasks: tasks.data ?? [],
+    isTasksLoading: tasks.isLoading,
+    documents: documents.data ?? [],
+    isDocumentsLoading: documents.isLoading,
+  };
+}

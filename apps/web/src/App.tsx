@@ -27,6 +27,9 @@ const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage").then(
 const HojePage = lazy(() => import("@/pages/hoje/HojePage").then((m) => ({ default: m.HojePage })));
 const TarefasPage = lazy(() => import("@/pages/tarefas/TarefasPage").then((m) => ({ default: m.TarefasPage })));
 const ProjetosPage = lazy(() => import("@/pages/projetos/ProjetosPage").then((m) => ({ default: m.ProjetosPage })));
+const ProjetoDetalhePage = lazy(() =>
+  import("@/pages/projetos/ProjetoDetalhePage").then((m) => ({ default: m.ProjetoDetalhePage }))
+);
 const InboxPage = lazy(() => import("@/pages/inbox/InboxPage").then((m) => ({ default: m.InboxPage })));
 const ProfissionalPage = lazy(() => import("@/pages/profissional/ProfissionalPage").then((m) => ({ default: m.ProfissionalPage })));
 const CalendarioPage = lazy(() =>
@@ -127,6 +130,7 @@ export default function App() {
           <Route path="/hoje" element={<HojePage />} />
           <Route path="/tarefas" element={<TarefasPage />} />
           <Route path="/projetos" element={<ProjetosPage />} />
+          <Route path="/projetos/:id" element={<ProjetoDetalhePage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/profissional" element={<ProfissionalPage />} />
           <Route path="/calendario" element={<CalendarioPage />} />

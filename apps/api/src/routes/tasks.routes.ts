@@ -6,6 +6,14 @@ import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validator
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
 import { computeNextOccurrence, parseRecurrenceRule } from "../services/recurrenceService.js";
+import { taskAttachmentCreateSchema, taskAttachmentUpdateSchema } from "../validators/attachment.schema.js";
+import {
+  addTaskAttachment,
+  deleteTaskAttachment,
+  listTaskAttachments,
+  taskBelongsToOwner,
+  updateTaskAttachmentCaption,
+} from "../services/taskAttachmentsService.js";
 
 export const tasksRouter = Router();
 
@@ -474,6 +482,50 @@ tasksRouter.delete("/:id/dependencies/:dependsOnId", async (req, res) => {
     sql: "DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_id = ?",
     args: [req.params.id, req.params.dependsOnId],
   });
+  return res.status(204).send();
+});
+
+/** GET /api/tasks/:id/attachments — imagens e PDFs anexados à tarefa. */
+tasksRouter.get("/:id/attachments", async (req, res) => {
+  const db = getDb();
+  if (!(await taskBelongsToOwner(db, req.user!.id, req.params.id))) {
+    return res.status(404).json({ error: "Tarefa não encontrada." });
+  }
+  return res.json(await listTaskAttachments(db, req.user!.id, req.params.id));
+});
+
+/** POST /api/tasks/:id/attachments — anexa uma imagem (já comprimida no cliente) ou um PDF. */
+tasksRouter.post("/:id/attachments", async (req, res) => {
+  const parsed = taskAttachmentCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Arquivo inválido." });
+  }
+  const db = getDb();
+  if (!(await taskBelongsToOwner(db, req.user!.id, req.params.id))) {
+    return res.status(404).json({ error: "Tarefa não encontrada." });
+  }
+  const created = await addTaskAttachment(db, req.user!.id, req.params.id, parsed.data);
+  if (!created) return res.status(400).json({ error: "Limite de anexos desta tarefa atingido." });
+  return res.status(201).json(created);
+});
+
+/** PATCH /api/tasks/:id/attachments/:attachmentId — edita a legenda do anexo. */
+tasksRouter.patch("/:id/attachments/:attachmentId", async (req, res) => {
+  const parsed = taskAttachmentUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const db = getDb();
+  const ok = await updateTaskAttachmentCaption(db, req.user!.id, req.params.id, req.params.attachmentId, parsed.data.caption ?? null);
+  if (!ok) return res.status(404).json({ error: "Anexo não encontrado." });
+  return res.json({ ok: true });
+});
+
+/** DELETE /api/tasks/:id/attachments/:attachmentId */
+tasksRouter.delete("/:id/attachments/:attachmentId", async (req, res) => {
+  const db = getDb();
+  const ok = await deleteTaskAttachment(db, req.user!.id, req.params.id, req.params.attachmentId);
+  if (!ok) return res.status(404).json({ error: "Anexo não encontrado." });
   return res.status(204).send();
 });
 

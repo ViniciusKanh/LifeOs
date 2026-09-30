@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ListChecks, Target, Repeat, BookOpen, GraduationCap, GanttChartSquare, NotebookPen, X, Sparkles } from "lucide-react";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
@@ -71,6 +71,19 @@ export function DesktopGlobalSearch() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const { results, isSearching } = useGlobalSearch(query);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Atalho Ctrl/⌘ + K foca a busca global de qualquer tela.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleSelect = (link: string) => {
     navigate(link);
@@ -82,13 +95,19 @@ export function DesktopGlobalSearch() {
     <div className="hidden md:flex flex-1 max-w-md relative">
       <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate pointer-events-none" />
       <input
+        ref={inputRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Buscar algo no LifeOS..."
-        className="w-full rounded-full pl-10 pr-3 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 focus:shadow-glow-brand transition-all"
+        onKeyDown={(e) => e.key === "Escape" && inputRef.current?.blur()}
+        placeholder="Buscar no LifeOS..."
+        aria-label="Busca global"
+        className="w-full rounded-full pl-10 pr-16 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 focus:shadow-glow-brand transition-all"
       />
+      <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center gap-0.5 rounded-md border border-paper-border dark:border-ink-border px-1.5 py-0.5 text-[10px] font-sans text-slate">
+        Ctrl K
+      </kbd>
       {open && (
         <div className="absolute top-[calc(100%+6px)] left-0 right-0 rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised shadow-card dark:shadow-card-dark overflow-hidden z-30">
           <ResultsList results={results} isSearching={isSearching} query={query} onSelect={handleSelect} />

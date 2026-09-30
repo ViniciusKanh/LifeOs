@@ -12,3 +12,6 @@ apps/api/*.db-shm
 
 .vercel
 .env*
+
+Claude outputs/
+_to_delete/

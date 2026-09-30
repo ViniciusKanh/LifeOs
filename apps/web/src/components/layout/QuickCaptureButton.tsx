@@ -37,7 +37,7 @@ export function QuickCaptureButton() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Captura rápida"
-        className="fixed z-20 bottom-20 md:bottom-6 left-4 md:left-6 w-12 h-12 rounded-full flex items-center justify-center bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border text-brand-600 dark:text-brand-400 shadow-card"
+        className="fixed z-20 bottom-[8.5rem] md:bottom-[5.5rem] right-4 md:right-6 w-12 h-12 rounded-full flex items-center justify-center bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border text-brand-600 dark:text-brand-400 shadow-card"
       >
         {justCaptured ? <Check size={20} className="text-growth" /> : <Inbox size={19} />}
       </button>

@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { TASK_STATUSES } from "@/utils/taskStatus";
 import {
   AlertTriangle,
   CalendarDays,
@@ -22,7 +23,7 @@ import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import type { Task } from "@/types";
 
-const COLUMNS = ["Backlog", "A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
+const COLUMNS = TASK_STATUSES;
 const PRIORITY_OPTIONS: Array<Task["priority"] | "todas"> = ["todas", "Alta", "Média", "Baixa"];
 const DONE_LIMIT = 4;
 
@@ -97,10 +98,10 @@ export function TarefasPage() {
 
   const handleSave = async (input: Parameters<typeof createTask>[0]) => {
     if (modalState.task) {
-      await updateTask({ id: modalState.task.id, patch: input });
-    } else {
-      await createTask({ ...input, status: input.status ?? modalState.initialStatus });
+      return updateTask({ id: modalState.task.id, patch: input });
     }
+    // Devolve a tarefa criada para o TaskModal enviar os anexos que ficaram na fila.
+    return createTask({ ...input, status: input.status ?? modalState.initialStatus });
   };
 
   return (

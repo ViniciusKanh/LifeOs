@@ -17,7 +17,7 @@ export interface JournalEntryForPdf {
   nightHelped: string | null;
   nightTakeaway: string | null;
   isFavorite: boolean;
-  media: Array<{ kind: "photo" | "audio"; dataUri: string; caption: string | null; durationSeconds: number | null }>;
+  media: Array<{ kind: "photo" | "audio" | "video" | "document"; dataUri: string; caption: string | null; durationSeconds: number | null }>;
   auto: JournalAutoData;
 }
 

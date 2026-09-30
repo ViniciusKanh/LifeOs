@@ -301,7 +301,7 @@ export async function getLifeMap(ownerId: string): Promise<LifeMapData> {
       progressPct: p.task_count ? Math.round((Number(p.done_count) / Number(p.task_count)) * 100) : null,
       lastActivityAt: p.updated_at ? String(p.updated_at) : null,
       linkedCount: Number(p.task_count ?? 0),
-      openPath: "/projetos",
+      openPath: `/projetos/${String(p.id)}`,
     });
   }
 
@@ -318,7 +318,7 @@ export async function getLifeMap(ownerId: string): Promise<LifeMapData> {
       progressPct: p.task_count ? Math.round((Number(p.done_count) / Number(p.task_count)) * 100) : null,
       lastActivityAt: p.updated_at ? String(p.updated_at) : null,
       linkedCount: Number(p.task_count ?? 0),
-      openPath: "/projetos",
+      openPath: `/projetos/${String(p.id)}`,
     });
   }
 

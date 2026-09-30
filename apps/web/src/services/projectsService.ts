@@ -1,17 +1,33 @@
 import { api } from "./api";
-import type { GanttData, Project, ProjectForecast, ProjectKind } from "@/types";
+import type { GanttData, Project, ProjectDocument, ProjectForecast, ProjectKind, ProjectLink, ProjectOverview, ProjectPriority, ProjectStatus, Task } from "@/types";
 
-export interface ProjectCreateInput {
-  name: string;
+/** Campos do cadastro completo — os mesmos na criação e na edição. */
+export interface ProjectDetailsInput {
   description?: string | null;
-  kind?: ProjectKind;
   color?: string | null;
+  status?: ProjectStatus;
+  priority?: ProjectPriority | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  objective?: string | null;
+  scope?: string | null;
+  successCriteria?: string | null;
+  client?: string | null;
+  area?: string | null;
+  budget?: number | null;
+  repositoryUrl?: string | null;
+  links?: ProjectLink[];
+  tags?: string[];
+}
+
+export interface ProjectCreateInput extends ProjectDetailsInput {
+  name: string;
+  kind?: ProjectKind;
   parentId?: string | null;
 }
 
-export interface ProjectUpdateInput {
+export interface ProjectUpdateInput extends ProjectDetailsInput {
   name?: string;
-  description?: string | null;
   // Flegar um projeto já existente como profissional/workspace (ou
   // reverter) — muda quais tarefas contam na dimensão Profissional do
   // Life Score, sem precisar recriar o projeto do zero.
@@ -27,6 +43,10 @@ export const projectsService = {
   remove: (id: string) => api.delete<void>(`/projects/${id}`),
   gantt: (id: string) => api.get<GanttData>(`/projects/${id}/gantt`),
   forecast: (id: string) => api.get<ProjectForecast>(`/projects/${id}/forecast`),
+  get: (id: string) => api.get<Project>(`/projects/${id}`),
+  overview: (id: string) => api.get<ProjectOverview>(`/projects/${id}/overview`),
+  tasks: (id: string) => api.get<Array<Task & { attachment_count: number }>>(`/projects/${id}/tasks`),
+  documents: (id: string) => api.get<ProjectDocument[]>(`/projects/${id}/documents`),
 };
 
 export const taskDependenciesService = {

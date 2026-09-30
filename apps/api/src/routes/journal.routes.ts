@@ -2,7 +2,10 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema } from "../validators/journal.schema.js";
+import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema, journalAiApplySchema } from "../validators/journal.schema.js";
+import { mimeFromDataUri } from "../validators/attachment.schema.js";
+import { organizeJournalDay, applyJournalOrganization, clearJournalOrganization } from "../services/journalAIService.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { buildJournalEntryPdf } from "../services/journalPdfService.js";
 import {
   getJournalAutoData,
@@ -12,7 +15,8 @@ import {
   ensureJournalEntryId,
   getJournalMedia,
   addJournalMedia,
-  updateJournalMediaCaption,
+  updateJournalMediaDetails,
+  journalMediaKindFromMime,
   deleteJournalMedia,
   setJournalFavorite,
   setJournalTags,
@@ -47,6 +51,24 @@ function parseJsonArray(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+/** Organização por IA já confirmada pelo usuário (null quando nunca foi salva). */
+function parseAiOrganization(row: Record<string, unknown> | undefined) {
+  if (!row?.ai_organized_at) return null;
+  let categories: Array<{ name: string; points: string[] }> = [];
+  try {
+    const parsed = JSON.parse((row.ai_categories as string) || "[]");
+    if (Array.isArray(parsed)) categories = parsed;
+  } catch {
+    categories = [];
+  }
+  return {
+    title: (row.ai_title as string | null) ?? null,
+    summary: (row.ai_summary as string | null) ?? null,
+    categories,
+    organizedAt: row.ai_organized_at as string,
+  };
 }
 
 /**
@@ -93,6 +115,7 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     locationLng: row?.location_lng ?? null,
     tags: parseJsonArray(row?.tags),
     links,
+    ai: parseAiOrganization(row),
     auto,
   };
 }
@@ -373,9 +396,20 @@ journalRouter.post("/:date/media", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
   const entryId = await ensureJournalEntryId(db, ownerId, date);
-  const media = await addJournalMedia(db, ownerId, entryId, parsed.data.dataUri, parsed.data.caption ?? null);
+  // O tipo (foto/vídeo/PDF) vem do MIME real do data URI, nunca de um campo à parte.
+  const mimeType = mimeFromDataUri(parsed.data.dataUri);
+  const media = await addJournalMedia(
+    db,
+    ownerId,
+    entryId,
+    parsed.data.dataUri,
+    parsed.data.caption ?? null,
+    journalMediaKindFromMime(mimeType),
+    null,
+    { story: parsed.data.story ?? null, fileName: parsed.data.fileName ?? null, mimeType }
+  );
   if (!media) {
-    return res.status(400).json({ error: "Limite de fotos por dia atingido." });
+    return res.status(400).json({ error: "Limite de mídias por dia atingido." });
   }
   return res.status(201).json(await buildJournalResponse(db, ownerId, date));
 });
@@ -403,7 +437,7 @@ journalRouter.post("/:date/media/audio", async (req, res) => {
   return res.status(201).json(await buildJournalResponse(db, ownerId, date));
 });
 
-/** PATCH /api/journal/:date/media/:mediaId — atualiza a legenda de uma foto. */
+/** PATCH /api/journal/:date/media/:mediaId — atualiza a legenda e/ou a história de uma mídia. */
 journalRouter.patch("/:date/media/:mediaId", async (req, res) => {
   const { date, mediaId } = req.params;
   if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
@@ -414,8 +448,11 @@ journalRouter.patch("/:date/media/:mediaId", async (req, res) => {
   }
   const db = getDb();
   const ownerId = req.user!.id;
-  const ok = await updateJournalMediaCaption(db, ownerId, mediaId, parsed.data.caption ?? null);
-  if (!ok) return res.status(404).json({ error: "Foto não encontrada." });
+  const ok = await updateJournalMediaDetails(db, ownerId, mediaId, {
+    caption: parsed.data.caption,
+    story: parsed.data.story,
+  });
+  if (!ok) return res.status(404).json({ error: "Mídia não encontrada." });
   return res.json(await buildJournalResponse(db, ownerId, date));
 });
 
@@ -429,6 +466,40 @@ journalRouter.delete("/:date/media/:mediaId", async (req, res) => {
   const ok = await deleteJournalMedia(db, ownerId, mediaId);
   if (!ok) return res.status(404).json({ error: "Foto não encontrada." });
   return res.json(await buildJournalResponse(db, ownerId, date));
+});
+
+/**
+ * POST /api/journal/:date/ai/organize — o Gemini SUGERE uma organização por
+ * temas do dia (título, resumo, temas e categoria de cada mídia). Não grava
+ * nada: a UI mostra a prévia e só salva após confirmação (rota /apply).
+ */
+journalRouter.post("/:date/ai/organize", rateLimit({ windowMs: 60_000, max: 6 }), async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const result = await organizeJournalDay(getDb(), req.user!.id, date);
+  if (!result.ok) return res.status(result.status).json({ error: result.message });
+  return res.json(result.suggestion);
+});
+
+/** POST /api/journal/:date/ai/organize/apply — salva a organização que o usuário confirmou. */
+journalRouter.post("/:date/ai/organize/apply", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const parsed = journalAiApplySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const db = getDb();
+  const ok = await applyJournalOrganization(db, req.user!.id, date, parsed.data);
+  if (!ok) return res.status(404).json({ error: "Entrada do dia não encontrada." });
+  return res.json(await buildJournalResponse(db, req.user!.id, date));
+});
+
+/** DELETE /api/journal/:date/ai/organize — descarta a organização por IA (o texto original fica intacto). */
+journalRouter.delete("/:date/ai/organize", async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const db = getDb();
+  await clearJournalOrganization(db, req.user!.id, date);
+  return res.json(await buildJournalResponse(db, req.user!.id, date));
 });
 
 /** PUT /api/journal/:date — cria ou atualiza a entrada do dia (upsert). */

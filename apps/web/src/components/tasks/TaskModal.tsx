@@ -6,6 +6,7 @@ import { useGoals } from "@/hooks/useGoals";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, buildRecurrenceRule, parseRecurrenceRule, type RecurrenceFreq } from "@/utils/recurrence";
 import type { Task, TaskPriority } from "@/types";
 import type { TaskInput } from "@/services/taskService";
+import { TaskAttachments, uploadQueuedFiles } from "./TaskAttachments";
 
 /**
  * Rótulo do tipo de projeto no seletor — é o que faz uma tarefa
@@ -54,8 +55,11 @@ export function TaskModal({
   onClose,
   onSave,
   onDelete,
+  defaultProjectId,
 }: {
   task: Task | null;
+  /** Projeto pré-selecionado ao criar uma tarefa a partir do Detalhe do Projeto. */
+  defaultProjectId?: string;
   statusOptions: string[];
   onClose: () => void;
   onSave: (input: TaskInput) => Promise<unknown>;
@@ -68,7 +72,7 @@ export function TaskModal({
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "Média");
   const [startDate, setStartDate] = useState(toDateInput(task?.start_date ?? null));
   const [dueDate, setDueDate] = useState(toDateInput(task?.due_date ?? null));
-  const [projectId, setProjectId] = useState<string>(task?.project_id ?? "");
+  const [projectId, setProjectId] = useState<string>(task?.project_id ?? defaultProjectId ?? "");
   const [goalId, setGoalId] = useState<string>(task?.goal_id ?? "");
   const [impact, setImpact] = useState(task?.impact ?? 0);
   const [urgency, setUrgency] = useState(task?.urgency ?? 0);
@@ -82,6 +86,8 @@ export function TaskModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Arquivos escolhidos antes da tarefa existir — enviados logo após a criação.
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
 
   const { projects } = useProjects();
   const selectedProject = projects.find((p) => p.id === projectId);
@@ -96,7 +102,7 @@ export function TaskModal({
     setSaving(true);
     setError(null);
     try {
-      await onSave({
+      const saved = await onSave({
         title: title.trim(),
         description: description.trim() || null,
         status,
@@ -111,6 +117,14 @@ export function TaskModal({
         estimateMinutes: estimateMinutes.trim() === "" ? null : Math.max(0, Number(estimateMinutes)),
         recurrenceRule: buildRecurrenceRule({ freq: recurrenceFreq, byDay: recurrenceByDay }),
       });
+      const createdId = !isEditing && saved && typeof (saved as { id?: unknown }).id === "string" ? (saved as { id: string }).id : null;
+      if (createdId && queuedFiles.length > 0) {
+        const failed = await uploadQueuedFiles(createdId, queuedFiles);
+        if (failed > 0) {
+          setError(`Tarefa criada, mas ${failed} anexo(s) não puderam ser enviados — abra a tarefa para tentar de novo.`);
+          return;
+        }
+      }
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar a tarefa.");
@@ -335,6 +349,8 @@ export function TaskModal({
               Ao concluir, uma nova tarefa é criada automaticamente na próxima data — o histórico desta é preservado.
             </p>
           </div>
+
+          <TaskAttachments taskId={task?.id ?? null} queued={queuedFiles} onQueueChange={setQueuedFiles} />
 
           {error && (
             <p className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2.5">{error}</p>

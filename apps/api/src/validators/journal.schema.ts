@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IMAGE_DATA_URI, PDF_DATA_URI, VIDEO_DATA_URI, fileNameSchema } from "./attachment.schema.js";
 
 /**
  * Campos manuais/criativos do Diário — o resto (humor, energia, sono,
@@ -32,24 +33,43 @@ export const journalUpsertSchema = z.object({
 });
 export type JournalUpsertInput = z.infer<typeof journalUpsertSchema>;
 
-// Aceita apenas data URI de imagem (base64), já comprimida no cliente
-// (ver apps/web/src/utils/image.ts) — teto generoso o bastante pra uma
-// foto de diário em boa qualidade sem deixar o banco inchar (mesmo
-// padrão do avatar em auth.schema.ts, com um teto um pouco maior porque
-// aqui é o conteúdo principal, não um ícone pequeno).
-const JOURNAL_PHOTO_DATA_URI = z
-  .string()
-  .max(3_000_000, "Imagem muito grande — escolha uma foto menor.")
-  .regex(/^data:image\/(png|jpe?g|webp);base64,/, "Formato de imagem inválido.");
-
+// Upload do Diário: foto (comprimida no cliente — ver apps/web/src/utils/image.ts),
+// vídeo curto ou PDF. O tipo real é deduzido do cabeçalho do data URI no
+// backend; os tetos de tamanho vêm de attachment.schema.ts (limite de corpo
+// da função serverless).
 export const journalMediaCreateSchema = z.object({
-  dataUri: JOURNAL_PHOTO_DATA_URI,
+  dataUri: z.union([IMAGE_DATA_URI, VIDEO_DATA_URI, PDF_DATA_URI], {
+    errorMap: () => ({ message: "Envie uma foto, um vídeo (MP4/WebM/MOV) ou um PDF de até ~3 MB." }),
+  }),
   caption: z.string().trim().max(200).optional().nullable(),
+  story: z.string().trim().max(4000).optional().nullable(),
+  fileName: fileNameSchema,
 });
 
 export const journalMediaUpdateSchema = z.object({
   caption: z.string().trim().max(200).optional().nullable(),
+  story: z.string().trim().max(4000).optional().nullable(),
 });
+
+/**
+ * Organização por IA confirmada pelo usuário. O Gemini só sugere
+ * (POST /ai/organize); este payload é o que o usuário aceitou salvar.
+ */
+export const journalAiApplySchema = z.object({
+  title: z.string().trim().max(120).optional().nullable(),
+  summary: z.string().trim().max(1200).optional().nullable(),
+  categories: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(60),
+        points: z.array(z.string().trim().min(1).max(400)).max(12),
+      })
+    )
+    .max(10),
+  mediaCategories: z.array(z.object({ id: z.string().min(1), category: z.string().trim().min(1).max(60) })).max(12).optional(),
+  tagsToAdd: z.array(z.string().trim().min(1).max(40)).max(15).optional(),
+});
+export type JournalAiApplyInput = z.infer<typeof journalAiApplySchema>;
 
 /** Fase 12 (Diário): PIN de privacidade — só dígitos, 4 a 8 caracteres. */
 export const journalPinSetSchema = z.object({

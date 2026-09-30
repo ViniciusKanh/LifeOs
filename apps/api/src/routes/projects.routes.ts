@@ -3,6 +3,13 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createProjectSchema, updateProjectSchema } from "../validators/project.schema.js";
+import {
+  buildProjectColumnValues,
+  getOwnedProject,
+  getProjectOverview,
+  listProjectDocuments,
+  serializeProjectRow,
+} from "../services/projectDetailsService.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
@@ -14,17 +21,17 @@ projectsRouter.get("/", async (req, res) => {
 
   const result = await db.execute({
     sql: `SELECT p.*,
-            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
-            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'Concluído') AS done_count
+            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.owner_id = p.owner_id) AS task_count,
+            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.owner_id = p.owner_id AND t.status = 'Concluído') AS done_count
           FROM projects p
           WHERE p.owner_id = ? ${includeArchived ? "" : "AND p.archived_at IS NULL"}
           ORDER BY p.created_at DESC`,
     args: [req.user!.id],
   });
-  return res.json(result.rows);
+  return res.json((result.rows as unknown as Array<Record<string, unknown>>).map(serializeProjectRow));
 });
 
-/** POST /api/projects */
+/** POST /api/projects — cadastro completo (todos os campos de detalhe são opcionais). */
 projectsRouter.post("/", async (req, res) => {
   const parsed = createProjectSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -32,16 +39,70 @@ projectsRouter.post("/", async (req, res) => {
   }
   const d = parsed.data;
   const db = getDb();
+  const ownerId = req.user!.id;
+
+  // parent_id só é aceito se o projeto pai também for do usuário autenticado.
+  if (d.parentId) {
+    const parent = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [d.parentId, ownerId] });
+    if (parent.rows.length === 0) return res.status(400).json({ error: "Projeto pai inválido." });
+  }
+
   const id = nanoid();
+  const pairs = buildProjectColumnValues(d);
+  const columns = ["id", "owner_id", "parent_id", ...pairs.map(([c]) => c)];
+  const values = [id, ownerId, d.parentId ?? null, ...pairs.map(([, v]) => v)];
 
   await db.execute({
-    sql: `INSERT INTO projects (id, owner_id, parent_id, name, description, kind, color)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, req.user!.id, d.parentId ?? null, d.name, d.description ?? null, d.kind, d.color ?? null],
+    sql: `INSERT INTO projects (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+    args: values,
   });
 
-  const created = await db.execute({ sql: "SELECT * FROM projects WHERE id = ? AND owner_id = ?", args: [id, req.user!.id] });
-  return res.status(201).json(created.rows[0]);
+  return res.status(201).json(await getOwnedProject(db, ownerId, id));
+});
+
+/** GET /api/projects/:id — metadados completos do projeto. */
+projectsRouter.get("/:id", async (req, res) => {
+  const db = getDb();
+  const project = await getOwnedProject(db, req.user!.id, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
+  return res.json(project);
+});
+
+/** GET /api/projects/:id/overview — indicadores derivados das tarefas, anexos e Diário. */
+projectsRouter.get("/:id/overview", async (req, res) => {
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const project = await getOwnedProject(db, ownerId, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
+  const overview = await getProjectOverview(db, ownerId, req.params.id, (project as { due_date?: string | null }).due_date ?? null);
+  return res.json(overview);
+});
+
+/** GET /api/projects/:id/tasks — tarefas do projeto (inclui contagem de anexos de cada uma). */
+projectsRouter.get("/:id/tasks", async (req, res) => {
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const project = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
+  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+
+  const result = await db.execute({
+    sql: `SELECT t.*,
+            (SELECT COUNT(*) FROM task_attachments a WHERE a.task_id = t.id AND a.owner_id = t.owner_id) AS attachment_count
+          FROM tasks t
+          WHERE t.owner_id = ? AND t.project_id = ? AND t.parent_task_id IS NULL
+          ORDER BY (t.status = 'Concluído') ASC, (t.due_date IS NULL) ASC, t.due_date ASC, t.created_at DESC`,
+    args: [ownerId, req.params.id],
+  });
+  return res.json(result.rows);
+});
+
+/** GET /api/projects/:id/documents — anexos das tarefas vinculadas ao projeto. */
+projectsRouter.get("/:id/documents", async (req, res) => {
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const project = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
+  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+  return res.json(await listProjectDocuments(db, ownerId, req.params.id));
 });
 
 /** PATCH /api/projects/:id */
@@ -51,23 +112,22 @@ projectsRouter.patch("/:id", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
   const db = getDb();
-  const existing = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  const ownerId = req.user!.id;
+  const existing = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
   if (existing.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
 
-  const { name, description, kind, color, archived } = parsed.data;
-  const sets: string[] = [];
-  const args: Array<string | number | null> = [];
-  if (name !== undefined) { sets.push("name = ?"); args.push(name); }
-  if (description !== undefined) { sets.push("description = ?"); args.push(description); }
-  if (kind !== undefined) { sets.push("kind = ?"); args.push(kind); }
-  if (color !== undefined) { sets.push("color = ?"); args.push(color); }
-  if (archived !== undefined) { sets.push("archived_at = ?"); args.push(archived ? new Date().toISOString() : null); }
+  const pairs = buildProjectColumnValues(parsed.data);
+  const sets = pairs.map(([c]) => `${c} = ?`);
+  const args: Array<string | number | null> = pairs.map(([, v]) => v);
+  if (parsed.data.archived !== undefined) {
+    sets.push("archived_at = ?");
+    args.push(parsed.data.archived ? new Date().toISOString() : null);
+  }
   sets.push("updated_at = datetime('now')");
-  args.push(req.params.id, req.user!.id);
+  args.push(req.params.id, ownerId);
 
   await db.execute({ sql: `UPDATE projects SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
-  const updated = await db.execute({ sql: "SELECT * FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  return res.json(updated.rows[0]);
+  return res.json(await getOwnedProject(db, ownerId, req.params.id));
 });
 
 /** DELETE /api/projects/:id — as tarefas do projeto continuam existindo, só perdem o vínculo (project_id vira NULL). */

@@ -119,7 +119,7 @@ searchRouter.get("/", async (req, res) => {
         "text"
       )
     ),
-    ...projects.rows.map((r) => toResult("project", { id: String(r.id), title: String(r.name), subtitle: "Projeto", link: "/projetos" }, "text")),
+    ...projects.rows.map((r) => toResult("project", { id: String(r.id), title: String(r.name), subtitle: "Projeto", link: `/projetos/${String(r.id)}` }, "text")),
     ...journalEntries.rows.map((r) => {
       const fields = ["intention", "thoughts", "challenges", "lighter_plan", "feel_good", "night_helped", "night_takeaway"] as const;
       const preview = fields.map((f) => stripHtml(r[f] as string | null)).find((p) => p.length > 0) ?? "";
@@ -204,7 +204,7 @@ searchRouter.get("/", async (req, res) => {
     }
     for (const r of recentProjects.rows as unknown as Array<{ id: string; name: string }>) {
       const key = `project:${r.id}`;
-      entityLookup.set(key, toResult("project", { id: r.id, title: r.name, subtitle: "Projeto", link: "/projetos" }, "semantic"));
+      entityLookup.set(key, toResult("project", { id: r.id, title: r.name, subtitle: "Projeto", link: `/projetos/${r.id}` }, "semantic"));
       candidates.push({ entityType: "project", entityId: r.id, text: r.name });
     }
 

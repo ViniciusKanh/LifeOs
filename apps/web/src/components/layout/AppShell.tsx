@@ -1,38 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import {
-  LayoutGrid,
-  Sun,
-  ListChecks,
-  BookOpen,
-  GraduationCap,
-  HeartPulse,
-  Repeat,
-  Target,
-  FlaskConical,
-  BarChart3,
-  History,
-  ClipboardList,
-  Menu,
-  X,
-  SunMedium,
-  Moon,
-  CalendarDays,
-  Trophy,
-  GanttChartSquare,
-  Inbox,
-  Briefcase,
-  CalendarRange,
-  Share2,
-  BellRing,
-  Activity,
-  CloudSun,
-  Gauge,
-  Radar,
-  TrendingUp,
-  Database,
-  NotebookPen,
-} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronRight, Menu, Moon, SunMedium, X } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationsBell } from "./NotificationsBell";
@@ -43,85 +12,68 @@ import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
 import { QuickCaptureButton } from "./QuickCaptureButton";
+import { Sidebar, NavGroups, useSidebarCollapsed } from "./Sidebar";
+import { AppFooter } from "./AppFooter";
+import { DEFAULT_QUOTE, MOBILE_PRIMARY, NAV_GROUPS, findNavItem, visibleGroups } from "./navConfig";
 
-// Frases curtas por área — só decoração de cabeçalho, sem dado
-// nenhum embutido; caem no padrão caso a rota não tenha uma frase própria.
-const PAGE_QUOTES: Record<string, string> = {
-  "/dashboard": "Disciplina de hoje, liberdade de amanhã.",
-  "/hoje": "Consistência hoje, resultados amanhã.",
-  "/tarefas": "Disciplina de hoje, liberdade de amanhã.",
-  "/inbox": "Capture agora, decida depois.",
-  "/profissional": "Foco no que move os ponteiros.",
-  "/semana": "Uma semana bem planejada se vive melhor.",
-  "/biblioteca": "Livros constroem a melhor versão de nós.",
-  "/educacao": "Estudo hoje, liberdade amanhã.",
-  "/saude": "Corpo saudável, mente mais forte.",
-  "/habitos": "Disciplina é a ponte entre seus objetivos e seus sonhos.",
-  "/metas": "Um objetivo sem plano é apenas um desejo.",
-  "/calendario": "Quem planeja o tempo, comanda o progresso.",
-  "/conquistas": "Cada conquista começou com um hábito repetido.",
-  "/analytics": "Dados transformam esforço em clareza.",
-  "/signals": "Observar com atenção é o primeiro passo para melhorar.",
-  "/contexto-do-dia": "Entender o contexto é ajustar melhor a rotina.",
-  "/timeline": "Disciplina de hoje, liberdade de amanhã.",
-  "/weekly-review": "Pequenos ajustes hoje, grandes resultados amanhã.",
-  "/life-map": "Clareza nasce quando você enxerga as conexões.",
-  "/capacity-planner": "Quanto realmente cabe no seu dia?",
-  "/deadline-radar": "Antecipar é criar mais liberdade.",
-  "/goal-forecast": "Pequenos passos hoje, grandes conquistas amanhã.",
-  "/data-health": "Dados confiáveis geram decisões melhores.",
-};
-const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
+/**
+ * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
+ * navegação e busca global + conteúdo + rodapé. No celular, barra inferior
+ * com 4 atalhos e um menu em gaveta com todos os módulos agrupados.
+ * Toda a navegação vem de navConfig.ts (fonte única).
+ */
 
-const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { to: "/hoje", label: "Hoje", icon: Sun },
-  { to: "/tarefas", label: "Tarefas", icon: ListChecks },
-  { to: "/projetos", label: "Projetos", icon: GanttChartSquare },
-  { to: "/capacity-planner", label: "Capacity Planner", icon: Gauge },
-  { to: "/deadline-radar", label: "Deadline Radar", icon: Radar },
-];
+const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
-const SECONDARY_NAV = [
-  { to: "/inbox", label: "Inbox", icon: Inbox },
-  { to: "/profissional", label: "Profissional", icon: Briefcase },
-  { to: "/semana", label: "Semana", icon: CalendarRange },
-  { to: "/calendario", label: "Calendário", icon: CalendarDays },
-  { to: "/biblioteca", label: "Biblioteca", icon: BookOpen },
-  { to: "/educacao", label: "Educação", icon: GraduationCap },
-  { to: "/saude", label: "Saúde", icon: HeartPulse },
-  { to: "/contexto-do-dia", label: "Contexto do Dia", icon: CloudSun },
-  { to: "/habitos", label: "Hábitos", icon: Repeat },
-  { to: "/metas", label: "Metas", icon: Target },
-  { to: "/experimentos", label: "Experimentos", icon: FlaskConical },
-  { to: "/conquistas", label: "Conquistas", icon: Trophy },
-  { to: "/goal-forecast", label: "Goal Forecast", icon: TrendingUp },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/signals", label: "Signals", icon: Activity },
-  { to: "/timeline", label: "Timeline", icon: History },
-  { to: "/weekly-review", label: "Weekly Review", icon: ClipboardList },
-  { to: "/life-map", label: "Life Map", icon: Share2 },
-  { to: "/gatilhos", label: "Gatilhos", icon: BellRing },
-  { to: "/diario", label: "Diário", icon: NotebookPen },
-  { to: "/data-health", label: "Data Health", icon: Database },
-];
+function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () => void; isAdmin: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open, onClose]);
 
-function navLinkClass({ isActive }: { isActive: boolean }) {
-  return `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-    isActive
-      ? "font-semibold text-brand-700 bg-gradient-to-r from-brand-50 to-transparent dark:from-brand-700/20 dark:to-transparent dark:text-brand-100"
-      : "text-slate font-medium hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-  }`;
-}
-
-/* Barrinha de destaque à esquerda do item ativo — só decoração de estado, não estrutura nova. */
-function ActiveRail({ isActive }: { isActive: boolean }) {
   return (
-    <span
-      className={`absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-gradient-to-b from-brand-500 to-signal transition-opacity ${
-        isActive ? "opacity-100" : "opacity-0"
-      }`}
-    />
+    <AnimatePresence>
+      {open && (
+        <motion.div className="md:hidden fixed inset-0 z-40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+          <motion.aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu de módulos"
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", stiffness: 340, damping: 36 }}
+            className="absolute inset-y-0 left-0 w-[86%] max-w-[320px] flex flex-col bg-paper-raised dark:bg-ink-raised shadow-2xl"
+          >
+            <div className="flex items-center justify-between h-16 px-4 border-b border-paper-border dark:border-ink-border">
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px]">
+                  <img src="/logo/icon-64.png" alt="" className="w-full h-full rounded-[10px] object-cover bg-white" />
+                </span>
+                <span className="leading-tight">
+                  <span className="block font-display font-bold">LifeOS</span>
+                  <span className="block text-[10.5px] text-slate">Transforme sua rotina em progresso</span>
+                </span>
+              </div>
+              <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center text-slate" aria-label="Fechar menu">
+                <X size={18} />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto px-3 py-2">
+              <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" />
+            </nav>
+          </motion.aside>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -129,94 +81,73 @@ export function AppShell() {
   const { isDark, setMode } = useTheme();
   const { isAdmin } = useAuth();
   const location = useLocation();
-  const [moreOpen, setMoreOpen] = useState(false);
+  const { collapsed, canToggle, toggle } = useSidebarCollapsed();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const moreItems = [
-    ...SECONDARY_NAV.map(({ to, label }) => ({ to, label })),
-    ...(isAdmin ? [{ to: "/configuracoes", label: "Configurações" }, { to: "/admin/usuarios", label: "Usuários" }] : []),
-  ];
+  const current = findNavItem(location.pathname);
+  const isSubPage = !!current && location.pathname !== current.item.to;
+  const quote = current?.item.quote ?? DEFAULT_QUOTE;
+  const mobilePrimary = MOBILE_PRIMARY.map((to) => ALL_ITEMS.find((i) => i.to === to)).filter((i): i is (typeof ALL_ITEMS)[number] => !!i);
 
-  const quote = PAGE_QUOTES[location.pathname] ?? DEFAULT_QUOTE;
+  // Cada troca de rota volta ao topo — o conteúdo rola na janela, não num contêiner.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [location.pathname]);
 
   return (
     <div className="w-full min-h-screen flex bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2]">
-      {/* sidebar desktop/tablet */}
-      <aside className="hidden md:flex md:flex-col shrink-0 md:w-[76px] lg:w-[248px] p-3 lg:p-4 bg-paper-raised dark:bg-ink-raised border-r border-paper-border dark:border-ink-border relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-aurora opacity-70 dark:opacity-40" />
+      <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] rounded-lg px-3 py-2 bg-brand-600 text-white text-sm">
+        Pular para o conteúdo
+      </a>
 
-        <div className="relative flex items-center gap-2.5 px-1 mb-7">
-          <div className="relative shrink-0 w-10 h-10 rounded-xl2 bg-gradient-to-br from-brand-500 to-signal p-[3px] shadow-glow-brand">
-            <img src="/logo/icon-64.png" alt="LifeOS" className="w-full h-full rounded-[13px] object-cover bg-white" />
-          </div>
-          <div className="hidden lg:block leading-tight">
-            <span className="block text-lg font-bold font-display tracking-tight">LifeOS</span>
-            <span className="block text-[11px] text-slate">progresso em movimento</span>
-          </div>
-        </div>
+      <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} />
 
-        <nav className="relative flex flex-col gap-0.5 flex-1 overflow-y-auto">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className={navLinkClass}>
-              {({ isActive }) => (
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        <header className="sticky top-0 z-30 h-16 flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="md:hidden w-9 h-9 -ml-1 rounded-xl flex items-center justify-center text-slate hover:bg-black/5 dark:hover:bg-white/10"
+            aria-label="Abrir menu de módulos"
+          >
+            <Menu size={19} />
+          </button>
+
+          <div className="min-w-0 flex-1 md:flex-none md:w-auto lg:min-w-[220px]">
+            <nav aria-label="Trilha de navegação" className="flex items-center gap-1 text-[11px] text-slate leading-none">
+              <span className="hidden sm:inline">{current?.group.label ?? "LifeOS"}</span>
+              {isSubPage && current && (
                 <>
-                  <ActiveRail isActive={isActive} />
-                  <Icon size={18} className="shrink-0" />
-                  <span className="hidden lg:inline">{label}</span>
+                  <ChevronRight size={11} className="hidden sm:inline" />
+                  <NavLink to={current.item.to} className="hover:text-brand-600">{current.item.label}</NavLink>
                 </>
               )}
-            </NavLink>
-          ))}
-
-          <div className="my-3 border-t border-paper-border dark:border-ink-border" />
-
-          {SECONDARY_NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className={navLinkClass}>
-              {({ isActive }) => (
-                <>
-                  <ActiveRail isActive={isActive} />
-                  <Icon size={18} className="shrink-0" />
-                  <span className="hidden lg:inline">{label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-
-        <button
-          onClick={() => setMode(isDark ? "light" : "dark")}
-          className="relative mt-3 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-        >
-          {isDark ? <SunMedium size={18} /> : <Moon size={18} />}
-          <span className="hidden lg:inline">{isDark ? "Tema claro" : "Tema escuro"}</span>
-        </button>
-      </aside>
-
-      {/* coluna principal */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* cabeçalho */}
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 md:px-8 py-3 border-b border-paper-border dark:border-ink-border bg-paper-raised/90 dark:bg-ink-raised/90 backdrop-blur supports-[backdrop-filter]:bg-paper-raised/75 dark:supports-[backdrop-filter]:bg-ink-raised/75">
-          <div className="flex items-center gap-2 md:hidden">
-            <img src="/logo/icon-64.png" alt="LifeOS" className="w-7 h-7 rounded-lg object-contain" />
-            <span className="text-sm font-bold font-display">LifeOS</span>
+            </nav>
+            <p className="font-display font-semibold text-[15px] md:text-base leading-tight truncate mt-0.5">
+              {current ? (isSubPage ? "Detalhes" : current.item.label) : "LifeOS"}
+            </p>
           </div>
 
-          <DesktopGlobalSearch />
+          <div className="hidden md:flex flex-1 justify-center min-w-0">
+            <DesktopGlobalSearch />
+          </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto md:ml-0">
             <MobileGlobalSearch />
             <button
               onClick={() => setMode(isDark ? "light" : "dark")}
               className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border"
+              aria-label={isDark ? "Ativar tema claro" : "Ativar tema escuro"}
             >
               {isDark ? <SunMedium size={16} /> : <Moon size={16} />}
             </button>
             <AchievementHeaderPulse />
             <NotificationsBell />
+            <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
             <ProfileMenu />
           </div>
         </header>
 
-        <div className="hidden md:flex justify-end px-8 pt-3">
+        <div className="hidden xl:flex justify-end px-8 pt-3 -mb-1">
           <p className="text-xs italic text-slate">
             <span className="text-brand-500 not-italic font-display font-semibold mr-0.5">&ldquo;</span>
             {quote}
@@ -224,66 +155,43 @@ export function AppShell() {
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <main id="conteudo" className="flex-1 min-w-0">
           <Outlet />
+        </main>
+
+        <div className="pb-[4.5rem] md:pb-0">
+          <AppFooter />
         </div>
 
         {/* navegação inferior mobile */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around py-2 bg-paper-raised/95 dark:bg-ink-raised/95 backdrop-blur border-t border-paper-border dark:border-ink-border">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors">
+        <nav
+          aria-label="Atalhos"
+          className="md:hidden fixed bottom-0 inset-x-0 z-20 grid grid-cols-5 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-paper-raised/95 dark:bg-ink-raised/95 backdrop-blur border-t border-paper-border dark:border-ink-border"
+        >
+          {mobilePrimary.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} className="flex flex-col items-center gap-0.5 py-1 rounded-xl">
               {({ isActive }) => (
                 <>
-                  <span
-                    className={`flex items-center justify-center w-9 h-7 rounded-full transition-colors ${
-                      isActive ? "bg-gradient-to-r from-brand-500 to-signal text-white" : "text-slate"
-                    }`}
-                  >
-                    <Icon size={17} />
+                  <span className="relative flex items-center justify-center w-11 h-7">
+                    {isActive && (
+                      <motion.span layoutId="mobile-tab" className="absolute inset-0 rounded-full bg-gradient-to-r from-brand-500 to-signal" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+                    )}
+                    <Icon size={17} className={`relative ${isActive ? "text-white" : "text-slate"}`} />
                   </span>
                   <span className={`text-[10px] ${isActive ? "font-semibold text-brand-700 dark:text-brand-100" : "text-slate"}`}>{label}</span>
                 </>
               )}
             </NavLink>
           ))}
-          <button onClick={() => setMoreOpen(true)} className="flex flex-col items-center gap-1 px-3 py-1.5">
-            <span className="flex items-center justify-center w-9 h-7 text-slate">
+          <button onClick={() => setDrawerOpen(true)} className="flex flex-col items-center gap-0.5 py-1" aria-label="Todos os módulos">
+            <span className="flex items-center justify-center w-11 h-7 text-slate">
               <Menu size={17} />
             </span>
-            <span className="text-[10px] text-slate">Mais</span>
+            <span className="text-[10px] text-slate">Módulos</span>
           </button>
-        </div>
+        </nav>
 
-        {moreOpen && (
-          <div className="md:hidden fixed inset-0 z-20 flex items-end bg-black/40" onClick={() => setMoreOpen(false)}>
-            <div className="w-full rounded-t-2xl p-5 bg-paper-raised dark:bg-ink-raised" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-sm font-semibold">Mais módulos</span>
-                <button onClick={() => setMoreOpen(false)} className="text-slate">
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {moreItems.map(({ to, label }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    onClick={() => setMoreOpen(false)}
-                    className={({ isActive }) =>
-                      `rounded-xl px-3 py-4 text-xs text-center border transition-colors ${
-                        isActive
-                          ? "border-brand-500/40 bg-gradient-to-br from-brand-50 to-transparent text-brand-700 font-semibold dark:from-brand-700/20 dark:text-brand-100"
-                          : "text-slate border-paper-border dark:border-ink-border"
-                      }`
-                    }
-                  >
-                    {label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} />
 
         <AchievementToast />
         <OnboardingFlow />
