@@ -21,15 +21,15 @@ export function LogoMark({ size = 220, color = "#fff", loop = true }: { size?: n
 
   return (
     <svg width={size} height={size} viewBox="0 0 200 200" fill="none" aria-hidden>
-      {/* anel de progresso: começa no topo e dá quase uma volta, parando antes da seta */}
-      <motion.path d="M 118 22 A 80 80 0 1 1 168 58" stroke={color} strokeWidth={17} strokeLinecap="round" {...draw(0)} />
+      {/* anel de progresso: sai do topo, contorna pela esquerda e por baixo e sobe pela direita até a seta (arco anti-horário) */}
+      <motion.path d="M 118 22 A 80 80 0 1 0 168 58" stroke={color} strokeWidth={17} strokeLinecap="round" {...draw(0)} />
       <motion.path
-        d="M 152 34 L 184 42 L 170 72 Z"
+        d="M 154 36 L 183 53.5 L 157 69 Z"
         fill={color}
         initial={{ scale: reduce ? 1 : 0, opacity: reduce ? 1 : 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 1.05, type: "spring", stiffness: 320, damping: 14, repeat, repeatDelay: 3.95 }}
-        style={{ transformOrigin: "168px 50px" }}
+        style={{ transformOrigin: "165px 53px" }}
       />
       {/* "L" */}
       <motion.path d="M 70 46 L 70 118 Q 70 136 88 136 L 150 136" stroke={color} strokeWidth={15} strokeLinecap="round" strokeLinejoin="round" {...draw(0.35)} />
