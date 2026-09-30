@@ -1,822 +1,424 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend } from "recharts";
+import { useMemo, useState } from "react";
+import { motion, useScroll, useSpring } from "motion/react";
 import {
-  TrendingUp,
-  ListChecks,
-  Droplets,
-  Heart,
-  Circle,
-  CheckCircle2,
-  Flame,
-  Info,
+  BarChart3,
   BookOpen,
-  Flag,
-  Wrench,
-  Plus,
-  Check,
-  Sparkles,
   Briefcase,
-  GraduationCap,
-  Repeat,
-  History as HistoryIcon,
+  CalendarDays,
   CheckSquare,
-  Dumbbell,
-  Moon,
-  Smile,
-  Trophy,
-  Wand2,
-  Users,
-  FlaskConical,
-  NotebookPen,
+  Droplets,
+  FolderKanban,
+  GraduationCap,
+  Heart,
+  LayoutGrid,
+  ListChecks,
+  Repeat,
+  Target,
+  Zap,
 } from "lucide-react";
-import { LifeScoreRadar } from "@/components/charts/LifeScoreRadar";
-import { HealthBodyGauge, GoalsThermometerGauge, DimensionRingGauge } from "@/components/dashboard/DimensionVectors";
-import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
-import { WeekGlance } from "@/components/dashboard/WeekGlance";
-import { useLifeScore, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
-import { useWeeklyReviewHistory } from "@/hooks/useReviews";
 import { useAuth } from "@/hooks/useAuth";
-import { useTasks } from "@/hooks/useTasks";
+import { useLifeScore, useLifeScoreHistory, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
+import { useTasks, useFocusTasks } from "@/hooks/useTasks";
+import { useProjects } from "@/hooks/useProjects";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealth, useHealthSummary } from "@/hooks/useHealth";
 import { useBooks } from "@/hooks/useBooks";
-import { useGoals } from "@/hooks/useGoals";
-import { useAchievements } from "@/hooks/useAchievements";
-import { useCustomAchievements } from "@/hooks/useCustomAchievements";
+import { useSignals } from "@/hooks/useSignals";
+import { useDeadlineRadar } from "@/hooks/useDeadlineRadar";
+import { useGoalForecast } from "@/hooks/useGoalForecast";
+import { useEvents } from "@/hooks/useEvents";
 import { useDailyInsight } from "@/hooks/useCopilot";
-import { Card, IconBadge, StatTile } from "@/components/ui/primitives";
-import type { TimelineEvent } from "@/types";
+import { WATER_GOAL_ML } from "@/components/health/healthUtils";
+import { Card } from "@/components/ui/primitives";
+import { AnimatedLineChart } from "@/components/charts/motion/AnimatedLineChart";
+import { Treemap } from "@/components/charts/motion/Treemap";
+import { WaffleChart } from "@/components/charts/motion/WaffleChart";
+import { Reveal } from "@/components/charts/motion/Reveal";
+import {
+  AttentionPanel,
+  ContinueReading,
+  CopilotBanner,
+  DashboardHero,
+  DayTimelineCard,
+  DimensionScroller,
+  GoalsCard,
+  InsightCard,
+  KpiStrip,
+  NextBestStep,
+  SectionTitle,
+  SignalsNow,
+  type DimensionItem,
+  type KpiData,
+} from "@/components/dashboard/DashboardSections";
+import {
+  DONE,
+  buildAttentionItems,
+  buildDayEntries,
+  lifeScoreWeekDelta,
+  localIsoDate,
+  openLoadByProject,
+  taskComposition,
+} from "@/utils/dashboardMetrics";
 
-const DIMENSION_LABELS: Record<string, string> = {
-  productivity: "Produtividade",
-  professional: "Profissional",
-  health: "Saúde",
-  education: "Educação",
-  reading: "Leitura",
-  habits: "Hábitos",
-  goals: "Metas",
+/* ============================================================
+   Dashboard v2 — "centro de comando" do dia.
+   Topo: saudação + Life Score com evolução real; KPIs clicáveis.
+   Meio: próximo melhor passo, sinais, alertas e o dia em linha do tempo.
+   Rolagem: seções surgem ao entrar na tela (motion whileInView) e uma
+   barra de progresso de rolagem acompanha a leitura; dimensões do Life
+   Score num scroller horizontal; visuais de carga (treemap), composição
+   (waffle) e ritmo (linhas animadas).
+   Todos os números vêm dos módulos originais — nada é estimado.
+   ============================================================ */
+
+const DIM_META: Array<{ key: keyof typeof DIM_EXPLAIN; label: string; color: string; icon: JSX.Element; to: string }> = [
+  { key: "productivity", label: "Produtividade", color: "#2F80FF", icon: <CheckSquare size={14} />, to: "/tarefas" },
+  { key: "health", label: "Saúde", color: "#12B76A", icon: <Heart size={14} />, to: "/saude" },
+  { key: "habits", label: "Hábitos", color: "#08B6A6", icon: <Repeat size={14} />, to: "/habitos" },
+  { key: "goals", label: "Metas", color: "#FF7A45", icon: <Target size={14} />, to: "/metas" },
+  { key: "reading", label: "Leitura", color: "#FF3D93", icon: <BookOpen size={14} />, to: "/biblioteca" },
+  { key: "education", label: "Educação", color: "#9550FF", icon: <GraduationCap size={14} />, to: "/educacao" },
+  { key: "professional", label: "Profissional", color: "#7C4DFF", icon: <Briefcase size={14} />, to: "/profissional" },
+];
+
+const DIM_EXPLAIN = {
+  productivity: "% das suas tarefas concluídas.",
+  health: "Água, sono e exercício de hoje.",
+  habits: "% dos hábitos cumpridos hoje.",
+  goals: "Equilíbrio entre metas semanais, mensais e anuais.",
+  reading: "Meta diária de páginas ou progresso dos livros em leitura.",
+  education: "Progresso médio das suas formações.",
+  professional: "Tarefas concluídas em projetos profissionais.",
 };
 
-// Cor de cada dimensão no radar/lista — o mesmo significado usado em
-// toda a aplicação (ver comentário em primitives.tsx: IconBadge).
-/** Mesmo mapeamento de tom acima, em classe de texto — usado pelos vetores (fill/stroke="currentColor"). */
-const DIMENSION_TEXT_TONE: Record<string, string> = {
-  productivity: "text-signal",
-  professional: "text-signal",
-  health: "text-cat-blue",
-  education: "text-cat-purple",
-  reading: "text-cat-pink",
-  habits: "text-cat-green",
-  goals: "text-cat-teal",
-};
-
-/** Ícone de cada dimensão nos vetores do Life Score — os mesmos já usados em "Como o Life Score é calculado". */
-const DIMENSION_ICON: Record<string, ReactNode> = {
-  productivity: <CheckSquare size={20} />,
-  professional: <Briefcase size={20} />,
-  education: <GraduationCap size={20} />,
-  reading: <BookOpen size={20} />,
-  habits: <Repeat size={20} />,
-};
-
-// Meta diária de água — ainda não é configurável por usuário no
-// backend, então usamos um valor de referência fixo só para calcular
-// o "% da meta" exibido; o litro registrado em si é sempre real.
-const WATER_GOAL_ML = 2500;
-
-const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
-  task: CheckSquare,
-  habit: Repeat,
-  workout: Dumbbell,
-  reading: BookOpen,
-  education: GraduationCap,
-  sleep: Moon,
-  mood: Smile,
-  water: Droplets,
-  work_note: Users,
-  experiment: FlaskConical,
-  journal: NotebookPen,
-};
-
-function timelineLabel(e: TimelineEvent): string {
-  switch (e.type) {
-    case "task":
-      return `Tarefa concluída: ${e.label}`;
-    case "habit":
-      return `Hábito cumprido: ${e.label}`;
-    case "workout":
-      return e.label;
-    case "reading":
-      return `Leitura: ${e.label}`;
-    case "education":
-      return `Disciplina concluída: ${e.label}`;
-    case "work_note":
-      return `Reunião/anotação: ${e.label}`;
-    default:
-      return e.label;
-  }
-}
-
-function formatEventTime(at: string) {
-  const iso = at.includes("T") ? at : at.replace(" ", "T");
-  const d = new Date(iso.endsWith("Z") ? iso : `${iso}Z`);
-  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function weekShortLabel(monday: string) {
-  const d = new Date(`${monday}T00:00:00`);
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
-// Legenda de tendência (▲/▼) para os StatTiles do topo — só aparece quando
-// há uma variação real vs. o período anterior (nunca "0%" ou texto inventado).
-function trendCaption(pct: number | null | undefined): string | undefined {
-  if (pct === null || pct === undefined || pct === 0) return undefined;
-  return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs. período anterior`;
+function shortDay(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
 export function DashboardPage() {
+  const today = localIsoDate();
+  const now = new Date();
+  const nowLabel = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
   const { user } = useAuth();
-  const { lifeScore, isLoading } = useLifeScore();
-  const { tasks, moveTask, createTask } = useTasks();
-  const { habits, summaryByHabitId, checkIn } = useHabits();
+  const { lifeScore, isLoading: scoreLoading } = useLifeScore();
+  const { history } = useLifeScoreHistory(30, !!lifeScore);
+  const { tasks, moveTask } = useTasks();
+  const { focusTasks } = useFocusTasks(1);
+  const { projects } = useProjects();
+  const { habits, summaryByHabitId } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
-  const { books } = useBooks({ status: "Lendo" }); // bug corrigido: o CHECK do banco usa "Lendo" (maiúsculo), o filtro em minúsculo nunca batia e o card de leitura atual nunca aparecia
-  const { stats: goalStats } = useGoals();
+  const { books } = useBooks({ status: "Lendo" });
   const { overview } = useAnalyticsOverview(14);
-  const { insights: lifeInsights } = useInsights(30);
-  const { history: reviewHistory } = useWeeklyReviewHistory(8);
-  const { achievements, unlocked: unlockedCatalog } = useAchievements();
-  const { trophies } = useCustomAchievements();
-  const today = new Date().toISOString().slice(0, 10);
+  const { insights } = useInsights(30);
+  const { data: signals, isLoading: signalsLoading } = useSignals("today");
+  const { data: deadlines } = useDeadlineRadar("7d");
+  const { data: goalForecast } = useGoalForecast("all");
+  const { items: calendarItems } = useEvents(today, today);
   const { events } = useTimeline({ from: today, to: today });
   const copilot = useDailyInsight();
+  const [completing, setCompleting] = useState(false);
 
-  const [quickTitle, setQuickTitle] = useState("");
-  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
-
-  const dims = lifeScore
-    ? Object.entries(DIMENSION_LABELS).map(([key, dim]) => ({
-        key,
-        dim,
-        value: (lifeScore as unknown as Record<string, number>)[key] ?? 0,
-      }))
-    : Object.entries(DIMENSION_LABELS).map(([key, dim]) => ({ key, dim, value: 0 }));
+  // Barra de progresso da rolagem (fica logo abaixo do cabeçalho fixo).
+  const { scrollYProgress } = useScroll();
+  const progress = useSpring(scrollYProgress, { stiffness: 140, damping: 30, restDelta: 0.001 });
 
   const overall = lifeScore?.overall ?? 0;
+  const delta = useMemo(() => lifeScoreWeekDelta(history, today), [history, today]);
 
   const tasksToday = tasks.filter((t) => t.due_date?.slice(0, 10) === today);
-  const tasksTodayDone = tasksToday.filter((t) => t.status === "Concluído").length;
+  const tasksTodayDone = tasksToday.filter((t) => t.status === DONE).length;
+  const overdueCount = tasks.filter((t) => t.status !== DONE && t.due_date && t.due_date.slice(0, 10) < today).length;
+  const habitsDone = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
+  const waterMl = health?.waterMl ?? 0;
+  const energy = health?.mood?.energy ?? null;
+  const agendaToday = calendarItems.filter((c) => c.startsAt.slice(0, 10) === today);
 
-  const priorities = tasks
-    .filter((t) => t.status !== "Concluído")
-    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
-    .slice(0, 5);
-
-  const todaysEvents = useMemo(
+  const attention = useMemo(
     () =>
-      [...events]
-        .filter((e) => String(e.at).slice(0, 10) === today)
-        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-        .slice(0, 5),
-    [events, today]
+      buildAttentionItems({
+        deadlines,
+        goals: goalForecast,
+        waterMl,
+        waterGoalMl: WATER_GOAL_ML,
+        habitsPending: habits.length - habitsDone,
+        hour: now.getHours(),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deadlines, goalForecast, waterMl, habits.length, habitsDone]
   );
 
-  const habitsDoneToday = habits.filter((h) => summaryByHabitId.get(h.id)?.checkedInToday).length;
+  const subtitle = useMemo(() => {
+    const dayLabel = signals?.dayClassification?.label;
+    const base = dayLabel ? `Seu dia está ${dayLabel.toLowerCase()}` : "Aqui está o retrato real da sua rotina";
+    if (attention.length === 0) return `${base} — nada pedindo atenção agora.`;
+    return `${base}, mas ${attention.length} ${attention.length === 1 ? "item merece" : "itens merecem"} atenção.`;
+  }, [signals, attention.length]);
 
-  // Sequência mais forte entre os hábitos ativos — dado já calculado por hábito, só pegamos o maior.
-  const streakHighlight: StreakHighlight | null = useMemo(() => {
-    let best: StreakHighlight | null = null;
-    for (const h of habits) {
-      const s = summaryByHabitId.get(h.id)?.currentStreak ?? 0;
-      if (s > 0 && (!best || s > best.streak)) best = { habitName: h.name, streak: s };
+  const kpis: KpiData[] = [
+    {
+      key: "priorities",
+      label: "Prioridades de hoje",
+      value: `${tasksTodayDone} / ${tasksToday.length}`,
+      caption: overdueCount > 0 ? `${overdueCount} atrasada(s)` : "nenhuma atrasada",
+      icon: <ListChecks size={20} />,
+      tone: "amber",
+      to: "/tarefas",
+    },
+    {
+      key: "water",
+      label: "Água",
+      value: `${(waterMl / 1000).toFixed(1)} L`,
+      caption: `de ${(WATER_GOAL_ML / 1000).toFixed(1)} L`,
+      icon: <Droplets size={20} />,
+      tone: "blue",
+      to: "/saude",
+      pct: Math.round((waterMl / WATER_GOAL_ML) * 100),
+    },
+    {
+      key: "habits",
+      label: "Hábitos",
+      value: `${habitsDone} / ${habits.length}`,
+      caption: habits.length > 0 ? `${Math.round((habitsDone / habits.length) * 100)}% concluídos` : "nenhum hábito ativo",
+      icon: <Repeat size={20} />,
+      tone: "green",
+      to: "/habitos",
+      pct: habits.length > 0 ? Math.round((habitsDone / habits.length) * 100) : undefined,
+    },
+    {
+      key: "energy",
+      label: "Energia",
+      value: energy !== null ? `${energy} / 5` : "—",
+      caption: energy !== null ? (energy >= 4 ? "nível bom hoje" : energy >= 3 ? "nível médio" : "nível baixo") : "registre em Saúde",
+      icon: <Zap size={20} />,
+      tone: "purple",
+      to: "/saude",
+    },
+    {
+      key: "agenda",
+      label: "Agenda",
+      value: `${agendaToday.length} ${agendaToday.length === 1 ? "evento" : "eventos"}`,
+      caption: "no seu dia de hoje",
+      icon: <CalendarDays size={20} />,
+      tone: "pink",
+      to: "/calendario",
+    },
+  ];
+
+  const nextTask = focusTasks[0] ?? null;
+  const nextTaskEstimate = nextTask ? tasks.find((t) => t.id === nextTask.id)?.estimate_minutes ?? null : null;
+  const completeNext = async () => {
+    if (!nextTask) return;
+    setCompleting(true);
+    try {
+      await moveTask({ id: nextTask.id, status: DONE });
+    } finally {
+      setCompleting(false);
     }
-    return best;
-  }, [habits, summaryByHabitId]);
-  const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
-  const currentBook = books[0];
-
-  const goalPeriods = goalStats?.periods ?? [];
-  const goalPeriodsDone = goalPeriods.reduce((sum, period) => sum + period.doneCount, 0);
-  const goalPeriodsTotal = goalPeriods.reduce((sum, period) => sum + period.totalCount, 0);
-  const goalPeriodsPct = goalPeriodsTotal > 0 ? Math.round((goalPeriodsDone / goalPeriodsTotal) * 100) : 0;
-  const nextMilestone = goalStats?.upcomingMilestones[0] ?? null;
-
-  // Conquistas recentes (catálogo + troféus customizados), mais novas
-  // primeiro — junta as duas fontes num único "últimas destravadas".
-  const unlockedCustom = trophies.filter((t) => t.unlockedAt);
-  const totalAchievements = achievements.length + trophies.length;
-  const totalUnlocked = unlockedCatalog.length + unlockedCustom.length;
-  const recentUnlocks = [
-    ...unlockedCatalog.map((a) => ({ id: a.id, title: a.title, icon: null as string | null, unlockedAt: a.unlockedAt! })),
-    ...unlockedCustom.map((t) => ({ id: t.id, title: t.title, icon: t.icon, unlockedAt: t.unlockedAt! })),
-  ]
-    .sort((a, b) => b.unlockedAt.localeCompare(a.unlockedAt))
-    .slice(0, 3);
-
-  const toggleTask = (id: string, currentStatus: string) => {
-    moveTask({ id, status: currentStatus === "Concluído" ? "A Fazer" : "Concluído" });
   };
 
-  const flash = (message: string) => {
-    setActionFeedback(message);
-    setTimeout(() => setActionFeedback((cur) => (cur === message ? null : cur)), 2500);
-  };
+  const dayEntries = useMemo(() => buildDayEntries(calendarItems, events, today), [calendarItems, events, today]);
 
-  const handleQuickWater = async () => {
-    await addWater(250);
-    flash("+250ml de água registrados!");
-  };
+  // Insight com base declarada — melhor dia da semana ou relação sono × produtividade.
+  const insight = useMemo(() => {
+    if (!insights) return { text: null, basis: null };
+    const r = insights.sleepVsNextDayProductivity;
+    if (r.r !== null && Math.abs(r.r) >= 0.3 && r.pairs >= 7) {
+      return {
+        text: r.r > 0 ? "Nas noites em que você dorme mais, o dia seguinte tende a render mais tarefas." : "Dormir mais não tem se refletido em mais tarefas no dia seguinte.",
+        basis: `Correlação observada (r = ${r.r.toFixed(2)}) em ${r.pairs} pares de dias — associação, não causa.`,
+      };
+    }
+    if (insights.bestWeekday && insights.bestWeekday.avgCompleted > 0) {
+      return {
+        text: `Seu dia mais produtivo tem sido ${insights.bestWeekday.label.toLowerCase()}, com média de ${insights.bestWeekday.avgCompleted.toFixed(1)} tarefas concluídas.`,
+        basis: "Baseado nos seus últimos 30 dias de registros.",
+      };
+    }
+    return { text: null, basis: null };
+  }, [insights]);
 
-  const handleQuickTask = async () => {
-    const title = quickTitle.trim();
-    if (!title) return;
-    await createTask({ title, status: "A Fazer" });
-    setQuickTitle("");
-    flash("Tarefa adicionada!");
-  };
+  const activeGoals = useMemo(
+    () =>
+      (goalForecast?.goals ?? [])
+        .filter((g) => g.status !== "completed" && g.progressPct !== null)
+        .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"))
+        .slice(0, 3),
+    [goalForecast]
+  );
 
-  // Tarefas concluídas por dia (últimos 14 dias) — reaproveita o mesmo
-  // dado real já usado em Analytics, sem nova consulta ao backend.
-  const tasksChartData = (overview?.tasksCompletedByDay ?? []).map((d) => ({
-    day: d.day.slice(5),
-    total: Number(d.total),
+  const dimensions: DimensionItem[] = DIM_META.map((d) => ({
+    ...d,
+    value: Math.round((lifeScore as unknown as Record<string, number> | null)?.[d.key] ?? 0),
+    explanation: DIM_EXPLAIN[d.key],
   }));
 
-  // Evolução do Life Score ao longo das revisões semanais salvas —
-  // dado real (nunca estimado): sem pelo menos 2 revisões salvas, o
-  // gráfico mostra um estado vazio em vez de uma linha inventada.
-  const reviewTrendData = useMemo(() => {
-    return [...reviewHistory]
-      .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date))
-      .map((r) => {
-        const dims5 = [r.productivity_pct, r.health_pct, r.education_pct, r.reading_pct, r.habits_pct].map((v) => v ?? 0);
-        const overallAvg = Math.round(dims5.reduce((a, b) => a + b, 0) / dims5.length);
-        return { week: weekShortLabel(r.week_start_date), overall: overallAvg };
-      });
-  }, [reviewHistory]);
+  // Evolução semanal: snapshots reais do Life Score quando houver 2+; senão, ritmo de tarefas.
+  const recentHistory = history.slice(-14);
+  const hasScoreHistory = recentHistory.length >= 2;
+  const weekStats = [
+    { label: "Life Score", value: `${overall}`, sub: delta ? `${delta.delta >= 0 ? "+" : ""}${delta.delta} pts` : "hoje" },
+    { label: "Tarefas", value: `${overview?.tasksCompleted ?? 0}`, sub: "concluídas (14d)" },
+    { label: "Hábitos", value: `${overview?.habitsCompletionPct ?? 0}%`, sub: "da meta (14d)" },
+    { label: "Leitura", value: `${overview?.pagesRead ?? 0}`, sub: "páginas (14d)" },
+  ];
 
-  const scoreInsights = useMemo(() => {
-    const sorted = [...dims].sort((a, b) => a.value - b.value);
-    const weakest = sorted[0];
-    const strongest = sorted[sorted.length - 1];
-    const pagesPerDay = overview ? Math.round((overview.pagesRead / 14) * 10) / 10 : 0;
-    return { weakest, strongest, pagesPerDay };
-  }, [dims, overview]);
+  const series = overview?.dailySeries;
+  const rhythmLabels = (series?.tasks ?? []).map((p) => shortDay(p.day));
+
+  const projectLoad = useMemo(() => openLoadByProject(tasks, projects), [tasks, projects]);
+  const composition = useMemo(() => taskComposition(tasks, today), [tasks, today]);
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
-      <div className="mb-6 overflow-hidden rounded-2xl border border-brand-500/15 bg-gradient-to-br from-paper-raised via-brand-50 to-signal/10 p-5 shadow-card dark:border-ink-border dark:from-ink-raised dark:via-brand-700/10 dark:to-signal/10">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="font-display text-3xl font-bold tracking-tight">Olá, {user?.name?.split(" ")[0] ?? ""}</p>
-            <p className="mt-1 text-sm text-slate">Aqui está o retrato atual da sua rotina, com alertas práticos para o próximo movimento.</p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl bg-white/70 px-3 py-2 dark:bg-white/10">
-              <p className="text-xl font-bold">{overall}</p>
-              <p className="text-[10px] uppercase tracking-wide text-slate">score</p>
-            </div>
-            <div className="rounded-xl bg-white/70 px-3 py-2 dark:bg-white/10">
-              <p className="text-xl font-bold">{tasksTodayDone}/{tasksToday.length}</p>
-              <p className="text-[10px] uppercase tracking-wide text-slate">hoje</p>
-            </div>
-            <div className="rounded-xl bg-white/70 px-3 py-2 dark:bg-white/10">
-              <p className="text-xl font-bold">{goalPeriodsDone}/{goalPeriodsTotal}</p>
-              <p className="text-[10px] uppercase tracking-wide text-slate">metas</p>
-            </div>
-          </div>
+    <>
+      <motion.div aria-hidden style={{ scaleX: progress }} className="fixed left-0 right-0 top-16 z-20 h-[3px] origin-left bg-gradient-to-r from-brand-500 via-cat-purple to-signal" />
+
+      <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8 space-y-4">
+        <DashboardHero
+          firstName={user?.name?.split(" ")[0] ?? ""}
+          subtitle={subtitle}
+          overall={overall}
+          isLoading={scoreLoading}
+          delta={delta}
+          history={recentHistory.map((h) => h.overall)}
+        />
+
+        <KpiStrip items={kpis} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-4">
+          <NextBestStep task={nextTask} estimateMinutes={nextTaskEstimate} onComplete={completeNext} isCompleting={completing} />
+          <SignalsNow signals={signals?.signals ?? []} isLoading={signalsLoading} />
         </div>
-      </div>
 
-      {/* Linha de stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        <StatTile tone="blue" icon={<TrendingUp size={18} />} label="Life Score" value={`${isLoading ? "—" : overall} / 100`} />
-        <StatTile
-          tone="purple"
-          icon={<ListChecks size={18} />}
-          label="Tarefas Hoje"
-          value={`${tasksTodayDone} / ${tasksToday.length}`}
-          progressPct={tasksToday.length > 0 ? Math.round((tasksTodayDone / tasksToday.length) * 100) : 0}
-          caption={trendCaption(overview?.changePct.tasksCompleted)}
-        />
-        <StatTile
-          tone="blue"
-          icon={<Droplets size={18} />}
-          label="Água"
-          value={`${((health?.waterMl ?? 0) / 1000).toFixed(1)} L`}
-          progressPct={Math.min(waterPct, 100)}
-          caption={trendCaption(overview?.changePct.avgWaterMl)}
-        />
-        <StatTile
-          tone="green"
-          icon={<Heart size={18} />}
-          label="Hábitos"
-          value={`${habitsDoneToday} / ${habits.length}`}
-          progressPct={habits.length > 0 ? Math.round((habitsDoneToday / habits.length) * 100) : 0}
-          caption={trendCaption(overview?.changePct.habitsCompletionPct)}
-        />
-        <StatTile
-          tone="amber"
-          icon={<Flag size={18} />}
-          label="Metas por período"
-          value={`${goalPeriodsDone} / ${goalPeriodsTotal}`}
-          progressPct={goalPeriodsPct}
-        />
-      </div>
+        <Reveal>
+          <AttentionPanel items={attention} onWater={() => void addWater(250)} />
+        </Reveal>
 
-      <div className="grid grid-cols-1 gap-3 mb-4 lg:grid-cols-3">
-        <DashboardInsight
-          icon={<Sparkles size={15} />}
-          title="O score pede atenção"
-          description={`${scoreInsights.weakest?.dim ?? "Dimensão"} está com ${scoreInsights.weakest?.value ?? 0}/100. Um registro pequeno hoje já ajuda a puxar essa dimensão.`}
-        />
-        <DashboardInsight
-          icon={<TrendingUp size={15} />}
-          title="Seu ponto forte"
-          description={`${scoreInsights.strongest?.dim ?? "Dimensão"} está liderando com ${scoreInsights.strongest?.value ?? 0}/100. Mantenha o que já está funcionando.`}
-        />
-        <DashboardInsight
-          icon={<BookOpen size={15} />}
-          title="Leitura diária"
-          description={`Média dos últimos 14 dias: ${scoreInsights.pagesPerDay} páginas/dia. Se sua meta é 20 páginas, o score agora usa esse alvo diário.`}
-        />
-      </div>
-
-      <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
-
-      {/* Linha principal — mesma composição do protótipo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <Card className="p-5">
-          <div className="flex items-center gap-2.5 mb-3">
-            <IconBadge tone="blue" size={30} icon={<HistoryIcon size={14} />} />
-            <p className="text-sm font-semibold">Resumo do dia</p>
-          </div>
-          {todaysEvents.length === 0 ? (
-            <p className="text-xs text-slate">Nada registrado ainda hoje.</p>
-          ) : (
-            <div className="relative pl-4 border-l-2 border-paper-border dark:border-ink-border space-y-3">
-              {todaysEvents.map((e) => {
-                const Icon = TIMELINE_ICON[e.type] ?? CheckSquare;
-                return (
-                  <div key={`${e.type}-${e.id}`} className="relative">
-                    <span className="absolute -left-[19px] top-0.5 w-2 h-2 rounded-full bg-brand-500 ring-4 ring-paper-raised dark:ring-ink-raised" />
-                    <div className="flex items-start gap-2">
-                      <Icon size={12} className="text-slate mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{timelineLabel(e)}</p>
-                        <p className="text-[10px] text-slate">{formatEventTime(String(e.at))}</p>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Reveal>
+            <DayTimelineCard entries={dayEntries} nowLabel={nowLabel} />
+          </Reveal>
+          <div className="space-y-4">
+            <Reveal delay={0.05}>
+              <InsightCard text={insight.text} basis={insight.basis} />
+            </Reveal>
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-4">
+              <Reveal delay={0.1}>
+                <Card className="p-5 h-full">
+                  <SectionTitle icon={<BarChart3 size={17} />} title="Esta semana" action={{ label: "Ver mais", to: "/analytics" }} />
+                  <div className="grid grid-cols-4 gap-1.5 mb-4">
+                    {weekStats.map((s) => (
+                      <div key={s.label} className="rounded-xl bg-paper dark:bg-ink px-2 py-2 min-w-0">
+                        <p className="text-[10px] text-slate truncate">{s.label}</p>
+                        <p className="text-sm font-bold truncate">{s.value}</p>
+                        <p className="text-[9px] text-slate truncate">{s.sub}</p>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-          )}
-          <Link to="/hoje" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Ver hoje →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Próximas prioridades</p>
-          {priorities.length === 0 ? (
-            <p className="text-xs text-slate">Nenhuma tarefa pendente — bom trabalho!</p>
-          ) : (
-            <div className="space-y-1">
-              {priorities.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => toggleTask(t.id, t.status)}
-                  className="w-full flex items-center gap-2.5 rounded-lg px-1.5 py-2 text-left hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                >
-                  <Circle size={15} className="text-slate shrink-0" />
-                  <span className="text-xs truncate flex-1">{t.title}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <Link to="/tarefas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-2 inline-block">
-            Ver todas →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Hábitos de hoje</p>
-          {habits.length === 0 ? (
-            <p className="text-xs text-slate">Crie seu primeiro hábito para acompanhar aqui.</p>
-          ) : (
-            <div className="space-y-1">
-              {habits.slice(0, 5).map((h) => {
-                const done = summaryByHabitId.get(h.id)?.checkedInToday ?? false;
-                const streak = summaryByHabitId.get(h.id)?.currentStreak ?? 0;
-                return (
-                  <button
-                    key={h.id}
-                    onClick={() => checkIn({ id: h.id, entryDate: today })}
-                    className="w-full flex items-center justify-between rounded-lg px-1.5 py-2 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                  >
-                    <span className="flex items-center gap-2.5 text-xs">
-                      {done ? <CheckCircle2 size={15} className="text-growth" /> : <Circle size={15} className="text-slate" />}
-                      <span className="truncate">
-                        {h.icon ? `${h.icon} ` : ""}
-                        {h.name}
-                      </span>
-                    </span>
-                    {streak > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] text-slate shrink-0">
-                        <Flame size={11} className="text-signal" /> {streak}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <Link to="/habitos" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-2 inline-block">
-            Ver todos →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Leitura atual</p>
-          {!currentBook ? (
-            <p className="text-xs text-slate">Nenhum livro em andamento — comece um na Biblioteca.</p>
-          ) : (
-            <div className="flex gap-3">
-              {currentBook.cover_url ? (
-                <img
-                  src={currentBook.cover_url}
-                  alt={currentBook.title}
-                  className="w-12 h-[72px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border"
-                />
-              ) : (
-                <div className="w-12 h-[72px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
-                  <BookOpen size={18} className="text-cat-pink" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold leading-snug truncate">{currentBook.title}</p>
-                {currentBook.author && <p className="text-xs text-slate mt-0.5 truncate">{currentBook.author}</p>}
-                {currentBook.total_pages ? (
-                  <div className="mt-2.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate mb-1">
-                      <span>
-                        Página {currentBook.current_page} de {currentBook.total_pages}
-                      </span>
-                      <span>{Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%</span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-                      <div
-                        className="h-full rounded-full bg-cat-pink"
-                        style={{ width: `${Math.round((currentBook.current_page / currentBook.total_pages) * 100)}%` }}
+                  {hasScoreHistory ? (
+                    <AnimatedLineChart
+                      ariaLabel="Evolução do Life Score"
+                      labels={recentHistory.map((h) => shortDay(h.date))}
+                      series={[{ key: "overall", label: "Life Score", color: "#7C4DFF", values: recentHistory.map((h) => h.overall) }]}
+                      yMax={100}
+                      height={150}
+                    />
+                  ) : (
+                    <>
+                      <AnimatedLineChart
+                        ariaLabel="Tarefas concluídas por dia"
+                        labels={rhythmLabels}
+                        series={[{ key: "tasks", label: "Tarefas concluídas", color: "#7C4DFF", values: (series?.tasks ?? []).map((p) => Number(p.total)) }]}
+                        height={150}
                       />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-          <Link to="/biblioteca" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Continuar lendo →
-          </Link>
-        </Card>
-      </div>
-
-      {/* Life Score + Como é calculado */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4 mb-4">
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <p className="text-sm font-semibold">Life Score</p>
-              <p className="text-xs text-slate">Visão geral das suas 7 dimensões de vida.</p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate">
-              <Info size={12} />
-              <span>Calculado a partir de dados reais</span>
+                      <p className="text-[10px] text-slate mt-1">Tarefas concluídas por dia. A evolução do Life Score aparece após alguns dias de uso.</p>
+                    </>
+                  )}
+                </Card>
+              </Reveal>
+              <Reveal delay={0.15}>
+                <GoalsCard goals={activeGoals} />
+              </Reveal>
             </div>
           </div>
-          <div className="flex flex-col md:flex-row items-center gap-6 mt-4">
-            <div className="w-full md:w-44 h-44 shrink-0">
-              <LifeScoreRadar data={dims} />
-            </div>
-            <div className="flex-1 w-full">
-              <div className="flex items-center gap-3">
-                <div className="relative w-16 h-16 shrink-0 text-brand-500">
-                  <DimensionRingGauge pct={overall} size={64} icon={null} />
-                  <span className="absolute inset-0 flex items-center justify-center font-display font-extrabold text-lg">
-                    {isLoading ? "—" : overall}
-                  </span>
-                </div>
-                <span className="text-sm text-slate">/ 100 · Seu Life Score</span>
-              </div>
-              <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                {dims.map((d) => (
-                  <div key={d.dim} className="flex flex-col items-center gap-1.5 text-center">
-                    <div className={`w-14 h-14 ${DIMENSION_TEXT_TONE[d.key]}`}>
-                      {d.key === "health" ? (
-                        <HealthBodyGauge pct={d.value} />
-                      ) : d.key === "goals" ? (
-                        <GoalsThermometerGauge pct={d.value} />
-                      ) : (
-                        <DimensionRingGauge pct={d.value} icon={DIMENSION_ICON[d.key]} />
-                      )}
-                    </div>
-                    <span className="text-[11px] text-slate leading-tight">{d.dim}</span>
-                    <span className="text-xs font-semibold">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Info size={15} className="text-slate" />
-            <p className="text-sm font-semibold">Como o Life Score é calculado</p>
-          </div>
-          <p className="text-xs text-slate mb-4">
-            O Life Score reflete o seu progresso nas principais áreas da vida, com base em dados reais da sua rotina.
-          </p>
-          <div className="space-y-3">
-            <ExplainRow
-              tone="amber"
-              icon={<Briefcase size={14} />}
-              title="Produtividade e Profissional"
-              description="% de tarefas concluídas (geral e por projetos profissionais)."
-            />
-            <ExplainRow tone="blue" icon={<Heart size={14} />} title="Saúde" description="Água, sono e exercício de hoje." />
-            <ExplainRow
-              tone="purple"
-              icon={<GraduationCap size={14} />}
-              title="Educação"
-              description="Progresso médio das suas formações."
-            />
-            <ExplainRow tone="pink" icon={<BookOpen size={14} />} title="Leitura" description="Meta diária de páginas quando cadastrada; senão progresso dos livros em leitura." />
-            <ExplainRow tone="green" icon={<Repeat size={14} />} title="Hábitos" description="% de hábitos cumpridos hoje." />
-            <ExplainRow tone="teal" icon={<Flag size={14} />} title="Metas" description="Progresso equilibrado entre metas semanais, mensais, semestrais e anuais." />
-          </div>
-          <p className="text-[11px] text-slate mt-4 pt-3 border-t border-paper-border dark:border-ink-border">
-            💡 Todas as dimensões vêm de dados reais registrados no LifeOS — nada aqui é estimado.
-          </p>
-        </Card>
-      </div>
-
-      {/* LifeOS Copilot — insight gerado por IA */}
-      <Card className="p-6 mb-4 bg-gradient-to-br from-brand-600 to-cat-purple text-white border-0 shadow-card">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <p className="font-display font-semibold text-base">LifeOS Copilot</p>
-              <p className="text-xs opacity-90 mt-0.5 max-w-md">
-                Insight do dia gerado por IA com base nos seus dados reais — tarefas, hábitos, água e leitura.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => copilot.regenerate()}
-            disabled={copilot.isRegenerating || copilot.isLoading}
-            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
-          >
-            <Wand2 size={15} />
-            {copilot.isRegenerating ? "Gerando..." : "Gerar outro insight"}
-          </button>
         </div>
 
-        {copilot.isLoading && <p className="text-sm mt-4 bg-white/10 rounded-xl px-4 py-3 opacity-80">Preparando o insight de hoje...</p>}
+        <Reveal>
+          <DimensionScroller items={dimensions} />
+        </Reveal>
 
-        {copilot.error && (
-          <p className="text-sm mt-4 bg-white/10 rounded-xl px-4 py-3">
-            {copilot.error.message}
-            {copilot.error.status === 400 && (
-              <>
-                {" "}
-                <Link to="/configuracoes" className="underline font-semibold">
-                  Ir para Configurações
-                </Link>
-              </>
-            )}
-          </p>
-        )}
-
-        {copilot.text && !copilot.error && !copilot.isLoading && (
-          <p className="text-sm leading-relaxed mt-4 bg-white/10 rounded-xl px-4 py-3">{copilot.text}</p>
-        )}
-      </Card>
-
-      {/* Gráficos de análise */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <Card className="p-5 md:p-6">
-          <p className="text-sm font-semibold mb-1">Tarefas concluídas</p>
-          <p className="text-xs text-slate mb-4">Últimos 14 dias.</p>
-          {tasksChartData.length === 0 ? (
-            <p className="text-sm text-slate">Sem tarefas concluídas nesse período ainda.</p>
-          ) : (
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tasksChartData}>
-                  <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" />
-                  <Tooltip contentStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="total" fill="#5B6EF5" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-5 md:p-6">
-          <p className="text-sm font-semibold mb-1">Evolução do Life Score</p>
-          <p className="text-xs text-slate mb-4">Com base nas suas revisões semanais salvas.</p>
-          {reviewTrendData.length < 2 ? (
-            <p className="text-sm text-slate">
-              Salve pelo menos duas revisões semanais no Weekly Review para ver sua evolução aqui.
-            </p>
-          ) : (
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={reviewTrendData}>
-                  <XAxis dataKey="week" tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" />
-                  <Tooltip contentStyle={{ fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="overall" name="Life Score" stroke="#5B6EF5" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
-
-        <WeekGlance series={overview?.dailySeries.tasks ?? []} />
-      </div>
-
-
-      {/* Linha secundária */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Wrench size={15} className="text-slate" />
-            <p className="text-sm font-semibold">Ações rápidas</p>
-          </div>
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2">
-              <input
-                value={quickTitle}
-                onChange={(e) => setQuickTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleQuickTask()}
-                placeholder="Nova tarefa rápida..."
-                className="flex-1 rounded-xl px-3 py-2.5 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500 transition-colors"
-              />
-              <button
-                onClick={handleQuickTask}
-                disabled={!quickTitle.trim()}
-                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-brand-500 text-white disabled:opacity-40"
-                title="Adicionar tarefa"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-
-            <button
-              onClick={handleQuickWater}
-              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-            >
-              <IconBadge tone="blue" size={28} icon={<Droplets size={13} />} />
-              <span className="flex-1 text-left">Registrar +250ml de água</span>
-            </button>
-
-            <Link
-              to="/saude"
-              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-            >
-              <IconBadge tone="pink" size={28} icon={<Heart size={13} />} />
-              <span className="flex-1 text-left">Registrar humor do dia</span>
-            </Link>
-
-            {actionFeedback && (
-              <p className="flex items-center gap-1.5 text-[11px] text-growth pt-1">
-                <Check size={12} /> {actionFeedback}
-              </p>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Bem-estar</p>
-          <div className="space-y-2.5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate">Água</span>
-              <span className="font-semibold">{((health?.waterMl ?? 0) / 1000).toFixed(1)} L</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate">Sono (última noite)</span>
-              <span className="font-semibold">
-                {health?.lastSleepMinutes ? `${Math.floor(health.lastSleepMinutes / 60)}h${health.lastSleepMinutes % 60}` : "—"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate">Exercícios hoje</span>
-              <span className="font-semibold">{health?.workoutsToday ?? 0}</span>
-            </div>
-          </div>
-          <Link to="/saude" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Ver saúde →
-          </Link>
-        </Card>
-
-        <Card className="p-5">
-          <p className="text-sm font-semibold mb-3">Metas em destaque</p>
-          {!nextMilestone ? (
-            <p className="text-xs text-slate">Nenhuma meta com próxima ação definida ainda.</p>
-          ) : (
-            <div>
-              <p className="text-sm font-semibold leading-snug truncate">{nextMilestone.goalTitle}</p>
-              {nextMilestone.category && <p className="text-xs text-slate mt-0.5">{nextMilestone.category}</p>}
-              {nextMilestone.nextAction && (
-                <p className="text-xs mt-2.5 flex items-start gap-1.5">
-                  <Flag size={12} className="text-signal-deep mt-0.5 shrink-0" />
-                  <span>{nextMilestone.nextAction}</span>
-                </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Reveal>
+            <Card className="p-5 h-full">
+              <SectionTitle icon={<FolderKanban size={17} />} title="Carga aberta por projeto" action={{ label: "Projetos", to: "/projetos" }} />
+              {projectLoad.length === 0 ? (
+                <p className="text-sm text-slate py-10 text-center">Nenhuma tarefa em aberto — carga zerada.</p>
+              ) : (
+                <>
+                  <Treemap items={projectLoad} height={230} unit=" tarefa(s)" />
+                  <p className="text-[11px] text-slate mt-2">Área de cada bloco = tarefas em aberto. Clique para abrir o projeto.</p>
+                </>
               )}
-              {nextMilestone.nextActionDue && (
-                <p className="text-[11px] text-slate mt-1">
-                  Prazo: {new Date(`${nextMilestone.nextActionDue}T12:00:00`).toLocaleDateString("pt-BR")}
-                </p>
+            </Card>
+          </Reveal>
+          <Reveal delay={0.08}>
+            <Card className="p-5 h-full">
+              <SectionTitle icon={<LayoutGrid size={17} />} title="Suas tarefas em 100 quadrados" action={{ label: "Tarefas", to: "/tarefas" }} />
+              {composition.total === 0 ? (
+                <p className="text-sm text-slate py-10 text-center">Nenhuma tarefa criada ou concluída nos últimos 30 dias.</p>
+              ) : (
+                <WaffleChart
+                  caption={`${composition.total} tarefas criadas ou concluídas nos últimos 30 dias. Cada quadrado ≈ 1%.`}
+                  categories={[
+                    { key: "done", label: "Concluídas", value: composition.done, color: "#12B76A" },
+                    { key: "doing", label: "Em andamento / revisão", value: composition.doing, color: "#2F80FF" },
+                    { key: "pending", label: "A fazer / backlog", value: composition.pending, color: "#9550FF" },
+                    { key: "overdue", label: "Atrasadas", value: composition.overdue, color: "#FF4757" },
+                  ]}
+                />
               )}
-            </div>
-          )}
-          <Link to="/metas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Ver metas →
-          </Link>
-        </Card>
+            </Card>
+          </Reveal>
+        </div>
 
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy size={15} className="text-signal-deep" />
-            <p className="text-sm font-semibold">Conquistas</p>
-          </div>
-          <p className="text-xs text-slate">
-            {totalUnlocked} de {totalAchievements} destravadas
-          </p>
-          {recentUnlocks.length === 0 ? (
-            <p className="text-xs text-slate mt-3">Nenhuma conquista destravada ainda — crie um troféu ou continue registrando sua rotina.</p>
-          ) : (
-            <div className="space-y-2 mt-3">
-              {recentUnlocks.map((a) => (
-                <div key={a.id} className="flex items-center gap-2.5 text-xs">
-                  <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-signal flex items-center justify-center text-white text-sm shrink-0">
-                    {a.icon ?? <Trophy size={12} />}
-                  </span>
-                  <span className="truncate">{a.title}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <Link to="/conquistas" className="text-xs text-brand-600 dark:text-brand-500 font-medium mt-3 inline-block">
-            Ver conquistas →
-          </Link>
-        </Card>
-      </div>
-    </div>
-  );
-}
+        <Reveal>
+          <Card className="p-5">
+            <SectionTitle icon={<BarChart3 size={17} />} title="Ritmo dos últimos 14 dias" action={{ label: "Analytics", to: "/analytics" }} />
+            {!series || series.tasks.length === 0 ? (
+              <p className="text-sm text-slate py-8 text-center">Sem registros no período ainda.</p>
+            ) : (
+              <div className="pb-6">
+                <AnimatedLineChart
+                  ariaLabel="Tarefas, hábitos e exercícios por dia"
+                  labels={rhythmLabels}
+                  height={220}
+                  series={[
+                    { key: "tasks", label: "Tarefas concluídas", color: "#7C4DFF", values: series.tasks.map((p) => Number(p.total)) },
+                    { key: "habits", label: "Hábitos cumpridos", color: "#12B76A", values: series.habits.map((p) => Number(p.total)) },
+                    { key: "workouts", label: "Exercícios", color: "#FF7A45", values: series.workouts.map((p) => Number(p.total)) },
+                  ]}
+                />
+              </div>
+            )}
+          </Card>
+        </Reveal>
 
-function ExplainRow({
-  tone,
-  icon,
-  title,
-  description,
-}: {
-  tone: "blue" | "purple" | "green" | "pink" | "teal" | "amber";
-  icon: ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <IconBadge tone={tone} icon={icon} size={30} />
-      <div className="min-w-0">
-        <p className="text-xs font-semibold">{title}</p>
-        <p className="text-[11px] text-slate leading-snug">{description}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
+          <Reveal>
+            <CopilotBanner
+              text={copilot.text}
+              isLoading={copilot.isLoading}
+              error={copilot.error}
+              onRegenerate={() => void copilot.regenerate()}
+              isRegenerating={copilot.isRegenerating}
+            />
+          </Reveal>
+          <Reveal delay={0.08}>
+            <ContinueReading book={books[0] ?? null} />
+          </Reveal>
+        </div>
       </div>
-    </div>
-  );
-}
-
-function DashboardInsight({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
-  return (
-    <Card className="p-4">
-      <div className="mb-2 flex items-center gap-2 text-brand-600 dark:text-brand-400">
-        {icon}
-        <p className="text-sm font-semibold text-inherit">{title}</p>
-      </div>
-      <p className="text-xs leading-relaxed text-slate">{description}</p>
-    </Card>
+    </>
   );
 }

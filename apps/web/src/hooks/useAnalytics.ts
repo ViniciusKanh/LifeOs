@@ -6,6 +6,16 @@ export function useLifeScore(date?: string) {
   return { lifeScore: query.data ?? null, isLoading: query.isLoading };
 }
 
+/** Evolução real do Life Score. `enabled` espera o score de hoje carregar (é ele que grava o snapshot do dia). */
+export function useLifeScoreHistory(days = 30, enabled = true) {
+  const query = useQuery({
+    queryKey: ["analytics", "life-score-history", days],
+    queryFn: () => analyticsService.lifeScoreHistory(days),
+    enabled,
+  });
+  return { history: query.data ?? [], isLoading: query.isLoading };
+}
+
 export function useAnalyticsOverview(days = 30) {
   const query = useQuery({ queryKey: ["analytics", "overview", days], queryFn: () => analyticsService.overview(days) });
   return { overview: query.data ?? null, isLoading: query.isLoading };

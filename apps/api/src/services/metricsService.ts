@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { getDb } from "../db/client.js";
 import { isDailyReadingGoal, pagesReadOn } from "./dailyReadingGoalService.js";
 
@@ -346,6 +347,33 @@ export async function computeLifeScore(ownerId: string, date = new Date().toISOS
     professional: professional.score,
     goals: goals.score,
   };
+}
+
+/** Grava (ou atualiza) o snapshot do Life Score do dia em life_scores — fonte do histórico real. */
+export async function saveLifeScoreSnapshot(ownerId: string, score: LifeScoreBreakdown): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `INSERT INTO life_scores (id, owner_id, score_date, overall_score, productivity, health, education, reading, habits, professional, goals)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (owner_id, score_date) DO UPDATE SET
+            overall_score = excluded.overall_score, productivity = excluded.productivity, health = excluded.health,
+            education = excluded.education, reading = excluded.reading, habits = excluded.habits,
+            professional = excluded.professional, goals = excluded.goals`,
+    args: [
+      // id aleatório: o único conflito possível é (owner_id, score_date), alvo do UPSERT.
+      randomUUID(),
+      ownerId,
+      score.date,
+      Math.round(score.overall),
+      Math.round(score.productivity),
+      Math.round(score.health),
+      Math.round(score.education),
+      Math.round(score.reading),
+      Math.round(score.habits),
+      Math.round(score.professional),
+      Math.round(score.goals),
+    ],
+  });
 }
 
 export interface RangeMetrics {

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { changePct, computeInsights, computeLifeScore, computeRangeMetrics } from "../services/metricsService.js";
+import { changePct, computeInsights, computeLifeScore, computeRangeMetrics, saveLifeScoreSnapshot } from "../services/metricsService.js";
 
 export const analyticsRouter = Router();
 analyticsRouter.use(requireAuth);
@@ -10,11 +10,46 @@ function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-/** GET /api/analytics/life-score?date=YYYY-MM-DD */
+/**
+ * GET /api/analytics/life-score?date=YYYY-MM-DD
+ * Quando é o score de HOJE, grava um snapshot diário em life_scores
+ * (upsert — só o último cálculo do dia fica). É daí que sai a evolução
+ * real do Life Score: parte das dimensões (produtividade, educação,
+ * profissional) não pode ser recalculada para datas passadas, então o
+ * histórico só existe a partir dos dias em que o score foi de fato visto.
+ */
 analyticsRouter.get("/life-score", async (req, res) => {
-  const date = (req.query.date as string) || isoDate(new Date());
+  const today = isoDate(new Date());
+  const date = (req.query.date as string) || today;
   const score = await computeLifeScore(req.user!.id, date);
+  if (date === today) {
+    await saveLifeScoreSnapshot(req.user!.id, score).catch((err) => console.error("[life-score] falha ao salvar snapshot:", err));
+  }
   return res.json(score);
+});
+
+/** GET /api/analytics/life-score/history?days=30 — snapshots diários reais (nunca interpolados). */
+analyticsRouter.get("/life-score/history", async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 2), 180);
+  const from = isoDate(new Date(Date.now() - (days - 1) * 86_400_000));
+  const result = await getDb().execute({
+    sql: `SELECT score_date, overall_score, productivity, health, education, reading, habits, professional, goals
+          FROM life_scores WHERE owner_id = ? AND score_date >= ? ORDER BY score_date ASC`,
+    args: [req.user!.id, from],
+  });
+  return res.json(
+    (result.rows as unknown as Array<Record<string, number | string>>).map((r) => ({
+      date: String(r.score_date),
+      overall: Number(r.overall_score),
+      productivity: Number(r.productivity ?? 0),
+      health: Number(r.health ?? 0),
+      education: Number(r.education ?? 0),
+      reading: Number(r.reading ?? 0),
+      habits: Number(r.habits ?? 0),
+      professional: Number(r.professional ?? 0),
+      goals: Number(r.goals ?? 0),
+    }))
+  );
 });
 
 /** Média diária real de sono/água num intervalo [from, to). */
