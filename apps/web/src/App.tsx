@@ -12,8 +12,9 @@ import { EmptyState } from "@/components/ui/primitives";
  * ainda separa os pacotes pesados (recharts, react-hook-form/zod) em
  * chunks compartilhados via manualChunks.
  */
-const LoginPage = lazy(() => import("@/pages/auth/LoginPage").then((m) => ({ default: m.LoginPage })));
-const RegisterPage = lazy(() => import("@/pages/auth/RegisterPage").then((m) => ({ default: m.RegisterPage })));
+// Login e Cadastro são o MESMO componente (cartão que vira em 3D): as duas
+// rotas apontam para AuthPage, então trocar entre elas só gira o cartão.
+const AuthPage = lazy(() => import("@/pages/auth/AuthPage").then((m) => ({ default: m.AuthPage })));
 const ForgotPasswordPage = lazy(() =>
   import("@/pages/auth/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage }))
 );
@@ -119,8 +120,8 @@ export default function App() {
   return (
     <Suspense fallback={<PageFallback />}>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/cadastro" element={<RegisterPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/cadastro" element={<AuthPage />} />
         <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
         <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
         <Route path="/verificar-email" element={<VerifyEmailPage />} />

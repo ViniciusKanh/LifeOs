@@ -75,7 +75,7 @@ export function CopilotAssistant() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Abrir o LifeOS Copilot"
-        className="fixed z-20 bottom-20 md:bottom-6 right-4 md:right-6 w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-brand-500 to-signal text-white shadow-glow-brand"
+        className="fixed z-20 bottom-28 md:bottom-6 right-4 md:right-6 w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-brand-500 to-signal text-white shadow-glow-brand"
       >
         <Sparkles size={20} />
       </button>

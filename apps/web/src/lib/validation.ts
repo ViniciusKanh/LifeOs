@@ -58,3 +58,25 @@ export function passwordStrength(password: string): number {
   if (/[^a-zA-Z0-9]/.test(password)) score++;
   return score;
 }
+
+/**
+ * Requisitos de senha exibidos no painel de força. Os 4 primeiros são
+ * obrigatórios (mesma regra do backend — PASSWORD_RULE em auth.schema.ts);
+ * o caractere especial é só recomendado e conta para a força.
+ */
+export const PASSWORD_REQUIREMENTS = [
+  { key: "length", label: "Pelo menos 8 caracteres", required: true, test: (p: string) => p.length >= 8 },
+  { key: "upper", label: "Uma letra maiúscula (A-Z)", required: true, test: (p: string) => /[A-Z]/.test(p) },
+  { key: "lower", label: "Uma letra minúscula (a-z)", required: true, test: (p: string) => /[a-z]/.test(p) },
+  { key: "number", label: "Um número (0-9)", required: true, test: (p: string) => /[0-9]/.test(p) },
+  { key: "special", label: "Um caractere especial (@#$…) — recomendado", required: false, test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+] as const;
+
+export type PasswordLevel = "weak" | "medium" | "strong";
+
+export function evaluatePassword(password: string) {
+  const checks = PASSWORD_REQUIREMENTS.map((r) => ({ key: r.key, label: r.label, required: r.required, ok: r.test(password) }));
+  const score = checks.filter((c) => c.ok).length;
+  const level: PasswordLevel = score <= 1 ? "weak" : score <= 3 ? "medium" : "strong";
+  return { checks, score, level, meetsRequired: checks.every((c) => !c.required || c.ok) };
+}

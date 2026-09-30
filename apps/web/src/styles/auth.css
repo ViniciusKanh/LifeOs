@@ -1,0 +1,224 @@
+/* ============================================================
+   Telas de autenticação do LifeOS — estilo "neumórfico" (superfície
+   única com relevo por sombra dupla), cartão que vira em 3D entre
+   Entrar/Criar conta e borda "elétrica" animada no foco dos campos,
+   com as cores da marca (violeta → coral) em vez do azul do modelo.
+   Tokens em variáveis CSS para o modo escuro redefinir só as cores.
+   ============================================================ */
+
+.auth-scope {
+  --auth-surface: #efebf7;
+  --auth-shadow-dark: rgba(152, 139, 186, 0.55);
+  --auth-shadow-light: rgba(255, 255, 255, 0.95);
+  --auth-text: #1e2537;
+  --auth-muted: #6e7391;
+  --auth-accent: #7c4dff;
+  --auth-accent-2: #ff7a45;
+  background: var(--auth-surface);
+  color: var(--auth-text);
+}
+
+.dark .auth-scope {
+  --auth-surface: #16131f;
+  --auth-shadow-dark: rgba(0, 0, 0, 0.6);
+  --auth-shadow-light: rgba(62, 54, 88, 0.35);
+  --auth-text: #e7eaf2;
+  --auth-muted: #9aa0bd;
+  --auth-accent: #9f7bff;
+}
+
+.neo-raised {
+  background: var(--auth-surface);
+  box-shadow: 18px 18px 38px var(--auth-shadow-dark), -18px -18px 38px var(--auth-shadow-light);
+}
+
+.neo-raised-sm {
+  background: var(--auth-surface);
+  box-shadow: 7px 7px 14px var(--auth-shadow-dark), -7px -7px 14px var(--auth-shadow-light);
+}
+
+.neo-inset {
+  background: var(--auth-surface);
+  box-shadow: inset 6px 6px 12px var(--auth-shadow-dark), inset -6px -6px 12px var(--auth-shadow-light);
+}
+
+/* Círculos flutuando no fundo */
+.auth-bubble {
+  position: fixed;
+  border-radius: 9999px;
+  background: var(--auth-surface);
+  box-shadow: 15px 15px 30px var(--auth-shadow-dark), -15px -15px 30px var(--auth-shadow-light);
+  animation: auth-float 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes auth-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-18px); }
+}
+
+/* Campo com borda elétrica */
+.neo-field {
+  position: relative;
+  height: 56px;
+}
+
+.neo-field__border,
+.neo-field__glow {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.neo-field__border {
+  inset: -2px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.neo-field__border::before {
+  content: "";
+  position: absolute;
+  width: 170%;
+  height: 170%;
+  left: -35%;
+  top: -35%;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 30deg, var(--auth-accent-2) 45deg, var(--auth-accent) 70deg, #2f80ff 88deg, transparent 110deg, transparent 360deg);
+  animation: auth-spin 1.1s linear infinite;
+}
+
+.neo-field__border::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 16px;
+  background: var(--auth-surface);
+}
+
+.neo-field__glow {
+  inset: -4px;
+  border-radius: 20px;
+  filter: blur(8px);
+  background: conic-gradient(from 0deg, transparent, var(--auth-accent), transparent 40%);
+}
+
+.neo-field:focus-within .neo-field__border { opacity: 1; }
+.neo-field:focus-within .neo-field__glow { opacity: 0.45; animation: auth-spin 1.1s linear infinite; }
+.neo-field[data-invalid="true"] .neo-field__border::before {
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 30deg, #ff4757 60deg, transparent 110deg, transparent 360deg);
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+.neo-field input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  border-radius: 16px;
+  color: var(--auth-text);
+  font-size: 15px;
+  padding: 18px 48px 4px 18px;
+  z-index: 2;
+  background: var(--auth-surface);
+  box-shadow: inset 6px 6px 12px var(--auth-shadow-dark), inset -6px -6px 12px var(--auth-shadow-light);
+  transition: box-shadow 0.25s ease;
+}
+
+.neo-field input:focus {
+  box-shadow: inset 3px 3px 7px var(--auth-shadow-dark), inset -3px -3px 7px var(--auth-shadow-light);
+}
+
+/* O foco já é indicado pela borda elétrica; o anel padrão ficaria duplicado. */
+.neo-field input:focus-visible { --tw-ring-shadow: 0 0 #0000; }
+
+.neo-field label {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  color: var(--auth-muted);
+  font-size: 15px;
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+
+.neo-field input:focus + label,
+.neo-field input:not(:placeholder-shown) + label {
+  top: 14px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--auth-accent);
+}
+
+/* Botão principal: relevo que "acende" com o gradiente da marca no hover */
+.neo-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--auth-accent);
+  background: var(--auth-surface);
+  box-shadow: 8px 8px 16px var(--auth-shadow-dark), -8px -8px 16px var(--auth-shadow-light);
+  transition: transform 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.neo-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, #7c4dff, #ff7a45, #7c4dff);
+  background-size: 200% 100%;
+  transform: translateY(100%);
+  transition: transform 0.35s ease;
+}
+
+.neo-btn:hover:not(:disabled),
+.neo-btn:focus-visible {
+  color: #fff;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 26px rgba(124, 77, 255, 0.35);
+}
+
+.neo-btn:hover:not(:disabled)::before,
+.neo-btn:focus-visible::before {
+  transform: translateY(0);
+  animation: auth-shine 1.5s linear infinite;
+}
+
+.neo-btn:active:not(:disabled) { transform: scale(0.97); }
+.neo-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@keyframes auth-shine {
+  from { background-position: 0 50%; }
+  to { background-position: 200% 50%; }
+}
+
+.neo-switch {
+  color: var(--auth-accent);
+  background: var(--auth-surface);
+  box-shadow: 7px 7px 14px var(--auth-shadow-dark), -7px -7px 14px var(--auth-shadow-light);
+  transition: 0.35s ease;
+}
+
+.neo-switch:hover,
+.neo-switch:focus-visible {
+  color: #fff;
+  background: linear-gradient(135deg, #7c4dff, #ff7a45);
+  transform: rotate(180deg) scale(1.08);
+  box-shadow: 0 8px 25px rgba(124, 77, 255, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-bubble,
+  .neo-field__border::before,
+  .neo-field:focus-within .neo-field__glow { animation: none; }
+}

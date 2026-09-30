@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
+import { motion } from "motion/react";
+import { KeyRound, MailCheck } from "lucide-react";
 import { forgotPasswordFormSchema, type ForgotPasswordFormValues } from "@/lib/validation";
 import { authService } from "@/services/authService";
-import { Button, Field } from "@/components/ui/primitives";
+import { GlassAuthCard, GlassButton, GlassField } from "@/components/auth/GlassAuthCard";
 
 export function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
@@ -20,33 +22,25 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10 bg-paper text-[#1E2126] dark:bg-ink dark:text-[#EDEBE4]">
-      <div className="flex items-center gap-2 mb-6">
-        <img src="/logo/icon-64.png" alt="LifeOS" className="w-8 h-8 rounded-md object-contain" />
-        <span className="text-sm tracking-wide text-slate">LifeOS</span>
-      </div>
-      <div className="w-full max-w-sm rounded-2xl p-7 md:p-8 border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised">
-        <h1 className="text-sm font-semibold mb-4">Recuperar senha</h1>
-
-        {sent ? (
-          <p className="text-sm text-slate">
-            Se este e-mail estiver cadastrado, você receberá um link com instruções em instantes.
-          </p>
-        ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <Field label="E-mail" type="email" placeholder="voce@email.com" {...register("email")} error={errors.email?.message} />
-            <Button type="submit" disabled={isSubmitting} className="w-full">
-              {isSubmitting ? "Enviando..." : "Enviar instruções"}
-            </Button>
-          </form>
-        )}
-
-        <p className="text-xs text-slate text-center pt-4">
-          <Link to="/login" className="font-semibold hover:underline text-inherit">
-            Voltar para o login
-          </Link>
-        </p>
-      </div>
-    </div>
+    <GlassAuthCard icon={<KeyRound size={24} />} title="Recuperar senha" subtitle="Enviaremos um link seguro para você criar uma nova senha.">
+      {sent ? (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-start gap-3 rounded-2xl border border-growth/30 bg-growth/10 p-4 text-sm">
+          <MailCheck className="text-growth shrink-0 mt-0.5" size={20} />
+          Se este e-mail estiver cadastrado, você receberá um link com instruções em instantes.
+        </motion.div>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+          <GlassField label="E-mail" type="email" autoComplete="email" {...register("email")} error={errors.email?.message} />
+          <GlassButton type="submit" busy={isSubmitting}>
+            {isSubmitting ? "Enviando..." : "Enviar instruções"}
+          </GlassButton>
+        </form>
+      )}
+      <p className="text-xs text-center pt-5">
+        <Link to="/login" className="font-semibold text-brand-100 hover:underline">
+          Voltar para o login
+        </Link>
+      </p>
+    </GlassAuthCard>
   );
 }

@@ -1,0 +1,105 @@
+/* ============================================================
+   Barra inferior do celular com indicador "magic navigation":
+   uma bolha da mesma cor da barra desliza até o item ativo, com
+   cantos curvos invertidos (pseudo-elementos com box-shadow), e o
+   ícone ativo sobe para dentro dela com a cor do módulo e um brilho.
+   ============================================================ */
+
+.magic-nav {
+  --nav-bg: #ffffff;
+  --nav-icon: #6e7391;
+  background: var(--nav-bg);
+}
+
+.dark .magic-nav {
+  --nav-bg: #15121f;
+  --nav-icon: #9aa0bd;
+}
+
+.magic-nav__indicator {
+  position: absolute;
+  top: -30px;
+  width: 70px;
+  height: 70px;
+  border-radius: 9999px;
+  background: var(--nav-bg);
+  z-index: 1;
+  transition: left 0.5s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.magic-nav__indicator::before,
+.magic-nav__indicator::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+}
+
+.magic-nav__indicator::before {
+  left: -27.5px;
+  box-shadow: 15px 18px var(--nav-bg);
+}
+
+.magic-nav__indicator::after {
+  right: -27.5px;
+  box-shadow: -15px 18px var(--nav-bg);
+}
+
+.magic-nav__icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 9999px;
+  color: var(--nav-icon);
+  transition: transform 0.5s, background-color 0.5s, color 0.5s;
+  transition-delay: 0s;
+}
+
+.magic-nav__icon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  top: 10px;
+  border-radius: 9999px;
+  background: var(--clr);
+  filter: blur(6px);
+  opacity: 0;
+  transition: opacity 0.5s;
+  z-index: -1;
+}
+
+.magic-nav__item[data-active="true"] .magic-nav__icon {
+  background: var(--clr);
+  color: #fff;
+  transform: translateY(-26px);
+  transition-delay: 0.2s;
+}
+
+.magic-nav__item[data-active="true"] .magic-nav__icon::before {
+  opacity: 0.55;
+  transition-delay: 0.2s;
+}
+
+.magic-nav__label {
+  position: absolute;
+  bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--clr);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s, transform 0.4s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.magic-nav__item[data-active="true"] .magic-nav__label {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.25s;
+}

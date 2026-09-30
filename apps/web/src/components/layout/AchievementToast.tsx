@@ -57,7 +57,7 @@ export function AchievementToast() {
 
   return (
     <div
-      className={`fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 max-w-sm transition-all duration-300 ${
+      className={`fixed bottom-28 md:bottom-6 right-4 md:right-6 z-50 max-w-sm transition-all duration-300 ${
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
       }`}
     >

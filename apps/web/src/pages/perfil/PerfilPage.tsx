@@ -32,6 +32,7 @@ import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/prim
 import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
+import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { api } from "@/services/api";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
@@ -144,15 +145,6 @@ export function PerfilPage() {
     setNewPassword("");
     setConfirmPassword("");
   };
-
-  // Requisitos calculados de verdade a partir da senha que o usuário
-  // está digitando agora — nada de checklist decorativo fixo.
-  const hasLength = newPassword.length >= 8;
-  const hasLettersAndNumbers = /[a-zA-Z]/.test(newPassword) && /[0-9]/.test(newPassword);
-  const hasSpecial = /[^a-zA-Z0-9]/.test(newPassword);
-  const metCount = [hasLength, hasLettersAndNumbers, hasSpecial].filter(Boolean).length;
-  const strengthLabel = newPassword.length === 0 ? "" : metCount <= 1 ? "Senha fraca" : metCount === 2 ? "Senha média" : "Senha forte";
-  const strengthColor = metCount <= 1 ? "bg-drop" : metCount === 2 ? "bg-signal" : "bg-growth";
 
   const themeLabel = mode === "dark" ? "Escuro" : mode === "light" ? "Claro" : "Automático (sistema)";
 
@@ -332,29 +324,7 @@ export function PerfilPage() {
                 </button>
               </div>
 
-              {newPassword.length > 0 && (
-                <div>
-                  <div className="flex gap-1 mb-1.5">
-                    {[0, 1, 2].map((i) => (
-                      <div key={i} className={`h-1 flex-1 rounded-full ${i < metCount ? strengthColor : "bg-paper-border dark:bg-ink-border"}`} />
-                    ))}
-                  </div>
-                  <p className={`text-[11px] font-medium mb-2 ${metCount <= 1 ? "text-drop" : metCount === 2 ? "text-signal-deep" : "text-growth"}`}>
-                    {strengthLabel}
-                  </p>
-                  <ul className="space-y-1">
-                    <li className={`flex items-center gap-1.5 text-[11px] ${hasLength ? "text-growth" : "text-slate"}`}>
-                      <Check size={12} className={hasLength ? "opacity-100" : "opacity-30"} /> Pelo menos 8 caracteres
-                    </li>
-                    <li className={`flex items-center gap-1.5 text-[11px] ${hasLettersAndNumbers ? "text-growth" : "text-slate"}`}>
-                      <Check size={12} className={hasLettersAndNumbers ? "opacity-100" : "opacity-30"} /> Inclui letras e números
-                    </li>
-                    <li className={`flex items-center gap-1.5 text-[11px] ${hasSpecial ? "text-growth" : "text-slate"}`}>
-                      <Check size={12} className={hasSpecial ? "opacity-100" : "opacity-30"} /> Inclui um caractere especial
-                    </li>
-                  </ul>
-                </div>
-              )}
+              {newPassword.length > 0 && <PasswordStrengthPanel password={newPassword} />}
 
               <Field
                 label="Confirmar nova senha"

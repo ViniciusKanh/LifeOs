@@ -14,7 +14,8 @@ import { CopilotAssistant } from "./CopilotAssistant";
 import { QuickCaptureButton } from "./QuickCaptureButton";
 import { Sidebar, NavGroups, useSidebarCollapsed } from "./Sidebar";
 import { AppFooter } from "./AppFooter";
-import { DEFAULT_QUOTE, MOBILE_PRIMARY, NAV_GROUPS, findNavItem, visibleGroups } from "./navConfig";
+import { MobileMagicNav } from "./MobileMagicNav";
+import { DEFAULT_QUOTE, findNavItem, visibleGroups } from "./navConfig";
 
 /**
  * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
@@ -23,7 +24,6 @@ import { DEFAULT_QUOTE, MOBILE_PRIMARY, NAV_GROUPS, findNavItem, visibleGroups }
  * Toda a navegação vem de navConfig.ts (fonte única).
  */
 
-const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () => void; isAdmin: boolean }) {
   useEffect(() => {
@@ -87,7 +87,6 @@ export function AppShell() {
   const current = findNavItem(location.pathname);
   const isSubPage = !!current && location.pathname !== current.item.to;
   const quote = current?.item.quote ?? DEFAULT_QUOTE;
-  const mobilePrimary = MOBILE_PRIMARY.map((to) => ALL_ITEMS.find((i) => i.to === to)).filter((i): i is (typeof ALL_ITEMS)[number] => !!i);
 
   // Cada troca de rota volta ao topo — o conteúdo rola na janela, não num contêiner.
   useEffect(() => {
@@ -159,37 +158,12 @@ export function AppShell() {
           <Outlet />
         </main>
 
-        <div className="pb-[4.5rem] md:pb-0">
+        <div className="pb-24 md:pb-0">
           <AppFooter />
         </div>
 
-        {/* navegação inferior mobile */}
-        <nav
-          aria-label="Atalhos"
-          className="md:hidden fixed bottom-0 inset-x-0 z-20 grid grid-cols-5 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-paper-raised/95 dark:bg-ink-raised/95 backdrop-blur border-t border-paper-border dark:border-ink-border"
-        >
-          {mobilePrimary.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className="flex flex-col items-center gap-0.5 py-1 rounded-xl">
-              {({ isActive }) => (
-                <>
-                  <span className="relative flex items-center justify-center w-11 h-7">
-                    {isActive && (
-                      <motion.span layoutId="mobile-tab" className="absolute inset-0 rounded-full bg-gradient-to-r from-brand-500 to-signal" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
-                    )}
-                    <Icon size={17} className={`relative ${isActive ? "text-white" : "text-slate"}`} />
-                  </span>
-                  <span className={`text-[10px] ${isActive ? "font-semibold text-brand-700 dark:text-brand-100" : "text-slate"}`}>{label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
-          <button onClick={() => setDrawerOpen(true)} className="flex flex-col items-center gap-0.5 py-1" aria-label="Todos os módulos">
-            <span className="flex items-center justify-center w-11 h-7 text-slate">
-              <Menu size={17} />
-            </span>
-            <span className="text-[10px] text-slate">Módulos</span>
-          </button>
-        </nav>
+        {/* navegação inferior mobile (indicador "magic navigation") */}
+        <MobileMagicNav onOpenModules={() => setDrawerOpen(true)} modulesOpen={drawerOpen} />
 
         <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} />
 
