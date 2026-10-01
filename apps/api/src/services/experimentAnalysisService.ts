@@ -49,6 +49,15 @@ export interface ExperimentAnalysis {
   streak: { current: number; best: number };
   overlaps: Array<{ id: string; title: string; status: string; sharesMetric: boolean }>;
   daysRemaining: number;
+  /**
+   * Pulso diário da métrica principal: valor de cada dia e a média acumulada
+   * até ali (mostra a leitura "convergindo" conforme os dias passam).
+   */
+  pulse: {
+    beforeMean: number | null;
+    points: Array<{ date: string; value: number | null; cumulativeMean: number | null; status: string }>;
+    latest: { date: string; value: number | null; vsBeforePct: number | null } | null;
+  };
 }
 
 function round(v: number | null, digits = 2) {
@@ -229,7 +238,30 @@ export async function getExperimentAnalysis(db: Db, ownerId: string, id: string)
 
   const verdict = buildVerdict({ primary, consistencyPct, decidedCount, daysElapsed, durationDays, overlaps });
 
-  return { verdict, metrics, weekly, success, perception, streak: computeStreaks(checkins), overlaps, daysRemaining };
+  let sum = 0;
+  let count = 0;
+  const pulsePoints = primaryDuringValues.map((p) => {
+    if (p.value !== null) {
+      sum += p.value;
+      count += 1;
+    }
+    return { date: p.date, value: round(p.value), cumulativeMean: count ? round(sum / count) : null, status: statusByDate.get(p.date) ?? "pending" };
+  });
+  const lastWithValue = [...pulsePoints].reverse().find((p) => p.value !== null) ?? null;
+  const beforeMean = primary?.before.mean ?? null;
+  const pulse = {
+    beforeMean,
+    points: pulsePoints,
+    latest: lastWithValue
+      ? {
+          date: lastWithValue.date,
+          value: lastWithValue.value,
+          vsBeforePct: beforeMean && lastWithValue.value !== null ? Math.round(((lastWithValue.value - beforeMean) / Math.abs(beforeMean)) * 100) : null,
+        }
+      : null,
+  };
+
+  return { verdict, metrics, weekly, success, perception, streak: computeStreaks(checkins), overlaps, daysRemaining, pulse };
 }
 
 function buildVerdict(p: {

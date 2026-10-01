@@ -4,7 +4,8 @@ import { Button, Field } from "@/components/ui/primitives";
 import { useExperimentBaselinePreview, useExperimentMetricsCatalog, useExperimentVerificationRules } from "@/hooks/useExperiments";
 import { useHabits } from "@/hooks/useHabits";
 import { CATEGORY_LABEL } from "./experimentDisplay";
-import type { CreateExperimentInput, ExperimentAISuggestion, ExperimentCategory, ExperimentMetricKey, ExperimentVerificationRule } from "@/types";
+import type { CreateExperimentInput, ExperimentAISuggestion, ExperimentCategory, ExperimentMetricKey, ExperimentProposal, ExperimentVerificationRule } from "@/types";
+import { ExperimentAIDesigner } from "./ExperimentAIDesigner";
 
 const DURATION_OPTIONS = [7, 14, 21, 28, 42] as const;
 const STEP_TITLES = ["Comece por um modelo", "O que você quer testar?", "Qual é sua hipótese?", "O que vamos medir?", "Defina o período", "Comportamento a cumprir", "Critério de sucesso", "Resumo"];
@@ -89,21 +90,52 @@ function initialState(suggestion?: ExperimentAISuggestion | null): WizardState {
   };
 }
 
+/** Converte a configuração da regra (objeto) no campo único do assistente. */
+function configToValue(config: Record<string, unknown> | null): string {
+  if (!config) return "";
+  const v = config.beforeTime ?? config.targetMl ?? config.minMinutes ?? config.minPages;
+  return v === undefined || v === null ? "" : String(v);
+}
+
+/** Aplica uma proposta da IA no estado do assistente (o usuário ainda revisa cada etapa). */
+function fromProposal(base: WizardState, p: ExperimentProposal): WizardState {
+  return {
+    ...base,
+    title: p.title,
+    category: p.category,
+    hypothesis: p.hypothesis,
+    description: p.dailyAction,
+    motivation: p.rationale,
+    primaryMetric: p.primaryMetric,
+    secondaryMetrics: p.secondaryMetrics,
+    durationDays: p.durationDays,
+    linkedHabitId: p.linkedHabitId ?? "",
+    verificationType: p.verificationType,
+    verificationRule: p.verificationRule ?? "",
+    configValue: configToValue(p.verificationConfig),
+    successCriteriaType: p.successCriteriaType,
+    successCriteriaValue: p.successCriteriaValue != null ? String(p.successCriteriaValue) : "",
+  };
+}
+
 /** Wizard de criação em etapas (seções 23-30) — nunca um formulário único gigante. */
 export function ExperimentWizard({
   onClose,
   onSubmit,
   isSubmitting,
   initialSuggestion,
+  initialProposal,
 }: {
   onClose: () => void;
   onSubmit: (input: CreateExperimentInput) => Promise<unknown>;
   isSubmitting?: boolean;
   initialSuggestion?: ExperimentAISuggestion | null;
+  /** Proposta escolhida no "Desenhar com IA" da página — já abre preenchida. */
+  initialProposal?: ExperimentProposal | null;
 }) {
   // Vindo de uma sugestão da IA, o modelo já está escolhido: pula a galeria.
-  const [step, setStep] = useState(initialSuggestion ? 1 : 0);
-  const [state, setState] = useState<WizardState>(() => initialState(initialSuggestion));
+  const [step, setStep] = useState(initialProposal ? 7 : initialSuggestion ? 1 : 0);
+  const [state, setState] = useState<WizardState>(() => (initialProposal ? fromProposal(initialState(null), initialProposal) : initialState(initialSuggestion)));
   const [error, setError] = useState<string | null>(null);
 
   const { data: catalog = [] } = useExperimentMetricsCatalog();
@@ -194,7 +226,7 @@ export function ExperimentWizard({
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-xl rounded-2xl bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border max-h-[92vh] overflow-y-auto"
+        className="w-full max-w-2xl rounded-2xl bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 md:px-6 pt-5 pb-3 sticky top-0 bg-paper-raised dark:bg-ink-raised border-b border-paper-border dark:border-ink-border z-10">
@@ -213,6 +245,18 @@ export function ExperimentWizard({
         <div className="p-5 md:p-6 space-y-4 min-h-[280px]">
           {step === 0 && (
             <div>
+              <ExperimentAIDesigner
+                compact
+                onPick={(p) => {
+                  setState((st) => fromProposal(st, p));
+                  setStep(7); // vai direto ao resumo; dá para voltar e ajustar qualquer etapa
+                }}
+              />
+              <div className="flex items-center gap-3 my-4" aria-hidden>
+                <span className="flex-1 h-px bg-paper-border dark:bg-ink-border" />
+                <span className="text-[11px] text-slate">ou escolha um modelo</span>
+                <span className="flex-1 h-px bg-paper-border dark:bg-ink-border" />
+              </div>
               <p className="text-xs text-slate mb-3">Escolha um modelo pronto — tudo vem preenchido e você ajusta nas próximas etapas.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {TEMPLATES.map((t) => (

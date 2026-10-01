@@ -50,8 +50,23 @@ export function useExperiment(id: string | undefined) {
     enabled: !!id,
   });
 
+  // IA: histórico de insights (o mais recente primeiro) e geração sob demanda.
+  const reportsQuery = useQuery({ queryKey: [...key, "ai-reports"], queryFn: () => experimentService.aiReports(id as string), enabled: !!id });
+  const generateInsights = useMutation({
+    mutationFn: (opts: { refresh?: boolean; final?: boolean } = {}) => experimentService.aiInsights(id as string, opts),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...key, "ai-reports"] }),
+  });
+  const parseLog = useMutation({ mutationFn: ({ text, date }: { text: string; date: string }) => experimentService.aiParseLog(id as string, text, date) });
+
   return {
     detail: detailQuery.data ?? null,
+    aiReports: reportsQuery.data ?? [],
+    isLoadingReports: reportsQuery.isLoading,
+    generateInsights: generateInsights.mutateAsync,
+    isGeneratingInsights: generateInsights.isPending,
+    insightsError: generateInsights.error instanceof Error ? generateInsights.error.message : null,
+    parseLog: parseLog.mutateAsync,
+    isParsingLog: parseLog.isPending,
     analysis: analysisQuery.data ?? null,
     isAnalysisLoading: analysisQuery.isLoading,
     isLoading: detailQuery.isLoading,

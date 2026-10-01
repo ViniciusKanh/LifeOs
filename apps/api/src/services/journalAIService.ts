@@ -1,4 +1,5 @@
 import type { getDb } from "../db/client.js";
+import { extractJson, str } from "./aiJson.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { getJournalMedia, stripHtml } from "./journalService.js";
 import type { JournalAiApplyInput } from "../validators/journal.schema.js";
@@ -40,21 +41,6 @@ const TEXT_FIELDS: Array<[string, string]> = [
 ];
 
 const MEDIA_LABEL: Record<string, string> = { photo: "foto", video: "vídeo", document: "PDF", audio: "nota de voz" };
-
-/** Extrai o primeiro objeto JSON da resposta (o modelo às vezes embrulha em ```json). */
-function extractJson(text: string): unknown {
-  const cleaned = text.replace(/```json|```/gi, "").trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(cleaned.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
-
-const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
 
 /** Valida e poda a resposta do modelo — ids de mídia inexistentes são descartados. */
 export function sanitizeSuggestion(raw: unknown, validMediaIds: Set<string>): JournalOrganizationSuggestion | null {

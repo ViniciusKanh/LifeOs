@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { FlaskConical, Plus } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronDown, FlaskConical, Plus, Wand2 } from "lucide-react";
 import { PageHeader, Button, Card } from "@/components/ui/primitives";
 import { useExperiments } from "@/hooks/useExperiments";
 import { useExperiment } from "@/hooks/useExperiment";
@@ -13,12 +14,15 @@ import { ExperimentList } from "@/components/experiments/ExperimentList";
 import { ExperimentInsightsCard, ExperimentAISuggestionCard, ExperimentsEmptyState } from "@/components/experiments/ExperimentInsights";
 import { ExperimentWizard } from "@/components/experiments/ExperimentWizard";
 import { ExperimentTodayCheckin } from "@/components/experiments/ExperimentTodayCheckin";
-import type { ExperimentAISuggestion } from "@/types";
+import { ExperimentAIDesigner } from "@/components/experiments/ExperimentAIDesigner";
+import type { ExperimentAISuggestion, ExperimentProposal } from "@/types";
 
 export function ExperimentsPage() {
   const { experiments, isLoading, summary, insights, createExperiment, isCreating, setStatus } = useExperiments();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSuggestion, setWizardSuggestion] = useState<ExperimentAISuggestion | null>(null);
+  const [wizardProposal, setWizardProposal] = useState<ExperimentProposal | null>(null);
+  const [designerOpen, setDesignerOpen] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
 
   // Com vários experimentos ativos, o usuário escolhe qual fica em destaque (antes só o 1º aparecia).
@@ -27,10 +31,52 @@ export function ExperimentsPage() {
   const featured = activeExperiments.find((e) => e.id === featuredId) ?? activeExperiments[0] ?? null;
   const featuredDetail = useExperiment(featured?.id);
 
-  const openWizard = (suggestion?: ExperimentAISuggestion) => {
+  const openWizard = (suggestion?: ExperimentAISuggestion, proposal?: ExperimentProposal) => {
     setWizardSuggestion(suggestion ?? null);
+    setWizardProposal(proposal ?? null);
     setWizardOpen(true);
   };
+
+  // Bloco "Desenhe com IA": aberto por padrão quando ainda não há experimento nenhum.
+  const designerVisible = designerOpen || experiments.length === 0;
+  const designer = (
+    <section className="relative overflow-hidden rounded-2xl border border-cat-purple/25 bg-paper-raised dark:bg-ink-raised shadow-card dark:shadow-card-dark">
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute -top-28 right-0 w-96 h-96 rounded-full bg-gradient-to-br from-cat-purple/25 via-cat-blue/15 to-cat-pink/10 blur-3xl"
+        animate={{ x: [0, -40, 0], y: [0, 25, 0], rotate: [0, 20, 0] }}
+        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <button
+        type="button"
+        onClick={() => setDesignerOpen((v) => !v)}
+        aria-expanded={designerVisible}
+        className="relative w-full flex items-center gap-3 p-4 md:p-5 text-left"
+      >
+        <motion.span
+          className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cat-purple to-cat-blue text-white flex items-center justify-center shrink-0 shadow-lg shadow-cat-purple/30"
+          animate={{ rotate: [0, -6, 6, 0] }}
+          transition={{ duration: 4, repeat: Infinity, repeatDelay: 2 }}
+        >
+          <Wand2 size={20} />
+        </motion.span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-display font-bold text-lg leading-tight">Desenhe um experimento com IA</span>
+          <span className="block text-xs text-slate">Diga o que quer melhorar. O Copilot lê seus registros reais e propõe testes já configurados para medir.</span>
+        </span>
+        {experiments.length > 0 && <ChevronDown size={18} className={`text-slate shrink-0 transition-transform ${designerVisible ? "rotate-180" : ""}`} />}
+      </button>
+      <AnimatePresence initial={false}>
+        {designerVisible && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="relative overflow-hidden">
+            <div className="px-4 pb-4 md:px-5 md:pb-5">
+              <ExperimentAIDesigner onPick={(p) => openWizard(undefined, p)} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  );
 
   if (isLoading) {
     return (
@@ -59,8 +105,10 @@ export function ExperimentsPage() {
 
       {summary && <ExperimentSummaryCards summary={summary} />}
 
+      {designer}
+
       {experiments.length === 0 ? (
-        <ExperimentsEmptyState onCreate={() => openWizard()} onAskCopilot={() => openWizard()} />
+        <ExperimentsEmptyState onCreate={() => openWizard()} onAskCopilot={() => setDesignerOpen(true)} />
       ) : (
         <>
           <ExperimentTodayCheckin experiments={experiments} />
@@ -123,6 +171,7 @@ export function ExperimentsPage() {
           onSubmit={(input) => createExperiment(input)}
           isSubmitting={isCreating}
           initialSuggestion={wizardSuggestion}
+          initialProposal={wizardProposal}
         />
       )}
 

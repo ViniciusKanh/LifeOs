@@ -1875,6 +1875,11 @@ export interface ExperimentAnalysis {
   streak: { current: number; best: number };
   overlaps: Array<{ id: string; title: string; status: ExperimentStatus; sharesMetric: boolean }>;
   daysRemaining: number;
+  pulse: {
+    beforeMean: number | null;
+    points: Array<{ date: string; value: number | null; cumulativeMean: number | null; status: string }>;
+    latest: { date: string; value: number | null; vsBeforePct: number | null } | null;
+  };
 }
 
 export interface ExperimentBaselinePreview {
@@ -1891,4 +1896,49 @@ export interface ExperimentBaselinePreview {
   sourceLabel: string;
   message: string;
   sparkline: Array<number | null>;
+}
+
+/* ---------- Experimentos: LifeOS Copilot (experimentCoachService.ts) ---------- */
+
+export interface ExperimentProposal {
+  title: string;
+  category: ExperimentCategory;
+  hypothesis: string;
+  rationale: string;
+  dailyAction: string;
+  primaryMetric: ExperimentMetricKey;
+  secondaryMetrics: ExperimentMetricKey[];
+  durationDays: number;
+  linkedHabitId: string | null;
+  verificationType: ExperimentVerificationType;
+  verificationRule: ExperimentVerificationRule | null;
+  verificationConfig: Record<string, unknown> | null;
+  successCriteriaType: ExperimentSuccessCriteriaType;
+  successCriteriaValue: number | null;
+  /** Calculado pelo servidor a partir dos registros reais — não vem da IA. */
+  baseline: { mean: number | null; daysWithData: number; unit: string | null; recommendedDurationDays: number | null };
+}
+
+export type ExperimentInsightKind = "dado" | "inferencia" | "sugestao";
+
+export interface ExperimentInsightReport {
+  id: string;
+  kind: "insight" | "final";
+  createdAt: string;
+  logsCount: number;
+  content: {
+    headline: string;
+    summary: string;
+    items: Array<{ kind: ExperimentInsightKind; text: string }>;
+    todayFocus: string | null;
+    question: string | null;
+  };
+}
+
+export interface ExperimentLogProposal {
+  logDate: string;
+  checkinStatus: ExperimentCheckinStatus | null;
+  perception: ExperimentPerception | null;
+  notes: string;
+  reasoning: string | null;
 }

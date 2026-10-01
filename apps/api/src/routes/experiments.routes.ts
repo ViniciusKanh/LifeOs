@@ -19,6 +19,8 @@ import {
 } from "../services/experimentService.js";
 import { analyzeExperiment, suggestExperiment } from "../services/experimentAIService.js";
 import { getExperimentAnalysis, getMetricBaselinePreview } from "../services/experimentAnalysisService.js";
+import { designExperiments, generateInsightReport, listInsightReports, parseDailyLog } from "../services/experimentCoachService.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { METRIC_KEYS } from "../services/experimentMetricsService.js";
 import { VERIFICATION_RULES } from "../services/experimentVerificationService.js";
 
@@ -92,6 +94,20 @@ experimentsRouter.get("/metrics/:key/baseline", async (req, res) => {
   }
 });
 
+// Chamadas de IA: limite por IP para evitar custo descontrolado com o Gemini.
+const aiLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 30 });
+const designSchema = z.object({ goal: z.string().trim().min(5, "Descreva o objetivo com um pouco mais de detalhe.").max(400), constraints: z.string().trim().max(300).optional().nullable() });
+const parseLogSchema = z.object({ text: z.string().trim().min(3).max(1500), date: dateSchema });
+
+/** POST /api/experiments/ai/design — a IA propõe 2-3 experimentos para um objetivo (nada é criado). */
+experimentsRouter.post("/ai/design", aiLimit, async (req, res) => {
+  const parsed = designSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const result = await designExperiments(getDb(), req.user!.id, parsed.data.goal, parsed.data.constraints);
+  if (!result.ok) return res.status(422).json({ error: result.message });
+  return res.json({ proposals: result.proposals });
+});
+
 /** GET /api/experiments/verification/rules — regras automáticas disponíveis para o wizard. */
 experimentsRouter.get("/verification/rules", async (_req, res) => {
   return res.json(Object.values(VERIFICATION_RULES));
@@ -154,6 +170,39 @@ experimentsRouter.get("/:id", async (req, res) => {
 experimentsRouter.get("/:id/analysis", async (req, res) => {
   try {
     return res.json(await getExperimentAnalysis(getDb(), req.user!.id, req.params.id));
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
+/** POST /api/experiments/:id/ai/parse-log — lê o relato do dia e PROPÕE um check-in (o usuário confirma antes de salvar). */
+experimentsRouter.post("/:id/ai/parse-log", aiLimit, async (req, res) => {
+  const parsed = parseLogSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  try {
+    const result = await parseDailyLog(getDb(), req.user!.id, req.params.id, parsed.data.text, parsed.data.date);
+    if (!result.ok) return res.status(422).json({ error: result.message });
+    return res.json(result.proposal);
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
+/** GET /api/experiments/:id/ai/reports — histórico de insights da IA deste experimento. */
+experimentsRouter.get("/:id/ai/reports", async (req, res) => {
+  try {
+    return res.json(await listInsightReports(getDb(), req.user!.id, req.params.id));
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
+/** POST /api/experiments/:id/ai/insights { refresh?, final? } — gera (ou reaproveita o de hoje) um relatório de insights. */
+experimentsRouter.post("/:id/ai/insights", aiLimit, async (req, res) => {
+  try {
+    const result = await generateInsightReport(getDb(), req.user!.id, req.params.id, { refresh: req.body?.refresh === true, final: req.body?.final === true });
+    if (!result.ok) return res.status(422).json({ error: result.message });
+    return res.json({ cached: result.cached, report: result.report });
   } catch (err) {
     return handleError(res, err);
   }

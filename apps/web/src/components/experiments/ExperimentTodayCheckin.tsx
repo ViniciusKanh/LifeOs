@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
-import { Bot, Check, ChevronRight, Loader2, X } from "lucide-react";
+import { Bot, Check, ChevronRight, Loader2, Sparkles, Wand2, X } from "lucide-react";
+import { ProvenanceBadge } from "./AiThinking";
 import { useExperiment } from "@/hooks/useExperiment";
 import { CATEGORY_ICON } from "./experimentDisplay";
-import type { ExperimentCheckinStatus, ExperimentListItem, ExperimentPerception } from "@/types";
+import type { ExperimentCheckinStatus, ExperimentListItem, ExperimentLogProposal, ExperimentPerception } from "@/types";
 
 /**
  * Check-in de hoje com um toque, para cada experimento ativo.
@@ -38,8 +39,12 @@ function localToday() {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
-function TodayRow({ experiment }: { experiment: ExperimentListItem }) {
-  const { detail, upsertLog, isSavingLog } = useExperiment(experiment.id);
+function TodayRow({ experiment, question }: { experiment: ExperimentListItem; question?: string | null }) {
+  const { detail, upsertLog, isSavingLog, parseLog, isParsingLog } = useExperiment(experiment.id);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [story, setStory] = useState("");
+  const [proposal, setProposal] = useState<ExperimentLogProposal | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const today = localToday();
   const day = detail?.checkins.find((c) => c.date === today) ?? null;
   const log = detail?.logs.find((l) => l.log_date === today) ?? null;
@@ -52,6 +57,28 @@ function TodayRow({ experiment }: { experiment: ExperimentListItem }) {
     upsertLog({ logDate: today, ...patch }).catch(() => undefined);
 
   const status = day?.status ?? "pending";
+
+  // Relato livre → a IA propõe status/percepção/nota; só grava depois da confirmação.
+  const interpret = async () => {
+    setAiError(null);
+    try {
+      setProposal(await parseLog({ text: story.trim(), date: today }));
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Não foi possível interpretar agora.");
+    }
+  };
+  const confirmProposal = async () => {
+    if (!proposal) return;
+    // O que a IA não identificou (null) não sobrescreve o que já estava marcado.
+    await save({
+      checkinStatus: automatic || !proposal.checkinStatus ? undefined : proposal.checkinStatus,
+      perception: proposal.perception ?? undefined,
+      notes: proposal.notes,
+    });
+    setProposal(null);
+    setStory("");
+    setStoryOpen(false);
+  };
 
   return (
     <li className="rounded-xl border border-paper-border dark:border-ink-border p-3">
@@ -128,6 +155,74 @@ function TodayRow({ experiment }: { experiment: ExperimentListItem }) {
         )}
       </div>
 
+      <button
+        type="button"
+        onClick={() => setStoryOpen((v) => !v)}
+        aria-expanded={storyOpen}
+        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-cat-purple hover:underline"
+      >
+        <Wand2 size={12} /> Contar como foi o dia (IA preenche o check-in)
+      </button>
+
+      <AnimatePresence initial={false}>
+        {storyOpen && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="mt-2 rounded-xl border border-cat-purple/25 bg-cat-purple/[0.04] p-3">
+              {question && <p className="text-[11px] text-cat-pink font-semibold mb-1.5">Pergunta do Copilot: {question}</p>}
+              <textarea
+                value={story}
+                onChange={(e) => setStory(e.target.value)}
+                rows={2}
+                maxLength={1500}
+                placeholder="Ex.: Consegui dormir às 22h40, acordei mais disposto, mas à tarde bateu cansaço."
+                aria-label="Como foi o seu dia"
+                className="w-full rounded-lg px-3 py-2 text-sm bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border outline-none focus:border-cat-purple resize-none"
+              />
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={interpret}
+                  disabled={isParsingLog || story.trim().length < 3}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-cat-purple text-white disabled:opacity-50"
+                >
+                  {isParsingLog ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Interpretar
+                </button>
+              </div>
+              {aiError && <p className="text-[11px] text-drop mt-2">{aiError}</p>}
+              <AnimatePresence>
+                {proposal && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-3 rounded-lg bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border p-3">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold mb-2">
+                      <ProvenanceBadge kind="inferencia" /> O Copilot entendeu assim — confira antes de salvar
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 text-[11px]">
+                      {!automatic && (
+                        <span className={clsx("rounded-full px-2 py-0.5 font-semibold", proposal.checkinStatus === "done" ? "bg-cat-green/12 text-cat-green" : proposal.checkinStatus === "missed" ? "bg-drop/10 text-drop" : "bg-slate/12 text-slate")}>
+                          {proposal.checkinStatus === "done" ? "Cumpriu" : proposal.checkinStatus === "missed" ? "Não cumpriu" : "Cumprimento não identificado"}
+                        </span>
+                      )}
+                      <span className="rounded-full px-2 py-0.5 bg-cat-pink/12 text-cat-pink font-semibold">
+                        {proposal.perception ? `${PERCEPTIONS.find((p) => p.value === proposal.perception)?.emoji} ${PERCEPTIONS.find((p) => p.value === proposal.perception)?.label}` : "Sentimento não identificado"}
+                      </span>
+                    </div>
+                    <p className="text-sm mt-2">“{proposal.notes}”</p>
+                    {proposal.reasoning && <p className="text-[10px] text-slate mt-1">Base: {proposal.reasoning}</p>}
+                    <div className="flex justify-end gap-2 mt-2.5">
+                      <button type="button" onClick={() => setProposal(null)} className="rounded-lg px-3 py-1.5 text-xs text-slate hover:text-inherit">
+                        Descartar
+                      </button>
+                      <button type="button" onClick={confirmProposal} disabled={isSavingLog} className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold bg-cat-green text-white disabled:opacity-50">
+                        <Check size={12} /> Salvar check-in
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence initial={false}>
         {noteOpen && (
           <motion.form
@@ -161,7 +256,7 @@ function TodayRow({ experiment }: { experiment: ExperimentListItem }) {
   );
 }
 
-export function ExperimentTodayCheckin({ experiments }: { experiments: ExperimentListItem[] }) {
+export function ExperimentTodayCheckin({ experiments, question }: { experiments: ExperimentListItem[]; question?: string | null }) {
   const active = experiments.filter((e) => e.status === "active");
   if (active.length === 0) return null;
   return (
@@ -170,7 +265,7 @@ export function ExperimentTodayCheckin({ experiments }: { experiments: Experimen
       <p className="text-xs text-slate mb-3">Um toque por experimento. Os automáticos o LifeOS confere sozinho pelos seus registros.</p>
       <ul className="space-y-2">
         {active.map((e) => (
-          <TodayRow key={e.id} experiment={e} />
+          <TodayRow key={e.id} experiment={e} question={question} />
         ))}
       </ul>
     </section>

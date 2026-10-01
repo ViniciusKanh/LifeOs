@@ -61,3 +61,8 @@ export function useExperimentBaselinePreview(metric: string | null, habitId?: st
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/** IA desenha experimentos a partir de um objetivo em texto livre (só propõe; nada é criado). */
+export function useExperimentAIDesign() {
+  return useMutation({ mutationFn: ({ goal, constraints }: { goal: string; constraints?: string | null }) => experimentService.aiDesign(goal, constraints) });
+}

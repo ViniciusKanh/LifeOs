@@ -17,6 +17,9 @@ import type {
   ExperimentPerceivedResult,
   ExperimentAnalysis,
   ExperimentBaselinePreview,
+  ExperimentProposal,
+  ExperimentInsightReport,
+  ExperimentLogProposal,
 } from "@/types";
 
 export interface VerificationRuleInfo {
@@ -28,6 +31,11 @@ export interface VerificationRuleInfo {
 }
 
 export const experimentService = {
+  aiDesign: (goal: string, constraints?: string | null) => api.post<{ proposals: ExperimentProposal[] }>("/experiments/ai/design", { goal, constraints: constraints || null }),
+  aiParseLog: (id: string, text: string, date: string) => api.post<ExperimentLogProposal>(`/experiments/${id}/ai/parse-log`, { text, date }),
+  aiReports: (id: string) => api.get<ExperimentInsightReport[]>(`/experiments/${id}/ai/reports`),
+  aiInsights: (id: string, opts: { refresh?: boolean; final?: boolean } = {}) =>
+    api.post<{ cached: boolean; report: ExperimentInsightReport }>(`/experiments/${id}/ai/insights`, opts),
   analysis: (id: string) => api.get<ExperimentAnalysis>(`/experiments/${id}/analysis`),
   baselinePreview: (metric: string, habitId?: string | null, days = 28) =>
     api.get<ExperimentBaselinePreview>(`/experiments/metrics/${metric}/baseline?days=${days}${habitId ? `&habitId=${encodeURIComponent(habitId)}` : ""}`),
