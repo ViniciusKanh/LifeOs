@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { extractJson, str } from "./aiJson.js";
-import { METRIC_CATALOG, METRIC_KEYS, getDailySeries, type ExperimentMetricKey } from "./experimentMetricsService.js";
+import { METRIC_CATALOG, METRIC_KEYS, getRecordedValues, type ExperimentMetricKey } from "./experimentMetricsService.js";
 import { VERIFICATION_RULES, type VerificationRule } from "./experimentVerificationService.js";
 import { CATEGORY_LABEL, ExperimentError, getExperimentDetail, type ExperimentCategory } from "./experimentService.js";
 import { getExperimentAnalysis } from "./experimentAnalysisService.js";
@@ -98,9 +98,10 @@ async function metricContext(db: Db, ownerId: string) {
   const keys = METRIC_KEYS.filter((k) => !METRIC_CATALOG[k].requiresHabit);
   const rows = await Promise.all(
     keys.map(async (key) => {
-      const s = await getDailySeries(db, ownerId, key, from, to, null);
-      const d = describe(s.values.filter((p) => p.value !== null).map((p) => p.value as number));
-      return { key, label: METRIC_CATALOG[key].label, unit: METRIC_CATALOG[key].unit, mean: d.mean, sd: d.sd, daysWithData: s.daysWithData };
+      // Média e desvio só dos dias com registro: com 6 dias de água em 30, a base é a média desses 6 — não 6/30 dela.
+      const values = await getRecordedValues(db, ownerId, key, from, to, null);
+      const d = describe(values);
+      return { key, label: METRIC_CATALOG[key].label, unit: METRIC_CATALOG[key].unit, mean: d.mean, sd: d.sd, daysWithData: values.length };
     })
   );
   return new Map(rows.map((r) => [r.key, r]));
@@ -123,7 +124,7 @@ export async function designExperiments(db: Db, ownerId: string, goal: string, c
   const habitIds = new Set(habits.map((h) => h.id));
 
   const metricLines = [...metrics.values()].map(
-    (m) => `- ${m.key} (${m.label}${m.unit ? `, ${m.unit}` : ""}): média 30d ${fmt(m.mean)}, ${m.daysWithData} dia(s) com registro`
+    (m) => `- ${m.key} (${m.label}${m.unit ? `, ${m.unit}` : ""}): média nos dias com registro ${fmt(m.mean)}, ${m.daysWithData} dia(s) com registro em 30 dias`
   );
   const ruleLines = Object.values(VERIFICATION_RULES).map((r) => `- ${r.key}: ${r.label} (config: ${r.configLabel}${r.configUnit ? ` em ${r.configUnit}` : ""})`);
 
@@ -444,7 +445,7 @@ export async function tailorDraft(db: Db, ownerId: string, draft: TailorDraft) {
   const lines = [...relevant]
     .map((k) => metrics.get(k))
     .filter((m): m is NonNullable<typeof m> => !!m)
-    .map((m) => `- ${m.key} (${m.label}${m.unit ? `, ${m.unit}` : ""}): média 30d ${fmt(m.mean)}, desvio ${fmt(m.sd)}, ${m.daysWithData} dia(s) com registro`);
+    .map((m) => `- ${m.key} (${m.label}${m.unit ? `, ${m.unit}` : ""}): média nos dias com registro ${fmt(m.mean)}, desvio ${fmt(m.sd)}, ${m.daysWithData} dia(s) com registro em 30 dias`);
 
   const prompt = [
     "Você é o LifeOS Copilot. O usuário escolheu um modelo de experimento pessoal e quer PERSONALIZÁ-LO aos dados dele.",

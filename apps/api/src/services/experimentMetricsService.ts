@@ -227,6 +227,24 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
   return map;
 }
 
+/**
+ * Só os dias em que houve registro de fato (sem preencher zero). Usado
+ * quando o número exibido é "sua média nos dias com registro" — ex.: a base
+ * mostrada nas propostas da IA. A análise antes × durante continua usando
+ * getDailySeries, que trata ausência como zero nas métricas de contagem.
+ */
+export async function getRecordedValues(
+  db: Db,
+  ownerId: string,
+  metric: ExperimentMetricKey,
+  from: string,
+  to: string,
+  linkedHabitId: string | null = null
+): Promise<number[]> {
+  const raw = await rawDailySeries(db, ownerId, metric, from, to, linkedHabitId);
+  return [...raw.values()];
+}
+
 export interface DailySeriesResult {
   values: Array<{ date: string; value: number | null }>;
   daysWithData: number;
