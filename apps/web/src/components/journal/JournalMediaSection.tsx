@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { Camera, FileText, Film, ImagePlus, Loader2, Play, Sparkles, Trash2, X } from "lucide-react";
 import type { JournalMedia } from "@/types";
 import { Button } from "@/components/ui/primitives";
-import { MediaCarousel, MediaLightbox, type CarouselItem } from "@/components/media/MediaCarousel";
+import { MediaLightbox, type CarouselItem } from "@/components/media/MediaCarousel";
+import { SpotlightSlider, type SpotlightSlide } from "@/components/media/SpotlightSlider";
 import { prepareUpload, uploadKindOf } from "@/utils/files";
 
 /**
@@ -26,6 +27,27 @@ export function toCarouselItem(m: JournalMedia): CarouselItem {
     src: m.dataUri,
     title: m.caption ?? m.fileName,
     badge: m.aiCategory,
+  };
+}
+
+/**
+ * Momento do slider em destaque: rótulo = categoria da IA (ou tipo da
+ * mídia), título = legenda (ou começo da história) e uma linha da história.
+ */
+function toSpotlightSlide(m: JournalMedia): SpotlightSlide {
+  const story = m.story?.trim() || null;
+  const caption = m.caption?.trim() || null;
+  // Sem legenda, a 1ª frase da história vira o título e o restante vira a linha de apoio.
+  const [firstSentence, ...rest] = story ? story.split(/(?<=[.!?])\s+|\n+/) : [];
+  const title = caption ?? (firstSentence ? firstSentence.slice(0, 90) : "Um momento do seu dia");
+  const subtitle = caption ? story : rest.join(" ").trim() || null;
+  return {
+    id: m.id,
+    kind: m.kind === "video" ? "video" : "image",
+    src: m.dataUri,
+    eyebrow: m.aiCategory ?? (m.kind === "video" ? "Vídeo do dia" : "Momento"),
+    title,
+    subtitle,
   };
 }
 
@@ -255,31 +277,17 @@ export function JournalMediaSection({
   };
 
   const items = allViewable.map(toCarouselItem);
-  const visualItems = visual.map(toCarouselItem);
+  const visualSlides = visual.map(toSpotlightSlide);
 
   return (
     <div className="space-y-3">
-      {visualItems.length > 0 && (
-        <MediaCarousel
-          items={visualItems}
+      {visualSlides.length > 0 && (
+        <SpotlightSlider
+          slides={visualSlides}
           index={carouselIndex}
           onIndexChange={setCarouselIndex}
-          fit="cover"
-          className="aspect-[16/9] sm:aspect-[21/9]"
-          overlay={(item) => {
-            const m = visual.find((v) => v.id === item.id);
-            if (!m?.caption && !m?.story) return null;
-            return (
-              <button
-                type="button"
-                onClick={() => setLightboxStart(allViewable.findIndex((v) => v.id === item.id))}
-                className="w-full text-left px-4 pb-4 pt-10 bg-gradient-to-t from-black/70 to-transparent text-white"
-              >
-                {m.caption && <p className="text-sm font-semibold truncate">{m.caption}</p>}
-                {m.story && <p className="text-xs text-white/85 line-clamp-2">{m.story}</p>}
-              </button>
-            );
-          }}
+          onOpen={(slide) => setLightboxStart(allViewable.findIndex((v) => v.id === slide.id))}
+          className="h-[300px] sm:h-[420px] lg:h-[500px]"
         />
       )}
 

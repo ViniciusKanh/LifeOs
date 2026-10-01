@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import { createECDH } from "node:crypto";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { encryptSecret, decryptSecret } from "./cryptoService.js";
@@ -25,34 +26,6 @@ async function readPushSetting(db: Db, keyName: string): Promise<string | null> 
   return decryptSecret(row.encrypted_value);
 }
 
-/**
- * Grava a chave SÓ se ainda não existir (primeiro a gravar vence). Em
- * serverless, duas instâncias frias podiam gerar pares diferentes ao mesmo
- * tempo e a segunda sobrescrevia a primeira: o navegador se inscrevia com
- * a chave pública de um par e o envio era assinado com a privada de outro,
- * e o serviço de push recusava (401/403) — era o erro "a inscrição existe,
- * mas o serviço de push não conseguiu entregar".
- */
-async function insertPushSettingIfMissing(db: Db, keyName: string, value: string): Promise<void> {
-  const encrypted = encryptSecret(value);
-  await db.execute({
-    sql: `INSERT INTO admin_settings (id, integration, key_name, encrypted_value, masked_preview, is_active)
-          VALUES (?, 'push', ?, ?, ?, 1)
-          ON CONFLICT (integration, key_name) DO NOTHING`,
-    args: [nanoid(), keyName, encrypted, `${value.slice(0, 6)}…`],
-  });
-}
-
-async function forcePushSetting(db: Db, keyName: string, value: string): Promise<void> {
-  const encrypted = encryptSecret(value);
-  await db.execute({
-    sql: `INSERT INTO admin_settings (id, integration, key_name, encrypted_value, masked_preview, is_active)
-          VALUES (?, 'push', ?, ?, ?, 1)
-          ON CONFLICT (integration, key_name) DO UPDATE SET encrypted_value = excluded.encrypted_value, masked_preview = excluded.masked_preview, is_active = 1`,
-    args: [nanoid(), keyName, encrypted, `${value.slice(0, 6)}…`],
-  });
-}
-
 interface VapidKeys {
   publicKey: string;
   privateKey: string;
@@ -73,23 +46,59 @@ async function readKeyPair(db: Db): Promise<VapidKeys | null> {
   return publicKey && privateKey ? { publicKey, privateKey } : null;
 }
 
-/** Garante um par VAPID persistido — sempre o par que está no banco. */
+/**
+ * Confere se a chave privada realmente gera a chave pública salva. Um par
+ * "misturado" (pública de uma geração, privada de outra — possível com a
+ * gravação antiga em duas etapas sem transação) faz TODO envio voltar 403
+ * do FCM, mesmo com o navegador inscrito na chave pública atual.
+ */
+export function isConsistentKeyPair(keys: VapidKeys): boolean {
+  try {
+    const ecdh = createECDH("prime256v1");
+    ecdh.setPrivateKey(Buffer.from(keys.privateKey, "base64url"));
+    return ecdh.getPublicKey().toString("base64url") === keys.publicKey.replace(/=+$/, "");
+  } catch {
+    return false;
+  }
+}
+
+/** Grava o par inteiro numa única transação — nunca meio par. */
+async function writeKeyPair(db: Db, keys: VapidKeys, mode: "if_missing" | "replace") {
+  const conflict =
+    mode === "replace"
+      ? "DO UPDATE SET encrypted_value = excluded.encrypted_value, masked_preview = excluded.masked_preview, is_active = 1"
+      : "DO NOTHING";
+  const stmt = (keyName: string, value: string) => ({
+    sql: `INSERT INTO admin_settings (id, integration, key_name, encrypted_value, masked_preview, is_active)
+          VALUES (?, 'push', ?, ?, ?, 1)
+          ON CONFLICT (integration, key_name) ${conflict}`,
+    args: [nanoid(), keyName, encryptSecret(value), `${value.slice(0, 6)}…`],
+  });
+  await db.batch([stmt("vapid_public_key", keys.publicKey), stmt("vapid_private_key", keys.privateKey)], "write");
+}
+
+/**
+ * Garante um par VAPID persistido E consistente. Se o par salvo estiver
+ * incompleto, inativo ou misturado, gera um novo, substitui atomicamente e
+ * apaga as inscrições existentes (todas foram criadas com a pública antiga
+ * e nunca mais funcionariam) — os navegadores se reinscrevem sozinhos ao
+ * perceber que a chave mudou (ver usePush.ts).
+ */
 export async function getVapidKeys(): Promise<VapidKeys> {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.keys;
 
   const db = getDb();
   let keys = await readKeyPair(db);
   if (!keys) {
-    const generated = webpush.generateVAPIDKeys();
-    await insertPushSettingIfMissing(db, "vapid_public_key", generated.publicKey);
-    await insertPushSettingIfMissing(db, "vapid_private_key", generated.privateKey);
+    await writeKeyPair(db, webpush.generateVAPIDKeys(), "if_missing");
     keys = await readKeyPair(db);
-    if (!keys) {
-      // Linhas antigas inativas ou par incompleto: grava o par novo inteiro.
-      await forcePushSetting(db, "vapid_public_key", generated.publicKey);
-      await forcePushSetting(db, "vapid_private_key", generated.privateKey);
-      keys = { publicKey: generated.publicKey, privateKey: generated.privateKey };
-    }
+  }
+  if (!keys || !isConsistentKeyPair(keys)) {
+    const fresh = webpush.generateVAPIDKeys();
+    await writeKeyPair(db, fresh, "replace");
+    await db.execute("DELETE FROM push_subscriptions");
+    console.warn("[push] par VAPID inválido/misturado — novo par gerado e inscrições antigas descartadas.");
+    keys = fresh;
   }
 
   cached = { keys, at: Date.now() };
@@ -172,6 +181,8 @@ export async function sendPushToUser(
         const statusCode = (err as { statusCode?: number })?.statusCode ?? null;
         const kind = classifyFailure(statusCode);
         failures.push({ service: serviceHost(sub.endpoint), statusCode, kind });
+        // Recusa de assinatura: outra instância pode ter trocado o par — relê do banco no próximo envio.
+        if (kind === "auth") cached = null;
         if (kind === "gone" || kind === "auth") {
           await db.execute({ sql: "DELETE FROM push_subscriptions WHERE id = ?", args: [sub.id] });
           removed += 1;
@@ -191,7 +202,7 @@ export function describePushFailures(failures: PushFailure[]): string {
   const kinds = new Set(failures.map((f) => f.kind));
   const services = [...new Set(failures.map((f) => f.service))].join(", ");
   if (kinds.has("auth")) {
-    return `O serviço de push (${services}) recusou a assinatura: a inscrição deste navegador foi criada com outra chave. Ela foi descartada — toque em "Enviar teste" de novo para recriá-la automaticamente.`;
+    return `O serviço de push (${services}) recusou a assinatura das chaves VAPID. A inscrição foi descartada e as chaves do servidor foram verificadas — desative e ative as notificações neste navegador e envie o teste de novo.`;
   }
   if (kinds.has("gone")) {
     return `A inscrição deste navegador expirou no serviço de push (${services}) e foi removida. Toque em "Enviar teste" de novo para criar uma nova.`;

@@ -167,3 +167,14 @@ describe("Diagnóstico de falha do push", () => {
     expect(describePushFailures([{ service: "x", statusCode: null, kind: "network" }])).toContain("conectar");
   });
 });
+
+describe("Par VAPID", () => {
+  it("detecta par consistente e par misturado", async () => {
+    const webpush = (await import("web-push")).default;
+    const { isConsistentKeyPair } = await import("../src/services/pushService.js");
+    const a = webpush.generateVAPIDKeys();
+    const b = webpush.generateVAPIDKeys();
+    expect(isConsistentKeyPair(a)).toBe(true);
+    expect(isConsistentKeyPair({ publicKey: a.publicKey, privateKey: b.privateKey })).toBe(false);
+  });
+});
