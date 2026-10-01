@@ -1,11 +1,14 @@
-import { useState, type FormEvent } from "react";
-import { Briefcase, Flame, Plus, Target, Trash2, Users } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { AlertTriangle, BarChart3, Briefcase, CalendarClock, CheckCircle2, Clock, Flame, Grid3x3, Hourglass, NotebookPen, Plus, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useProfessionalTasks, useTasks } from "@/hooks/useTasks";
-import { useGoals } from "@/hooks/useGoals";
 import { useWorkNotes } from "@/hooks/useWorkNotes";
-import { Button, Card, EmptyState, Field, PageHeader } from "@/components/ui/primitives";
+import { useProfessionalOverview } from "@/hooks/useProfessional";
+import { Button, Card, EmptyState, Field, PageHeader, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
+import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
+import { ComparisonGrid, DayMatrix, WeekdayBars } from "@/components/professional/ProfessionalInsights";
+import { formatMinutes } from "@/components/projects/projectMeta";
 import type { Task } from "@/types";
 
 const COLUMNS = ["Backlog", "A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
@@ -16,18 +19,40 @@ function formatDate(value: string) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
 }
 
+function Section({ icon, title, subtitle, action, children, className }: { icon: ReactNode; title: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <Card className={`p-4 sm:p-5 ${className ?? ""}`}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-display font-semibold text-[15px]">{icon} {title}</p>
+          {subtitle && <p className="text-xs text-slate mt-0.5">{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function deltaCaption(current: number, previous: number, unit: (v: number) => string) {
+  if (previous === 0 && current === 0) return "sem registros nas 2 últimas semanas";
+  if (previous === 0) return `semana anterior: 0`;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return `${pct >= 0 ? "+" : ""}${pct}% vs semana anterior (${unit(previous)})`;
+}
+
 /**
- * Área Profissional — reúne o que o briefing original pedia como
- * módulo próprio, mas até agora só existia implicitamente: o
- * Priority Score (impact*urgência/esforço, campos que já existiam no
- * banco sem nenhuma tela), as metas de carreira já cadastradas em
- * Metas (categoria "Carreira") e um log rápido de reuniões 1:1 e
- * anotações de trabalho.
+ * Área Profissional — o trabalho cruzado com o resto do LifeOS:
+ * KPIs da semana, matriz dia a dia (tarefas, horas, reuniões, sono e
+ * energia), "o que influencia seu trabalho" (comparações com Saúde e
+ * Hábitos), carga por projeto profissional, prazos, Priority Score, melhor
+ * dia da semana, metas de carreira, Diário e reuniões 1:1.
+ * Todos os números vêm de GET /api/professional/overview (dados reais).
  */
 export function ProfissionalPage() {
   const { tasks: professionalTasks, isLoading: tasksLoading } = useProfessionalTasks();
   const { updateTask, removeTask } = useTasks();
-  const { goals, isLoading: goalsLoading } = useGoals();
+  const { overview, isLoading: overviewLoading } = useProfessionalOverview();
   const { notes, isLoading: notesLoading, createNote, isCreating, removeNote } = useWorkNotes();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -36,7 +61,8 @@ export function ProfissionalPage() {
   const [noteDate, setNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [noteError, setNoteError] = useState<string | null>(null);
 
-  const careerGoals = goals.filter((g) => g.category === "Carreira" && g.status === "active");
+  const careerGoals = overview?.careerGoals ?? [];
+  const k = overview?.kpis;
 
   const handleAddNote = async (e: FormEvent) => {
     e.preventDefault();
@@ -52,12 +78,107 @@ export function ProfissionalPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8">
+    <div className="px-4 py-6 md:px-8 md:py-8 mx-auto max-w-[1440px]">
       <PageHeader
         icon={<Briefcase size={20} />}
         title="Profissional"
-        subtitle="Priority Score das suas tarefas de trabalho, metas de carreira e o histórico de 1:1s e anotações."
+        subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões, Diário e metas de carreira."
       />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <StatTile
+          icon={<Briefcase size={16} />}
+          label="Em aberto"
+          value={overviewLoading ? "…" : String(k?.open ?? 0)}
+          tone="purple"
+          caption={k ? (k.overdue > 0 ? `${k.overdue} atrasadas · ${k.dueThisWeek} vencem em 7 dias` : `${k.dueThisWeek} vencem em 7 dias`) : undefined}
+        />
+        <StatTile
+          icon={<CheckCircle2 size={16} />}
+          label="Concluídas (7 dias)"
+          value={overviewLoading ? "…" : String(k?.done7 ?? 0)}
+          tone="green"
+          caption={k ? deltaCaption(k.done7, k.donePrev7, (v) => String(v)) : undefined}
+        />
+        <StatTile
+          icon={<Clock size={16} />}
+          label="Horas registradas (7 dias)"
+          value={overviewLoading ? "…" : formatMinutes(k?.logged7 ?? 0)}
+          tone="blue"
+          caption={k ? deltaCaption(k.logged7, k.loggedPrev7, formatMinutes) : undefined}
+        />
+        <StatTile
+          icon={<Hourglass size={16} />}
+          label="Restante estimado"
+          value={overviewLoading ? "…" : formatMinutes(k?.remainingMinutes ?? 0)}
+          tone="amber"
+          caption={k ? (k.unestimatedOpen > 0 ? `${k.unestimatedOpen} tarefas sem estimativa` : `${k.meetings30} reuniões/anotações em 30 dias`) : undefined}
+        />
+      </div>
+
+      {overview && (
+        <>
+          <Section
+            className="mb-4"
+            icon={<Grid3x3 size={16} className="text-cat-purple" />}
+            title="Seus últimos 14 dias de trabalho"
+            subtitle="Tarefas profissionais concluídas e horas registradas lado a lado com reuniões, sono e energia. Quadrado tracejado = sem registro naquele dia."
+          >
+            <DayMatrix daily={overview.daily} />
+          </Section>
+
+          <Section
+            className="mb-4"
+            icon={<Sparkles size={16} className="text-cat-purple" />}
+            title="O que acompanha seus melhores dias de trabalho"
+            subtitle="Média de tarefas profissionais concluídas por dia, comparando dias com e sem cada condição."
+          >
+            <ComparisonGrid comparisons={overview.comparisons} windowDays={overview.windowDays} />
+          </Section>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+            <Section
+              className="xl:col-span-2"
+              icon={<Hourglass size={16} className="text-brand-600" />}
+              title="Carga dos projetos profissionais"
+              action={<Link to="/projetos" className="text-xs font-medium text-brand-600 dark:text-brand-100 hover:underline shrink-0">Projetos</Link>}
+            >
+              <ProjectLoadBoard
+                workload={overview.workload}
+                isLoading={false}
+                emptyText="Nenhum projeto do tipo Profissional com tarefas. Em Projetos, marque o tipo como Profissional e vincule tarefas."
+              />
+            </Section>
+            <div className="space-y-4">
+              <Section icon={<CalendarClock size={16} className="text-signal-deep" />} title="Prazos dos próximos 14 dias">
+                {overview.upcoming.length === 0 ? (
+                  <p className="text-xs text-slate">Nenhuma tarefa profissional com prazo nos próximos 14 dias.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {overview.upcoming.map((u) => {
+                      const late = u.dueDate < overview.today;
+                      return (
+                        <li key={u.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1.5">
+                          <span className={`text-[11px] font-semibold w-12 shrink-0 ${late ? "text-drop" : "text-slate"}`}>{formatDate(u.dueDate)}</span>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: u.projectColor ?? "#7C4DFF" }} aria-hidden />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm truncate">{u.title}</span>
+                            <span className="block text-[10px] text-slate truncate">{u.projectName} · {u.status}</span>
+                          </span>
+                          {late && <AlertTriangle size={13} className="text-drop shrink-0" aria-label="Atrasada" />}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Section>
+              <Section icon={<BarChart3 size={16} className="text-cat-blue" />} title="Melhor dia da semana" subtitle={`Últimos ${overview.windowDays} dias`}>
+                <WeekdayBars weekday={overview.weekday} best={overview.bestWeekday} />
+              </Section>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* ============== Priority Score ============== */}
@@ -112,7 +233,7 @@ export function ProfissionalPage() {
               Ver todas →
             </Link>
           </div>
-          {!goalsLoading && careerGoals.length === 0 ? (
+          {!overviewLoading && careerGoals.length === 0 ? (
             <p className="text-xs text-slate">
               Nenhuma meta ativa na categoria "Carreira" ainda —{" "}
               <Link to="/metas" className="text-brand-600 dark:text-brand-500 font-medium">
@@ -122,19 +243,45 @@ export function ProfissionalPage() {
             </p>
           ) : (
             <div className="space-y-3">
-              {careerGoals.map((g) => {
-                const pct = g.target_value ? Math.min(100, Math.round((g.current_value / g.target_value) * 100)) : g.current_value > 0 ? 100 : 0;
-                return (
-                  <div key={g.id}>
-                    <p className="text-xs font-medium truncate">{g.title}</p>
-                    <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-1.5">
-                      <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
-                    </div>
+              {careerGoals.map((g) => (
+                <div key={g.id}>
+                  <div className="flex justify-between gap-2 text-xs">
+                    <p className="font-medium truncate">{g.title}</p>
+                    <span className="text-slate shrink-0">{g.pct}%</span>
                   </div>
-                );
-              })}
+                  <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-1.5">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${g.pct}%` }} />
+                  </div>
+                  {g.dueDate && <p className="text-[10px] text-slate mt-1">prazo {formatDate(g.dueDate)}</p>}
+                </div>
+              ))}
             </div>
           )}
+          <div className="mt-5 pt-4 border-t border-paper-border dark:border-ink-border">
+            <p className="flex items-center gap-1.5 text-sm font-semibold mb-2">
+              <NotebookPen size={14} className="text-cat-pink" /> No Diário
+            </p>
+            {!overview || overview.journal.recent.length === 0 ? (
+              <p className="text-xs text-slate">
+                Nenhuma entrada do Diário ligada a projetos profissionais. No{" "}
+                <Link to="/diario" className="text-brand-600 dark:text-brand-500 font-medium">Diário</Link>, use “Vincular a projeto”.
+              </p>
+            ) : (
+              <>
+                <p className="text-[11px] text-slate mb-2">{overview.journal.linkedEntries30} entrada(s) sobre trabalho nos últimos 30 dias.</p>
+                <ul className="space-y-2">
+                  {overview.journal.recent.map((j) => (
+                    <li key={`${j.date}-${j.projectName}`}>
+                      <Link to={`/diario?date=${j.date}`} className="block rounded-lg px-2 py-1.5 -mx-2 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
+                        <p className="text-[11px] font-semibold text-cat-pink">{formatDate(j.date)} · {j.projectName}</p>
+                        {j.preview && <p className="text-xs text-slate line-clamp-2">{j.preview}</p>}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
         </Card>
       </div>
 

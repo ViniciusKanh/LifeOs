@@ -1,7 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { habitService } from "@/services/habitService";
 import { triggerAchievementsCheck } from "@/services/achievementsService";
-import type { Habit } from "@/types";
+import type { Habit, HabitTaskGenerationInput } from "@/types";
 
 const HABITS_KEY = ["habits"];
 const SUMMARY_KEY = ["habits", "summary"];
@@ -37,11 +37,12 @@ export function useHabits() {
     },
   });
   const generateTasks = useMutation({
-    mutationFn: (date?: string) => habitService.generateTasks(date),
+    mutationFn: (input: HabitTaskGenerationInput) => habitService.generateTasks(input),
     onSuccess: () => {
       // A tarefa gerada precisa aparecer em Tarefas/Kanban/Hoje na hora.
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { pushService } from "@/services/pushService";
+import { ApiError } from "@/services/api";
 
 /** Converte a chave pública VAPID (base64url) para o Uint8Array que PushManager.subscribe exige. */
 function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
@@ -19,11 +20,16 @@ function subscriptionUsesKey(sub: PushSubscription, key: Uint8Array<ArrayBuffer>
   return bytes.length === key.length && bytes.every((value, index) => value === key[index]);
 }
 
-async function currentSubscription(reg: ServiceWorkerRegistration) {
+/**
+ * Garante uma inscrição do navegador com a chave VAPID atual e sincroniza
+ * com o backend. `forceNew` descarta a inscrição existente mesmo que a
+ * chave bata — usado quando o serviço de push recusou a inscrição atual.
+ */
+async function currentSubscription(reg: ServiceWorkerRegistration, forceNew = false) {
   const { publicKey } = await pushService.getVapidPublicKey();
   const key = urlBase64ToUint8Array(publicKey);
   let sub = await reg.pushManager.getSubscription();
-  if (sub && !subscriptionUsesKey(sub, key)) {
+  if (sub && (forceNew || !subscriptionUsesKey(sub, key))) {
     await sub.unsubscribe();
     sub = null;
   }
@@ -125,7 +131,16 @@ export function usePush() {
     }
     await currentSubscription(reg);
     setIsSubscribed(true);
-    return pushService.sendTest();
+    try {
+      return await pushService.sendTest();
+    } catch (err) {
+      // O backend já descartou a inscrição recusada (retryable): recria do zero e tenta uma única vez.
+      if (err instanceof ApiError && err.status === 502 && err.data?.retryable === true) {
+        await currentSubscription(reg, true);
+        return pushService.sendTest();
+      }
+      throw err;
+    }
   }, []);
 
   return { support, permission, isSubscribed, loading, error, subscribe, unsubscribe, sendTest };

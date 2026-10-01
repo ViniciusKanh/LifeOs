@@ -19,7 +19,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useLifeScore, useLifeScoreHistory, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjectWorkload } from "@/hooks/useProjects";
+import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealth, useHealthSummary } from "@/hooks/useHealth";
 import { useBooks } from "@/hooks/useBooks";
@@ -31,7 +32,6 @@ import { useDailyInsight } from "@/hooks/useCopilot";
 import { WATER_GOAL_ML } from "@/components/health/healthUtils";
 import { Card } from "@/components/ui/primitives";
 import { AnimatedLineChart } from "@/components/charts/motion/AnimatedLineChart";
-import { Treemap } from "@/components/charts/motion/Treemap";
 import { WaffleChart } from "@/components/charts/motion/WaffleChart";
 import { Reveal } from "@/components/charts/motion/Reveal";
 import {
@@ -56,7 +56,7 @@ import {
   buildDayEntries,
   lifeScoreWeekDelta,
   localIsoDate,
-  openLoadByProject,
+  dayLabel,
   taskComposition,
 } from "@/utils/dashboardMetrics";
 
@@ -91,10 +91,6 @@ const DIM_EXPLAIN = {
   professional: "Tarefas concluídas em projetos profissionais.",
 };
 
-function shortDay(iso: string) {
-  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
 export function DashboardPage() {
   const today = localIsoDate();
   const now = new Date();
@@ -105,7 +101,7 @@ export function DashboardPage() {
   const { history } = useLifeScoreHistory(30, !!lifeScore);
   const { tasks, moveTask } = useTasks();
   const { focusTasks } = useFocusTasks(1);
-  const { projects } = useProjects();
+  const { workload, isLoading: workloadLoading } = useProjectWorkload({ days: 30 });
   const { habits, summaryByHabitId } = useHabits();
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
@@ -265,9 +261,19 @@ export function DashboardPage() {
   ];
 
   const series = overview?.dailySeries;
-  const rhythmLabels = (series?.tasks ?? []).map((p) => shortDay(p.day));
-
-  const projectLoad = useMemo(() => openLoadByProject(tasks, projects), [tasks, projects]);
+  const rhythmLabels = (series?.tasks ?? []).map((p) => dayLabel(p.day, { weekday: true }));
+  const rhythmSeries = useMemo(
+    () =>
+      series
+        ? [
+            { key: "tasks", label: "Tarefas concluídas", color: "#7C4DFF", values: series.tasks.map((p) => Number(p.total)) },
+            { key: "habits", label: "Hábitos cumpridos", color: "#12B76A", values: series.habits.map((p) => Number(p.total)) },
+            { key: "workouts", label: "Exercícios", color: "#FF7A45", values: series.workouts.map((p) => Number(p.total)) },
+          ]
+        : [],
+    [series]
+  );
+  const [hiddenRhythm, setHiddenRhythm] = useState<Set<string>>(new Set());
   const composition = useMemo(() => taskComposition(tasks, today), [tasks, today]);
 
   return (
@@ -319,7 +325,7 @@ export function DashboardPage() {
                   {hasScoreHistory ? (
                     <AnimatedLineChart
                       ariaLabel="Evolução do Life Score"
-                      labels={recentHistory.map((h) => shortDay(h.date))}
+                      labels={recentHistory.map((h) => dayLabel(h.date))}
                       series={[{ key: "overall", label: "Life Score", color: "#7C4DFF", values: recentHistory.map((h) => h.overall) }]}
                       yMax={100}
                       height={150}
@@ -351,15 +357,8 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Reveal>
             <Card className="p-5 h-full">
-              <SectionTitle icon={<FolderKanban size={17} />} title="Carga aberta por projeto" action={{ label: "Projetos", to: "/projetos" }} />
-              {projectLoad.length === 0 ? (
-                <p className="text-sm text-slate py-10 text-center">Nenhuma tarefa em aberto — carga zerada.</p>
-              ) : (
-                <>
-                  <Treemap items={projectLoad} height={230} unit=" tarefa(s)" />
-                  <p className="text-[11px] text-slate mt-2">Área de cada bloco = tarefas em aberto. Clique para abrir o projeto.</p>
-                </>
-              )}
+              <SectionTitle icon={<FolderKanban size={17} />} title="Carga por projeto" action={{ label: "Projetos", to: "/projetos" }} />
+              <ProjectLoadBoard workload={workload} isLoading={workloadLoading} limit={4} showTotals={false} />
             </Card>
           </Reveal>
           <Reveal delay={0.08}>
@@ -368,15 +367,39 @@ export function DashboardPage() {
               {composition.total === 0 ? (
                 <p className="text-sm text-slate py-10 text-center">Nenhuma tarefa criada ou concluída nos últimos 30 dias.</p>
               ) : (
-                <WaffleChart
-                  caption={`${composition.total} tarefas criadas ou concluídas nos últimos 30 dias. Cada quadrado ≈ 1%.`}
-                  categories={[
-                    { key: "done", label: "Concluídas", value: composition.done, color: "#12B76A" },
-                    { key: "doing", label: "Em andamento / revisão", value: composition.doing, color: "#2F80FF" },
-                    { key: "pending", label: "A fazer / backlog", value: composition.pending, color: "#9550FF" },
-                    { key: "overdue", label: "Atrasadas", value: composition.overdue, color: "#FF4757" },
-                  ]}
-                />
+                <>
+                  <WaffleChart
+                    caption={`${composition.total} tarefas criadas ou concluídas nos últimos 30 dias. Cada quadrado ≈ 1%.`}
+                    categories={[
+                      { key: "done", label: "Concluídas", value: composition.done, color: "#12B76A" },
+                      { key: "doing", label: "Em andamento / revisão", value: composition.doing, color: "#2F80FF" },
+                      { key: "pending", label: "A fazer / backlog", value: composition.pending, color: "#9550FF" },
+                      { key: "overdue", label: "Atrasadas", value: composition.overdue, color: "#FF4757" },
+                    ]}
+                  />
+                  <dl className="mt-4 grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Criadas (30d)", value: String(composition.created) },
+                      { label: "Concluídas (30d)", value: String(composition.completedInPeriod) },
+                      {
+                        label: "Tempo típico até concluir",
+                        value: composition.medianLeadDays === null ? "—" : composition.medianLeadDays < 1 ? "< 1 dia" : `${String(composition.medianLeadDays).replace(".", ",")} dias`,
+                      },
+                    ].map((m) => (
+                      <div key={m.label} className="rounded-xl bg-paper dark:bg-ink px-3 py-2">
+                        <dt className="text-[10px] text-slate leading-tight">{m.label}</dt>
+                        <dd className="font-display font-bold text-base leading-tight mt-0.5">{m.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {composition.created > 0 && (
+                    <p className="text-[11px] text-slate mt-2">
+                      {composition.completedInPeriod >= composition.created
+                        ? "Você concluiu tanto quanto criou no período — o backlog não está crescendo."
+                        : `Entraram ${composition.created - composition.completedInPeriod} tarefa(s) a mais do que saíram no período.`}
+                    </p>
+                  )}
+                </>
               )}
             </Card>
           </Reveal>
@@ -388,18 +411,46 @@ export function DashboardPage() {
             {!series || series.tasks.length === 0 ? (
               <p className="text-sm text-slate py-8 text-center">Sem registros no período ainda.</p>
             ) : (
-              <div className="pb-6">
-                <AnimatedLineChart
-                  ariaLabel="Tarefas, hábitos e exercícios por dia"
-                  labels={rhythmLabels}
-                  height={220}
-                  series={[
-                    { key: "tasks", label: "Tarefas concluídas", color: "#7C4DFF", values: series.tasks.map((p) => Number(p.total)) },
-                    { key: "habits", label: "Hábitos cumpridos", color: "#12B76A", values: series.habits.map((p) => Number(p.total)) },
-                    { key: "workouts", label: "Exercícios", color: "#FF7A45", values: series.workouts.map((p) => Number(p.total)) },
-                  ]}
-                />
-              </div>
+              <>
+                {/* Totais do período por série — clique para mostrar/ocultar a linha */}
+                <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Séries do gráfico">
+                  {rhythmSeries.map((s) => {
+                    const total = s.values.reduce((a, b) => a + b, 0);
+                    const activeDays = s.values.filter((v) => v > 0).length;
+                    const hidden = hiddenRhythm.has(s.key);
+                    return (
+                      <button
+                        key={s.key}
+                        aria-pressed={!hidden}
+                        onClick={() =>
+                          setHiddenRhythm((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(s.key)) next.delete(s.key);
+                            else if (next.size < rhythmSeries.length - 1) next.add(s.key);
+                            return next;
+                          })
+                        }
+                        className={`text-left rounded-xl border px-3 py-2 transition-all ${hidden ? "opacity-45 border-paper-border dark:border-ink-border" : "border-paper-border dark:border-ink-border bg-paper/60 dark:bg-ink/60"}`}
+                      >
+                        <span className="flex items-center gap-1.5 text-[11px] text-slate">
+                          <span className="w-2.5 h-[3px] rounded-full" style={{ backgroundColor: s.color }} /> {s.label}
+                        </span>
+                        <span className="block font-display font-bold text-base leading-tight">
+                          {total} <span className="text-[11px] font-normal text-slate">· {activeDays} de {s.values.length} dias</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="pb-6">
+                  <AnimatedLineChart
+                    ariaLabel="Tarefas, hábitos e exercícios por dia"
+                    labels={rhythmLabels}
+                    height={220}
+                    series={rhythmSeries.filter((s) => !hiddenRhythm.has(s.key))}
+                  />
+                </div>
+              </>
             )}
           </Card>
         </Reveal>

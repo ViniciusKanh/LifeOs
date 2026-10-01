@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, CalendarClock, CheckCircle2, FolderKanban, GanttChartSquare, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useProjects, useProjectForecast } from "@/hooks/useProjects";
+import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ChevronDown, Clock, FolderKanban, GanttChartSquare, Hourglass, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useProjects, useProjectForecast, useProjectWorkload } from "@/hooks/useProjects";
+import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { Button, Card, EmptyState, IconBadge, PageHeader, StatTile } from "@/components/ui/primitives";
 import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
-import { KIND_META, PRIORITY_META, STATUS_META, formatProjectDate } from "@/components/projects/projectMeta";
-import type { Project, ProjectKind, ProjectStatus } from "@/types";
+import { KIND_META, PRIORITY_META, STATUS_META, formatMinutes, formatProjectDate } from "@/components/projects/projectMeta";
+import type { Project, ProjectKind, ProjectLoad, ProjectStatus } from "@/types";
 
 /**
  * Projetos — visão de portfólio. Cada cartão leva ao detalhe completo
@@ -27,7 +28,7 @@ function ProjectForecastChip({ project }: { project: Project }) {
   return <p className="text-[11px] text-growth">No ritmo atual: {formatProjectDate(forecast.date, { day: "2-digit", month: "short" })}</p>;
 }
 
-function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: () => void; onDelete: () => void }) {
+function ProjectCard({ project, load, onEdit, onDelete }: { project: Project; load?: ProjectLoad; onEdit: () => void; onDelete: () => void }) {
   const meta = KIND_META[project.kind];
   const Icon = meta.icon;
   const status = STATUS_META[project.status] ?? STATUS_META.active;
@@ -73,6 +74,25 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
             <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
               <motion.div className="h-full rounded-full bg-growth" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
             </div>
+            {load && load.open > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate">
+                {load.remainingMinutes > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <Hourglass size={11} /> {formatMinutes(load.remainingMinutes)} restantes
+                  </span>
+                )}
+                {load.loggedMinutesPeriod > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock size={11} /> {formatMinutes(load.loggedMinutesPeriod)} em 30d
+                  </span>
+                )}
+                {load.overdue > 0 && (
+                  <span className="inline-flex items-center gap-1 text-drop font-semibold">
+                    <AlertTriangle size={11} /> {load.overdue} atrasada{load.overdue > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="mt-1.5 min-h-[16px]">
               <ProjectForecastChip project={project} />
             </div>
@@ -118,6 +138,9 @@ export function ProjetosPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [kindFilter, setKindFilter] = useState<ProjectKind | "all">("all");
   const [search, setSearch] = useState("");
+  const { workload, isLoading: workloadLoading } = useProjectWorkload({ days: 30, kind: kindFilter === "all" ? undefined : kindFilter });
+  const [loadOpen, setLoadOpen] = useState(true);
+  const loadById = useMemo(() => new Map((workload?.projects ?? []).filter((p) => p.id).map((p) => [p.id as string, p])), [workload]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -165,6 +188,37 @@ export function ProjetosPage() {
             <StatTile icon={<GanttChartSquare size={16} />} label="Tarefas em aberto" value={String(stats.openTasks)} tone="blue" />
             <StatTile icon={<CalendarClock size={16} />} label="Prazos vencidos" value={String(stats.overdue)} tone="amber" />
           </div>
+
+          <Card className="p-4 sm:p-5 mb-5">
+            <button
+              onClick={() => setLoadOpen((v) => !v)}
+              aria-expanded={loadOpen}
+              className="w-full flex items-center justify-between gap-3 text-left"
+            >
+              <span>
+                <span className="flex items-center gap-2 font-display font-semibold text-[15px]">
+                  <Hourglass size={17} className="text-brand-600" /> Carga de trabalho por projeto
+                </span>
+                <span className="block text-xs text-slate mt-0.5">
+                  Tarefas em aberto, horas estimadas × registradas (cronômetro e foco, últimos 30 dias) e prazos{kindFilter !== "all" ? ` · ${KIND_META[kindFilter].label}` : ""}.
+                </span>
+              </span>
+              <ChevronDown size={18} className={`text-slate shrink-0 transition-transform ${loadOpen ? "rotate-180" : ""}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {loadOpen && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <div className="pt-4">
+                    <ProjectLoadBoard
+                      workload={workload}
+                      isLoading={workloadLoading}
+                      emptyText="Nenhuma tarefa vinculada a projetos ainda. Vincule tarefas a um projeto para ver a carga, as horas e a pressão de prazo."
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Card>
 
           <Card className="p-3 mb-5 flex flex-col lg:flex-row lg:items-center gap-3">
             <label className="relative flex-1 min-w-0">
@@ -228,7 +282,7 @@ export function ProjetosPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               <AnimatePresence mode="popLayout">
                 {filtered.map((p) => (
-                  <ProjectCard key={p.id} project={p} onEdit={() => setProjectToEdit(p)} onDelete={() => setProjectToDelete(p)} />
+                  <ProjectCard key={p.id} project={p} load={loadById.get(p.id)} onEdit={() => setProjectToEdit(p)} onDelete={() => setProjectToDelete(p)} />
                 ))}
               </AnimatePresence>
             </div>

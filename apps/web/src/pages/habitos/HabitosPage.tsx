@@ -24,7 +24,8 @@ import { Link } from "react-router-dom";
 import { useHabitEntriesRange, useHabits } from "@/hooks/useHabits";
 import { useHabitsInsight } from "@/hooks/useCopilot";
 import { Button, Card, Field, IconBadge, EmptyState } from "@/components/ui/primitives";
-import type { Habit } from "@/types";
+import type { Habit, HabitTaskGenerationInput } from "@/types";
+import { HabitTaskGeneratorModal } from "@/components/habits/HabitTaskGeneratorModal";
 
 /* ------------------------------------------------------------------ */
 /* Categorias predefinidas de hábito — mesmo padrão visual (ícone +    */
@@ -96,21 +97,24 @@ export function HabitosPage() {
   const [filterTab, setFilterTab] = useState<FilterTab>("Todos");
   const [toast, setToast] = useState<string | null>(null);
 
-  async function handleGenerateTasks() {
-    try {
-      const result = await generateTasks();
-      if (result.created.length === 0) {
-        setToast(
-          result.skippedDone > 0
-            ? "Todos os hábitos de hoje já estão em dia — nenhuma tarefa nova."
-            : "Nenhum hábito ativo pra gerar tarefa."
-        );
-      } else {
-        setToast(`${result.created.length} ${result.created.length === 1 ? "tarefa gerada" : "tarefas geradas"} em Tarefas para hoje.`);
-      }
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : "Não foi possível gerar as tarefas.");
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+
+  async function handleGenerateTasks(input: HabitTaskGenerationInput) {
+    const result = await generateTasks(input);
+    const period = result.from === result.to ? "no dia escolhido" : "no período";
+    if (result.created.length === 0) {
+      setToast(
+        result.skippedExisting > 0 || result.skippedDone > 0
+          ? `Nada novo ${period}: os hábitos já têm tarefa gerada ou já foram cumpridos.`
+          : "Nenhum hábito selecionado para gerar tarefa."
+      );
+    } else {
+      const skipped = result.skippedDone + result.skippedExisting;
+      setToast(
+        `${result.created.length} ${result.created.length === 1 ? "tarefa gerada" : "tarefas geradas"} em Tarefas ${period}${skipped > 0 ? ` (${skipped} pulada(s) por já existirem ou estarem cumpridas)` : ""}.`
+      );
     }
+    return result;
   }
   const today = todayStr();
   const week = useMemo(() => currentWeekDates(), []);
@@ -221,9 +225,9 @@ export function HabitosPage() {
         </div>
         <div className="flex items-center gap-2">
           {habits.length > 0 && (
-            <Button variant="secondary" onClick={handleGenerateTasks} disabled={isGeneratingTasks} title="Cria em Tarefas uma tarefa pra cada hábito de hoje ainda não cumprido">
+            <Button variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Escolha período, hábitos, carga, prioridade e projeto das tarefas geradas">
               {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
-              Gerar tarefas de hoje
+              Gerar tarefas
             </Button>
           )}
           <Button onClick={() => setModalOpen(true)}>
@@ -588,6 +592,7 @@ export function HabitosPage() {
           {toast}
         </button>
       )}
+      {generatorOpen && <HabitTaskGeneratorModal habits={habits} onClose={() => setGeneratorOpen(false)} onGenerate={handleGenerateTasks} />}
     </div>
   );
 }

@@ -97,78 +97,164 @@ habitsRouter.post("/", async (req, res) => {
   return res.status(201).json(created.rows[0]);
 });
 
-const generateTasksSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato YYYY-MM-DD").optional(),
-});
+const ISO_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato YYYY-MM-DD");
+const MAX_GENERATION_DAYS = 31;
+
+const generateTasksSchema = z
+  .object({
+    /** Legado: um único dia (equivale a from = to = date). */
+    date: ISO_DATE.optional(),
+    from: ISO_DATE.optional(),
+    to: ISO_DATE.optional(),
+    /** Subconjunto de hábitos; vazio/ausente = todos os ativos. */
+    habitIds: z.array(z.string().min(1)).max(100).optional(),
+    estimateMinutes: z.number().int().min(5).max(480).default(30),
+    priority: z.enum(["Baixa", "Média", "Alta"]).default("Média"),
+    status: z.enum(["Backlog", "A Fazer"]).default("A Fazer"),
+    projectId: z.string().min(1).nullable().optional(),
+    /** Hábitos semanais/mensais geram uma tarefa por semana/mês em vez de uma por dia. */
+    respectFrequency: z.boolean().default(true),
+  })
+  .superRefine((v, ctx) => {
+    const from = v.from ?? v.date;
+    const to = v.to ?? v.from ?? v.date;
+    if (from && to && to < from) ctx.addIssue({ code: "custom", message: "A data final precisa ser igual ou posterior à inicial." });
+    if (from && to && (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1 > MAX_GENERATION_DAYS) {
+      ctx.addIssue({ code: "custom", message: `Gere no máximo ${MAX_GENERATION_DAYS} dias por vez.` });
+    }
+  });
+
+function eachDay(from: string, to: string): string[] {
+  const out: string[] = [];
+  const cur = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  while (cur <= end) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
+}
+
+/** Chave do "ciclo" do hábito: o dia (diário), a semana ISO (semanal) ou o mês (mensal). */
+function cycleKey(frequency: string, day: string): string {
+  if (frequency === "monthly") return day.slice(0, 7);
+  if (frequency === "weekly" || frequency === "times_per_week") {
+    const d = new Date(`${day}T12:00:00Z`);
+    const monday = new Date(d);
+    monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return `w${monday.toISOString().slice(0, 10)}`;
+  }
+  return day;
+}
+
+function formatBr(day: string) {
+  const [y, m, d] = day.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/** Texto padrão da descrição — deixa explícito que a tarefa veio do módulo Hábitos. */
+export function habitTaskDescription(habitName: string, day: string, estimateMinutes: number) {
+  return [
+    `Tarefa gerada automaticamente a partir do hábito “${habitName}” (módulo Hábitos do LifeOS) para ${formatBr(day)}.`,
+    `Carga planejada: ${estimateMinutes} min.`,
+    "Ao concluir esta tarefa, o check-in do hábito neste dia é registrado automaticamente.",
+  ].join("\n");
+}
 
 /**
- * POST /api/habits/generate-tasks — "Gerar tarefas de hoje": cria, em
- * Tarefas, uma tarefa com vencimento no dia pedido (hoje, por padrão) pra
- * cada hábito ativo que ainda não foi cumprido naquele dia — assim o
- * hábito vira algo que aparece pra fazer em Tarefas/Kanban/Hoje, em vez de
- * só existir isolado na tela Hábitos. Concluir essa tarefa depois faz o
- * check-in automático do hábito (ver maybeCheckInLinkedHabit em
- * tasks.routes.ts) — a integração é nos dois sentidos.
+ * POST /api/habits/generate-tasks — gerador parametrizável: cria em Tarefas
+ * uma tarefa por hábito e por dia do período escolhido (máx. 31 dias), com
+ * data de início e término no próprio dia, carga estimada (30 min por
+ * padrão), prioridade/status/projeto escolhidos e descrição indicando a
+ * origem. Concluir a tarefa faz o check-in automático do hábito (ver
+ * maybeCheckInLinkedHabit em tasks.routes.ts).
  *
- * Idempotente: nunca gera duas tarefas pro mesmo hábito no mesmo dia (nem
- * pula hábito já cumprido no dia), então clicar de novo no botão não
- * duplica nada.
+ * Idempotente: nunca gera duas tarefas para o mesmo hábito no mesmo dia
+ * (ou no mesmo ciclo, para hábitos semanais/mensais) e pula dias em que o
+ * hábito já foi cumprido.
  */
 habitsRouter.post("/generate-tasks", async (req, res) => {
   const parsed = generateTasksSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
-  const targetDate = parsed.data.date ?? new Date().toISOString().slice(0, 10);
+  const input = parsed.data;
+  const today = new Date().toISOString().slice(0, 10);
+  const from = input.from ?? input.date ?? today;
+  const to = input.to ?? (input.from ? input.from : input.date ?? today);
   const db = getDb();
   const ownerId = req.user!.id;
 
+  if (input.projectId) {
+    const owned = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [input.projectId, ownerId] });
+    if (owned.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+  }
+
   const habitsRes = await db.execute({
-    sql: "SELECT id, name, icon, target_count FROM habits WHERE owner_id = ? AND archived_at IS NULL",
+    sql: "SELECT id, name, frequency, target_count FROM habits WHERE owner_id = ? AND archived_at IS NULL",
     args: [ownerId],
   });
-  const habits = habitsRes.rows as unknown as Array<{ id: string; name: string; icon: string | null; target_count: number }>;
-
+  const wanted = input.habitIds?.length ? new Set(input.habitIds) : null;
+  const habits = (habitsRes.rows as unknown as Array<{ id: string; name: string; frequency: string; target_count: number }>).filter(
+    (h) => !wanted || wanted.has(h.id)
+  );
   if (habits.length === 0) {
-    return res.json({ created: [], skippedDone: 0, skippedExisting: 0 });
+    return res.json({ created: [], skippedDone: 0, skippedExisting: 0, from, to });
   }
 
-  const doneRes = await db.execute({
-    sql: `SELECT habit_id FROM habit_entries WHERE owner_id = ? AND entry_date = ? AND count >= (SELECT target_count FROM habits WHERE habits.id = habit_entries.habit_id)`,
-    args: [ownerId, targetDate],
-  });
-  const doneHabitIds = new Set((doneRes.rows as unknown as Array<{ habit_id: string }>).map((r) => r.habit_id));
+  // Busca uma janela um pouco maior que o período para enxergar o ciclo semanal/mensal inteiro.
+  const lookFrom = new Date(`${from}T12:00:00Z`);
+  lookFrom.setUTCDate(lookFrom.getUTCDate() - 31);
+  const lookFromStr = lookFrom.toISOString().slice(0, 10);
 
-  const existingRes = await db.execute({
-    sql: "SELECT habit_id FROM tasks WHERE owner_id = ? AND habit_id IS NOT NULL AND date(due_date) = date(?)",
-    args: [ownerId, targetDate],
-  });
-  const existingHabitIds = new Set((existingRes.rows as unknown as Array<{ habit_id: string }>).map((r) => r.habit_id));
+  const [doneRes, existingRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT he.habit_id, he.entry_date FROM habit_entries he JOIN habits h ON h.id = he.habit_id
+            WHERE he.owner_id = ? AND he.entry_date BETWEEN ? AND ? AND he.count >= h.target_count`,
+      args: [ownerId, lookFromStr, to],
+    }),
+    db.execute({
+      sql: "SELECT habit_id, date(due_date) AS day FROM tasks WHERE owner_id = ? AND habit_id IS NOT NULL AND date(due_date) BETWEEN date(?) AND date(?)",
+      args: [ownerId, lookFromStr, to],
+    }),
+  ]);
+  const freqOf = new Map(habits.map((h) => [h.id, input.respectFrequency ? h.frequency : "daily"]));
+  const doneKeys = new Set(
+    (doneRes.rows as unknown as Array<{ habit_id: string; entry_date: string }>).map((r) => `${r.habit_id}|${cycleKey(freqOf.get(r.habit_id) ?? "daily", r.entry_date)}`)
+  );
+  const existingKeys = new Set(
+    (existingRes.rows as unknown as Array<{ habit_id: string; day: string }>).map((r) => `${r.habit_id}|${cycleKey(freqOf.get(r.habit_id) ?? "daily", r.day)}`)
+  );
 
-  const created: Array<Record<string, unknown>> = [];
+  const created: Array<{ id: string; title: string; habit_id: string; start_date: string; due_date: string }> = [];
   let skippedDone = 0;
   let skippedExisting = 0;
+  const statements: Array<{ sql: string; args: Array<string | number | null> }> = [];
 
-  for (const habit of habits) {
-    if (doneHabitIds.has(habit.id)) {
-      skippedDone += 1;
-      continue;
+  for (const day of eachDay(from, to)) {
+    for (const habit of habits) {
+      const k = `${habit.id}|${cycleKey(freqOf.get(habit.id) ?? "daily", day)}`;
+      if (doneKeys.has(k)) {
+        skippedDone += 1;
+        continue;
+      }
+      if (existingKeys.has(k)) {
+        skippedExisting += 1;
+        continue;
+      }
+      existingKeys.add(k);
+      const id = nanoid();
+      statements.push({
+        sql: `INSERT INTO tasks (id, owner_id, habit_id, project_id, title, description, status, priority, start_date, due_date, estimate_minutes)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [id, ownerId, habit.id, input.projectId ?? null, habit.name, habitTaskDescription(habit.name, day, input.estimateMinutes), input.status, input.priority, day, day, input.estimateMinutes],
+      });
+      created.push({ id, title: habit.name, habit_id: habit.id, start_date: day, due_date: day });
     }
-    if (existingHabitIds.has(habit.id)) {
-      skippedExisting += 1;
-      continue;
-    }
-    const id = nanoid();
-    await db.execute({
-      sql: `INSERT INTO tasks (id, owner_id, habit_id, title, status, priority, due_date)
-            VALUES (?, ?, ?, ?, 'Backlog', 'Média', ?)`,
-      args: [id, ownerId, habit.id, habit.name, targetDate],
-    });
-    const row = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ?", args: [id] });
-    created.push(row.rows[0] as unknown as Record<string, unknown>);
   }
 
-  return res.json({ created, skippedDone, skippedExisting });
+  if (statements.length > 0) await db.batch(statements, "write");
+  return res.json({ created, skippedDone, skippedExisting, from, to });
 });
 
 /** POST /api/habits/:id/check-in — registra (ou atualiza) o cumprimento do dia */

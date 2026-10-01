@@ -105,8 +105,10 @@ analyticsRouter.get("/overview", async (req, res) => {
     sleepWaterAverages(ownerId, fromStr, toBoundaryStr),
     sleepWaterAverages(ownerId, prevFromStr, prevToStr),
     db.execute({
-      sql: `SELECT date(updated_at) AS day, COUNT(*) AS total FROM tasks
-            WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?)
+      // Data real da conclusão (completed_at); updated_at só como fallback de tarefas antigas —
+      // editar uma tarefa concluída não pode "movê-la" para o dia da edição.
+      sql: `SELECT date(COALESCE(completed_at, updated_at)) AS day, COUNT(*) AS total FROM tasks
+            WHERE owner_id = ? AND status = 'Concluído' AND date(COALESCE(completed_at, updated_at)) >= date(?)
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),

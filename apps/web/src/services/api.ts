@@ -2,9 +2,12 @@ export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333/ap
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Corpo JSON da resposta de erro (campos extras como `retryable`), quando houver. */
+  data: Record<string, unknown> | undefined;
+  constructor(message: string, status: number, data?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -30,7 +33,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = await res.json().catch(() => undefined);
 
   if (!res.ok) {
-    throw new ApiError(data?.error ?? "Erro inesperado.", res.status);
+    throw new ApiError(data?.error ?? "Erro inesperado.", res.status, data && typeof data === "object" ? data : undefined);
   }
 
   return data as T;

@@ -6,6 +6,9 @@ import {
   type ProjectUpdateInput,
 } from "@/services/projectsService";
 
+import { localIsoDate } from "@/utils/dashboardMetrics";
+import type { ProjectKind } from "@/types";
+
 const PROJECTS_KEY = ["projects"];
 
 export function useProjects(includeArchived = false) {
@@ -99,4 +102,18 @@ export function useProjectDetail(projectId: string | undefined) {
     documents: documents.data ?? [],
     isDocumentsLoading: documents.isLoading,
   };
+}
+
+/**
+ * Carga por projeto. A chave fica sob ["projects"] para ser revalidada
+ * junto com qualquer mudança de tarefa/projeto (useTasks já invalida "projects").
+ */
+export function useProjectWorkload(options: { days?: number; kind?: ProjectKind } = {}) {
+  const today = localIsoDate();
+  const days = options.days ?? 30;
+  const query = useQuery({
+    queryKey: [...PROJECTS_KEY, "workload", today, days, options.kind ?? "all"],
+    queryFn: () => projectsService.workload({ today, days, kind: options.kind }),
+  });
+  return { workload: query.data ?? null, isLoading: query.isLoading, isError: query.isError };
 }

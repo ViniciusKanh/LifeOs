@@ -10,6 +10,7 @@ import {
   listProjectDocuments,
   serializeProjectRow,
 } from "../services/projectDetailsService.js";
+import { getProjectWorkload, resolveClientToday } from "../services/workloadService.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
@@ -29,6 +30,17 @@ projectsRouter.get("/", async (req, res) => {
     args: [req.user!.id],
   });
   return res.json((result.rows as unknown as Array<Record<string, unknown>>).map(serializeProjectRow));
+});
+
+/**
+ * GET /api/projects/workload?days=30&kind=professional&today=YYYY-MM-DD —
+ * carga por projeto (status, horas estimadas/restantes/registradas, prazos e pressão).
+ * Declarada antes de "/:id" para não ser capturada como id.
+ */
+projectsRouter.get("/workload", async (req, res) => {
+  const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
+  const kind = typeof req.query.kind === "string" && ["personal", "workspace", "professional", "academic"].includes(req.query.kind) ? req.query.kind : undefined;
+  return res.json(await getProjectWorkload(getDb(), req.user!.id, { today: resolveClientToday(req.query.today), days, kind }));
 });
 
 /** POST /api/projects — cadastro completo (todos os campos de detalhe são opcionais). */

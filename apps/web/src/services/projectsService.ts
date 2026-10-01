@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { GanttData, Project, ProjectDocument, ProjectForecast, ProjectKind, ProjectLink, ProjectOverview, ProjectPriority, ProjectStatus, Task } from "@/types";
+import type { GanttData, Project, ProjectDocument, ProjectForecast, ProjectKind, ProjectLink, ProjectOverview, ProjectPriority, ProjectStatus, Task, WorkloadSummary } from "@/types";
 
 /** Campos do cadastro completo — os mesmos na criação e na edição. */
 export interface ProjectDetailsInput {
@@ -37,6 +37,12 @@ export interface ProjectUpdateInput extends ProjectDetailsInput {
 }
 
 export const projectsService = {
+  /** Carga por projeto (status, horas e prazos), derivada das tarefas e apontamentos. */
+  workload: (params: { today: string; days?: number; kind?: ProjectKind }) => {
+    const q = new URLSearchParams({ today: params.today, days: String(params.days ?? 30) });
+    if (params.kind) q.set("kind", params.kind);
+    return api.get<WorkloadSummary>(`/projects/workload?${q.toString()}`);
+  },
   list: (includeArchived = false) => api.get<Project[]>(`/projects${includeArchived ? "?includeArchived=true" : ""}`),
   create: (input: ProjectCreateInput) => api.post<Project>("/projects", input),
   update: (id: string, patch: ProjectUpdateInput) => api.patch<Project>(`/projects/${id}`, patch),

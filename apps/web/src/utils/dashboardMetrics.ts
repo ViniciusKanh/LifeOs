@@ -1,4 +1,4 @@
-import type { CalendarItem, DeadlineRadarDashboard, GoalForecastDashboard, LifeScoreBreakdown, Project, Task, TimelineEvent } from "@/types";
+import type { CalendarItem, DeadlineRadarDashboard, GoalForecastDashboard, LifeScoreBreakdown, Task, TimelineEvent } from "@/types";
 
 /**
  * Regras do Dashboard (fora da UI): tudo aqui é derivado de dados reais já
@@ -155,26 +155,20 @@ export function buildDayEntries(calendar: CalendarItem[], events: TimelineEvent[
 /** Paleta categórica do LifeOS em ordem fixa (nunca ciclada por ranking). */
 export const CATEGORY_ORDER = ["#7C4DFF", "#2F80FF", "#FF7A45", "#12B76A", "#FF3D93", "#08B6A6", "#9550FF"];
 
-/** Carga aberta por projeto (treemap). "Sem projeto" agrega o resto. */
-export function openLoadByProject(tasks: Task[], projects: Project[]) {
-  const byProject = new Map<string, number>();
-  for (const t of tasks) {
-    if (t.status === DONE) continue;
-    const key = t.project_id ?? "__none__";
-    byProject.set(key, (byProject.get(key) ?? 0) + 1);
-  }
-  const ordered = projects.map((p) => p.id);
-  return Array.from(byProject.entries()).map(([id, value]) => {
-    const project = projects.find((p) => p.id === id);
-    const idx = Math.max(0, ordered.indexOf(id));
-    return {
-      id,
-      label: project?.name ?? "Sem projeto",
-      value,
-      color: project?.color ?? (id === "__none__" ? "#6E7391" : CATEGORY_ORDER[idx % CATEGORY_ORDER.length]),
-      href: project ? `/projetos/${project.id}` : "/tarefas",
-    };
-  });
+/**
+ * Rótulo de dia dos gráficos. As séries diárias da API chegam como "MM-DD"
+ * (sem ano) — tratar isso como data ISO completa gerava "Invalid Date".
+ * Aceita "YYYY-MM-DD", "MM-DD" e datetime.
+ */
+export function dayLabel(day: string, opts: { weekday?: boolean } = {}) {
+  const clean = day.slice(0, 10);
+  const iso = /^\d{2}-\d{2}$/.test(clean) ? `${new Date().getFullYear()}-${clean}` : clean;
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return day;
+  // Série que cruza a virada do ano: "12-30" no começo de janeiro é do ano anterior.
+  if (/^\d{2}-\d{2}$/.test(clean) && d.getTime() - Date.now() > 2 * 86_400_000) d.setFullYear(d.getFullYear() - 1);
+  const base = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  return opts.weekday ? `${d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")} ${base}` : base;
 }
 
 /** Composição das tarefas dos últimos 30 dias (criadas ou concluídas no período). */
@@ -187,11 +181,23 @@ export function taskComposition(tasks: Task[], today: string) {
   let doing = 0;
   let pending = 0;
   let overdue = 0;
+  let created = 0;
+  let completedInPeriod = 0;
+  const leadDays: number[] = [];
   for (const t of recent) {
     if (t.status === DONE) done += 1;
     else if (t.due_date && t.due_date.slice(0, 10) < today) overdue += 1;
     else if (t.status === "Em Andamento" || t.status === "Em Revisão") doing += 1;
     else pending += 1;
+    if (t.created_at.slice(0, 10) >= from) created += 1;
+    if (t.status === DONE && t.completed_at && t.completed_at.slice(0, 10) >= from) {
+      completedInPeriod += 1;
+      const lead = (Date.parse(t.completed_at.replace(" ", "T")) - Date.parse(t.created_at.replace(" ", "T"))) / 86_400_000;
+      if (Number.isFinite(lead) && lead >= 0) leadDays.push(lead);
+    }
   }
-  return { total: recent.length, done, doing, pending, overdue };
+  // Mediana (e não média): uma tarefa esquecida por meses não distorce o "tempo típico".
+  const sortedLead = [...leadDays].sort((x, y) => x - y);
+  const medianLeadDays = sortedLead.length >= 3 ? Math.round(sortedLead[Math.floor(sortedLead.length / 2)] * 10) / 10 : null;
+  return { total: recent.length, done, doing, pending, overdue, created, completedInPeriod, medianLeadDays };
 }

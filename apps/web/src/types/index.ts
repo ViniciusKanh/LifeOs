@@ -1718,3 +1718,115 @@ export interface DataHealthSummary {
   history: DataHealthHistoryPoint[];
   isNewUser: boolean;
 }
+
+/* ============================================================
+   Carga por projeto e visão Profissional — espelham
+   apps/api/src/services/workloadService.ts e professionalService.ts.
+   ============================================================ */
+
+export type LoadPressure = "critical" | "attention" | "ok" | "idle";
+
+export interface ProjectLoad {
+  id: string | null;
+  name: string;
+  color: string | null;
+  kind: string | null;
+  status: string | null;
+  dueDate: string | null;
+  total: number;
+  done: number;
+  open: number;
+  doing: number;
+  todo: number;
+  overdue: number;
+  dueThisWeek: number;
+  unestimatedOpen: number;
+  openEstimateMinutes: number;
+  remainingMinutes: number;
+  spentMinutes: number;
+  loggedMinutesPeriod: number;
+  completedPeriod: number;
+  createdPeriod: number;
+  progressPct: number;
+  nextDue: { taskId: string; title: string; date: string } | null;
+  daysToDeadline: number | null;
+  hoursPerDayNeeded: number | null;
+  pressure: LoadPressure;
+}
+
+export interface WorkloadSummary {
+  periodDays: number;
+  today: string;
+  projects: ProjectLoad[];
+  totals: {
+    open: number;
+    overdue: number;
+    dueThisWeek: number;
+    remainingMinutes: number;
+    loggedMinutesPeriod: number;
+    completedPeriod: number;
+    createdPeriod: number;
+    unestimatedOpen: number;
+    weeksToClear: number | null;
+  };
+}
+
+export interface ProfessionalComparison {
+  key: "sleep" | "energy" | "workout" | "habits" | "meetings";
+  label: string;
+  withLabel: string;
+  withoutLabel: string;
+  withDays: number;
+  withoutDays: number;
+  withAvgDone: number | null;
+  withoutAvgDone: number | null;
+  withAvgMinutes: number | null;
+  withoutAvgMinutes: number | null;
+  deltaPct: number | null;
+  reason: string | null;
+}
+
+export interface ProfessionalOverview {
+  today: string;
+  windowDays: number;
+  kpis: {
+    open: number;
+    overdue: number;
+    dueThisWeek: number;
+    done7: number;
+    donePrev7: number;
+    logged7: number;
+    loggedPrev7: number;
+    meetings30: number;
+    remainingMinutes: number;
+    unestimatedOpen: number;
+  };
+  daily: Array<{ day: string; done: number; loggedMinutes: number; meetings: number; sleepHours: number | null; energy: number | null }>;
+  weekday: Array<{ weekday: number; label: string; done: number }>;
+  bestWeekday: { label: string; done: number } | null;
+  comparisons: ProfessionalComparison[];
+  workload: WorkloadSummary;
+  upcoming: Array<{ id: string; title: string; projectName: string; projectColor: string | null; dueDate: string; priorityScore: number | null; status: string }>;
+  careerGoals: Array<{ id: string; title: string; pct: number; dueDate: string | null }>;
+  journal: { linkedEntries30: number; recent: Array<{ date: string; projectName: string; preview: string | null }> };
+}
+
+/** Parâmetros do gerador de tarefas a partir de hábitos (POST /habits/generate-tasks). */
+export interface HabitTaskGenerationInput {
+  from: string;
+  to: string;
+  habitIds?: string[];
+  estimateMinutes: number;
+  priority: TaskPriority;
+  status: "Backlog" | "A Fazer";
+  projectId?: string | null;
+  respectFrequency: boolean;
+}
+
+export interface HabitTaskGenerationResult {
+  created: Array<{ id: string; title: string; habit_id: string; start_date: string; due_date: string }>;
+  skippedDone: number;
+  skippedExisting: number;
+  from: string;
+  to: string;
+}

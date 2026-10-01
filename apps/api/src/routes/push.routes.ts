@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getVapidPublicKey, sendPushToUser } from "../services/pushService.js";
+import { describePushFailures, getVapidPublicKey, sendPushToUser } from "../services/pushService.js";
 
 export const pushRouter = Router();
 
@@ -98,7 +98,9 @@ pushRouter.post("/test", async (req, res) => {
     return res.status(400).json({ error: message });
   }
   if (result.sent === 0) {
-    return res.status(502).json({ error: "A inscrição existe, mas o serviço de push não conseguiu entregar. Reative as notificações neste navegador e tente novamente." });
+    // `retryable`: a inscrição ruim já foi descartada — o app recria e tenta de novo sozinho.
+    const retryable = result.failures.some((f) => f.kind === "auth" || f.kind === "gone");
+    return res.status(502).json({ error: describePushFailures(result.failures), retryable, failures: result.failures });
   }
   return res.json({ ok: true, ...result });
 });
