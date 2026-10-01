@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
-import { X, ChevronLeft, ChevronRight, AlertTriangle, Sparkles, Microscope } from "lucide-react";
+import { motion } from "motion/react";
+import { X, ChevronLeft, ChevronRight, AlertTriangle, Sparkles, Microscope, Wand2 } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
-import { useExperimentBaselinePreview, useExperimentMetricsCatalog, useExperimentVerificationRules } from "@/hooks/useExperiments";
+import { useExperimentAITailor, useExperimentBaselinePreview, useExperimentMetricsCatalog, useExperimentVerificationRules } from "@/hooks/useExperiments";
+import { ExperimentTailorPanel } from "./ExperimentTailorPanel";
+import { ExperimentTrackingPlan } from "./ExperimentTrackingPlan";
+import { buildTrackingPlan } from "@/utils/experimentTrackingPlan";
+import { CATEGORY_EMOJI, EMOJI_CHOICES } from "./experimentDisplay";
 import { useHabits } from "@/hooks/useHabits";
 import { CATEGORY_LABEL } from "./experimentDisplay";
-import type { CreateExperimentInput, ExperimentAISuggestion, ExperimentCategory, ExperimentMetricKey, ExperimentProposal, ExperimentVerificationRule } from "@/types";
+import type { CreateExperimentInput, ExperimentAISuggestion, ExperimentCategory, ExperimentMetricKey, ExperimentProposal, ExperimentTailorField, ExperimentVerificationRule } from "@/types";
 import { ExperimentAIDesigner } from "./ExperimentAIDesigner";
 
 const DURATION_OPTIONS = [7, 14, 21, 28, 42] as const;
@@ -67,6 +72,7 @@ interface WizardState {
   configValue: string;
   successCriteriaType: "consistency" | "metric_change" | "none";
   successCriteriaValue: string;
+  emoji: string;
 }
 
 function initialState(suggestion?: ExperimentAISuggestion | null): WizardState {
@@ -87,6 +93,7 @@ function initialState(suggestion?: ExperimentAISuggestion | null): WizardState {
     configValue: "",
     successCriteriaType: "none",
     successCriteriaValue: "",
+    emoji: "",
   };
 }
 
@@ -95,6 +102,17 @@ function configToValue(config: Record<string, unknown> | null): string {
   if (!config) return "";
   const v = config.beforeTime ?? config.targetMl ?? config.minMinutes ?? config.minPages;
   return v === undefined || v === null ? "" : String(v);
+}
+
+/** Campo único do assistente → objeto de configuração da regra (mesma regra do envio). */
+function valueToConfig(rule: ExperimentVerificationRule, value: string): Record<string, unknown> | null {
+  if (rule === "sleep_before") return { beforeTime: value || "23:00" };
+  if (rule === "water_target") return { targetMl: Number(value) || 3000 };
+  if (rule === "focus_minimum") return { minMinutes: Number(value) || 25 };
+  if (rule === "reading_pages_minimum") return { minPages: Number(value) || 20 };
+  if (rule === "exercise_minimum") return { minMinutes: Number(value) || 30 };
+  if (rule === "study_minimum") return { minMinutes: Number(value) || 60 };
+  return null;
 }
 
 /** Aplica uma proposta da IA no estado do assistente (o usuário ainda revisa cada etapa). */
@@ -160,9 +178,83 @@ export function ExperimentWizard({
       configValue: t.configValue ?? "",
       successCriteriaType: t.successCriteriaType,
       successCriteriaValue: t.successCriteriaValue ?? "",
+      emoji: t.emoji,
     }));
     setStep(1);
+    // Ao escolher um modelo, o Copilot já personaliza metas e hipótese aos dados reais.
+    requestTailor({
+      title: t.title,
+      category: t.category,
+      hypothesis: t.hypothesis,
+      primaryMetric: t.primaryMetric,
+      secondaryMetrics: t.secondaryMetrics,
+      durationDays: t.durationDays,
+      verificationType: t.verificationType,
+      verificationRule: t.verificationRule ?? null,
+      verificationConfig: t.verificationRule ? valueToConfig(t.verificationRule, t.configValue ?? "") : null,
+      successCriteriaType: t.successCriteriaType,
+      successCriteriaValue: t.successCriteriaValue ? Number(t.successCriteriaValue) : null,
+    });
   };
+
+  const tailor = useExperimentAITailor();
+  const [appliedChanges, setAppliedChanges] = useState<Set<number>>(new Set());
+  function requestTailor(draft: Parameters<typeof tailor.mutate>[0]) {
+    setAppliedChanges(new Set());
+    tailor.mutate(draft);
+  }
+  const tailorFromState = () => {
+    if (!state.primaryMetric || !state.title.trim()) return;
+    requestTailor({
+      title: state.title.trim(),
+      category: state.category,
+      hypothesis: state.hypothesis || null,
+      primaryMetric: state.primaryMetric,
+      secondaryMetrics: state.secondaryMetrics,
+      durationDays: state.durationDays === -1 ? 14 : state.durationDays,
+      verificationType: state.verificationType,
+      verificationRule: state.verificationRule || null,
+      verificationConfig: state.verificationRule ? valueToConfig(state.verificationRule, state.configValue) : null,
+      successCriteriaType: state.successCriteriaType,
+      successCriteriaValue: state.successCriteriaValue ? Number(state.successCriteriaValue) : null,
+    });
+  };
+  const currentTailorValue = (field: ExperimentTailorField): unknown => {
+    switch (field) {
+      case "title": return state.title;
+      case "hypothesis": return state.hypothesis;
+      case "verificationConfig": return state.verificationRule ? valueToConfig(state.verificationRule, state.configValue) : null;
+      case "durationDays": return state.durationDays;
+      case "successCriteriaValue": return state.successCriteriaValue ? Number(state.successCriteriaValue) : null;
+      case "secondaryMetrics": return state.secondaryMetrics;
+    }
+  };
+  const applyTailorChange = (index: number) => {
+    const c = tailor.data?.changes[index];
+    if (!c) return;
+    setState((st) => {
+      switch (c.field) {
+        case "title": return { ...st, title: String(c.value) };
+        case "hypothesis": return { ...st, hypothesis: String(c.value) };
+        case "verificationConfig": return { ...st, configValue: configToValue(c.value as Record<string, unknown>) };
+        case "durationDays": return { ...st, durationDays: Number(c.value) };
+        case "successCriteriaValue": return { ...st, successCriteriaValue: String(c.value) };
+        case "secondaryMetrics": return { ...st, secondaryMetrics: c.value as ExperimentMetricKey[] };
+      }
+    });
+    setAppliedChanges((prev) => new Set(prev).add(index));
+  };
+  const applyAllTailor = () => (tailor.data?.changes ?? []).forEach((_, i) => !appliedChanges.has(i) && applyTailorChange(i));
+
+  const trackingSteps = buildTrackingPlan({
+    primaryMetric: state.primaryMetric,
+    secondaryMetrics: state.secondaryMetrics,
+    verificationType: state.verificationType,
+    verificationRule: state.verificationRule,
+    configValue: state.configValue,
+    dailyAction: state.description,
+    metricInfo: (key) => catalog.find((m) => m.key === key),
+  });
 
   const preview = useExperimentBaselinePreview(state.primaryMetric || null, state.linkedHabitId || null);
   const recommended = preview.data?.recommendedDurationDays ?? null;
@@ -186,16 +278,7 @@ export function ExperimentWizard({
     if (!state.primaryMetric) return;
     setError(null);
     try {
-      const verificationConfig: Record<string, unknown> | null = (() => {
-        if (state.verificationType !== "automatic" || !state.verificationRule) return null;
-        if (state.verificationRule === "sleep_before") return { beforeTime: state.configValue || "23:00" };
-        if (state.verificationRule === "water_target") return { targetMl: Number(state.configValue) || 3000 };
-        if (state.verificationRule === "focus_minimum") return { minMinutes: Number(state.configValue) || 25 };
-        if (state.verificationRule === "reading_pages_minimum") return { minPages: Number(state.configValue) || 20 };
-        if (state.verificationRule === "exercise_minimum") return { minMinutes: Number(state.configValue) || 30 };
-        if (state.verificationRule === "study_minimum") return { minMinutes: Number(state.configValue) || 60 };
-        return null;
-      })();
+      const verificationConfig = state.verificationType === "automatic" && state.verificationRule ? valueToConfig(state.verificationRule, state.configValue) : null;
 
       const input: CreateExperimentInput = {
         title: state.title.trim(),
@@ -213,6 +296,7 @@ export function ExperimentWizard({
         verificationConfig: verificationConfig ?? undefined,
         successCriteriaType: state.successCriteriaType,
         successCriteriaValue: state.successCriteriaValue ? Number(state.successCriteriaValue) : undefined,
+        emoji: state.emoji || null,
       };
       await onSubmit(input);
       onClose();
@@ -243,6 +327,29 @@ export function ExperimentWizard({
         </div>
 
         <div className="p-5 md:p-6 space-y-4 min-h-[280px]">
+          {step > 0 && (
+            <>
+              <ExperimentTailorPanel
+                tailoring={tailor.data ?? null}
+                isLoading={tailor.isPending}
+                error={tailor.error instanceof Error ? tailor.error.message : null}
+                currentValue={currentTailorValue}
+                applied={appliedChanges}
+                onApply={applyTailorChange}
+                onApplyAll={applyAllTailor}
+                onUseEmoji={(e) => set("emoji", e)}
+              />
+              {!tailor.data && !tailor.isPending && state.primaryMetric && state.title.trim() && (
+                <button
+                  type="button"
+                  onClick={tailorFromState}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-dashed border-cat-purple/40 px-3 py-2.5 text-xs font-semibold text-cat-purple hover:bg-cat-purple/[0.05]"
+                >
+                  <Wand2 size={14} /> Personalizar com IA a partir dos meus dados
+                </button>
+              )}
+            </>
+          )}
           {step === 0 && (
             <div>
               <ExperimentAIDesigner
@@ -289,6 +396,28 @@ export function ExperimentWizard({
           {step === 1 && (
             <>
               <Field label="Nome do experimento" value={state.title} onChange={(e) => set("title", e.target.value)} placeholder="Ex.: Dormir antes das 23h" />
+              <div>
+                <p className="text-xs text-slate">Emoji do experimento</p>
+                <div className="flex flex-wrap gap-1 mt-1.5" role="radiogroup" aria-label="Emoji do experimento">
+                  {EMOJI_CHOICES.map((e) => {
+                    const selected = (state.emoji || CATEGORY_EMOJI[state.category]) === e;
+                    return (
+                      <motion.button
+                        key={e}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => set("emoji", e)}
+                        whileHover={{ scale: 1.18, rotate: -8 }}
+                        whileTap={{ scale: 0.9 }}
+                        className={`w-9 h-9 rounded-xl text-lg leading-none flex items-center justify-center border transition-colors ${selected ? "border-cat-purple bg-cat-purple/10" : "border-transparent hover:bg-paper dark:hover:bg-ink"}`}
+                      >
+                        {e}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
               <div>
                 <label className="text-xs text-slate">Categoria</label>
                 <select
@@ -558,12 +687,20 @@ export function ExperimentWizard({
 
           {step === 7 && (
             <div className="space-y-2 text-sm">
-              <p><span className="text-slate">Nome: </span>{state.title}</p>
+              <p className="flex items-center gap-2 font-display font-semibold text-lg">
+                <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 300, damping: 14 }} className="text-3xl leading-none">
+                  {state.emoji || CATEGORY_EMOJI[state.category]}
+                </motion.span>
+                {state.title}
+              </p>
               {state.hypothesis && <p><span className="text-slate">Hipótese: </span>{state.hypothesis}</p>}
               <p><span className="text-slate">Período: </span>{state.startDate} → {endDate} ({state.durationDays === -1 ? "personalizado" : `${state.durationDays} dias`})</p>
               <p><span className="text-slate">Métrica principal: </span>{catalog.find((m) => m.key === state.primaryMetric)?.label ?? state.primaryMetric}</p>
               <p><span className="text-slate">Comportamento: </span>{state.verificationType === "automatic" ? "Verificação automática" : "Check-in manual"}</p>
               <p><span className="text-slate">Critério de sucesso: </span>{state.successCriteriaType === "none" ? "Nenhum" : `${state.successCriteriaType === "consistency" ? "Consistência" : "Mudança de métrica"} ≥ ${state.successCriteriaValue || "?"}%`}</p>
+              <div className="mt-3">
+                <ExperimentTrackingPlan steps={trackingSteps} aiTips={tailor.data?.trackingTips} reminderTime={tailor.data?.reminderTime} />
+              </div>
               <div className="mt-3 rounded-xl bg-paper dark:bg-ink p-3 text-xs text-slate space-y-1">
                 <p className="font-semibold text-inherit flex items-center gap-1.5"><Microscope size={13} className="text-cat-purple" /> Como o LifeOS vai analisar</p>
                 <p>

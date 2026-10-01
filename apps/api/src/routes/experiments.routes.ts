@@ -19,7 +19,7 @@ import {
 } from "../services/experimentService.js";
 import { analyzeExperiment, suggestExperiment } from "../services/experimentAIService.js";
 import { getExperimentAnalysis, getMetricBaselinePreview } from "../services/experimentAnalysisService.js";
-import { designExperiments, generateInsightReport, listInsightReports, parseDailyLog } from "../services/experimentCoachService.js";
+import { designExperiments, generateInsightReport, listInsightReports, parseDailyLog, tailorDraft, type TailorDraft } from "../services/experimentCoachService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { METRIC_KEYS } from "../services/experimentMetricsService.js";
 import { VERIFICATION_RULES } from "../services/experimentVerificationService.js";
@@ -48,6 +48,7 @@ const createSchema = z.object({
   verificationConfig: z.record(z.unknown()).optional().nullable(),
   successCriteriaType: z.enum(["consistency", "metric_change", "none"]).optional(),
   successCriteriaValue: z.number().optional().nullable(),
+  emoji: z.string().trim().max(16).optional().nullable(),
 });
 
 const updateSchema = createSchema.partial();
@@ -106,6 +107,33 @@ experimentsRouter.post("/ai/design", aiLimit, async (req, res) => {
   const result = await designExperiments(getDb(), req.user!.id, parsed.data.goal, parsed.data.constraints);
   if (!result.ok) return res.status(422).json({ error: result.message });
   return res.json({ proposals: result.proposals });
+});
+
+const tailorSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  category: categoryEnum,
+  hypothesis: z.string().trim().max(500).optional().nullable(),
+  primaryMetric: metricKeyEnum,
+  secondaryMetrics: z.array(metricKeyEnum).max(5).optional(),
+  durationDays: z.number().int().min(1).max(120),
+  verificationType: z.enum(["automatic", "manual"]),
+  verificationRule: verificationRuleEnum.optional().nullable(),
+  verificationConfig: z.record(z.unknown()).optional().nullable(),
+  successCriteriaType: z.enum(["consistency", "metric_change", "none"]).optional(),
+  successCriteriaValue: z.number().optional().nullable(),
+});
+
+/** POST /api/experiments/ai/tailor — personaliza um rascunho aos dados reais (o usuário aplica campo a campo). */
+experimentsRouter.post("/ai/tailor", aiLimit, async (req, res) => {
+  const parsed = tailorSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  try {
+    const result = await tailorDraft(getDb(), req.user!.id, parsed.data as TailorDraft);
+    if (!result.ok) return res.status(422).json({ error: result.message });
+    return res.json(result.tailoring);
+  } catch (err) {
+    return handleError(res, err);
+  }
 });
 
 /** GET /api/experiments/verification/rules — regras automáticas disponíveis para o wizard. */

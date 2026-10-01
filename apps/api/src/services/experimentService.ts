@@ -64,6 +64,7 @@ interface ExperimentRow {
   perceived_result: "improved" | "no_change" | "worsened" | null;
   created_at: string;
   updated_at: string;
+  emoji: string | null;
 }
 
 function mapExperiment(row: ExperimentRow) {
@@ -80,6 +81,7 @@ function mapExperiment(row: ExperimentRow) {
     primary_metric: row.primary_metric,
     secondary_metrics: row.secondary_metrics_json ? (JSON.parse(row.secondary_metrics_json) as ExperimentMetricKey[]) : [],
     linked_habit_id: row.linked_habit_id,
+    emoji: row.emoji ?? null,
     verification_type: row.verification_type,
     verification_rule: row.verification_rule,
     verification_config: row.verification_config_json ? JSON.parse(row.verification_config_json) : null,
@@ -157,6 +159,41 @@ export async function getMetricCatalog(db: Db, ownerId: string) {
   });
 }
 
+/* ---------------------------- Check-ins recentes (painel) ---------------------------- */
+
+/**
+ * Status dos últimos `days` dias de um experimento, pela mesma regra do
+ * detalhe (automático pelo dado real, senão o check-in manual). Usado no
+ * painel com vários experimentos — só para os que já começaram.
+ */
+async function recentCheckins(db: Db, ownerId: string, row: ExperimentRow, days: number) {
+  const today = isoDate(new Date());
+  const to = today < row.end_date ? today : row.end_date;
+  const fromCandidate = addDays(to, -(days - 1));
+  const from = fromCandidate < row.start_date ? row.start_date : fromCandidate;
+  if (from > to) return [] as Array<{ date: string; status: "done" | "missed" | "pending" }>;
+  const logs = await db.execute({
+    sql: "SELECT log_date, checkin_status FROM personal_experiment_logs WHERE experiment_id = ? AND owner_id = ? AND log_date BETWEEN ? AND ?",
+    args: [row.id, ownerId, from, to],
+  });
+  const manual = new Map((logs.rows as unknown as Array<{ log_date: string; checkin_status: string | null }>).map((l) => [l.log_date, l.checkin_status]));
+  const config = row.verification_config_json ? JSON.parse(row.verification_config_json) : null;
+  const out: Array<{ date: string; status: "done" | "missed" | "pending" }> = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    let status: "done" | "missed" | "pending" = "pending";
+    if (row.verification_type === "automatic" && row.verification_rule) {
+      const auto = await checkAutomaticRule(db, ownerId, row.verification_rule, config, row.linked_habit_id, d);
+      if (auto !== null) status = auto ? "done" : "missed";
+    }
+    if (status === "pending") {
+      const m = manual.get(d);
+      if (m === "done" || m === "missed") status = m;
+    }
+    out.push({ date: d, status });
+  }
+  return out;
+}
+
 /* ---------------------------- Listagem ---------------------------- */
 
 export async function listExperiments(db: Db, ownerId: string) {
@@ -185,7 +222,11 @@ export async function listExperiments(db: Db, ownerId: string) {
         }
       }
 
-      return { ...mapExperiment(row), progressPct, daysElapsed, durationDays, resultLabel };
+      const recent = row.status === "draft" || row.status === "cancelled" ? [] : await recentCheckins(db, ownerId, row, 7);
+      const decided = recent.filter((c) => c.status !== "pending");
+      const recentConsistencyPct = decided.length ? Math.round((decided.filter((c) => c.status === "done").length / decided.length) * 100) : null;
+
+      return { ...mapExperiment(row), progressPct, daysElapsed, durationDays, resultLabel, recent, recentConsistencyPct };
     })
   );
 }
@@ -301,6 +342,7 @@ export interface CreateExperimentInput {
   verificationConfig?: Record<string, unknown> | null;
   successCriteriaType?: "consistency" | "metric_change" | "none";
   successCriteriaValue?: number | null;
+  emoji?: string | null;
 }
 
 function validateDatesAndMetric(input: { startDate: string; endDate: string; primaryMetric: ExperimentMetricKey; linkedHabitId?: string | null }) {
@@ -324,14 +366,14 @@ export async function createExperiment(db: Db, ownerId: string, input: CreateExp
     sql: `INSERT INTO personal_experiments
           (id, owner_id, title, description, category, hypothesis, motivation, status, start_date, end_date,
            primary_metric, secondary_metrics_json, linked_habit_id, verification_type, verification_rule,
-           verification_config_json, success_criteria_type, success_criteria_value)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           verification_config_json, success_criteria_type, success_criteria_value, emoji)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id, ownerId, input.title.trim(), input.description ?? null, input.category, input.hypothesis ?? null, input.motivation ?? null,
       status, input.startDate, input.endDate, input.primaryMetric, JSON.stringify(input.secondaryMetrics ?? []),
       input.linkedHabitId ?? null, input.verificationType, input.verificationRule ?? null,
       input.verificationConfig ? JSON.stringify(input.verificationConfig) : null,
-      input.successCriteriaType ?? "none", input.successCriteriaValue ?? null,
+      input.successCriteriaType ?? "none", input.successCriteriaValue ?? null, input.emoji ?? null,
     ],
   });
   return mapExperiment(await fetchExperimentRow(db, ownerId, id));
@@ -357,6 +399,7 @@ export async function updateExperiment(db: Db, ownerId: string, id: string, inpu
     verificationConfig: input.verificationConfig !== undefined ? input.verificationConfig : (current.verification_config_json ? JSON.parse(current.verification_config_json) : null),
     successCriteriaType: input.successCriteriaType ?? current.success_criteria_type,
     successCriteriaValue: input.successCriteriaValue !== undefined ? input.successCriteriaValue : current.success_criteria_value,
+    emoji: input.emoji !== undefined ? input.emoji : current.emoji,
   };
   validateDatesAndMetric(merged);
 
@@ -364,12 +407,12 @@ export async function updateExperiment(db: Db, ownerId: string, id: string, inpu
     sql: `UPDATE personal_experiments SET
             title = ?, description = ?, category = ?, hypothesis = ?, motivation = ?, start_date = ?, end_date = ?,
             primary_metric = ?, secondary_metrics_json = ?, linked_habit_id = ?, verification_type = ?, verification_rule = ?,
-            verification_config_json = ?, success_criteria_type = ?, success_criteria_value = ?, updated_at = datetime('now')
+            verification_config_json = ?, success_criteria_type = ?, success_criteria_value = ?, emoji = ?, updated_at = datetime('now')
           WHERE id = ? AND owner_id = ?`,
     args: [
       merged.title.trim(), merged.description, merged.category, merged.hypothesis, merged.motivation, merged.startDate, merged.endDate,
       merged.primaryMetric, JSON.stringify(merged.secondaryMetrics), merged.linkedHabitId, merged.verificationType, merged.verificationRule,
-      merged.verificationConfig ? JSON.stringify(merged.verificationConfig) : null, merged.successCriteriaType, merged.successCriteriaValue,
+      merged.verificationConfig ? JSON.stringify(merged.verificationConfig) : null, merged.successCriteriaType, merged.successCriteriaValue, merged.emoji ?? null,
       id, ownerId,
     ],
   });

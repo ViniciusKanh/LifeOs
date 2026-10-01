@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { experimentService } from "@/services/experimentService";
-import type { CreateExperimentInput, ExperimentStatus } from "@/types";
+import type { CreateExperimentInput, ExperimentStatus, ExperimentTailorDraft } from "@/types";
 
 const LIST_KEY = ["experiments"];
 const SUMMARY_KEY = ["experiments", "summary"];
@@ -65,4 +65,9 @@ export function useExperimentBaselinePreview(metric: string | null, habitId?: st
 /** IA desenha experimentos a partir de um objetivo em texto livre (só propõe; nada é criado). */
 export function useExperimentAIDesign() {
   return useMutation({ mutationFn: ({ goal, constraints }: { goal: string; constraints?: string | null }) => experimentService.aiDesign(goal, constraints) });
+}
+
+/** IA personaliza o rascunho do assistente (metas, hipótese, dicas de registro). */
+export function useExperimentAITailor() {
+  return useMutation({ mutationFn: (draft: ExperimentTailorDraft) => experimentService.aiTailor(draft) });
 }

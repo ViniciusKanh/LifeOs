@@ -150,3 +150,71 @@ describe("IA dos Experimentos — check-in por relato e insights", () => {
     expect((await other.agent.get(`/api/experiments/${id}/ai/reports`)).status).toBe(404);
   });
 });
+
+describe("IA dos Experimentos — personalizar modelo", () => {
+  it("valida cada ajuste proposto e ignora campos/valores fora do permitido", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    for (let i = 1; i <= 5; i++) {
+      await agent.post("/api/health/water").send({ amountMl: 1600, recordedAt: `${isoDate(addDays(new Date(), -i))}T10:00:00.000Z` });
+    }
+    gemini.next = JSON.stringify({
+      changes: [
+        { field: "verificationConfig", value: { targetMl: 2000 }, reason: "Sua média é 1,6 L; 2 L é um passo realista." },
+        { field: "durationDays", value: 19, reason: "Mais dias reduzem a incerteza." },
+        { field: "owner_id", value: "hack", reason: "x" },
+        { field: "secondaryMetrics", value: ["mood", "inventada", "energy"], reason: "y" },
+      ],
+      trackingTips: ["Deixe uma garrafa na mesa", "Registre a cada garrafa"],
+      pitfalls: ["Esquecer de registrar no fim de semana"],
+      reminderTime: "21:30",
+      emoji: "💧",
+    });
+    const res = await agent.post("/api/experiments/ai/tailor").send({
+      title: "2,5 L de água por dia",
+      category: "hidratacao",
+      primaryMetric: "water_ml",
+      secondaryMetrics: ["energy"],
+      durationDays: 14,
+      verificationType: "automatic",
+      verificationRule: "water_target",
+      verificationConfig: { targetMl: 2500 },
+      successCriteriaType: "consistency",
+      successCriteriaValue: 80,
+    });
+    expect(res.status).toBe(200);
+    const fields = res.body.changes.map((c: { field: string }) => c.field);
+    expect(fields).toEqual(["verificationConfig", "durationDays", "secondaryMetrics"]);
+    expect(res.body.changes[0].value).toEqual({ targetMl: 2000 });
+    expect(res.body.changes[1].value).toBe(21); // arredondado para semanas
+    expect(res.body.changes[2].value).toEqual(["mood", "energy"]);
+    expect(res.body.reminderTime).toBe("21:30");
+    expect(res.body.emoji).toBe("💧");
+    expect(res.body.baseline).toEqual({ mean: 1600, daysWithData: 5, unit: "ml" });
+  });
+});
+
+describe("Painel de experimentos", () => {
+  it("guarda o emoji e devolve os check-ins recentes na listagem", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const created = await agent.post("/api/experiments").send({
+      title: "Meditar 10 min",
+      emoji: "🧘",
+      category: "bem_estar",
+      startDate: isoDate(addDays(new Date(), -2)),
+      endDate: isoDate(addDays(new Date(), 11)),
+      primaryMetric: "stress",
+      verificationType: "manual",
+    });
+    expect(created.body.emoji).toBe("🧘");
+    await agent.post(`/api/experiments/${created.body.id}/logs`).send({ logDate: isoDate(addDays(new Date(), -1)), checkinStatus: "done" });
+
+    const list = await agent.get("/api/experiments");
+    const item = list.body.find((e: { id: string }) => e.id === created.body.id);
+    expect(item.recent).toHaveLength(3);
+    expect(item.recent.filter((d: { status: string }) => d.status === "done")).toHaveLength(1);
+    expect(item.recentConsistencyPct).toBe(100);
+
+    const updated = await agent.patch(`/api/experiments/${created.body.id}`).send({ emoji: "🌿" });
+    expect(updated.body.emoji).toBe("🌿");
+  });
+});

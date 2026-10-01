@@ -20,6 +20,8 @@ import type {
   ExperimentProposal,
   ExperimentInsightReport,
   ExperimentLogProposal,
+  ExperimentTailoring,
+  ExperimentTailorDraft,
 } from "@/types";
 
 export interface VerificationRuleInfo {
@@ -31,6 +33,7 @@ export interface VerificationRuleInfo {
 }
 
 export const experimentService = {
+  aiTailor: (draft: ExperimentTailorDraft) => api.post<ExperimentTailoring>("/experiments/ai/tailor", draft),
   aiDesign: (goal: string, constraints?: string | null) => api.post<{ proposals: ExperimentProposal[] }>("/experiments/ai/design", { goal, constraints: constraints || null }),
   aiParseLog: (id: string, text: string, date: string) => api.post<ExperimentLogProposal>(`/experiments/${id}/ai/parse-log`, { text, date }),
   aiReports: (id: string) => api.get<ExperimentInsightReport[]>(`/experiments/${id}/ai/reports`),

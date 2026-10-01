@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { Bot, Check, ChevronRight, Loader2, Sparkles, Wand2, X } from "lucide-react";
 import { ProvenanceBadge } from "./AiThinking";
 import { useExperiment } from "@/hooks/useExperiment";
-import { CATEGORY_ICON } from "./experimentDisplay";
+import { experimentEmoji } from "./experimentDisplay";
 import type { ExperimentCheckinStatus, ExperimentListItem, ExperimentLogProposal, ExperimentPerception } from "@/types";
 
 /**
@@ -50,7 +50,8 @@ function TodayRow({ experiment, question }: { experiment: ExperimentListItem; qu
   const log = detail?.logs.find((l) => l.log_date === today) ?? null;
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
-  const Icon = CATEGORY_ICON[experiment.category];
+  // Pequena celebração ao marcar "Cumpri" (chave nova a cada clique reinicia a animação).
+  const [celebrate, setCelebrate] = useState(0);
   const automatic = experiment.verification_type === "automatic";
 
   const save = (patch: { checkinStatus?: ExperimentCheckinStatus | null; perception?: ExperimentPerception | null; notes?: string | null }) =>
@@ -83,8 +84,28 @@ function TodayRow({ experiment, question }: { experiment: ExperimentListItem; qu
   return (
     <li className="rounded-xl border border-paper-border dark:border-ink-border p-3">
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className="w-8 h-8 rounded-lg bg-cat-purple/10 text-cat-purple flex items-center justify-center shrink-0">
-          <Icon size={15} />
+        <span className="relative w-9 h-9 rounded-xl bg-cat-purple/10 flex items-center justify-center shrink-0 text-xl leading-none">
+          {experimentEmoji(experiment)}
+          <AnimatePresence>
+            {celebrate > 0 && (
+              <motion.span key={celebrate} className="pointer-events-none absolute inset-0" initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ duration: 1.1, delay: 0.5 }}>
+                {Array.from({ length: 8 }).map((_, k) => {
+                  const angle = (k / 8) * Math.PI * 2;
+                  return (
+                    <motion.span
+                      key={k}
+                      className="absolute left-1/2 top-1/2 text-xs"
+                      initial={{ x: 0, y: 0, scale: 0.4 }}
+                      animate={{ x: Math.cos(angle) * 28, y: Math.sin(angle) * 28, scale: 1 }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                    >
+                      {k % 2 ? "✨" : "🎉"}
+                    </motion.span>
+                  );
+                })}
+              </motion.span>
+            )}
+          </AnimatePresence>
         </span>
         <Link to={`/experimentos/${experiment.id}`} className="min-w-0 flex-1 group">
           <p className="text-sm font-semibold truncate group-hover:text-cat-purple">{experiment.title}</p>
@@ -106,7 +127,10 @@ function TodayRow({ experiment, question }: { experiment: ExperimentListItem; qu
                 key={s}
                 type="button"
                 disabled={isSavingLog}
-                onClick={() => save({ checkinStatus: status === s ? null : s })}
+                onClick={() => {
+                  if (s === "done" && status !== "done") setCelebrate((v) => v + 1);
+                  void save({ checkinStatus: status === s ? null : s });
+                }}
                 aria-pressed={status === s}
                 className={clsx(
                   "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-colors",

@@ -19,7 +19,7 @@ import { ExperimentAIPanel } from "@/components/experiments/ExperimentAIPanel";
 import { ExperimentAIInsights } from "@/components/experiments/ExperimentAIInsights";
 import { ExperimentConcludeModal } from "@/components/experiments/ExperimentConcludeModal";
 import { ExperimentEditModal } from "@/components/experiments/ExperimentEditModal";
-import { STATUS_LABEL_PT, CATEGORY_LABEL, CATEGORY_ICON } from "@/components/experiments/experimentDisplay";
+import { STATUS_LABEL_PT, CATEGORY_LABEL, CATEGORY_ICON, experimentEmoji } from "@/components/experiments/experimentDisplay";
 
 /**
  * Detalhe do experimento em quatro abas:
@@ -174,7 +174,19 @@ export function ExperimentDetailPage() {
                   {brDate(experiment.start_date)} → {brDate(experiment.end_date)}
                 </span>
               </div>
-              <h1 className="font-display font-bold text-2xl md:text-3xl mt-2 leading-tight">{experiment.title}</h1>
+              <h1 className="flex items-center gap-3 font-display font-bold text-2xl md:text-3xl mt-2 leading-tight">
+                <motion.span
+                  className="text-4xl md:text-5xl leading-none"
+                  initial={{ scale: 0, rotate: -25 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  whileHover={{ scale: 1.15, rotate: [0, -10, 10, 0] }}
+                  transition={{ type: "spring", stiffness: 300, damping: 14 }}
+                  aria-hidden
+                >
+                  {experimentEmoji(experiment)}
+                </motion.span>
+                <span>{experiment.title}</span>
+              </h1>
               {experiment.description && <p className="text-sm text-slate mt-1.5">{experiment.description}</p>}
               {experiment.hypothesis && (
                 <div className="flex items-start gap-2 mt-3 p-3 rounded-xl bg-cat-purple/5 border border-cat-purple/15 text-sm">

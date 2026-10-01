@@ -1104,6 +1104,8 @@ export interface Experiment {
   perceived_result: ExperimentPerceivedResult | null;
   created_at: string;
   updated_at: string;
+  /** Emoji escolhido (nulo = emoji padrão da categoria). */
+  emoji: string | null;
 }
 
 /** Linha da listagem — já vem com os campos derivados prontos (progresso, resultado), calculados no backend. */
@@ -1112,6 +1114,9 @@ export interface ExperimentListItem extends Experiment {
   daysElapsed: number;
   durationDays: number;
   resultLabel: string | null;
+  /** Últimos 7 dias (ou menos, no começo) de check-in — painel com vários experimentos. */
+  recent?: Array<{ date: string; status: ExperimentCheckinStatus | "pending" }>;
+  recentConsistencyPct?: number | null;
 }
 
 export interface ExperimentMetricComparison {
@@ -1202,6 +1207,7 @@ export interface CreateExperimentInput {
   verificationConfig?: Record<string, unknown> | null;
   successCriteriaType?: ExperimentSuccessCriteriaType;
   successCriteriaValue?: number | null;
+  emoji?: string | null;
 }
 
 export type UpdateExperimentInput = Partial<CreateExperimentInput>;
@@ -1941,4 +1947,30 @@ export interface ExperimentLogProposal {
   perception: ExperimentPerception | null;
   notes: string;
   reasoning: string | null;
+}
+
+export type ExperimentTailorField = "title" | "hypothesis" | "verificationConfig" | "durationDays" | "successCriteriaValue" | "secondaryMetrics";
+
+/** Personalização de um rascunho pela IA (POST /experiments/ai/tailor). */
+export interface ExperimentTailoring {
+  changes: Array<{ field: ExperimentTailorField; value: unknown; reason: string }>;
+  trackingTips: string[];
+  pitfalls: string[];
+  reminderTime: string | null;
+  emoji: string | null;
+  baseline: { mean: number | null; daysWithData: number; unit: string | null };
+}
+
+export interface ExperimentTailorDraft {
+  title: string;
+  category: ExperimentCategory;
+  hypothesis?: string | null;
+  primaryMetric: ExperimentMetricKey;
+  secondaryMetrics?: ExperimentMetricKey[];
+  durationDays: number;
+  verificationType: ExperimentVerificationType;
+  verificationRule?: ExperimentVerificationRule | null;
+  verificationConfig?: Record<string, unknown> | null;
+  successCriteriaType?: ExperimentSuccessCriteriaType;
+  successCriteriaValue?: number | null;
 }

@@ -399,3 +399,135 @@ export async function generateInsightReport(db: Db, ownerId: string, experimentI
   const saved = await db.execute({ sql: "SELECT id, kind, content_json, logs_count, created_at FROM experiment_ai_reports WHERE id = ?", args: [id] });
   return { ok: true as const, cached: false, report: toReport(saved.rows[0] as unknown as ReportRow) };
 }
+
+/* ============================================================
+   4) Personalizar um rascunho (modelo escolhido ou preenchido à mão)
+   ============================================================ */
+
+export interface TailorDraft {
+  title: string;
+  category: ExperimentCategory;
+  hypothesis?: string | null;
+  primaryMetric: ExperimentMetricKey;
+  secondaryMetrics?: ExperimentMetricKey[];
+  durationDays: number;
+  verificationType: "automatic" | "manual";
+  verificationRule?: VerificationRule | null;
+  verificationConfig?: Record<string, unknown> | null;
+  successCriteriaType?: "consistency" | "metric_change" | "none";
+  successCriteriaValue?: number | null;
+}
+
+export type TailorField = "title" | "hypothesis" | "verificationConfig" | "durationDays" | "successCriteriaValue" | "secondaryMetrics";
+
+export interface TailorChange {
+  field: TailorField;
+  value: unknown;
+  reason: string;
+}
+
+/**
+ * Ajusta um rascunho aos dados reais do usuário: metas da regra automática
+ * (ex.: meta de água perto da média atual), hipótese mais específica,
+ * duração e critério coerentes — e devolve dicas de como registrar no dia a
+ * dia. Cada mudança é validada aqui; o usuário aplica campo a campo.
+ */
+export async function tailorDraft(db: Db, ownerId: string, draft: TailorDraft) {
+  const config = await getGeminiConfig();
+  if (!config) return { ok: false as const, message: NO_AI };
+  if (!METRIC_CATALOG[draft.primaryMetric]) throw new ExperimentError("Métrica principal inválida.");
+
+  const metrics = await metricContext(db, ownerId);
+  const relevant = new Set<ExperimentMetricKey>([draft.primaryMetric, ...(draft.secondaryMetrics ?? [])]);
+  const rule = draft.verificationRule && draft.verificationRule in VERIFICATION_RULES ? VERIFICATION_RULES[draft.verificationRule] : null;
+  if (rule && rule.metric in METRIC_CATALOG) relevant.add(rule.metric as ExperimentMetricKey);
+  const lines = [...relevant]
+    .map((k) => metrics.get(k))
+    .filter((m): m is NonNullable<typeof m> => !!m)
+    .map((m) => `- ${m.key} (${m.label}${m.unit ? `, ${m.unit}` : ""}): média 30d ${fmt(m.mean)}, desvio ${fmt(m.sd)}, ${m.daysWithData} dia(s) com registro`);
+
+  const prompt = [
+    "Você é o LifeOS Copilot. O usuário escolheu um modelo de experimento pessoal e quer PERSONALIZÁ-LO aos dados dele.",
+    "",
+    "Regras obrigatórias:",
+    SAFETY,
+    "- Proponha só mudanças que melhorem o teste para ESTE usuário; se o rascunho já estiver bom, devolva poucas ou nenhuma mudança.",
+    "- Metas de regra automática devem ser desafiadoras porém realistas: perto da média atual, com melhora gradual (ex.: +10% a +30%).",
+    "- Se a métrica principal tiver poucos registros, recomende começar a registrar e uma duração maior.",
+    "",
+    `Rascunho: ${JSON.stringify({ ...draft, verificationRuleLabel: rule?.label ?? null })}`,
+    "",
+    "Dados reais do usuário (últimos 30 dias):",
+    ...(lines.length ? lines : ["- sem registros nas métricas envolvidas"]),
+    "",
+    "Campos que você pode alterar: title (string), hypothesis (string \"Se eu ..., então ...\"), verificationConfig (objeto da regra: beforeTime \"HH:MM\" | targetMl | minMinutes | minPages), durationDays (7-42), successCriteriaValue (1-100), secondaryMetrics (lista de chaves).",
+    "",
+    "Responda APENAS com JSON válido, sem markdown:",
+    '{"changes":[{"field":"...","value":...,"reason":"1 frase citando o dado real que justifica"}],"trackingTips":["como registrar no dia a dia, 2-4 dicas curtas e práticas"],"pitfalls":["1-3 armadilhas comuns deste teste"],"reminderTime":"HH:MM ou null","emoji":"um emoji que represente o experimento"}',
+  ].join("\n");
+
+  const result = await generateText(prompt, config);
+  if (!result.ok) return { ok: false as const, message: result.message };
+  const raw = (extractJson(result.text) ?? {}) as Record<string, unknown>;
+
+  const changes: TailorChange[] = [];
+  for (const c of Array.isArray(raw.changes) ? raw.changes.slice(0, 6) : []) {
+    const o = (c ?? {}) as Record<string, unknown>;
+    const reason = str(o.reason, 240) ?? "";
+    switch (o.field) {
+      case "title": {
+        const v = str(o.value, 80);
+        if (v && v !== draft.title) changes.push({ field: "title", value: v, reason });
+        break;
+      }
+      case "hypothesis": {
+        const v = str(o.value, 300);
+        if (v && v !== draft.hypothesis) changes.push({ field: "hypothesis", value: v, reason });
+        break;
+      }
+      case "verificationConfig": {
+        if (!draft.verificationRule || !(draft.verificationRule in VERIFICATION_RULES) || typeof o.value !== "object" || o.value === null) break;
+        const v = sanitizeRuleConfig(draft.verificationRule, o.value as Record<string, unknown>);
+        if (v && JSON.stringify(v) !== JSON.stringify(sanitizeRuleConfig(draft.verificationRule, draft.verificationConfig ?? null))) changes.push({ field: "verificationConfig", value: v, reason });
+        break;
+      }
+      case "durationDays": {
+        const v = Math.ceil(clampInt(o.value, 7, 42, draft.durationDays) / 7) * 7;
+        if (v !== draft.durationDays) changes.push({ field: "durationDays", value: v, reason });
+        break;
+      }
+      case "successCriteriaValue": {
+        if (!draft.successCriteriaType || draft.successCriteriaType === "none") break;
+        const v = clampInt(o.value, 1, 100, draft.successCriteriaValue ?? 80);
+        if (v !== draft.successCriteriaValue) changes.push({ field: "successCriteriaValue", value: v, reason });
+        break;
+      }
+      case "secondaryMetrics": {
+        if (!Array.isArray(o.value)) break;
+        const v = o.value
+          .filter((k): k is ExperimentMetricKey => typeof k === "string" && k in METRIC_CATALOG && k !== draft.primaryMetric && !METRIC_CATALOG[k as ExperimentMetricKey].requiresHabit)
+          .filter((k, i, arr) => arr.indexOf(k) === i)
+          .slice(0, 3);
+        if (JSON.stringify(v) !== JSON.stringify(draft.secondaryMetrics ?? [])) changes.push({ field: "secondaryMetrics", value: v, reason });
+        break;
+      }
+    }
+  }
+  const list = (v: unknown, max: number) => (Array.isArray(v) ? v.map((x) => str(x, 200)).filter((x): x is string => !!x).slice(0, max) : []);
+  const reminder = typeof raw.reminderTime === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.reminderTime) ? raw.reminderTime : null;
+  // Emoji: só aceita algo curto (1 grafema provável) — nunca texto livre.
+  const emoji = typeof raw.emoji === "string" && raw.emoji.trim().length > 0 && raw.emoji.trim().length <= 8 && !/[a-z0-9]/i.test(raw.emoji) ? raw.emoji.trim() : null;
+  const primaryCtx = metrics.get(draft.primaryMetric);
+
+  return {
+    ok: true as const,
+    tailoring: {
+      changes,
+      trackingTips: list(raw.trackingTips, 4),
+      pitfalls: list(raw.pitfalls, 3),
+      reminderTime: reminder,
+      emoji,
+      baseline: { mean: primaryCtx?.mean ?? null, daysWithData: primaryCtx?.daysWithData ?? 0, unit: METRIC_CATALOG[draft.primaryMetric].unit },
+    },
+  };
+}

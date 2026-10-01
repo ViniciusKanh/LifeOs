@@ -10,7 +10,7 @@ import { ExperimentComparisonCard } from "@/components/experiments/ExperimentCom
 import { ExperimentCheckins } from "@/components/experiments/ExperimentCheckins";
 import { ExperimentObservations } from "@/components/experiments/ExperimentObservations";
 import { ExperimentLogModal } from "@/components/experiments/ExperimentLogModal";
-import { ExperimentList } from "@/components/experiments/ExperimentList";
+import { ExperimentBoard } from "@/components/experiments/ExperimentBoard";
 import { ExperimentInsightsCard, ExperimentAISuggestionCard, ExperimentsEmptyState } from "@/components/experiments/ExperimentInsights";
 import { ExperimentWizard } from "@/components/experiments/ExperimentWizard";
 import { ExperimentTodayCheckin } from "@/components/experiments/ExperimentTodayCheckin";
@@ -156,7 +156,7 @@ export function ExperimentsPage() {
             </div>
           )}
 
-          <ExperimentList experiments={experiments} />
+          <ExperimentBoard experiments={experiments} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ExperimentInsightsCard insights={insights} />

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MoreHorizontal, Sparkles, TrendingUp, Quote, Bot, PenLine } from "lucide-react";
-import { Button, Card, IconBadge } from "@/components/ui/primitives";
-import { CATEGORY_ICON, CATEGORY_METRIC_LABEL, STATUS_LABEL_PT } from "./experimentDisplay";
+import { Button, Card } from "@/components/ui/primitives";
+import { CATEGORY_METRIC_LABEL, STATUS_LABEL_PT, experimentEmoji } from "./experimentDisplay";
+import { motion } from "motion/react";
 import type { ExperimentListItem, ExperimentStatus } from "@/types";
 
 const STATUS_TONE: Record<ExperimentStatus, string> = {
@@ -24,7 +25,6 @@ export function ActiveExperimentCard({
   onChangeStatus: (status: ExperimentStatus) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const CategoryIcon = CATEGORY_ICON[experiment.category];
 
   return (
     <Card className="p-4 md:p-5 relative">
@@ -45,7 +45,9 @@ export function ActiveExperimentCard({
       </div>
 
       <div className="flex items-start gap-2.5">
-        <IconBadge icon={<CategoryIcon size={16} />} tone="purple" size={34} />
+        <motion.span className="text-3xl leading-none shrink-0" whileHover={{ scale: 1.2, rotate: [0, -10, 10, 0] }} aria-hidden>
+          {experimentEmoji(experiment)}
+        </motion.span>
         <div className="min-w-0">
           <Link to={`/experimentos/${experiment.id}`} className="block">
             <p className="font-display font-bold text-lg leading-tight hover:text-cat-purple transition-colors">{experiment.title}</p>

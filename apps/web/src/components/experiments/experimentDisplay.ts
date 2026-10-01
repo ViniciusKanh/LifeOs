@@ -61,3 +61,25 @@ export const STATUS_LABEL_PT: Record<ExperimentStatus, string> = {
   completed: "Concluído",
   cancelled: "Cancelado",
 };
+
+/** Emoji padrão por categoria — usado quando o experimento não tem emoji próprio. */
+export const CATEGORY_EMOJI: Record<ExperimentCategory, string> = {
+  saude: "❤️",
+  sono: "🌙",
+  exercicio: "🏃",
+  hidratacao: "💧",
+  produtividade: "⚡",
+  focus: "🎯",
+  educacao: "🎓",
+  leitura: "📚",
+  habitos: "🔁",
+  bem_estar: "🌿",
+  personalizado: "🧪",
+};
+
+export function experimentEmoji(e: { emoji?: string | null; category: ExperimentCategory }): string {
+  return e.emoji || CATEGORY_EMOJI[e.category];
+}
+
+/** Opções do seletor de emoji do assistente. */
+export const EMOJI_CHOICES = ["🧪", "🌙", "😴", "💧", "🏃", "🏋️", "🧘", "🎯", "⚡", "📚", "🎓", "📵", "☕", "🥗", "🍎", "🌿", "❤️", "🧠", "✍️", "🎵", "🌅", "🚶", "🔥", "🌱"];
