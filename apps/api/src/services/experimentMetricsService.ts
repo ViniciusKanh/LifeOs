@@ -200,7 +200,8 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "tasks_completed": {
       const r = await db.execute({
-        sql: "SELECT date(updated_at) AS d, COUNT(*) AS v FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        // Data real de conclusão (completed_at); updated_at só para tarefas antigas sem esse campo.
+        sql: "SELECT date(COALESCE(completed_at, updated_at)) AS d, COUNT(*) AS v FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(COALESCE(completed_at, updated_at)) BETWEEN date(?) AND date(?) GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");

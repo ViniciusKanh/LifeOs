@@ -18,6 +18,7 @@ import {
   upsertLog,
 } from "../services/experimentService.js";
 import { analyzeExperiment, suggestExperiment } from "../services/experimentAIService.js";
+import { getExperimentAnalysis, getMetricBaselinePreview } from "../services/experimentAnalysisService.js";
 import { METRIC_KEYS } from "../services/experimentMetricsService.js";
 import { VERIFICATION_RULES } from "../services/experimentVerificationService.js";
 
@@ -78,6 +79,19 @@ experimentsRouter.get("/metrics/catalog", async (req, res) => {
   return res.json(catalog);
 });
 
+/** GET /api/experiments/metrics/:key/baseline?days=28&habitId= — prévia do histórico para o assistente de criação. */
+experimentsRouter.get("/metrics/:key/baseline", async (req, res) => {
+  const metric = metricKeyEnum.safeParse(req.params.key);
+  if (!metric.success) return res.status(400).json({ error: "Métrica inválida." });
+  const days = Math.min(90, Math.max(7, Number(req.query.days) || 28));
+  const habitId = typeof req.query.habitId === "string" && req.query.habitId ? req.query.habitId : null;
+  try {
+    return res.json(await getMetricBaselinePreview(getDb(), req.user!.id, metric.data, days, habitId));
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
 /** GET /api/experiments/verification/rules — regras automáticas disponíveis para o wizard. */
 experimentsRouter.get("/verification/rules", async (_req, res) => {
   return res.json(Object.values(VERIFICATION_RULES));
@@ -131,6 +145,15 @@ experimentsRouter.get("/:id", async (req, res) => {
     const db = getDb();
     const detail = await getExperimentDetail(db, req.user!.id, req.params.id);
     return res.json(detail);
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
+/** GET /api/experiments/:id/analysis — análise aprofundada (efeito, evidência, adesão, semanas, critério, percepção). */
+experimentsRouter.get("/:id/analysis", async (req, res) => {
+  try {
+    return res.json(await getExperimentAnalysis(getDb(), req.user!.id, req.params.id));
   } catch (err) {
     return handleError(res, err);
   }

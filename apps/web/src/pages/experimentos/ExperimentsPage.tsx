@@ -12,6 +12,7 @@ import { ExperimentLogModal } from "@/components/experiments/ExperimentLogModal"
 import { ExperimentList } from "@/components/experiments/ExperimentList";
 import { ExperimentInsightsCard, ExperimentAISuggestionCard, ExperimentsEmptyState } from "@/components/experiments/ExperimentInsights";
 import { ExperimentWizard } from "@/components/experiments/ExperimentWizard";
+import { ExperimentTodayCheckin } from "@/components/experiments/ExperimentTodayCheckin";
 import type { ExperimentAISuggestion } from "@/types";
 
 export function ExperimentsPage() {
@@ -20,7 +21,10 @@ export function ExperimentsPage() {
   const [wizardSuggestion, setWizardSuggestion] = useState<ExperimentAISuggestion | null>(null);
   const [logModalOpen, setLogModalOpen] = useState(false);
 
-  const featured = experiments.find((e) => e.status === "active") ?? null;
+  // Com vários experimentos ativos, o usuário escolhe qual fica em destaque (antes só o 1º aparecia).
+  const activeExperiments = experiments.filter((e) => e.status === "active");
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
+  const featured = activeExperiments.find((e) => e.id === featuredId) ?? activeExperiments[0] ?? null;
   const featuredDetail = useExperiment(featured?.id);
 
   const openWizard = (suggestion?: ExperimentAISuggestion) => {
@@ -59,6 +63,24 @@ export function ExperimentsPage() {
         <ExperimentsEmptyState onCreate={() => openWizard()} onAskCopilot={() => openWizard()} />
       ) : (
         <>
+          <ExperimentTodayCheckin experiments={experiments} />
+
+          {activeExperiments.length > 1 && (
+            <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5" role="tablist" aria-label="Experimento em destaque">
+              {activeExperiments.map((e) => (
+                <button
+                  key={e.id}
+                  role="tab"
+                  aria-selected={featured?.id === e.id}
+                  onClick={() => setFeaturedId(e.id)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${featured?.id === e.id ? "border-cat-purple bg-cat-purple/10 text-cat-purple" : "border-paper-border dark:border-ink-border text-slate hover:text-inherit"}`}
+                >
+                  {e.title}
+                </button>
+              ))}
+            </div>
+          )}
+
           {featured && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
               <div className="lg:col-span-1">

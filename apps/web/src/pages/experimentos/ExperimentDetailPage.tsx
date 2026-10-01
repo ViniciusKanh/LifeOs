@@ -3,8 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Pencil, Quote, Trash2 } from "lucide-react";
 import { Button, Card } from "@/components/ui/primitives";
 import { useExperiment } from "@/hooks/useExperiment";
-import { ExperimentComparisonCard } from "@/components/experiments/ExperimentComparison";
-import { ExperimentCheckins } from "@/components/experiments/ExperimentCheckins";
+import { ExperimentAnalysisPanel } from "@/components/experiments/ExperimentAnalysisPanel";
+import { ExperimentCalendar } from "@/components/experiments/ExperimentCalendar";
+import { ExperimentTodayCheckin } from "@/components/experiments/ExperimentTodayCheckin";
 import { ExperimentObservations } from "@/components/experiments/ExperimentObservations";
 import { ExperimentLogModal } from "@/components/experiments/ExperimentLogModal";
 import { ExperimentTimelineChart } from "@/components/experiments/ExperimentTimelineChart";
@@ -17,10 +18,11 @@ import { useExperiments } from "@/hooks/useExperiments";
 export function ExperimentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { detail, isLoading, isError, setStatus, upsertLog, isSavingLog, conclude, isConcluding, analyze, isAnalyzing, analysisText, analysisError, updateExperiment } = useExperiment(id);
+  const { detail, analysis, isAnalysisLoading, isLoading, isError, setStatus, upsertLog, isSavingLog, conclude, isConcluding, analyze, isAnalyzing, analysisText, analysisError, updateExperiment } = useExperiment(id);
   const { removeExperiment } = useExperiments();
 
   const [logModalOpen, setLogModalOpen] = useState(false);
+  const [logDate, setLogDate] = useState<string | undefined>(undefined);
   const [concludeOpen, setConcludeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -42,7 +44,11 @@ export function ExperimentDetailPage() {
     );
   }
 
-  const { experiment, progressPct, daysElapsed, durationDays, comparison, checkins, consistencyPct, logs, interpretation } = detail;
+  const { experiment, progressPct, daysElapsed, durationDays, checkins, consistencyPct, logs } = detail;
+  const openLog = (date?: string) => {
+    setLogDate(date);
+    setLogModalOpen(true);
+  };
 
   const handleDelete = async () => {
     if (!confirm("Excluir este experimento e todo o seu histórico de observações? Essa ação não pode ser desfeita.")) return;
@@ -51,10 +57,13 @@ export function ExperimentDetailPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <Button variant="ghost" onClick={() => navigate("/experimentos")}><ArrowLeft size={15} /> Voltar</Button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {experiment.status === "draft" && (
+            <Button variant="secondary" onClick={() => setStatus("active")}>Iniciar agora</Button>
+          )}
           {experiment.status === "active" && (
             <Button variant="secondary" onClick={() => setStatus("paused")}>Pausar</Button>
           )}
@@ -96,20 +105,22 @@ export function ExperimentDetailPage() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          <ExperimentComparisonCard comparison={comparison} beforeDays={comparison[0]?.beforeDays ?? 0} duringDays={comparison[0]?.duringDays ?? 0} />
-          <ExperimentTimelineChart experiment={experiment} />
-          <Card className="p-4 md:p-5">
-            <p className="text-sm font-semibold mb-2">Interpretação</p>
-            <p className="text-sm text-slate">{interpretation}</p>
-          </Card>
-          <ExperimentAIPanel onAnalyze={(q) => analyze(q)} isAnalyzing={isAnalyzing} text={analysisText} error={analysisError} />
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+        <div className="xl:col-span-2">
+          <ExperimentAnalysisPanel analysis={analysis} consistencyPct={consistencyPct} isLoading={isAnalysisLoading} />
         </div>
         <div className="space-y-4">
-          <ExperimentCheckins checkins={checkins} title="Check-ins" />
-          <ExperimentObservations logs={logs} onNewObservation={() => setLogModalOpen(true)} />
+          {experiment.status === "active" && (
+            <ExperimentTodayCheckin experiments={[{ ...experiment, progressPct, daysElapsed, durationDays, resultLabel: null }]} />
+          )}
+          <ExperimentCalendar startDate={experiment.start_date} endDate={experiment.end_date} checkins={checkins} logs={logs} onSelectDay={(d) => openLog(d)} />
+          <ExperimentObservations logs={logs} onNewObservation={() => openLog()} />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <ExperimentTimelineChart experiment={experiment} />
+        <ExperimentAIPanel onAnalyze={(q) => analyze(q)} isAnalyzing={isAnalyzing} text={analysisText} error={analysisError} />
       </div>
 
       {experiment.personal_conclusion && (
@@ -127,6 +138,7 @@ export function ExperimentDetailPage() {
           onClose={() => setLogModalOpen(false)}
           onSave={(input) => upsertLog(input)}
           isSaving={isSavingLog}
+          initialDate={logDate}
         />
       )}
       {concludeOpen && (

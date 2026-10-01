@@ -15,6 +15,8 @@ import type {
   ExperimentLog,
   ExperimentWorthContinuing,
   ExperimentPerceivedResult,
+  ExperimentAnalysis,
+  ExperimentBaselinePreview,
 } from "@/types";
 
 export interface VerificationRuleInfo {
@@ -26,6 +28,9 @@ export interface VerificationRuleInfo {
 }
 
 export const experimentService = {
+  analysis: (id: string) => api.get<ExperimentAnalysis>(`/experiments/${id}/analysis`),
+  baselinePreview: (metric: string, habitId?: string | null, days = 28) =>
+    api.get<ExperimentBaselinePreview>(`/experiments/metrics/${metric}/baseline?days=${days}${habitId ? `&habitId=${encodeURIComponent(habitId)}` : ""}`),
   list: () => api.get<ExperimentListItem[]>("/experiments"),
   summary: () => api.get<ExperimentSummary>("/experiments/summary"),
   insights: () => api.get<ExperimentInsightStat[]>("/experiments/insights"),

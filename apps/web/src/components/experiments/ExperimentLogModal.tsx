@@ -37,8 +37,11 @@ export function ExperimentLogModal({
   onClose,
   onSave,
   isSaving,
+  initialDate,
 }: {
   experiment: Experiment;
+  /** Abre o modal já num dia específico (ex.: clique no calendário do experimento). */
+  initialDate?: string;
   /** Status já calculado por dia (fonte automática ou manual) — vem de ExperimentDetail. */
   checkins?: ExperimentCheckinDay[];
   /** Observações/checkins manuais já salvos — usado para pré-preencher ao reabrir um dia já registrado. */
@@ -48,7 +51,7 @@ export function ExperimentLogModal({
   isSaving?: boolean;
 }) {
   const { data: catalog = [] } = useExperimentMetricsCatalog();
-  const [logDate, setLogDate] = useState(today());
+  const [logDate, setLogDate] = useState(initialDate ?? today());
 
   const existingLog = useMemo(() => logs?.find((l) => l.log_date === logDate) ?? null, [logs, logDate]);
   const [notes, setNotes] = useState(existingLog?.notes ?? "");

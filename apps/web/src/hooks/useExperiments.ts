@@ -51,3 +51,13 @@ export function useExperimentMetricsCatalog() {
 export function useExperimentVerificationRules() {
   return useQuery({ queryKey: RULES_KEY, queryFn: experimentService.verificationRules });
 }
+
+/** Prévia do histórico de uma métrica (últimos 28 dias) para o assistente de criação. */
+export function useExperimentBaselinePreview(metric: string | null, habitId?: string | null) {
+  return useQuery({
+    queryKey: ["experiments", "baseline-preview", metric, habitId ?? null],
+    queryFn: () => experimentService.baselinePreview(metric as string, habitId),
+    enabled: !!metric,
+    staleTime: 5 * 60 * 1000,
+  });
+}

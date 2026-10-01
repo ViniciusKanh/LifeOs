@@ -29,13 +29,17 @@ export function SpotlightSlider({
   onIndexChange,
   onOpen,
   className,
+  size = "hero",
 }: {
   slides: SpotlightSlide[];
   index: number;
   onIndexChange: (index: number) => void;
   onOpen?: (slide: SpotlightSlide) => void;
   className?: string;
+  /** "compact" para cartões (feed do Diário): textos, botões e margens menores. */
+  size?: "hero" | "compact";
 }) {
+  const compact = size === "compact";
   const reduceMotion = useReducedMotion();
   const [direction, setDirection] = useState(1);
   const count = slides.length;
@@ -65,7 +69,7 @@ export function SpotlightSlider({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-[18px] bg-[#111] shadow-[0_25px_60px_-20px_rgba(15,10,40,0.45)] ring-1 ring-white/10 ${className ?? ""}`}
+      className={`group relative overflow-hidden bg-[#111] ring-1 ring-white/10 ${compact ? "rounded-xl" : "rounded-[18px] shadow-[0_25px_60px_-20px_rgba(15,10,40,0.45)]"} ${className ?? ""}`}
       role="region"
       aria-roledescription="carrossel"
       aria-label={`Momento ${safeIndex + 1} de ${count}: ${current.title}`}
@@ -89,6 +93,9 @@ export function SpotlightSlider({
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.12}
           onDragEnd={handleDragEnd}
+          // onTap não dispara depois de um arrasto: toque abre o detalhe, arrastar troca o slide.
+          onTap={onOpen ? () => onOpen(current) : undefined}
+          style={{ cursor: onOpen ? "zoom-in" : undefined }}
         >
           {current.kind === "video" ? (
             <video src={current.src} muted playsInline preload="metadata" className="w-full h-full object-cover pointer-events-none" />
@@ -101,10 +108,6 @@ export function SpotlightSlider({
       {/* Degradê de leitura — de baixo (forte) para cima (suave) */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" aria-hidden />
 
-      {/* Área clicável para abrir o detalhe (fica abaixo dos controles) */}
-      {onOpen && (
-        <button type="button" onClick={() => onOpen(current)} className="absolute inset-0 z-[1] cursor-zoom-in" aria-label={`Abrir ${current.title}`} tabIndex={-1} />
-      )}
 
       {current.kind === "video" && (
         <span className="pointer-events-none absolute left-1/2 top-1/2 z-[2] -translate-x-1/2 -translate-y-1/2 w-14 h-14 rounded-full bg-black/45 backdrop-blur-md border border-white/30 flex items-center justify-center text-white">
@@ -131,19 +134,23 @@ export function SpotlightSlider({
               type="button"
               onClick={() => go(side === "prev" ? -1 : 1)}
               aria-label={side === "prev" ? "Momento anterior" : "Próximo momento"}
-              className={`absolute top-1/2 z-10 -translate-y-1/2 w-11 h-11 sm:w-[52px] sm:h-[52px] rounded-full flex items-center justify-center text-white
+              className={`absolute top-1/2 z-10 -translate-y-1/2 ${compact ? "w-9 h-9" : "w-11 h-11 sm:w-[52px] sm:h-[52px]"} rounded-full flex items-center justify-center text-white
                 bg-[rgba(15,15,15,0.45)] backdrop-blur-md border border-white/25 transition-all duration-300
                 hover:bg-white/20 hover:border-white/60 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70
-                ${side === "prev" ? "left-3 sm:left-5 hover:-translate-x-[3px]" : "right-3 sm:right-5 hover:translate-x-[3px]"}`}
+                ${side === "prev" ? `${compact ? "left-2.5" : "left-3 sm:left-5"} hover:-translate-x-[3px]` : `${compact ? "right-2.5" : "right-3 sm:right-5"} hover:translate-x-[3px]`}`}
             >
-              {side === "prev" ? <ChevronLeft size={24} /> : <ChevronRight size={24} />}
+              {side === "prev" ? <ChevronLeft size={compact ? 18 : 24} /> : <ChevronRight size={compact ? 18 : 24} />}
             </button>
           ))}
         </>
       )}
 
       {/* Texto do momento + contador */}
-      <div className="pointer-events-none absolute z-[5] left-5 right-5 sm:left-[35px] sm:right-[35px] bottom-12 sm:bottom-[55px] flex items-end justify-between gap-4 text-white">
+      <div
+        className={`pointer-events-none absolute z-[5] flex items-end justify-between gap-4 text-white ${
+          compact ? "left-4 right-4 bottom-9" : "left-5 right-5 sm:left-[35px] sm:right-[35px] bottom-12 sm:bottom-[55px]"
+        }`}
+      >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={current.id}
@@ -153,16 +160,16 @@ export function SpotlightSlider({
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.35, delay: 0.05 }}
           >
-            <p className="mb-1.5 text-[11px] font-bold tracking-[3px] uppercase opacity-70 truncate">{current.eyebrow}</p>
-            <h2 className="font-display text-xl sm:text-[27px] font-semibold leading-tight line-clamp-2 drop-shadow-sm">{current.title}</h2>
-            {current.subtitle && <p className="mt-1 text-xs sm:text-sm text-white/80 line-clamp-1 max-w-xl">{current.subtitle}</p>}
+            <p className={`font-bold uppercase opacity-70 truncate ${compact ? "mb-0.5 text-[9px] tracking-[2.5px]" : "mb-1.5 text-[11px] tracking-[3px]"}`}>{current.eyebrow}</p>
+            <h2 className={`font-display font-semibold leading-tight line-clamp-2 drop-shadow-sm ${compact ? "text-base" : "text-xl sm:text-[27px]"}`}>{current.title}</h2>
+            {current.subtitle && !compact && <p className="mt-1 text-xs sm:text-sm text-white/80 line-clamp-1 max-w-xl">{current.subtitle}</p>}
           </motion.div>
         </AnimatePresence>
 
         {count > 1 && (
-          <div className="flex items-center gap-2.5 text-[13px] font-semibold shrink-0" aria-hidden>
-            <span className="text-[19px] tabular-nums">{pad(safeIndex + 1)}</span>
-            <i className="block w-[35px] h-px bg-white/60" />
+          <div className={`flex items-center font-semibold shrink-0 ${compact ? "gap-1.5 text-[11px]" : "gap-2.5 text-[13px]"}`} aria-hidden>
+            <span className={`tabular-nums ${compact ? "text-sm" : "text-[19px]"}`}>{pad(safeIndex + 1)}</span>
+            <i className={`block h-px bg-white/60 ${compact ? "w-5" : "w-[35px]"}`} />
             <span className="opacity-55 tabular-nums">{pad(count)}</span>
           </div>
         )}
@@ -170,7 +177,7 @@ export function SpotlightSlider({
 
       {/* Pontos: o ativo vira pílula */}
       {count > 1 && (
-        <div className="absolute z-10 left-5 sm:left-[35px] bottom-[18px] sm:bottom-[22px] flex gap-[7px]">
+        <div className={`absolute z-10 flex gap-[7px] ${compact ? "left-4 bottom-3.5" : "left-5 sm:left-[35px] bottom-[18px] sm:bottom-[22px]"}`}>
           {slides.map((s, i) => (
             <button
               key={s.id}

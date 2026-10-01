@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/primitives";
 import type { ExperimentMetricComparison } from "@/types";
 
 /** Formata o valor de uma métrica no padrão de cada unidade (ex.: sono em "6h58" em vez de "6.97h"). */
-function formatMetricValue(value: number | null, unit: string | null): string {
+export function formatMetricValue(value: number | null, unit: string | null): string {
   if (value === null) return "—";
   if (unit === "h") {
     const totalMinutes = Math.round(value * 60);

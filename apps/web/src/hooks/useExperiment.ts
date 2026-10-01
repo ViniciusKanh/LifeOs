@@ -43,8 +43,17 @@ export function useExperiment(id: string | undefined) {
     mutationFn: (question?: string) => experimentService.analyze(id as string, question),
   });
 
+  // Análise fica sob ["experiments", "detail", id, ...] para ser revalidada junto com o detalhe.
+  const analysisQuery = useQuery({
+    queryKey: [...key, "analysis"],
+    queryFn: () => experimentService.analysis(id as string),
+    enabled: !!id,
+  });
+
   return {
     detail: detailQuery.data ?? null,
+    analysis: analysisQuery.data ?? null,
+    isAnalysisLoading: analysisQuery.isLoading,
     isLoading: detailQuery.isLoading,
     isError: detailQuery.isError,
     refetch: detailQuery.refetch,

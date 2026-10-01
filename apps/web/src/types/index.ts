@@ -1830,3 +1830,65 @@ export interface HabitTaskGenerationResult {
   from: string;
   to: string;
 }
+
+/* ---------- Experimentos: análise aprofundada e prévia de base (experimentAnalysisService.ts) ---------- */
+
+export type ExperimentEvidence = "strong" | "moderate" | "weak" | "none" | "insufficient";
+
+export interface ExperimentDescribe {
+  n: number;
+  mean: number | null;
+  sd: number | null;
+  median: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface ExperimentMetricAnalysis {
+  metric: ExperimentMetricKey;
+  label: string;
+  unit: string | null;
+  inverse: boolean;
+  isPrimary: boolean;
+  before: ExperimentDescribe;
+  during: ExperimentDescribe;
+  effect: {
+    diff: number | null;
+    ciLow: number | null;
+    ciHigh: number | null;
+    effectSize: number | null;
+    evidence: ExperimentEvidence;
+    outsideNaturalRange: boolean | null;
+  };
+  coveragePct: number;
+  adherence: { doneMean: number | null; doneDays: number; missedMean: number | null; missedDays: number; favorableDiff: number | null } | null;
+}
+
+export type ExperimentSuccessStatus = "met" | "not_met" | "on_track" | "at_risk" | "unreachable" | "pending" | "none";
+
+export interface ExperimentAnalysis {
+  verdict: { tone: "positive" | "negative" | "neutral" | "collecting" | "warning"; title: string; text: string; nextStep: string };
+  metrics: ExperimentMetricAnalysis[];
+  weekly: Array<{ week: number; from: string; to: string; primaryMean: number | null; consistencyPct: number | null; daysWithData: number }>;
+  success: { type: ExperimentSuccessCriteriaType; target: number | null; current: number | null; status: ExperimentSuccessStatus; message: string; doneDaysNeeded: number | null };
+  perception: { avg: number | null; firstHalfAvg: number | null; secondHalfAvg: number | null; counts: Record<ExperimentPerception, number>; total: number };
+  streak: { current: number; best: number };
+  overlaps: Array<{ id: string; title: string; status: ExperimentStatus; sharesMetric: boolean }>;
+  daysRemaining: number;
+}
+
+export interface ExperimentBaselinePreview {
+  metric: ExperimentMetricKey;
+  label: string;
+  unit: string | null;
+  days: number;
+  daysWithData: number;
+  mean: number | null;
+  sd: number | null;
+  cvPct: number | null;
+  recommendedDurationDays: number | null;
+  sourcePath: string;
+  sourceLabel: string;
+  message: string;
+  sparkline: Array<number | null>;
+}

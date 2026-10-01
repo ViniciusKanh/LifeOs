@@ -54,6 +54,7 @@ import {
 import type { JournalDaySummary, JournalCollectionInput, JournalLocationSummary } from "@/services/journalService";
 import type { JournalMedia, JournalEntryLink, GeocodeResult } from "@/types";
 import { JournalMediaSection } from "@/components/journal/JournalMediaSection";
+import { SpotlightSlider, type SpotlightSlide } from "@/components/media/SpotlightSlider";
 import { JournalAiOrganizer } from "@/components/journal/JournalAiOrganizer";
 import { buildJournalMoments, type JournalMoment, type JournalMomentKind } from "@/utils/journalMoments";
 import type { JournalCollection } from "@/types";
@@ -1354,65 +1355,41 @@ function EntryCardMoodGlyph({ day }: { day: JournalDaySummary }) {
   return <BookOpen size={24} className="text-cat-pink/70" />;
 }
 
-/**
- * Mosaico de mídia do card — 1 foto grande (16:9), 2 em coluna, 3 (uma
- * grande + duas pequenas) ou 4+ em grade com "+N" na última quando há mais
- * fotos do que as 4 carregadas. Sempre fotos reais da entrada — nunca
- * imagem inventada — e nunca aparece se o dia não tiver foto nenhuma.
- */
-function EntryCardMedia({ day, onOpenLightbox }: { day: JournalDaySummary; onOpenLightbox: (src: string) => void }) {
-  const photos = day.photos;
-  if (photos.length === 0) return null;
-  const openAt = (src: string) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onOpenLightbox(src);
-  };
-  const extra = day.photoCount > photos.length ? day.photoCount - photos.length : 0;
+/** Abre o visualizador do feed com todas as fotos carregadas do dia, já no índice clicado. */
+type FeedPhotoOpener = (photos: string[], index: number) => void;
 
-  if (photos.length === 1) {
-    return (
-      <button onClick={openAt(photos[0])} className="block w-full rounded-xl overflow-hidden mb-3 aspect-[16/9]">
-        <img src={photos[0]} alt="" className="w-full h-full object-cover" />
-      </button>
-    );
-  }
-  if (photos.length === 2) {
-    return (
-      <div className="grid grid-cols-2 gap-1.5 rounded-xl overflow-hidden mb-3 aspect-[16/9]">
-        {photos.map((src, i) => (
-          <button key={i} onClick={openAt(src)} className="overflow-hidden">
-            <img src={src} alt="" className="w-full h-full object-cover" />
-          </button>
-        ))}
-      </div>
-    );
-  }
-  if (photos.length === 3) {
-    return (
-      <div className="grid grid-cols-2 gap-1.5 rounded-xl overflow-hidden mb-3 aspect-[16/9]">
-        <button onClick={openAt(photos[0])} className="row-span-2 overflow-hidden">
-          <img src={photos[0]} alt="" className="w-full h-full object-cover" />
-        </button>
-        <div className="grid grid-rows-2 gap-1.5">
-          {photos.slice(1).map((src, i) => (
-            <button key={i} onClick={openAt(src)} className="overflow-hidden">
-              <img src={src} alt="" className="w-full h-full object-cover" />
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+/** Primeira frase do texto do dia, para o título do slide (nunca inventa texto). */
+function firstSentence(text: string | null | undefined, max = 80) {
+  const clean = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!clean) return null;
+  const sentence = clean.split(/(?<=[.!?])\s/)[0];
+  return sentence.length > max ? `${sentence.slice(0, max - 1)}…` : sentence;
+}
+
+/**
+ * Mídia do card do feed — slider em destaque (mesmo componente do editor
+ * do dia, em tamanho compacto). Sempre fotos reais da entrada; não aparece
+ * se o dia não tiver foto. Os cliques no slider não abrem o editor do card.
+ */
+function EntryCardMedia({ day, onOpenLightbox }: { day: JournalDaySummary; onOpenLightbox: FeedPhotoOpener }) {
+  const [index, setIndex] = useState(0);
+  const photos = day.photos;
+  const slides = useMemo<SpotlightSlide[]>(() => {
+    const extra = day.photoCount > photos.length ? ` · ${day.photoCount} no dia` : "";
+    const title = firstSentence(day.preview) ?? "Momentos do dia";
+    return photos.map((src, i) => ({ id: `${day.date}-${i}`, kind: "image", src, eyebrow: `${formatCardDate(day.date)}${extra}`, title }));
+  }, [photos, day.date, day.photoCount, day.preview]);
+  if (photos.length === 0) return null;
   return (
-    <div className="grid grid-cols-2 grid-rows-2 gap-1.5 rounded-xl overflow-hidden mb-3 aspect-[16/9]">
-      {photos.slice(0, 4).map((src, i) => (
-        <button key={i} onClick={openAt(src)} className="relative overflow-hidden">
-          <img src={src} alt="" className="w-full h-full object-cover" />
-          {i === 3 && extra > 0 && (
-            <span className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-sm font-semibold">+{extra}</span>
-          )}
-        </button>
-      ))}
+    <div className="mb-3" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      <SpotlightSlider
+        size="compact"
+        slides={slides}
+        index={index}
+        onIndexChange={setIndex}
+        onOpen={(slide) => onOpenLightbox(photos, Math.max(0, slides.findIndex((x) => x.id === slide.id)))}
+        className="aspect-[16/9]"
+      />
     </div>
   );
 }
@@ -1705,7 +1682,7 @@ function EntryCard({
   collections: JournalCollection[];
   isToday: boolean;
   onOpen: () => void;
-  onOpenLightbox: (src: string) => void;
+  onOpenLightbox: FeedPhotoOpener;
   onToggleFavorite: () => void;
   onMove: (journalIds: string[]) => void;
   onExport: () => void;
@@ -1910,14 +1887,28 @@ function FeedInsightsStrip({ onOpenInsights }: { onOpenInsights: () => void }) {
   );
 }
 
-/** Lightbox simples pra abrir uma foto do feed em tamanho grande — fecha ao clicar fora ou no X. */
-function MediaLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+/** Visualizador em tela cheia do feed: o mesmo slider, grande, com Esc para fechar. */
+function FeedPhotoViewer({ photos, startIndex, onClose }: { photos: string[]; startIndex: number; onClose: () => void }) {
+  const [index, setIndex] = useState(startIndex);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
+  const slides: SpotlightSlide[] = photos.map((src, i) => ({ id: `viewer-${i}`, kind: "image", src, eyebrow: "Diário", title: `Foto ${i + 1} de ${photos.length}` }));
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
-      <button onClick={onClose} aria-label="Fechar" className="absolute top-4 right-4 text-white/80 hover:text-white p-2">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6" onClick={onClose} role="dialog" aria-modal="true" aria-label="Fotos do dia">
+      <button onClick={onClose} aria-label="Fechar" className="absolute top-4 right-4 z-10 text-white/80 hover:text-white p-2">
         <X size={22} />
       </button>
-      <img src={src} alt="" className="max-w-full max-h-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
+      <div className="w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+        <SpotlightSlider slides={slides} index={index} onIndexChange={setIndex} className="h-[60vh] sm:h-[75vh]" />
+      </div>
     </div>
   );
 }
@@ -1936,7 +1927,7 @@ function JournalFeedTab({
   onChangeFilter: (id: string | null) => void;
 }) {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null);
   const { days, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useJournalDays(journalFilter ?? undefined, favoritesOnly);
   const { toggleFavorite, moveToJournals, deleteEntry, setTags, moveDate, addLink } = useJournalDayActions();
   const today = todayIso();
@@ -2004,7 +1995,7 @@ function JournalFeedTab({
                   collections={collections}
                   isToday={day.date === today}
                   onOpen={() => onOpenDay(day.date)}
-                  onOpenLightbox={setLightbox}
+                  onOpenLightbox={(photos, index) => setLightbox({ photos, index })}
                   onToggleFavorite={() => toggleFavorite({ date: day.date, isFavorite: !day.isFavorite }).catch(() => undefined)}
                   onMove={(journalIds) => moveToJournals({ date: day.date, journalIds }).catch(() => undefined)}
                   onExport={() => downloadJournalPdf(day.date).catch(() => undefined)}
@@ -2027,7 +2018,7 @@ function JournalFeedTab({
           )}
         </div>
       )}
-      {lightbox && <MediaLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <FeedPhotoViewer photos={lightbox.photos} startIndex={lightbox.index} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
