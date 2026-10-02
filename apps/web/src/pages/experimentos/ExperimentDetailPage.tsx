@@ -234,7 +234,7 @@ export function ExperimentDetailPage() {
       </motion.div>
 
       {/* Abas */}
-      <div role="tablist" aria-label="Seções do experimento" className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-0.5 sticky top-16 z-10 bg-paper/80 dark:bg-ink/80 backdrop-blur py-1.5">
+      <div role="tablist" aria-label="Seções do experimento" className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-0.5 sticky top-0 z-10 bg-paper/80 dark:bg-ink/80 backdrop-blur py-1.5">
         {TABS.map((t) => (
           <button
             key={t.key}

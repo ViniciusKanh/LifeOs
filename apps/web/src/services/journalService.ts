@@ -15,6 +15,19 @@ export interface JournalUpsertInput {
   tags?: string[];
 }
 
+export type JournalWordPeriod = "30" | "90" | "365" | "all";
+
+/** Nuvem de palavras automática (sem IA) — contagem real do que o usuário escreveu. */
+export interface JournalWordCloud {
+  period: JournalWordPeriod;
+  entries: number;
+  totalWords: number;
+  distinctWords: number;
+  words: Array<{ word: string; count: number; days: number; recentDates: string[] }>;
+  rising: Array<{ word: string; recentPct: number; previousPct: number }>;
+  excluded: string[];
+}
+
 export interface JournalInsights {
   totalEntries: number;
   currentStreak: number;
@@ -73,6 +86,10 @@ export const journalService = {
   get: (date: string) => api.get<JournalEntry>(`/journal/${date}`),
   save: (date: string, input: JournalUpsertInput) => api.put<JournalEntry>(`/journal/${date}`, input),
   insights: () => api.get<JournalInsights>("/journal/insights"),
+  wordCloud: (period: JournalWordPeriod, journalId?: string | null) =>
+    api.get<JournalWordCloud>(`/journal/insights/words?period=${period}${journalId ? `&journalId=${encodeURIComponent(journalId)}` : ""}`),
+  excludeWord: (word: string) => api.post<void>("/journal/insights/words/exclusions", { word }),
+  restoreWord: (word: string) => api.delete<void>(`/journal/insights/words/exclusions/${encodeURIComponent(word)}`),
   days: (before?: string, journalId?: string, favoritesOnly?: boolean) =>
     api.get<JournalDaysPage>(`/journal/days${daysQuery(before, journalId, favoritesOnly)}`),
   calendarMonth: (month: string, journalId?: string) =>

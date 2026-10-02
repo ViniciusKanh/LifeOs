@@ -11,6 +11,19 @@
      em vez de abrir uma barra de rolagem horizontal na página inteira. */
   html, body {
     overflow-x: hidden;
+    /* Comportamento de app: sem "elástico"/pull-to-refresh além dos limites
+       da tela. A rolagem real acontece em .app-scroll (AppShell). */
+    overscroll-behavior: none;
+    /* Remove o zoom por toque duplo e o atraso de toque no mobile. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Dentro do app a rolagem fica contida no contêiner de conteúdo. */
+  .app-scroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] font-sans antialiased;

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAppScrollRef } from "@/components/layout/AppScrollContext";
 import { motion, useScroll, useSpring } from "motion/react";
 import {
   BarChart3,
@@ -117,7 +118,8 @@ export function DashboardPage() {
   const [completing, setCompleting] = useState(false);
 
   // Barra de progresso da rolagem (fica logo abaixo do cabeçalho fixo).
-  const { scrollYProgress } = useScroll();
+  const scrollRef = useAppScrollRef();
+  const { scrollYProgress } = useScroll(scrollRef ? { container: scrollRef } : undefined);
   const progress = useSpring(scrollYProgress, { stiffness: 140, damping: 30, restDelta: 0.001 });
 
   const overall = lifeScore?.overall ?? 0;

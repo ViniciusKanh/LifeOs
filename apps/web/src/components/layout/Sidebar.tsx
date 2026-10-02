@@ -205,7 +205,7 @@ export function Sidebar({ groups, collapsed, canToggle, onToggle }: { groups: Na
     <motion.aside
       animate={{ width: collapsed ? 80 : 264 }}
       transition={{ type: "spring", stiffness: 300, damping: 34 }}
-      className="hidden md:flex flex-col shrink-0 sticky top-0 h-screen bg-paper-raised dark:bg-ink-raised border-r border-paper-border dark:border-ink-border z-20"
+      className="hidden md:flex flex-col shrink-0 h-full bg-paper-raised dark:bg-ink-raised border-r border-paper-border dark:border-ink-border z-20"
       aria-label="Navegação principal"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-aurora opacity-50 dark:opacity-30" aria-hidden />

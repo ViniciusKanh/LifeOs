@@ -58,6 +58,7 @@ import { SpotlightSlider, type SpotlightSlide } from "@/components/media/Spotlig
 import { JournalAiOrganizer } from "@/components/journal/JournalAiOrganizer";
 import { JournalWritingAssistant } from "@/components/journal/JournalWritingAssistant";
 import { JournalDayClosing } from "@/components/journal/JournalDayClosing";
+import { JournalWordCloud } from "@/components/journal/JournalWordCloud";
 import { MOOD_EMOJI } from "@/utils/journalMood";
 import { useQueryClient } from "@tanstack/react-query";
 import { healthService } from "@/services/healthService";
@@ -1905,6 +1906,11 @@ function JournalFeedTab({
         </button>
       </div>
       <JournalFilterChips collections={collections} active={journalFilter} onChange={onChangeFilter} />
+      {journalFilter && (
+        <div className="mb-3">
+          <JournalWordCloud collections={collections} onOpenDay={onOpenDay} fixedJournalId={journalFilter} compact />
+        </div>
+      )}
       {isLoading ? (
         <p className="text-sm text-slate">Carregando…</p>
       ) : days.length === 0 ? (
@@ -1972,7 +1978,7 @@ function JournalFeedTab({
 }
 
 /** Aba "Insights" — as mesmas métricas reais do masthead, em destaque, com contagem animada. */
-function JournalInsightsTab() {
+function JournalInsightsTab({ collections, onOpenDay }: { collections: JournalCollection[]; onOpenDay: (date: string) => void }) {
   const { insights, isLoading } = useJournalInsights();
   const streakCount = useCountUp(insights?.currentStreak ?? 0);
   const longestCount = useCountUp(insights?.longestStreak ?? 0);
@@ -2014,6 +2020,8 @@ function JournalInsightsTab() {
           </Card>
         ))}
       </div>
+
+      <JournalWordCloud collections={collections} onOpenDay={onOpenDay} />
 
       {/* Correlação real com humor (Saúde) — só aparece com amostra suficiente
           em ambos os grupos (ver getJournalInsights); nunca uma métrica
@@ -2795,7 +2803,7 @@ function DiarioPageContent() {
           <DiarioSidebar collections={collections} onOpenDay={openDay} onOpenCollections={() => setView("collections")} />
         </div>
       )}
-      {view === "insights" && <JournalInsightsTab />}
+      {view === "insights" && <JournalInsightsTab collections={collections} onOpenDay={openDay} />}
       {view === "calendar" && (
         <JournalCalendarTab onOpenDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={setJournalFilter} />
       )}

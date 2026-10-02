@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, Menu, Moon, SunMedium, X } from "lucide-react";
@@ -17,6 +17,7 @@ import { AppFooter } from "./AppFooter";
 import { MobileMagicNav } from "./MobileMagicNav";
 import { TermsGate } from "@/components/legal/TermsGate";
 import { DEFAULT_QUOTE, findNavItem, visibleGroups } from "./navConfig";
+import { AppScrollContext } from "./AppScrollContext";
 
 /**
  * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
@@ -89,21 +90,22 @@ export function AppShell() {
   const isSubPage = !!current && location.pathname !== current.item.to;
   const quote = current?.item.quote ?? DEFAULT_QUOTE;
 
-  // Cada troca de rota volta ao topo — o conteúdo rola na janela, não num contêiner.
+  // A janela nunca rola (comportamento de app): só este contêiner. Cada troca de rota volta ao topo dele.
+  const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    window.scrollTo({ top: 0 });
+    scrollRef.current?.scrollTo({ top: 0 });
   }, [location.pathname]);
 
   return (
-    <div className="w-full min-h-screen flex bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2]">
+    <div className="app-shell fixed inset-0 w-full flex overflow-hidden bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2]">
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] rounded-lg px-3 py-2 bg-brand-600 text-white text-sm">
         Pular para o conteúdo
       </a>
 
       <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} />
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        <header className="sticky top-0 z-30 h-16 flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70">
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        <header className="shrink-0 relative z-30 h-16 flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70">
           <button
             onClick={() => setDrawerOpen(true)}
             className="md:hidden w-9 h-9 -ml-1 rounded-xl flex items-center justify-center text-slate hover:bg-black/5 dark:hover:bg-white/10"
@@ -147,6 +149,9 @@ export function AppShell() {
           </div>
         </header>
 
+        {/* Única área rolável do app: limitada entre o cabeçalho e a borda da tela, sem "elástico" além dos limites. */}
+        <div ref={scrollRef} id="app-scroll" className="app-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain">
+        <AppScrollContext.Provider value={scrollRef}>
         <div className="hidden xl:flex justify-end px-8 pt-3 -mb-1">
           <p className="text-xs italic text-slate">
             <span className="text-brand-500 not-italic font-display font-semibold mr-0.5">&ldquo;</span>
@@ -161,6 +166,8 @@ export function AppShell() {
 
         <div className="pb-24 md:pb-0">
           <AppFooter />
+        </div>
+        </AppScrollContext.Provider>
         </div>
 
         {/* navegação inferior mobile (indicador "magic navigation") */}

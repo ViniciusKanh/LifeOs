@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -6,6 +7,7 @@ import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema
 import { mimeFromDataUri } from "../validators/attachment.schema.js";
 import { organizeJournalDay, applyJournalOrganization, clearJournalOrganization, assistJournalDay } from "../services/journalAIService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { getJournalWordCloud, excludeJournalWord, restoreJournalWord, type WordCloudPeriod } from "../services/journalWordsService.js";
 import { buildJournalEntryPdf } from "../services/journalPdfService.js";
 import {
   getJournalAutoData,
@@ -149,6 +151,35 @@ async function syncEntryJournals(db: ReturnType<typeof getDb>, ownerId: string, 
 journalRouter.get("/insights", async (req, res) => {
   const db = getDb();
   return res.json(await getJournalInsights(db, req.user!.id));
+});
+
+/**
+ * GET /api/journal/insights/words?period=30|90|365|all&journalId= — nuvem de
+ * palavras automática (sem IA) das entradas ou de um diário específico.
+ */
+const WORD_PERIODS: WordCloudPeriod[] = ["30", "90", "365", "all"];
+journalRouter.get("/insights/words", async (req, res) => {
+  const period = WORD_PERIODS.includes(req.query.period as WordCloudPeriod) ? (req.query.period as WordCloudPeriod) : "90";
+  const journalId = typeof req.query.journalId === "string" && req.query.journalId ? req.query.journalId : null;
+  return res.json(await getJournalWordCloud(getDb(), req.user!.id, period, journalId));
+});
+
+const wordSchema = z.object({ word: z.string().trim().min(2).max(40) });
+
+/** POST /api/journal/insights/words/exclusions — esconde uma palavra da nuvem (só deste usuário). */
+journalRouter.post("/insights/words/exclusions", async (req, res) => {
+  const parsed = wordSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Palavra inválida." });
+  await excludeJournalWord(getDb(), req.user!.id, parsed.data.word);
+  return res.status(204).end();
+});
+
+/** DELETE /api/journal/insights/words/exclusions/:word — volta a mostrar a palavra. */
+journalRouter.delete("/insights/words/exclusions/:word", async (req, res) => {
+  const parsed = wordSchema.safeParse({ word: req.params.word });
+  if (!parsed.success) return res.status(400).json({ error: "Palavra inválida." });
+  await restoreJournalWord(getDb(), req.user!.id, parsed.data.word);
+  return res.status(204).end();
 });
 
 /**

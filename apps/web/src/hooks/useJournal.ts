@@ -1,10 +1,29 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { journalService, journalCollectionsService, type JournalUpsertInput, type JournalCollectionInput } from "@/services/journalService";
+import { journalService, journalCollectionsService, type JournalUpsertInput, type JournalCollectionInput, type JournalWordPeriod } from "@/services/journalService";
 
 /** Estatísticas reais do hábito de escrever no diário (streak, recorde, entradas, palavras) — usado pelo painel "Insights" do Diário. */
 export function useJournalInsights() {
   const query = useQuery({ queryKey: ["journal", "insights"], queryFn: journalService.insights });
   return { insights: query.data ?? null, isLoading: query.isLoading };
+}
+
+/** Nuvem de palavras do Diário (todas as entradas ou um diário) + esconder/mostrar palavras. */
+export function useJournalWordCloud(period: JournalWordPeriod, journalId: string | null) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["journal", "words", period, journalId ?? "all"],
+    queryFn: () => journalService.wordCloud(period, journalId),
+  });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["journal", "words"] });
+  const exclude = useMutation({ mutationFn: journalService.excludeWord, onSuccess: invalidate });
+  const restore = useMutation({ mutationFn: journalService.restoreWord, onSuccess: invalidate });
+  return {
+    cloud: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    excludeWord: exclude.mutateAsync,
+    restoreWord: restore.mutateAsync,
+  };
 }
 
 /** Uma entrada por data — reaproveitado pela tela Diário e, futuramente, por qualquer resumo do dia. */
