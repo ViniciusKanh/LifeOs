@@ -49,16 +49,16 @@ export function HealthStatCard({
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <IconBadge tone={tone} icon={icon} size={32} />
-          <span className="truncate text-xs text-slate">{label}</span>
+          <span className="truncate text-xs text-slate rpg:font-pixel rpg:uppercase rpg:tracking-wide rpg:text-[11px]">{label}</span>
         </div>
-        <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${BADGE_TONE[badge.tone]}`}>
+        <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold rpg:rounded-[2px] rpg:font-pixel rpg:uppercase rpg:border ${BADGE_TONE[badge.tone]}`}>
           {badge.label}
         </span>
       </div>
 
       <div className="flex items-end justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-display text-lg font-bold leading-none">{value}</p>
+          <p className="truncate font-display text-lg font-bold leading-none rpg:font-pixel rpg:text-xl">{value}</p>
           <p className="mt-1.5 truncate text-[11px] text-slate">{caption}</p>
         </div>
         <div className="flex h-7 shrink-0 items-end gap-[3px]">
@@ -74,7 +74,7 @@ export function HealthStatCard({
       </div>
 
       {progressPct !== undefined && (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-paper-border dark:bg-ink-border">
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
           <div className={`h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${Math.min(100, progressPct)}%` }} />
         </div>
       )}
@@ -90,14 +90,14 @@ export function WaterRing({ pct }: { pct: number }) {
   const offset = circumference * (1 - pct / 100);
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={radius} strokeWidth={stroke} className="stroke-paper-border dark:stroke-ink-border" fill="none" />
+      <circle cx={size / 2} cy={size / 2} r={radius} strokeWidth={stroke} className="stroke-paper-border dark:stroke-ink-border rpg:stroke-rpg-bg" fill="none" />
       <circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
         strokeWidth={stroke}
         strokeLinecap="round"
-        className="stroke-cat-blue transition-[stroke-dashoffset] duration-500"
+        className="stroke-cat-blue rpg:stroke-rpg-blue transition-[stroke-dashoffset] duration-500"
         fill="none"
         strokeDasharray={circumference}
         strokeDashoffset={offset}

@@ -7,6 +7,7 @@ import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
 import type { HealthCorrelation, MoodEntry, SleepEntry, WaterEntry, Workout } from "@/types";
 import type { MoodEntryInput, SleepEntryInput, WorkoutInput } from "@/services/healthService";
 import { WaterRing } from "./HealthStatCard";
+import { rpgAvatar } from "@/components/rpg/rpgAssets";
 import {
   WATER_GOAL_ML,
   WATER_QUICK_ADD,
@@ -659,8 +660,18 @@ export function WellnessInsightCard({
 }
 
 export function WellnessIllustrationCard() {
+  const alchemist = rpgAvatar("alquimista");
   return (
-    <Card className="overflow-hidden border-0 bg-gradient-to-br from-brand-600 via-cat-purple to-cat-blue p-6 text-white shadow-card">
+    <>
+    {/* Tema RPG: a mesma mensagem, num pergaminho com o alquimista. */}
+    <div className="hidden rpg:flex rpg-parchment items-center gap-4 p-5 mx-1.5 my-1.5">
+      <img src={alchemist.src} alt="" aria-hidden loading="lazy" width={112} height={112} className="pixelated w-24 h-24 sm:w-28 sm:h-28 shrink-0 border-2 border-rpg-bronze object-cover" />
+      <div className="min-w-0">
+        <p className="font-rpg text-xl font-bold leading-tight text-rpg-ink">Um novo dia, novas oportunidades.</p>
+        <p className="mt-2 text-sm leading-relaxed text-rpg-ink/85">Continue cuidando de voce. Seu bem-estar de hoje constroi o seu melhor amanha.</p>
+      </div>
+    </div>
+    <Card className="overflow-hidden border-0 bg-gradient-to-br from-brand-600 via-cat-purple to-cat-blue p-6 text-white shadow-card rpg:hidden">
       <div className="relative min-h-[220px]">
         <div className="absolute inset-x-4 bottom-6 h-20 rounded-[50%] bg-white/12" />
         <div className="absolute bottom-10 left-5 h-20 w-32 rounded-t-[80px] bg-white/18" />
@@ -675,6 +686,7 @@ export function WellnessIllustrationCard() {
         </div>
       </div>
     </Card>
+    </>
   );
 }
 
@@ -735,11 +747,11 @@ function CardHeader({
       <div className="flex min-w-0 items-center gap-2.5">
         <IconBadge tone={tone} size={34} icon={icon} />
         <div className="min-w-0">
-          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-sm font-semibold rpg:font-pixel rpg:uppercase rpg:tracking-[0.1em] rpg:text-[13px] rpg:text-rpg-gold-light">{title}</p>
           <p className="text-xs text-slate">{subtitle}</p>
         </div>
       </div>
-      <button onClick={onOpenHistory} className="shrink-0 text-xs font-medium text-brand-600 dark:text-brand-500">
+      <button onClick={onOpenHistory} className="shrink-0 text-xs font-medium text-brand-600 dark:text-brand-500 rpg:text-rpg-purple rpg:font-semibold hover:underline">
         Ver historico
       </button>
     </div>

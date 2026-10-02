@@ -141,7 +141,6 @@
      quatro "rebites" dourados nos cantos (gradientes, sem pseudo-elemento). */
   .rpg-panel,
   .rpg .lifeos-card {
-    position: relative;
     border-radius: 4px;
     border: 2px solid rgb(var(--rpg-border));
     background-color: rgb(var(--rpg-panel));
@@ -285,4 +284,19 @@
 }
 .rpg .app-scroll {
   scrollbar-color: rgb(var(--rpg-border)) rgb(var(--rpg-bg));
+}
+
+/* Gráficos (recharts) no tema RPG: grade e tooltip nos tokens; as séries
+   continuam com suas cores para não perder legibilidade. */
+.rpg .recharts-cartesian-grid line {
+  stroke: rgb(var(--rpg-border) / 0.7);
+}
+.rpg .recharts-cartesian-axis-tick-value {
+  fill: rgb(var(--rpg-text-muted));
+}
+.rpg .recharts-default-tooltip {
+  background: rgb(var(--rpg-panel)) !important;
+  border: 2px solid rgb(var(--rpg-border)) !important;
+  border-radius: 4px !important;
+  color: rgb(var(--rpg-text));
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Activity, ChevronLeft, ChevronRight, Dumbbell, Droplets, HeartPulse, Loader2, Moon, Sun } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Dumbbell, Droplets, FlaskRound, HeartPulse, Loader2, Moon, Sun, Zap } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
 import { useHealthInsight } from "@/hooks/useCopilot";
@@ -27,6 +27,9 @@ import {
   todayKey,
   weeklySeries,
 } from "@/components/health/healthUtils";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGAvatarButton, RPGPageHeader } from "@/components/rpg";
+import { RpgHealthAttributes } from "@/components/health/RpgHealthSections";
 import type { MoodEntryInput, SleepEntryInput, WaterEntryInput, WorkoutInput } from "@/services/healthService";
 
 function boundedPct(value: number) {
@@ -79,6 +82,11 @@ export function SaudePage() {
   } = useHealth();
   const { correlations, isLoading: correlationsLoading } = useHealthCorrelations();
   const insight = useHealthInsight();
+  const { isRpg } = useTheme();
+  // Séries do "Pulso da semana": no RPG leem os tokens (sem hex solto).
+  const pulseColor = isRpg
+    ? { water: "rgb(var(--rpg-blue))", sleep: "rgb(var(--rpg-purple))", move: "rgb(var(--rpg-green))", mood: "rgb(var(--rpg-orange))" }
+    : { water: "#3478F6", sleep: "#7C4DFF", move: "#22B573", mood: "#F5A31A" };
 
   const [historyOpen, setHistoryOpen] = useState<HealthHistoryKind | null>(null);
   const [editTarget, setEditTarget] = useState<HealthEditTarget | null>(null);
@@ -188,17 +196,30 @@ export function SaudePage() {
 
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
-      <PageHeader
-        icon={<HeartPulse size={21} />}
-        title="Saúde e bem-estar"
-        subtitle="Cuide de você hoje para viver um amanhã melhor."
-        actions={<p className="text-xs italic text-slate">Corpo saudável, mente mais forte.</p>}
-      />
+      {isRpg ? (
+        <RPGPageHeader
+          banner="saude"
+          className="mb-4"
+          leading={<RPGAvatarButton />}
+          eyebrow="Atributos do personagem"
+          title="Saúde e bem-estar"
+          subtitle="Cuide de você hoje para viver um amanhã melhor."
+          footnote="Água, sono, movimento e humor — sempre dos seus registros reais."
+          aside={<p className="rpg-parchment hidden md:block mx-1.5 my-1.5 max-w-[260px] px-4 py-3 text-center text-sm italic">&ldquo;Corpo saudável, mente mais forte.&rdquo;</p>}
+        />
+      ) : (
+        <PageHeader
+          icon={<HeartPulse size={21} />}
+          title="Saúde e bem-estar"
+          subtitle="Cuide de você hoje para viver um amanhã melhor."
+          actions={<p className="text-xs italic text-slate">Corpo saudável, mente mais forte.</p>}
+        />
+      )}
 
       {/* Controle por dia — mesma navegação usada no Diário e no Capacity Planner:
           todos os cards abaixo (hoje, semana, cards de água/sono/exercício/humor)
           passam a olhar pro dia selecionado, não sempre pra "agora". */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-paper-border bg-paper-raised px-3.5 py-2.5 dark:border-ink-border dark:bg-ink-raised">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-paper-border bg-paper-raised px-3.5 py-2.5 dark:border-ink-border dark:bg-ink-raised rpg:rpg-panel rpg:px-3.5 rpg:py-2.5">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSelectedDate((d) => addDaysKey(d, -1))}
@@ -207,7 +228,7 @@ export function SaudePage() {
           >
             <ChevronLeft size={14} />
           </button>
-          <p className="text-sm font-semibold capitalize min-w-[9rem] text-center sm:min-w-[13rem]">{formatDayLabel(selectedDate)}</p>
+          <p className="text-sm font-semibold capitalize min-w-[9rem] text-center sm:min-w-[13rem] rpg:font-pixel rpg:text-rpg-gold-light">{formatDayLabel(selectedDate)}</p>
           <button
             onClick={() => setSelectedDate((d) => addDaysKey(d, 1))}
             disabled={selectedDate >= todayStr}
@@ -226,9 +247,9 @@ export function SaudePage() {
               <button
                 key={dayKey}
                 onClick={() => setSelectedDate(dayKey)}
-                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors ${
+                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors rpg:rounded-[3px] rpg:w-7 rpg:h-7 rpg:font-pixel ${
                   isSelected
-                    ? "bg-growth text-white"
+                    ? "bg-growth text-white rpg:bg-rpg-green rpg:text-rpg-bg rpg:ring-2 rpg:ring-rpg-gold/70"
                     : isToday
                       ? "text-growth border border-growth/50"
                       : "text-slate border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
@@ -248,31 +269,42 @@ export function SaudePage() {
       </div>
 
       {isLoading && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-sm text-slate dark:border-ink-border dark:bg-ink-raised">
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-sm text-slate dark:border-ink-border dark:bg-ink-raised rpg:rpg-panel" role="status">
           <Loader2 size={16} className="animate-spin" />
           Carregando seus registros de bem-estar...
         </div>
       )}
 
       <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-        <HealthHero
-          vitalityScore={vitalityScore}
-          waterPct={boundedPct(waterPct)}
-          sleepPct={dailySleepPct}
-          workoutsPct={movedToday ? 100 : 0}
-          moodPct={moodLoggedToday ? 100 : 0}
-          isToday={selectedDate === todayStr}
-        />
+        {isRpg ? (
+          <RpgHealthAttributes
+            vitalityScore={vitalityScore}
+            waterPct={boundedPct(waterPct)}
+            sleepPct={dailySleepPct}
+            workoutsPct={movedToday ? 100 : 0}
+            moodPct={moodLoggedToday ? 100 : 0}
+            isToday={selectedDate === todayStr}
+          />
+        ) : (
+          <HealthHero
+            vitalityScore={vitalityScore}
+            waterPct={boundedPct(waterPct)}
+            sleepPct={dailySleepPct}
+            workoutsPct={movedToday ? 100 : 0}
+            moodPct={moodLoggedToday ? 100 : 0}
+            isToday={selectedDate === todayStr}
+          />
+        )}
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <IconBadge tone="teal" size={34} icon={<Activity size={15} />} />
               <div>
-                <p className="text-sm font-semibold">Pulso da semana</p>
+                <p className="text-sm font-semibold rpg:font-pixel rpg:uppercase rpg:tracking-[0.1em] rpg:text-[13px] rpg:text-rpg-gold-light">Pulso da semana</p>
                 <p className="text-xs text-slate">Cada linha está normalizada de 0 a 100.</p>
               </div>
             </div>
-            <span className="rounded-full bg-growth/10 px-2.5 py-1 text-[11px] font-semibold text-growth">
+            <span className="rounded-full bg-growth/10 px-2.5 py-1 text-[11px] font-semibold text-growth rpg:rounded-[2px] rpg:border rpg:border-rpg-green/50 rpg:font-pixel">
               {waterGoalDays}/7 dias com água
             </span>
           </div>
@@ -281,30 +313,30 @@ export function SaudePage() {
               <AreaChart data={healthPulse} margin={{ top: 10, right: 8, bottom: 0, left: -20 }}>
                 <defs>
                   <linearGradient id="healthWater" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3478F6" stopOpacity={0.24} />
-                    <stop offset="95%" stopColor="#3478F6" stopOpacity={0.02} />
+                    <stop offset="5%" stopColor={pulseColor.water} stopOpacity={0.24} />
+                    <stop offset="95%" stopColor={pulseColor.water} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="healthMood" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#F5A31A" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#F5A31A" stopOpacity={0.02} />
+                    <stop offset="5%" stopColor={pulseColor.mood} stopOpacity={0.2} />
+                    <stop offset="95%" stopColor={pulseColor.mood} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="#E5EAF2" strokeDasharray="3 3" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
                 <YAxis hide domain={[0, 100]} />
                 <Tooltip contentStyle={{ borderRadius: 14, border: "1px solid rgba(148,163,184,.35)", fontSize: 12 }} formatter={(value) => [`${Math.round(Number(value))}%`, ""]} />
-                <Area type="monotone" dataKey="Agua" stroke="#3478F6" strokeWidth={2} fill="url(#healthWater)" />
-                <Area type="monotone" dataKey="Sono" stroke="#7C4DFF" strokeWidth={2} fill="transparent" />
-                <Area type="monotone" dataKey="Movimento" stroke="#22B573" strokeWidth={2} fill="transparent" />
-                <Area type="monotone" dataKey="Humor" stroke="#F5A31A" strokeWidth={2} fill="url(#healthMood)" />
+                <Area type="monotone" dataKey="Agua" stroke={pulseColor.water} strokeWidth={2} fill="url(#healthWater)" />
+                <Area type="monotone" dataKey="Sono" stroke={pulseColor.sleep} strokeWidth={2} fill="transparent" />
+                <Area type="monotone" dataKey="Movimento" stroke={pulseColor.move} strokeWidth={2} fill="transparent" />
+                <Area type="monotone" dataKey="Humor" stroke={pulseColor.mood} strokeWidth={2} fill="url(#healthMood)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate sm:grid-cols-4">
-            <LegendDot color="bg-cat-blue" label="Água" />
-            <LegendDot color="bg-cat-purple" label="Sono" />
-            <LegendDot color="bg-growth" label="Movimento" />
-            <LegendDot color="bg-signal" label="Humor" />
+            <LegendDot color="bg-cat-blue rpg:bg-rpg-blue" label="Água" />
+            <LegendDot color="bg-cat-purple rpg:bg-rpg-purple" label="Sono" />
+            <LegendDot color="bg-growth rpg:bg-rpg-green" label="Movimento" />
+            <LegendDot color="bg-signal rpg:bg-rpg-orange" label="Humor" />
           </div>
         </Card>
       </div>
@@ -312,7 +344,7 @@ export function SaudePage() {
       <div className="-mx-4 mb-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
         <HealthStatCard
           tone="blue"
-          icon={<Droplets size={16} />}
+          icon={isRpg ? <FlaskRound size={16} /> : <Droplets size={16} />}
           label="Água"
           value={`${(waterTotal / 1000).toFixed(1)} / ${(WATER_GOAL_ML / 1000).toFixed(1)} L`}
           badge={waterBadge}
@@ -341,7 +373,7 @@ export function SaudePage() {
         />
         <HealthStatCard
           tone="amber"
-          icon={<Sun size={16} />}
+          icon={isRpg ? <Zap size={16} /> : <Sun size={16} />}
           label="Humor & energia"
           value={mood[0] ? `${mood[0].mood} / 5` : avgMoodWeek !== null ? `${avgMoodWeek.toFixed(1)} / 5` : "-- / 5"}
           badge={moodBadge}
@@ -436,7 +468,7 @@ export function SaudePage() {
 
       {toast && (
         <button
-          className="fixed bottom-5 right-5 z-[70] rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-left text-sm font-semibold shadow-card dark:border-ink-border dark:bg-ink-raised"
+          className="fixed bottom-5 right-5 z-[70] rounded-xl border border-paper-border bg-paper-raised px-4 py-3 text-left text-sm font-semibold shadow-card dark:border-ink-border dark:bg-ink-raised rpg:rpg-panel rpg:rpg-panel-success"
           onClick={() => setToast(null)}
         >
           {toast}
