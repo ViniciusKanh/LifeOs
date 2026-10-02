@@ -255,7 +255,7 @@ export function SignalsNow({ signals, isLoading }: { signals: SignalCard[]; isLo
       ) : signals.length === 0 ? (
         <p className="text-sm text-slate">Registre sono, humor ou água para ver seus sinais aqui.</p>
       ) : (
-        <ul className="divide-y divide-paper-border/70 dark:divide-ink-border/60">
+        <ul className="divide-y divide-paper-border/70 dark:divide-ink-border/60 rpg:divide-rpg-border/50 rpg:lg:grid rpg:lg:grid-cols-2 rpg:lg:gap-x-6 rpg:lg:divide-y-0">
           {signals.slice(0, 6).map((s, i) => {
             const Icon = SIGNAL_ICON[s.key] ?? Activity;
             const st = SIGNAL_STATUS[s.status];
@@ -267,7 +267,7 @@ export function SignalsNow({ signals, isLoading }: { signals: SignalCard[]; isLo
                   <span className="text-sm font-semibold w-16 text-right">
                     {s.value === null ? "—" : `${s.value}${s.unit ? ` ${s.unit}` : ""}`}
                   </span>
-                  <span className={`w-24 text-center rounded-full px-2 py-0.5 text-[11px] font-medium ${st.className}`}>{st.label}</span>
+                  <span className={`w-24 text-center rounded-full px-2 py-0.5 text-[11px] font-medium rpg:rounded-[3px] rpg:font-pixel ${st.className}`}>{st.label}</span>
                 </Link>
               </motion.li>
             );

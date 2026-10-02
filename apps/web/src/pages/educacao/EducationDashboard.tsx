@@ -27,6 +27,7 @@ import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { PhaseBadge } from "./EducacaoPage";
 import type { AcademicProject, AcademicProjectKind, Course, Education, EducationKind, Subject, Task } from "@/types";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 
 const SUBJECT_STATUS: Subject["status"][] = ["Planejada", "Em andamento", "Concluída", "Trancada"];
 const ACADEMIC_COLUMNS = ["Backlog", "A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
@@ -193,7 +194,8 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
       </div>
 
       {/* ===================== Cabeçalho da formação ===================== */}
-      <Card className="p-5 md:p-6 mb-4">
+      {/* No RPG: a formação é a "jornada acadêmica" em destaque (moldura dourada) */}
+      <Card className="p-5 md:p-6 mb-4 rpg:rpg-panel-gold">
         <div className="flex flex-col lg:flex-row lg:items-center gap-5">
           <div className="flex items-start gap-4 flex-1 min-w-0">
             <IconBadge tone="blue" size={56} icon={<GraduationCap size={26} />} />
@@ -211,7 +213,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
                   <span>Progresso por tarefas</span>
                   <span className="font-semibold text-inherit">{education.progress_pct}%</span>
                 </div>
-                <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
                   <div
                     className="h-full rounded-full bg-signal transition-[width] duration-700"
                     style={{ width: `${education.progress_pct}%` }}
@@ -242,7 +244,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
 
           {/* Largura total no mobile (empilhado); volta a ser um cartão
               lateral compacto a partir de lg, quando fica ao lado do resto */}
-          <div className="rounded-2xl p-4 bg-gradient-to-br from-brand-500 to-cat-purple text-white w-full lg:max-w-[220px] shrink-0">
+          <div className="rounded-2xl p-4 bg-gradient-to-br from-brand-500 to-cat-purple text-white w-full lg:max-w-[220px] shrink-0 rpg:rpg-parchment rpg:italic">
             <p className="text-xs leading-relaxed">&ldquo;{fallbackQuoteOfTheDay()}&rdquo;</p>
           </div>
         </div>
@@ -257,10 +259,10 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
             <IconBadge tone="blue" size={34} icon={<BookOpen size={16} />} />
             <span className="text-xs text-slate">Disciplinas ativas</span>
           </div>
-          <p className="font-display font-bold text-xl leading-none">
+          <p className="font-display font-bold text-xl leading-none rpg:font-pixel">
             {dashboard.stats?.activeSubjects ?? 0} / {dashboard.stats?.totalSubjects ?? 0}
           </p>
-          <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
+          <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg mt-3">
             <div
               className="h-full rounded-full bg-cat-blue"
               style={{
@@ -280,7 +282,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
             <IconBadge tone="amber" size={34} icon={<Calendar size={16} />} />
             <span className="text-xs text-slate">Próximos prazos</span>
           </div>
-          <p className="font-display font-bold text-xl leading-none">{dashboard.stats?.upcomingDeadlines ?? 0}</p>
+          <p className="font-display font-bold text-xl leading-none rpg:font-pixel">{dashboard.stats?.upcomingDeadlines ?? 0}</p>
           <p className="text-[10px] text-slate mt-1.5">nos próximos 30 dias</p>
         </Card>
 
@@ -290,7 +292,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
             <span className="text-xs text-slate">Horas de estudo</span>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <p className="font-display font-bold text-xl leading-none">{formatHM(dashboard.stats?.studyMinutesThisWeek ?? 0)}</p>
+            <p className="font-display font-bold text-xl leading-none rpg:font-pixel">{formatHM(dashboard.stats?.studyMinutesThisWeek ?? 0)}</p>
             {dashboard.stats?.studyChangePct !== null && dashboard.stats?.studyChangePct !== undefined && (
               <span className={`text-[10px] font-semibold ${dashboard.stats.studyChangePct >= 0 ? "text-growth" : "text-drop"}`}>
                 {dashboard.stats.studyChangePct >= 0 ? "↑" : "↓"} {Math.abs(dashboard.stats.studyChangePct)}%
@@ -305,7 +307,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
             <IconBadge tone="purple" size={34} icon={<Trophy size={16} />} />
             <span className="text-xs text-slate">Projetos acadêmicos</span>
           </div>
-          <p className="font-display font-bold text-xl leading-none">{dashboard.stats?.activeAcademicProjects ?? 0}</p>
+          <p className="font-display font-bold text-xl leading-none rpg:font-pixel">{dashboard.stats?.activeAcademicProjects ?? 0}</p>
           <p className="text-[10px] text-slate mt-1.5">em andamento</p>
         </Card>
       </div>
@@ -314,7 +316,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold">Disciplinas do semestre</p>
+            <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Disciplinas do semestre</p>
             {dashboard.subjects.length > SUBJECTS_LIMIT && (
               <button onClick={() => setShowAllSubjects((v) => !v)} className="text-xs text-brand-600 dark:text-brand-500 font-medium">
                 {showAllSubjects ? "Ver menos" : "Ver todas →"}
@@ -332,7 +334,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
                     <p className="text-xs font-semibold truncate">{s.name}</p>
                     {s.professor && <p className="text-[10px] text-slate truncate">{s.professor}</p>}
                     <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
                         <div
                           className={`h-full rounded-full ${SUBJECT_TONES[idx % SUBJECT_TONES.length] === "blue" ? "bg-cat-blue" : SUBJECT_TONES[idx % SUBJECT_TONES.length] === "purple" ? "bg-cat-purple" : SUBJECT_TONES[idx % SUBJECT_TONES.length] === "green" ? "bg-cat-green" : SUBJECT_TONES[idx % SUBJECT_TONES.length] === "pink" ? "bg-cat-pink" : "bg-cat-teal"}`}
                           style={{ width: `${s.progress_pct}%` }}
@@ -355,7 +357,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
 
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold">Próximos prazos</p>
+            <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Próximos prazos</p>
             {(pendingDeadlines.length > DEADLINES_LIMIT || completedDeadlines.length > COMPLETED_DEADLINES_LIMIT) && (
               <button onClick={() => setShowAllDeadlines((v) => !v)} className="text-xs text-brand-600 dark:text-brand-500 font-medium">
                 {showAllDeadlines ? "Ver menos" : "Ver todos →"}
@@ -426,7 +428,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
 
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold">Horas de estudo na semana</p>
+            <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Horas de estudo na semana</p>
             <button onClick={() => setStudyModalOpen(true)} className="text-xs text-brand-600 dark:text-brand-500 font-medium">
               + Registrar
             </button>
@@ -465,7 +467,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold">Meu semestre</p>
+            <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Meu semestre</p>
             <div className="flex items-center gap-3">
               <button onClick={() => setAddingStep((v) => !v)} className="text-xs text-brand-600 dark:text-brand-500 font-medium">
                 + Etapa
@@ -574,7 +576,7 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
 
       <div id="projetos-academicos" className="mt-8 space-y-8">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm font-semibold">TCC, dissertação e projetos acadêmicos</p>
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>TCC, dissertação e projetos acadêmicos</p>
           <Button variant="secondary" onClick={() => setNewProjectOpen(true)}>
             <Plus size={14} /> Novo projeto acadêmico
           </Button>
@@ -688,7 +690,7 @@ function ModalWrap({ title, onClose, children }: { title: string; onClose: () =>
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{title}</p>
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>{title}</p>
           <button onClick={onClose} className="text-slate">
             <X size={18} />
           </button>
@@ -998,7 +1000,7 @@ function AcademicProjectKanban({ project }: { project: AcademicProject }) {
               <span>Tarefas concluídas</span>
               <span>{project.progress_pct}%</span>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+            <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
               <div className="h-full rounded-full bg-growth" style={{ width: `${project.progress_pct}%` }} />
             </div>
           </div>

@@ -7,6 +7,7 @@ import { inputClass } from "@/components/ui/Modal";
 import { useGoals } from "@/hooks/useGoals";
 import { LIFE_AREAS, LIFE_AREA_BY_KEY, cycleLabel } from "@/utils/lifeOsLabels";
 import type { DirectionGoal, LifeArea } from "@/types";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 
 type Horizon = "year" | "quarter" | "month" | "none";
 
@@ -154,7 +155,7 @@ export function CycleGoals({ goals, cycles }: { goals: DirectionGoal[]; cycles: 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <Target size={16} className="text-cat-purple" />
-          <p className="text-sm font-semibold">Metas por ciclo</p>
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Metas por ciclo</p>
         </div>
         <div role="tablist" aria-label="Horizonte" className="flex gap-1 overflow-x-auto max-w-full">
           {tabs.map((t) => (

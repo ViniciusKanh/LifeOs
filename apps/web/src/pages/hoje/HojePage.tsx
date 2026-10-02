@@ -34,7 +34,8 @@ import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { TodayCockpit } from "@/components/today/TodayCockpit";
-import { RpgNextQuest, RpgTodayHero, RpgTodaySignals, RpgTodayStats } from "@/components/today/RpgTodaySections";
+import { RpgNextAction, RpgTodayHero, RpgTodaySignals } from "@/components/today/RpgTodaySections";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RpgCopilotPanel } from "@/components/dashboard/RpgDashboardSections";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useTheme } from "@/hooks/useTheme";
@@ -143,43 +144,11 @@ export function HojePage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full">
       {isRpg ? (
-        <>
+        // Tema RPG: herói do dia + Signals lado a lado (ordem da referência).
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-4 mb-4">
           <RpgTodayHero prioritiesPct={prioritiesPct} quote={findNavItem("/hoje")?.item.quote ?? DEFAULT_QUOTE} />
-          <div className="mt-4">
-            <RpgTodayStats
-              prioritiesDone={prioritiesDone}
-              prioritiesTotal={prioritiesTotal}
-              prioritiesPct={prioritiesPct}
-              overdue={overdueCount}
-              habitsDone={habitsDone}
-              habitsTotal={habits.length}
-              waterLabel={`${((health?.waterMl ?? 0) / 1000).toFixed(1)} / ${(WATER_GOAL_ML / 1000).toFixed(1)} L`}
-              waterPct={waterPct}
-              onWater={() => void addWater(250)}
-              sleepLabel={health?.lastSleepMinutes ? formatHM(health.lastSleepMinutes) : "—"}
-              sleepPct={health?.lastSleepMinutes ? sleepPct : null}
-              energy={health?.mood?.energy ?? null}
-            />
-          </div>
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 mb-4">
-            <RpgNextQuest
-              task={focusTasks[0] ?? null}
-              estimateMinutes={focusTasks[0] ? tasks.find((t) => t.id === focusTasks[0].id)?.estimate_minutes ?? null : null}
-              onComplete={(id) => moveTask({ id, status: "Concluído" })}
-            />
-            <RpgCopilotPanel
-              title="Insight do dia"
-              text={copilot.text}
-              isLoading={copilot.isLoading}
-              error={copilot.error}
-              onRegenerate={() => void copilot.regenerate()}
-              isRegenerating={copilot.isRegenerating}
-            />
-          </div>
-          <div className="mb-4">
-            <RpgTodaySignals />
-          </div>
-        </>
+          <RpgTodaySignals />
+        </div>
       ) : (
         <>
         <p className="font-display font-bold text-2xl">Hoje</p>
@@ -255,7 +224,7 @@ export function HojePage() {
               <div className="flex items-center gap-2.5 min-w-0">
                 <IconBadge tone="amber" size={32} icon={<Star size={15} />} />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold">Prioridades</p>
+                  <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Prioridades</p>
                   <p className="text-xs text-slate">Suas tarefas mais importantes para hoje.</p>
                 </div>
               </div>
@@ -297,7 +266,7 @@ export function HojePage() {
             <div className="flex items-center gap-2.5 mb-1">
               <IconBadge tone="pink" size={32} icon={<Flame size={15} />} />
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Foque nisso agora</p>
+                <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Foque nisso agora</p>
                 <p className="text-xs text-slate">Priorização automática, calculada por prazo, prioridade e dependências.</p>
               </div>
             </div>
@@ -351,7 +320,7 @@ export function HojePage() {
 
           <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-semibold">Bem-estar</p>
+              <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Bem-estar</p>
               <Link to="/saude" className="text-xs text-brand-600 dark:text-brand-500 font-medium">
                 Ver mais →
               </Link>
@@ -405,7 +374,7 @@ export function HojePage() {
               <div className="flex items-center gap-2.5">
                 <IconBadge tone="blue" size={32} icon={<CalendarClock size={15} />} />
                 <div>
-                  <p className="text-sm font-semibold">Compromissos de hoje</p>
+                  <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Compromissos de hoje</p>
                   <p className="text-xs text-slate">Sua agenda para o dia.</p>
                 </div>
               </div>
@@ -433,12 +402,20 @@ export function HojePage() {
             )}
           </Card>
 
+          {isRpg && (
+            <RpgNextAction
+              task={focusTasks[0] ?? null}
+              estimateMinutes={focusTasks[0] ? tasks.find((t) => t.id === focusTasks[0].id)?.estimate_minutes ?? null : null}
+              onStart={(id) => moveTask({ id, status: "Em Andamento" })}
+            />
+          )}
+
           <Card className="p-5">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2.5">
                 <IconBadge tone="blue" size={32} icon={<HistoryIcon size={15} />} />
                 <div>
-                  <p className="text-sm font-semibold">Linha do dia</p>
+                  <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Linha do dia</p>
                   <p className="text-xs text-slate">O que você já registrou hoje.</p>
                 </div>
               </div>
@@ -471,7 +448,7 @@ export function HojePage() {
 
           <Card className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold">Hábitos rápidos</p>
+              <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Hábitos rápidos</p>
               <Link to="/habitos" className="text-xs text-brand-600 dark:text-brand-500 font-medium">
                 Ver todos →
               </Link>
@@ -511,6 +488,19 @@ export function HojePage() {
           </Card>
         </div>
       </div>
+
+      {isRpg && (
+        <div className="mt-4">
+          <RpgCopilotPanel
+            title="Insight do dia"
+            text={copilot.text}
+            isLoading={copilot.isLoading}
+            error={copilot.error}
+            onRegenerate={() => void copilot.regenerate()}
+            isRegenerating={copilot.isRegenerating}
+          />
+        </div>
+      )}
 
       {taskModalOpen && (
         <TaskModal

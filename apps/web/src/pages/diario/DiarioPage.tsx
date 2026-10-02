@@ -38,6 +38,7 @@ import {
   Tag,
   Map as MapIcon,
   PenLine,
+  NotebookPen,
 } from "lucide-react";
 import {
   useJournal,
@@ -70,7 +71,9 @@ import { useGoals } from "@/hooks/useGoals";
 import { useProjects } from "@/hooks/useProjects";
 import { contextService } from "@/services/contextService";
 import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/DashboardInsights";
-import { Card, EmptyState } from "@/components/ui/primitives";
+import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { RPGButton } from "@/components/rpg/RPGButton";
+import { useTheme } from "@/hooks/useTheme";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
 import { API_URL } from "@/services/api";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
@@ -557,7 +560,7 @@ const MOMENT_META: Record<JournalMomentKind, { icon: React.ReactNode; label: str
 function JournalMomentsRow({ moments, addedIds, onInsert }: { moments: JournalMoment[]; addedIds: Set<string>; onInsert: (moment: JournalMoment) => void }) {
   if (moments.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 mb-4">
+    <div className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 mb-4 rpg:rpg-panel">
       <div className="flex items-center gap-2 mb-2">
         <Sparkles size={14} className="text-cat-purple" />
         <p className="text-xs font-semibold">Sugestões de hoje</p>
@@ -844,7 +847,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       {/* Masthead — inspirado no app Diário/Journal da Apple: gradiente suave do
           ícone do app, navegação de dia limpa, e um painel de Insights reais
           sobre o hábito de escrever (sequência, recorde, entradas, palavras) */}
-      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/15 via-cat-purple/[0.06] to-transparent p-4 sm:p-6 sm:pt-5">
+      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/15 via-cat-purple/[0.06] to-transparent p-4 sm:p-6 sm:pt-5 rpg:rpg-panel rpg:border-rpg-pink/50 rpg:p-4 sm:rpg:p-6">
         <div className="flex items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-1.5 shrink-0">
             <button
@@ -863,7 +866,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
             </button>
           </div>
           <div className="text-center min-w-0">
-            <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none">Diário</p>
+            <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none rpg:font-rpg rpg:text-rpg-pink">Diário</p>
             <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
           </div>
           <button
@@ -1228,13 +1231,15 @@ const TABS: Array<{ key: ViewKey; label: string }> = [
 
 function TabBar({ active, onChange }: { active: ViewKey; onChange: (t: ViewKey) => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-1 w-fit overflow-x-auto">
+    <div role="tablist" aria-label="Seções do Diário" className="flex items-center gap-1 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-1 w-fit max-w-full overflow-x-auto rpg:rpg-panel rpg:p-1">
       {TABS.map((tab) => (
         <button
           key={tab.key}
+          role="tab"
+          aria-selected={active === tab.key}
           onClick={() => onChange(tab.key)}
           className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-            active === tab.key ? "bg-white dark:bg-ink-raised text-cat-pink shadow-sm" : "text-slate hover:text-inherit"
+            active === tab.key ? "bg-white dark:bg-ink-raised text-cat-pink shadow-sm rpg:bg-rpg-pink/20" : "text-slate hover:text-inherit"
           }`}
         >
           {tab.label}
@@ -1651,8 +1656,8 @@ function EntryCard({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onOpen();
       }}
-      className={`w-full text-left cursor-pointer rounded-2xl border bg-paper-raised dark:bg-ink-raised p-4 sm:p-5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99] ${
-        isToday ? "border-cat-pink/40 ring-1 ring-cat-pink/15" : "border-paper-border dark:border-ink-border"
+      className={`w-full text-left cursor-pointer rounded-2xl border bg-paper-raised dark:bg-ink-raised p-4 sm:p-5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99] rpg:rpg-panel rpg:p-4 sm:rpg:p-5 ${
+        isToday ? "border-cat-pink/40 ring-1 ring-cat-pink/15 rpg:border-rpg-pink/60" : "border-paper-border dark:border-ink-border"
       }`}
     >
       <EntryCardMedia day={day} onOpenLightbox={onOpenLightbox} />
@@ -1772,7 +1777,7 @@ function OnThisDaySection({ onOpenDay }: { onOpenDay: (date: string) => void }) 
           <button
             key={day.date}
             onClick={() => onOpenDay(day.date)}
-            className="snap-start shrink-0 w-56 text-left rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3.5 shadow-card dark:shadow-card-dark transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99]"
+            className="snap-start shrink-0 w-56 text-left rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3.5 shadow-card dark:shadow-card-dark rpg:rpg-panel rpg:p-3.5 transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99]"
           >
             <div className="flex items-center gap-2 mb-1">
               <CalendarDays size={12} className="text-cat-pink shrink-0" />
@@ -1925,13 +1930,13 @@ function JournalFeedTab({
           {!hasTodayEntry && !favoritesOnly && !journalFilter && (
             <button
               onClick={() => onOpenDay(today)}
-              className="w-full text-left rounded-2xl border border-dashed border-cat-pink/30 bg-cat-pink/5 dark:bg-cat-pink/10 p-4 sm:p-5 hover:bg-cat-pink/10 transition-colors flex items-center gap-3"
+              className="w-full text-left rounded-2xl border border-dashed border-cat-pink/30 bg-cat-pink/5 dark:bg-cat-pink/10 p-4 sm:p-5 hover:bg-cat-pink/10 transition-colors flex items-center gap-3 rpg:rpg-panel rpg:border-dashed rpg:border-rpg-pink/60 rpg:p-4 sm:rpg:p-5"
             >
               <span className="shrink-0 w-11 h-11 rounded-full bg-cat-pink/15 flex items-center justify-center">
                 <Plus size={18} className="text-cat-pink" />
               </span>
               <div>
-                <p className="text-sm font-semibold">Continuar escrevendo</p>
+                <p className="text-sm font-semibold rpg:font-pixel rpg:uppercase rpg:tracking-wide rpg:text-rpg-pink">Continuar escrevendo</p>
                 <p className="text-xs text-slate mt-0.5">Você ainda não escreveu nada hoje.</p>
               </div>
             </button>
@@ -2741,6 +2746,7 @@ export function DiarioPage() {
 }
 
 function DiarioPageContent() {
+  const { isRpg } = useTheme();
   const [view, setView] = useState<ViewKey | "day">("feed");
   const [date, setDate] = useState(todayIso());
   const [journalFilter, setJournalFilter] = useState<string | null>(null);
@@ -2773,19 +2779,34 @@ function DiarioPageContent() {
 
   return (
     <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div>
-          <p className="text-2xl sm:text-3xl font-bold tracking-tight text-cat-pink">Diário</p>
-          <p className="text-xs sm:text-sm text-slate mt-0.5">Reflita sobre os momentos do seu dia.</p>
+      {isRpg ? (
+        <PageHeader
+          banner="diario"
+          tone="pink"
+          icon={<NotebookPen size={24} />}
+          title="Diário"
+          subtitle="Crônicas da sua jornada — reflita sobre os momentos do seu dia."
+          actions={
+            <RPGButton variant="pink" onClick={() => openDay(todayIso())}>
+              <Plus size={15} /> Nova entrada
+            </RPGButton>
+          }
+        />
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div>
+            <p className="text-2xl sm:text-3xl font-bold tracking-tight text-cat-pink">Diário</p>
+            <p className="text-xs sm:text-sm text-slate mt-0.5">Reflita sobre os momentos do seu dia.</p>
+          </div>
+          <button
+            onClick={() => openDay(todayIso())}
+            className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 active:scale-95 transition-all shadow-sm"
+          >
+            <Plus size={15} />
+            Nova entrada
+          </button>
         </div>
-        <button
-          onClick={() => openDay(todayIso())}
-          className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 active:scale-95 transition-all shadow-sm"
-        >
-          <Plus size={15} />
-          Nova entrada
-        </button>
-      </div>
+      )}
 
       <div className="mb-5">
         <TabBar active={view} onChange={setView} />

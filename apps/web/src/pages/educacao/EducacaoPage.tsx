@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Plus, X } from "lucide-react";
+import { GraduationCap, Plus, X } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme";
 import { useEducations } from "@/hooks/useEducations";
-import { Button, EmptyState, Field } from "@/components/ui/primitives";
+import { Button, EmptyState, Field, PageHeader } from "@/components/ui/primitives";
 import { EducationDashboard } from "./EducationDashboard";
 import type { EducationKind, EducationPhase } from "@/types";
 
@@ -47,6 +48,7 @@ export function PhaseBadge({ phase }: { phase: EducationPhase }) {
 export function EducacaoPage() {
   const { educations, isLoading, createEducation } = useEducations();
   const [modalOpen, setModalOpen] = useState(false);
+  const { isRpg } = useTheme();
 
   // Formação em destaque no painel: a primeira ainda ativa (não
   // concluída); se todas estiverem concluídas, cai na mais recente.
@@ -72,15 +74,30 @@ export function EducacaoPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
-      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-        <div>
-          <p className="font-display font-bold text-2xl">Educação</p>
-          <p className="text-sm text-slate mt-0.5">Organize seus estudos, disciplinas, projetos e prazos em um só lugar.</p>
+      {isRpg ? (
+        <PageHeader
+          banner="educacao"
+          tone="blue"
+          icon={<GraduationCap size={24} />}
+          title="Educação"
+          subtitle="Organize seus estudos, disciplinas, projetos e prazos em um só lugar."
+          actions={
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus size={15} /> Nova formação
+            </Button>
+          }
+        />
+      ) : (
+        <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+          <div>
+            <p className="font-display font-bold text-2xl">Educação</p>
+            <p className="text-sm text-slate mt-0.5">Organize seus estudos, disciplinas, projetos e prazos em um só lugar.</p>
+          </div>
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus size={15} /> Nova formação
+          </Button>
         </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <Plus size={15} /> Nova formação
-        </Button>
-      </div>
+      )}
 
       {!isLoading && educations.length === 0 && (
         <EmptyState

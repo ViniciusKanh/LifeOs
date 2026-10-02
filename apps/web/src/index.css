@@ -29,6 +29,7 @@
   --rpg-red: 229 72 77;
   --rpg-orange: 245 158 11;
   --rpg-cyan: 34 211 238;
+  --rpg-pink: 236 92 160;
   --rpg-text: 241 234 216;
   --rpg-text-muted: 154 166 196;
   --rpg-border: 92 70 38;
@@ -217,6 +218,7 @@
   .rpg-btn-blue { background: linear-gradient(rgb(var(--rpg-blue)), rgb(var(--rpg-blue) / 0.75)); }
   .rpg-btn-success { background: linear-gradient(rgb(var(--rpg-green)), rgb(var(--rpg-green) / 0.72)); color: rgb(var(--rpg-bg)); }
   .rpg-btn-danger { background: linear-gradient(rgb(var(--rpg-red)), rgb(var(--rpg-red) / 0.75)); }
+  .rpg-btn-pink { background: linear-gradient(rgb(var(--rpg-pink)), rgb(var(--rpg-pink) / 0.75)); }
   .rpg-btn-gold { background: linear-gradient(rgb(var(--rpg-gold-light)), rgb(var(--rpg-gold))); color: rgb(var(--rpg-parchment-ink)); }
   .rpg-btn-secondary,
   .rpg .lifeos-btn-secondary { background: rgb(var(--rpg-panel-light)); border-color: rgb(var(--rpg-border)); }
@@ -299,4 +301,12 @@
   border: 2px solid rgb(var(--rpg-border)) !important;
   border-radius: 4px !important;
   color: rgb(var(--rpg-text));
+}
+
+/* Abas no tema RPG: qualquer aba ativa (role=tab / aria-selected ou aria-current)
+   ganha a moldura dourada do design system, sem estilo próprio por tela. */
+.rpg [role="tab"][aria-selected="true"],
+.rpg .rpg-tab-active {
+  box-shadow: inset 0 0 0 2px rgb(var(--rpg-gold) / 0.85);
+  color: rgb(var(--rpg-gold-light));
 }

@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from "react";
 import clsx from "clsx";
 
-export type RPGButtonVariant = "primary" | "blue" | "secondary" | "danger" | "success" | "gold" | "ghost";
+export type RPGButtonVariant = "primary" | "blue" | "pink" | "secondary" | "danger" | "success" | "gold" | "ghost";
 
 /** Botão RPG (borda de 2px, highlight superior, afunda no clique). */
 export function RPGButton({ variant = "primary", className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: RPGButtonVariant }) {

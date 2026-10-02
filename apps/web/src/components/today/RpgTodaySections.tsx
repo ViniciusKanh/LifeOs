@@ -1,142 +1,93 @@
 import { Link } from "react-router-dom";
-import { CalendarClock, CalendarDays, CheckCircle2, Clock, Droplets, ListChecks, Moon, Plus, Repeat, Search, Swords, Zap } from "lucide-react";
+import { CalendarDays, Play } from "lucide-react";
 import type { FocusTask } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useSignals } from "@/hooks/useSignals";
 import { SignalsNow } from "@/components/dashboard/DashboardSections";
-import { RPGAvatarButton, RPGButton, RPGPageHeader, RPGPanel, RPGProgressRing, RPGQuestCard, RPGStatCard, rpgButtonClass } from "@/components/rpg";
+import { RPGAvatarButton, RPGBadge, RPGButton, RPGPanel, PRIORITY_TONE, RPG_BANNERS } from "@/components/rpg";
 
 /* ============================================================
-   Tela Hoje no tema RPG. Só apresentação: todos os valores chegam
-   prontos da HojePage (mesmos hooks e services da tela clássica).
+   Tela Hoje no tema RPG ("Centro da Jornada do Dia"). Só apresentação:
+   tudo chega pronto da HojePage (mesmos hooks e services da tela clássica).
    ============================================================ */
+
+/** Saudação pelo horário local do aparelho. */
+function greeting(now: Date) {
+  const h = now.getHours();
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+}
 
 export function RpgTodayHero({ prioritiesPct, quote }: { prioritiesPct: number; quote: string }) {
   const { user } = useAuth();
-  const date = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+  const now = new Date();
+  const date = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
   return (
-    <RPGPageHeader
-      banner="hoje"
-      leading={<RPGAvatarButton />}
-      title={`Olá, ${user?.name?.split(" ")[0] ?? ""}!`}
-      subtitle={<span className="italic">&ldquo;{quote}&rdquo;</span>}
-      footnote={<span className="inline-flex items-center gap-1.5 first-letter:uppercase"><CalendarDays size={13} aria-hidden /> {date}</span>}
-      aside={
-        <div className="rpg-parchment mx-1.5 my-1.5 flex items-center gap-4 px-4 py-3 w-full sm:w-[300px]">
-          <RPGProgressRing value={prioritiesPct} size={88} tone="green" label="Progresso do dia" />
-          <div className="min-w-0">
-            <p className="font-pixel text-xs font-bold uppercase tracking-[0.12em] text-rpg-ink/80">Progresso do dia</p>
-            <p className="mt-1 text-sm text-rpg-ink">
-              <strong className="font-pixel text-lg">{prioritiesPct}%</strong> das prioridades concluídas
-            </p>
-          </div>
+    <header className="rpg-panel rpg-panel-gold relative overflow-hidden h-full min-h-[200px]">
+      <img src={RPG_BANNERS.hoje} alt="" aria-hidden decoding="async" className="pixelated absolute inset-0 w-full h-full object-cover object-[50%_75%]" />
+      <div className="absolute inset-0 bg-gradient-to-r from-rpg-bg/90 via-rpg-bg/50 to-transparent" aria-hidden />
+      <div className="relative flex items-end justify-between gap-4 p-4 sm:p-6 h-full">
+        <div className="min-w-0 max-w-md">
+          <h1 className="rpg-title text-2xl sm:text-3xl font-bold leading-tight">
+            {greeting(now)}, {user?.name?.split(" ")[0] ?? ""}!
+          </h1>
+          <p className="mt-1 text-sm text-rpg-text/90 first-letter:uppercase">{date}</p>
+          <blockquote className="mt-4 border-2 border-rpg-border bg-rpg-bg/80 px-4 py-3 text-sm italic" style={{ borderRadius: 4 }}>
+            &ldquo;{quote}&rdquo;
+          </blockquote>
+          <p className="mt-3 inline-flex items-center gap-1.5 font-pixel text-xs text-rpg-gold-light">
+            <CalendarDays size={13} aria-hidden /> {prioritiesPct}% das prioridades concluídas
+          </p>
         </div>
-      }
-    />
-  );
-}
-
-/** Próxima missão: a tarefa de maior Priority Score (useFocusTasks). */
-export function RpgNextQuest({ task, estimateMinutes, onComplete }: { task: FocusTask | null; estimateMinutes: number | null; onComplete: (id: string) => void }) {
-  const due = task?.dueDate ? new Date(`${task.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "") : "Sem prazo";
-  return (
-    <RPGPanel title="Sua próxima missão" icon={<Swords size={14} />} variant="quest" className="h-full">
-      <RPGQuestCard
-        label="Missão em destaque"
-        title={task?.title ?? null}
-        priority={task?.priority}
-        reasons={task?.reasons.join(" · ") || null}
-        facts={[
-          { icon: <CalendarClock size={15} />, label: "Prazo", value: due },
-          { icon: <Clock size={15} />, label: "Tempo estimado", value: estimateMinutes ? `${estimateMinutes} min` : "Não estimado" },
-          { icon: <Zap size={15} />, label: "Prioridade", value: task?.priority ?? "—" },
-        ]}
-        emptyText="Tudo em dia. Escolha uma tarefa para começar ou planeje o próximo passo."
-        actions={
-          task ? (
-            <>
-              <RPGButton variant="success" onClick={() => onComplete(task.id)} className="flex-1">
-                <CheckCircle2 size={16} /> Concluir missão
-              </RPGButton>
-              <Link to={`/tarefas?task=${task.id}`} className={rpgButtonClass("blue", "flex-1")}>
-                <Search size={15} /> Ver detalhes
-              </Link>
-            </>
-          ) : (
-            <Link to="/tarefas?nova=1" className={rpgButtonClass("primary")}>
-              <Plus size={15} /> Nova tarefa
-            </Link>
-          )
-        }
-      />
-    </RPGPanel>
-  );
-}
-
-export function RpgTodayStats({
-  prioritiesDone,
-  prioritiesTotal,
-  prioritiesPct,
-  overdue,
-  habitsDone,
-  habitsTotal,
-  waterLabel,
-  waterPct,
-  onWater,
-  sleepLabel,
-  sleepPct,
-  energy,
-}: {
-  prioritiesDone: number;
-  prioritiesTotal: number;
-  prioritiesPct: number;
-  overdue: number;
-  habitsDone: number;
-  habitsTotal: number;
-  waterLabel: string;
-  waterPct: number;
-  onWater: () => void;
-  sleepLabel: string;
-  sleepPct: number | null;
-  energy: number | null;
-}) {
-  const habitsPct = habitsTotal > 0 ? Math.round((habitsDone / habitsTotal) * 100) : 0;
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-4">
-      <RPGStatCard icon={<ListChecks size={17} />} label="Prioridades" value={`${prioritiesDone} / ${prioritiesTotal}`} tone="orange" pct={prioritiesPct} caption={overdue > 0 ? `${prioritiesPct}% concluídas · ${overdue} vencida(s)` : `${prioritiesPct}% concluídas`} to="/tarefas" />
-      <RPGStatCard icon={<Repeat size={17} />} label="Hábitos" value={`${habitsDone} / ${habitsTotal}`} tone="green" pct={habitsPct} caption={`${habitsPct}% concluídos`} to="/habitos" />
-      <RPGStatCard
-        icon={<Droplets size={17} />}
-        label="Água"
-        value={waterLabel}
-        tone="blue"
-        pct={Math.min(waterPct, 100)}
-        caption={`${waterPct}% da meta`}
-        action={
-          <RPGButton variant="blue" onClick={onWater} className="w-full !py-1.5 !text-xs" aria-label="Registrar 250 ml de água">
-            <Plus size={13} /> 250 ml
-          </RPGButton>
-        }
-      />
-      <RPGStatCard icon={<Moon size={17} />} label="Sono" value={sleepLabel} tone="purple" pct={sleepPct ?? undefined} caption={sleepPct != null ? `${sleepPct}% da meta` : "sem registro"} to="/saude" />
-      <div className="col-span-2 md:col-span-1">
-        <RPGStatCard
-          icon={<Zap size={17} />}
-          label="Energia"
-          value={energy != null ? `${energy} / 5` : "—"}
-          tone="gold"
-          pct={energy != null ? (energy / 5) * 100 : undefined}
-          caption={energy != null ? (energy >= 4 ? "nível bom hoje" : energy >= 3 ? "nível médio" : "nível baixo") : "registre em Saúde"}
-          to="/saude"
-        />
+        <div className="hidden sm:block shrink-0">
+          <RPGAvatarButton size="lg" mobileSize="md" />
+        </div>
       </div>
-    </div>
+    </header>
   );
 }
 
-/** Signals do dia — mesmo componente/serviço do Dashboard. */
+/** Signals do dia — mesmo componente e serviço do Dashboard (nada recalculado aqui). */
 export function RpgTodaySignals() {
   const { data, isLoading } = useSignals("today");
   return <SignalsNow signals={data?.signals ?? []} isLoading={isLoading} />;
 }
 
+/**
+ * Próxima melhor ação: a 1ª tarefa do Priority Score (useFocusTasks), com o
+ * motivo calculado no backend. "Iniciar" move a tarefa para Em Andamento.
+ */
+export function RpgNextAction({
+  task,
+  estimateMinutes,
+  onStart,
+}: {
+  task: FocusTask | null;
+  estimateMinutes: number | null;
+  onStart: (id: string) => void;
+}) {
+  return (
+    <RPGPanel title="Próxima melhor ação" icon={<Play size={14} />} variant="legendary">
+      {!task ? (
+        <p className="text-sm text-rpg-muted">Nenhuma tarefa em aberto agora.</p>
+      ) : (
+        <div className="flex items-center gap-3 border-2 border-rpg-border bg-rpg-bg/50 px-3 py-2.5" style={{ borderRadius: 4 }}>
+          <div className="flex-1 min-w-0">
+            <Link to={`/tarefas?task=${task.id}`} className="block text-sm font-semibold hover:underline line-clamp-2">
+              {task.title}
+            </Link>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-rpg-muted">
+              <RPGBadge tone={PRIORITY_TONE[task.priority] ?? "muted"}>{task.priority}</RPGBadge>
+              {estimateMinutes ? <span>~ {estimateMinutes} min</span> : null}
+              {task.reasons[0] && <span className="truncate">{task.reasons[0]}</span>}
+            </div>
+          </div>
+          {task.status !== "Em Andamento" && (
+            <RPGButton onClick={() => onStart(task.id)} className="shrink-0 !py-2">
+              Iniciar
+            </RPGButton>
+          )}
+        </div>
+      )}
+    </RPGPanel>
+  );
+}

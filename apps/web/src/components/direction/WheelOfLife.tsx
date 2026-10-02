@@ -4,6 +4,7 @@ import { Loader2, SlidersHorizontal } from "lucide-react";
 import { Button, Card } from "@/components/ui/primitives";
 import { LIFE_AREAS } from "@/utils/lifeOsLabels";
 import type { LifeArea, WheelData } from "@/types";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 
 /**
  * Roda da vida: nota 0–10 por área (autoavaliação, dado declarado pelo
@@ -52,7 +53,7 @@ export function WheelOfLife({
     <Card className="p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
         <div>
-          <p className="text-sm font-semibold">Roda da vida</p>
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Roda da vida</p>
           <p className="text-[11px] text-slate">
             {hasAny ? `Sua autoavaliação${lastDate ? ` de ${new Date(`${lastDate}T00:00:00`).toLocaleDateString("pt-BR")}` : ""} — 0 a 10 por área.` : "Dê uma nota de 0 a 10 para cada área e veja onde está o desequilíbrio."}
           </p>

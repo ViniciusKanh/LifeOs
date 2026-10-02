@@ -218,6 +218,7 @@ const RPG_TONE_ICON: Record<RpgTone, string> = {
   red: "text-rpg-red",
   orange: "text-rpg-orange",
   cyan: "text-rpg-cyan",
+  pink: "text-rpg-pink",
   muted: "text-rpg-muted",
 };
 

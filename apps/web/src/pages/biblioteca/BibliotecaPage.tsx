@@ -18,6 +18,7 @@ import { useBooks, useIsbnLookup } from "@/hooks/useBooks";
 import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import type { BookCreateInput } from "@/services/libraryService";
 import type { Book, BookLookupResult, BookStatus } from "@/types";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 
 const STATUS_TABS: Array<{ value: BookStatus | "Todos"; label: string }> = [
   { value: "Todos", label: "Todos" },
@@ -119,6 +120,8 @@ export function BibliotecaPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
       <PageHeader
+        banner="biblioteca"
+        tone="orange"
         icon={<BookOpen size={20} />}
         title="Biblioteca"
         subtitle="Seus livros, ideias e aprendizados em um só lugar."
@@ -137,15 +140,17 @@ export function BibliotecaPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-5">
-            <div className="flex gap-1.5 flex-wrap">
+            <div role="tablist" aria-label="Status dos livros" className="flex gap-1.5 flex-wrap">
               {STATUS_TABS.map((tab) => (
                 <button
                   key={tab.value}
+                  role="tab"
+                  aria-selected={statusFilter === tab.value}
                   onClick={() => setStatusFilter(tab.value)}
-                  className={`text-xs rounded-full px-3 py-1.5 border font-semibold transition-colors ${
+                  className={`text-xs rounded-full px-3 py-1.5 border font-semibold transition-colors rpg:rounded-[3px] rpg:border-2 ${
                     statusFilter === tab.value
-                      ? "bg-signal border-signal text-white"
-                      : "border-paper-border dark:border-ink-border text-slate bg-paper-raised dark:bg-ink-raised"
+                      ? "bg-signal border-signal text-white rpg:bg-rpg-orange/25 rpg:border-rpg-gold"
+                      : "border-paper-border dark:border-ink-border text-slate bg-paper-raised dark:bg-ink-raised rpg:border-rpg-border rpg:bg-rpg-panel"
                   }`}
                 >
                   {tab.label}
@@ -215,8 +220,9 @@ export function BibliotecaPage() {
                 const pct = progressPct(book);
                 return (
                   <Link key={book.id} to={`/biblioteca/${book.id}`}>
-                    <Card className="p-3 h-full flex flex-col hover:border-brand-500/50 hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                      <div className="aspect-[2/3] rounded-lg overflow-hidden mb-2 flex items-center justify-center bg-gradient-to-br from-brand-500/10 to-signal/10 dark:from-brand-500/15 dark:to-signal/15">
+                    <Card className="p-3 h-full flex flex-col hover:border-brand-500/50 hover:shadow-lg hover:-translate-y-0.5 transition-all rpg:hover:border-rpg-gold/70">
+                      {/* Capa real do livro: nunca pixelizada; no RPG só ganha moldura bronze */}
+                      <div className="aspect-[2/3] rounded-lg overflow-hidden mb-2 flex items-center justify-center rpg:border-2 rpg:border-rpg-bronze bg-gradient-to-br from-brand-500/10 to-signal/10 dark:from-brand-500/15 dark:to-signal/15">
                         {book.cover_url ? (
                           <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
                         ) : (
@@ -227,7 +233,7 @@ export function BibliotecaPage() {
                       {book.author && <p className="text-xs text-slate mt-0.5 line-clamp-1">{book.author}</p>}
 
                       <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full mt-2 self-start ${
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full mt-2 self-start rpg:rounded-[2px] rpg:font-pixel rpg:uppercase rpg:tracking-wide ${
                           book.status === "Lendo"
                             ? "bg-growth/10 text-growth"
                             : book.status === "Concluído"
@@ -244,7 +250,7 @@ export function BibliotecaPage() {
 
                       {pct !== null && (
                         <div className="flex items-center gap-2 mt-2">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
                             <div className={`h-full rounded-full ${book.status === "Concluído" ? "bg-growth" : "bg-signal"}`} style={{ width: `${pct}%` }} />
                           </div>
                           <span className="text-[10px] text-slate shrink-0">{pct}%</span>
@@ -299,7 +305,7 @@ export function BibliotecaPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <IconBadge tone="teal" size={30} icon={<BookOpen size={14} />} />
-                <p className="text-sm font-semibold">Leitura atual</p>
+                <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Leitura atual</p>
               </div>
             </div>
             {!currentlyReading ? (
@@ -320,7 +326,7 @@ export function BibliotecaPage() {
                     <>
                       <p className="text-[11px] text-slate mt-1.5">Página {currentlyReading.current_page} de {currentlyReading.total_pages}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
+                        <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
                           <div className="h-full rounded-full bg-growth" style={{ width: `${readingProgress}%` }} />
                         </div>
                         <span className="text-[10px] text-slate shrink-0">{readingProgress}%</span>
@@ -362,7 +368,7 @@ export function BibliotecaPage() {
           <Card className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <IconBadge tone="purple" size={30} icon={<Bookmark size={14} />} />
-              <p className="text-sm font-semibold">Atividade recente</p>
+              <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Atividade recente</p>
             </div>
             {activity.length === 0 ? (
               <p className="text-xs text-slate">Nenhuma atividade registrada ainda.</p>
@@ -400,7 +406,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{title}</p>
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>{title}</p>
           <button onClick={onClose} className="text-slate">
             <X size={18} />
           </button>

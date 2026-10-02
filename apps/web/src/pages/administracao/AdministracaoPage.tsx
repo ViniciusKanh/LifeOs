@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGStatCard } from "@/components/rpg/RPGStatCard";
 import { motion } from "motion/react";
 import { AlertTriangle, Archive, CalendarClock, CheckCircle2, FileText, FolderLock, Plus, Search, X } from "lucide-react";
 import { Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -26,6 +28,7 @@ const GROUPS: Array<{ key: string; label: string; test: (i: LifeAdminItem) => bo
 export function AdministracaoPage() {
   const [showArchived, setShowArchived] = useState(false);
   const { items, isLoading, isError, create, update, remove, markDone, removeHistory } = useLifeAdmin(showArchived);
+  const { isRpg } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [kind, setKind] = useState<KindFilter>("todos");
   const [category, setCategory] = useState<LifeAdminCategory | null>(null);
@@ -100,6 +103,8 @@ export function AdministracaoPage() {
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
       <PageHeader
+        banner="administracao"
+        tone="orange"
         icon={<FolderLock size={20} />}
         title="Administração da vida"
         subtitle="Vencimentos, manutenções, documentos e contas — lembrados antes de virarem problema."
@@ -118,12 +123,15 @@ export function AdministracaoPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {[
-          { label: "Atrasados", value: counts.overdue, icon: <AlertTriangle size={16} />, tone: "text-drop bg-drop/10" },
-          { label: "Vencem em breve", value: counts.soon, icon: <CalendarClock size={16} />, tone: "text-cat-purple bg-cat-purple/10" },
-          { label: "Em dia", value: counts.ok, icon: <CheckCircle2 size={16} />, tone: "text-growth bg-growth/10" },
-          { label: "Com arquivo guardado", value: counts.files, icon: <FileText size={16} />, tone: "text-cat-blue bg-cat-blue/10" },
+          { label: "Atrasados", value: counts.overdue, icon: <AlertTriangle size={16} />, tone: "text-drop bg-drop/10", rpgTone: "red" as const },
+          { label: "Vencem em breve", value: counts.soon, icon: <CalendarClock size={16} />, tone: "text-cat-purple bg-cat-purple/10", rpgTone: "orange" as const },
+          { label: "Em dia", value: counts.ok, icon: <CheckCircle2 size={16} />, tone: "text-growth bg-growth/10", rpgTone: "green" as const },
+          { label: "Com arquivo guardado", value: counts.files, icon: <FileText size={16} />, tone: "text-cat-blue bg-cat-blue/10", rpgTone: "blue" as const },
         ].map((s, i) => (
           <motion.div key={s.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            {isRpg ? (
+              <RPGStatCard icon={s.icon} label={s.label} value={String(s.value)} tone={s.rpgTone} />
+            ) : (
             <Card className="p-3.5 flex items-center gap-3">
               <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.tone}`}>{s.icon}</span>
               <div>
@@ -131,12 +139,13 @@ export function AdministracaoPage() {
                 <p className="text-[11px] text-slate mt-1">{s.label}</p>
               </div>
             </Card>
+            )}
           </motion.div>
         ))}
       </div>
 
-      <div className="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-3 bg-paper/85 dark:bg-ink/85 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-2 shadow-card">
+      <div className="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-3 bg-paper/85 dark:bg-ink/85 backdrop-blur rpg:bg-rpg-bg/90 rpg:backdrop-blur-none">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-2 shadow-card rpg:rpg-panel">
           <div role="tablist" aria-label="Tipo" className="flex gap-1 overflow-x-auto max-w-full">
             {(["todos", ...Object.keys(LIFE_ADMIN_KIND)] as KindFilter[]).map((k) => (
               <button
@@ -145,7 +154,7 @@ export function AdministracaoPage() {
                 aria-selected={kind === k}
                 onClick={() => setKind(k)}
                 className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  kind === k ? "bg-brand-500 text-white" : "text-slate hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                  kind === k ? "bg-brand-500 text-white rpg:bg-rpg-orange/25" : "text-slate hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
                 }`}
               >
                 {k === "todos" ? "Todos" : `${LIFE_ADMIN_KIND[k].emoji} ${LIFE_ADMIN_KIND[k].label}`}
@@ -242,7 +251,7 @@ export function AdministracaoPage() {
             if (list.length === 0) return null;
             return (
               <section key={g.key}>
-                <h2 className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wide mb-2 ${g.key === "attention" ? "text-drop" : "text-slate"}`}>
+                <h2 className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wide mb-2 rpg:font-pixel rpg:text-[12px] ${g.key === "attention" ? "text-drop rpg:text-rpg-red" : "text-slate rpg:text-rpg-gold"}`}>
                   {g.label}
                   <span className="rounded-full px-1.5 py-0.5 text-[10px] bg-black/[0.05] dark:bg-white/[0.08]">{list.length}</span>
                 </h2>

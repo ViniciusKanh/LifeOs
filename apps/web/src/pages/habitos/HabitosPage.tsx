@@ -19,13 +19,15 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis } from "recharts";
 import { Link } from "react-router-dom";
 import { useHabitEntriesRange, useHabits } from "@/hooks/useHabits";
 import { useHabitsInsight } from "@/hooks/useCopilot";
-import { Button, Card, Field, IconBadge, EmptyState } from "@/components/ui/primitives";
+import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/components/ui/primitives";
 import type { Habit, HabitTaskGenerationInput } from "@/types";
 import { HabitTaskGeneratorModal } from "@/components/habits/HabitTaskGeneratorModal";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 
 /* ------------------------------------------------------------------ */
 /* Categorias predefinidas de hábito — mesmo padrão visual (ícone +    */
@@ -216,25 +218,41 @@ export function HabitosPage() {
   }, [stats]);
   const hasBestTimesData = bestTimesData.buckets.some((b) => b.value > 0);
 
+  const { isRpg } = useTheme();
+  const habitActions = (
+    <div className="flex items-center gap-2">
+      {habits.length > 0 && (
+        <Button variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Escolha período, hábitos, carga, prioridade e projeto das tarefas geradas">
+          {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
+          Gerar tarefas
+        </Button>
+      )}
+      <Button onClick={() => setModalOpen(true)}>
+        <Plus size={14} /> Novo hábito
+      </Button>
+    </div>
+  );
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <p className="font-display font-semibold text-2xl">Hábitos</p>
-          <p className="text-sm text-slate mt-1">Pequenas ações, grandes resultados. Construa a vida que você deseja, um dia de cada vez.</p>
+      {isRpg ? (
+        <PageHeader
+          banner="habitos"
+          tone="green"
+          icon={<Flame size={24} />}
+          title="Hábitos"
+          subtitle="Pequenas ações, grandes resultados. Construa a vida que você deseja, um dia de cada vez."
+          actions={habitActions}
+        />
+      ) : (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <p className="font-display font-semibold text-2xl">Hábitos</p>
+            <p className="text-sm text-slate mt-1">Pequenas ações, grandes resultados. Construa a vida que você deseja, um dia de cada vez.</p>
+          </div>
+          {habitActions}
         </div>
-        <div className="flex items-center gap-2">
-          {habits.length > 0 && (
-            <Button variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Escolha período, hábitos, carga, prioridade e projeto das tarefas geradas">
-              {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
-              Gerar tarefas
-            </Button>
-          )}
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus size={14} /> Novo hábito
-          </Button>
-        </div>
-      </div>
+      )}
 
       {habits.length === 0 ? (
         <EmptyState
@@ -251,7 +269,7 @@ export function HabitosPage() {
               <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Flame size={18} />} tone="amber" />
                 <div className="min-w-0">
-                  <p className="text-lg sm:text-xl font-semibold leading-tight">{diasLabel(stats?.currentStreakMax ?? 0)}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight rpg:font-pixel">{diasLabel(stats?.currentStreakMax ?? 0)}</p>
                   <p className="text-xs text-slate leading-tight">Sequência atual</p>
                 </div>
               </div>
@@ -261,7 +279,7 @@ export function HabitosPage() {
                 <IconBadge icon={<Target size={18} />} tone="blue" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-lg sm:text-xl font-semibold leading-tight">
+                    <p className="text-lg sm:text-xl font-semibold leading-tight rpg:font-pixel">
                       {completedToday} / {totalHabits}
                     </p>
                     {completedDelta !== null && completedDelta !== 0 && (
@@ -273,7 +291,7 @@ export function HabitosPage() {
                   <p className="text-xs text-slate leading-tight">Hábitos concluídos hoje</p>
                 </div>
               </div>
-              <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-2">
+              <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-2 rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
                 <div className="h-full rounded-full bg-cat-blue" style={{ width: `${totalHabits ? (completedToday / totalHabits) * 100 : 0}%` }} />
               </div>
             </Card>
@@ -281,7 +299,7 @@ export function HabitosPage() {
               <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Activity size={18} />} tone="purple" />
                 <div className="min-w-0">
-                  <p className="text-lg sm:text-xl font-semibold leading-tight">{totalHabits}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight rpg:font-pixel">{totalHabits}</p>
                   <p className="text-xs text-slate leading-tight">Hábitos ativos</p>
                 </div>
               </div>
@@ -291,7 +309,7 @@ export function HabitosPage() {
                 <IconBadge icon={<TrendingUp size={18} />} tone="teal" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-lg sm:text-xl font-semibold leading-tight">{consistency?.ratePct ?? 0}%</p>
+                    <p className="text-lg sm:text-xl font-semibold leading-tight rpg:font-pixel">{consistency?.ratePct ?? 0}%</p>
                     {consistency?.changePct !== null && consistency?.changePct !== undefined && consistency.changePct !== 0 && (
                       <span className={`text-[11px] font-semibold ${consistency.changePct > 0 ? "text-growth" : "text-drop"}`}>
                         {consistency.changePct > 0 ? "↑" : "↓"}{Math.abs(consistency.changePct)}%
@@ -306,7 +324,7 @@ export function HabitosPage() {
               <div className="flex items-center gap-2.5 sm:gap-3">
                 <IconBadge icon={<Sparkles size={18} />} tone="pink" />
                 <div className="min-w-0">
-                  <p className="text-lg sm:text-xl font-semibold leading-tight">{diasLabel(stats?.bestStreakMax ?? 0)}</p>
+                  <p className="text-lg sm:text-xl font-semibold leading-tight rpg:font-pixel">{diasLabel(stats?.bestStreakMax ?? 0)}</p>
                   <p className="text-xs text-slate leading-tight">Melhor sequência</p>
                 </div>
               </div>
@@ -318,7 +336,7 @@ export function HabitosPage() {
             <div className="space-y-4 min-w-0">
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-sm font-semibold">Meus hábitos</p>
+                  <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Meus hábitos</p>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {(["Todos", "Hoje", "Concluidos", "EmRisco"] as FilterTab[]).map((tab) => {
@@ -382,16 +400,19 @@ export function HabitosPage() {
                                   key={d.iso}
                                   disabled={isFuture}
                                   onClick={() => checkIn({ id: habit.id, entryDate: d.iso, count: done ? 0 : habit.target_count })}
-                                  className="w-7 h-7 mx-auto flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                                  className={`w-7 h-7 mx-auto flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed rpg:rounded-[3px] rpg:border-2 ${done ? "rpg:border-rpg-green rpg:bg-rpg-green/15" : "rpg:border-rpg-border rpg:bg-rpg-bg/60"}`}
                                   title={d.iso}
+                                  aria-label={`${habit.name} em ${d.iso}: ${done ? "feito" : "não feito"}`}
+                                  aria-pressed={done}
                                 >
-                                  {done ? <CheckCircle2 size={20} className="text-growth" /> : <Circle size={18} className="text-paper-border dark:text-ink-border" />}
+                                  {/* No RPG o dia cumprido vira um "selo" verde */}
+                                  {done ? <CheckCircle2 size={20} className="text-growth rpg:text-rpg-green" /> : <Circle size={18} className="text-paper-border dark:text-ink-border rpg:opacity-0" />}
                                 </button>
                               );
                             })}
                             <div className="flex items-center justify-center gap-1 text-xs text-slate">
-                              <Flame size={12} className={summary?.currentStreak ? "text-signal" : ""} />
-                              {diasLabel(summary?.currentStreak ?? 0)}
+                              <Flame size={12} className={summary?.currentStreak ? "text-signal rpg:text-rpg-orange" : ""} />
+                              <span className="rpg:font-pixel">{diasLabel(summary?.currentStreak ?? 0)}</span>
                             </div>
                             <div className="flex items-center justify-center gap-2">
                               <button onClick={() => setEditingHabit(habit)} className="text-slate hover:text-inherit">
@@ -444,7 +465,7 @@ export function HabitosPage() {
 
                 <Card className="p-5">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-semibold">Melhores horários</p>
+                    <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Melhores horários</p>
                     {bestTimesData.peakLabel && (
                       <span className="text-[10px] font-semibold text-cat-blue bg-cat-blue/10 rounded-full px-2 py-0.5 flex items-center gap-1">
                         <Clock size={10} /> {bestTimesData.peakLabel}
@@ -473,7 +494,7 @@ export function HabitosPage() {
             <div className="space-y-4">
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold">Minha consistência</p>
+                  <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Minha consistência</p>
                   <span className="text-[11px] text-slate">Últimos 30 dias</span>
                 </div>
                 {heatmapWeeks.length > 0 ? (
@@ -482,7 +503,7 @@ export function HabitosPage() {
                       {heatmapWeeks.map((wk, wi) => (
                         <div key={wi} className="flex flex-col gap-1.5">
                           {wk.map((d) => (
-                            <div key={d.date} title={`${d.date}: ${d.completed}/${d.total}`} className={`w-4 h-4 rounded-sm ${heatmapColor(d.ratio)}`} />
+                            <div key={d.date} title={`${d.date}: ${d.completed}/${d.total}`} className={`w-4 h-4 rounded-sm rpg:rounded-[2px] rpg:ring-1 rpg:ring-black/50 ${heatmapColor(d.ratio)}`} />
                           ))}
                         </div>
                       ))}
@@ -525,7 +546,7 @@ export function HabitosPage() {
                 <div className="flex items-center gap-2.5 mb-3">
                   <IconBadge tone="pink" size={34} icon={<Sparkles size={15} />} />
                   <div>
-                    <p className="text-sm font-semibold">Insights da sua jornada</p>
+                    <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Insights da sua jornada</p>
                     <p className="text-xs text-slate">Análise da IA sobre sequências e consistência.</p>
                   </div>
                 </div>
@@ -630,7 +651,7 @@ function HabitoModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{habit ? "Editar hábito" : "Novo hábito"}</p>
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>{habit ? "Editar hábito" : "Novo hábito"}</p>
           <button onClick={onClose} className="text-slate">
             <X size={18} />
           </button>

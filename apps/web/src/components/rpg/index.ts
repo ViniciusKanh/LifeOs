@@ -11,3 +11,4 @@ export { RPGStatCard } from "./RPGStatCard";
 export { RPGQuestCard } from "./RPGQuestCard";
 export { RPGPageHeader } from "./RPGPageHeader";
 export * from "./rpgAssets";
+export { RPGIconSlot } from "./RPGIconSlot";

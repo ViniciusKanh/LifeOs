@@ -1,5 +1,9 @@
 import React from "react";
 import clsx from "clsx";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGPageHeader } from "@/components/rpg/RPGPageHeader";
+import { RPGIconSlot } from "@/components/rpg/RPGIconSlot";
+import type { RpgBanner, RpgTone } from "@/components/rpg/rpgAssets";
 
 /* ============================================================
    Design system mínimo do LifeOS. Todo componente novo deve
@@ -242,12 +246,32 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  banner,
+  tone,
 }: {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** No tema RPG, com banner, vira o RPGPageHeader (mesmo conteúdo). */
+  banner?: RpgBanner;
+  /** Cor semântica do ícone no RPG (ex.: rosa no Diário). */
+  tone?: RpgTone;
 }) {
+  const { isRpg } = useTheme();
+  if (isRpg && banner) {
+    return (
+      <RPGPageHeader
+        banner={banner}
+        size="md"
+        className="mb-5"
+        leading={icon ? <RPGIconSlot icon={icon} tone={tone} /> : undefined}
+        title={title}
+        subtitle={subtitle}
+        actions={actions}
+      />
+    );
+  }
   return (
     <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
       <div className="flex items-center gap-3">

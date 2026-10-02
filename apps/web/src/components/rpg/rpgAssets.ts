@@ -30,16 +30,22 @@ export function rpgAvatar(id: RpgAvatarId | null | undefined) {
   return RPG_AVATARS.find((a) => a.id === id) ?? RPG_AVATARS[0];
 }
 
-export type RpgBanner = "dashboard" | "hoje" | "tarefas" | "saude";
+export type RpgBanner = "dashboard" | "hoje" | "tarefas" | "saude" | "diario" | "notas" | "habitos" | "biblioteca" | "educacao" | "administracao";
 export const RPG_BANNERS: Record<RpgBanner, string> = {
   dashboard: `${BASE}/banners/dashboard.webp`,
   hoje: `${BASE}/banners/hoje.webp`,
   tarefas: `${BASE}/banners/tarefas.webp`,
   saude: `${BASE}/banners/saude.webp`,
+  diario: `${BASE}/banners/diario.webp`,
+  notas: `${BASE}/banners/notas.webp`,
+  habitos: `${BASE}/banners/habitos.webp`,
+  biblioteca: `${BASE}/banners/biblioteca.webp`,
+  educacao: `${BASE}/banners/educacao.webp`,
+  administracao: `${BASE}/banners/administracao.webp`,
 };
 
 /** Tons do design system RPG → classes Tailwind dos tokens (sem hex solto). */
-export type RpgTone = "gold" | "purple" | "blue" | "green" | "red" | "orange" | "cyan" | "muted";
+export type RpgTone = "gold" | "purple" | "blue" | "green" | "red" | "orange" | "cyan" | "pink" | "muted";
 
 export const RPG_TONE_TEXT: Record<RpgTone, string> = {
   gold: "text-rpg-gold-light",
@@ -49,6 +55,7 @@ export const RPG_TONE_TEXT: Record<RpgTone, string> = {
   red: "text-rpg-red",
   orange: "text-rpg-orange",
   cyan: "text-rpg-cyan",
+  pink: "text-rpg-pink",
   muted: "text-rpg-muted",
 };
 
@@ -60,6 +67,7 @@ export const RPG_TONE_BG: Record<RpgTone, string> = {
   red: "bg-rpg-red",
   orange: "bg-rpg-orange",
   cyan: "bg-rpg-cyan",
+  pink: "bg-rpg-pink",
   muted: "bg-rpg-muted",
 };
 
@@ -71,8 +79,12 @@ export const RPG_TONE_SOFT: Record<RpgTone, string> = {
   red: "bg-rpg-red/15 border-rpg-red/55 text-rpg-red",
   orange: "bg-rpg-orange/15 border-rpg-orange/50 text-rpg-orange",
   cyan: "bg-rpg-cyan/15 border-rpg-cyan/50 text-rpg-cyan",
+  pink: "bg-rpg-pink/15 border-rpg-pink/50 text-rpg-pink",
   muted: "bg-rpg-panel-light border-rpg-border text-rpg-muted",
 };
 
 /** Prioridade de tarefa → tom (Baixa verde, Média âmbar, Alta vermelho). */
 export const PRIORITY_TONE: Record<string, RpgTone> = { Alta: "red", Média: "orange", Baixa: "green", Crítica: "red" };
+
+/** Classes de título de seção no tema RPG (pixel, dourado, caixa alta) — somadas ao título clássico. */
+export const RPG_SECTION_TITLE = "rpg:font-pixel rpg:uppercase rpg:tracking-[0.08em] rpg:text-[13px] rpg:text-rpg-gold-light";

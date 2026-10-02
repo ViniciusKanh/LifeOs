@@ -9,7 +9,12 @@ import { NoteLinkPicker, LINK_TYPE_LABEL } from "@/components/notes/NoteLinkPick
 import { useNote, useNotes } from "@/hooks/useLifeOs";
 import { notesService } from "@/services/notesService";
 import { NOTE_KIND } from "@/utils/lifeOsLabels";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGBadge } from "@/components/rpg/RPGBadge";
+import type { RpgTone } from "@/components/rpg/rpgAssets";
 import type { NoteKind } from "@/types";
+
+const NOTE_RUNE_TONE: Record<NoteKind, RpgTone> = { nota: "blue", ideia: "gold", referencia: "purple" };
 
 const AUTOSAVE_MS = 900;
 
@@ -112,7 +117,7 @@ function NoteEditor({ id, onBack, onDeleted, onOpen }: { id: string; onBack: () 
           }}
           maxLength={200}
           aria-label="Título"
-          className="w-full bg-transparent outline-none font-display text-2xl font-bold mb-2"
+          className="w-full bg-transparent outline-none font-display text-2xl font-bold mb-2 rpg:font-rpg rpg:text-rpg-gold-light"
           placeholder="Título"
         />
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
@@ -250,6 +255,7 @@ function NoteEditor({ id, onBack, onDeleted, onOpen }: { id: string; onBack: () 
  * editor à direita (no celular, uma coisa de cada vez).
  */
 export function NotasPage() {
+  const { isRpg } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const selected = searchParams.get("nota");
   const [q, setQ] = useState("");
@@ -321,6 +327,8 @@ export function NotasPage() {
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
       <PageHeader
+        banner="notas"
+        tone="gold"
         icon={<NotebookText size={20} />}
         title="Notas"
         subtitle="Seu segundo cérebro: ideias, referências e aprendizados ligados ao resto da sua vida."
@@ -344,7 +352,7 @@ export function NotasPage() {
                   key={k ?? "all"}
                   onClick={() => setKind(k)}
                   aria-pressed={kind === k}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium border ${kind === k ? "border-brand-500 bg-brand-500/10" : "border-paper-border dark:border-ink-border text-slate"}`}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium border rpg:rounded-[3px] ${kind === k ? "border-brand-500 bg-brand-500/10 rpg:border-rpg-gold rpg:bg-rpg-gold/10 rpg:text-rpg-gold-light" : "border-paper-border dark:border-ink-border text-slate"}`}
                 >
                   {k ? `${NOTE_KIND[k].emoji} ${NOTE_KIND[k].label}` : "Todas"}
                 </button>
@@ -378,10 +386,11 @@ export function NotasPage() {
                     <li key={n.id}>
                       <button
                         onClick={() => open(n.id)}
-                        className={`w-full text-left rounded-xl px-3 py-2.5 transition-colors ${selected === n.id ? "bg-brand-500/10 ring-1 ring-brand-500/30" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"}`}
+                        className={`w-full text-left rounded-xl px-3 py-2.5 transition-colors ${selected === n.id ? "bg-brand-500/10 ring-1 ring-brand-500/30 rpg:bg-rpg-purple/20 rpg:ring-2 rpg:ring-rpg-gold/70" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.04] rpg:hover:bg-rpg-panel-hover/60"}`}
                       >
                         <span className="flex items-center gap-1.5">
-                          <span className="text-xs">{NOTE_KIND[n.kind].emoji}</span>
+                          {/* No RPG o tipo vira uma "runa" (selo com texto) em vez do emoji */}
+                          {isRpg ? <RPGBadge tone={NOTE_RUNE_TONE[n.kind]}>{NOTE_KIND[n.kind].label}</RPGBadge> : <span className="text-xs">{NOTE_KIND[n.kind].emoji}</span>}
                           <span className="text-sm font-semibold truncate flex-1">{n.title}</span>
                           {n.pinned && <Pin size={11} className="text-signal shrink-0" />}
                         </span>

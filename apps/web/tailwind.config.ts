@@ -54,6 +54,7 @@ export default {
           red: "rgb(var(--rpg-red) / <alpha-value>)",
           orange: "rgb(var(--rpg-orange) / <alpha-value>)",
           cyan: "rgb(var(--rpg-cyan) / <alpha-value>)",
+          pink: "rgb(var(--rpg-pink) / <alpha-value>)",
           text: "rgb(var(--rpg-text) / <alpha-value>)",
           muted: "rgb(var(--rpg-text-muted) / <alpha-value>)",
           border: "rgb(var(--rpg-border) / <alpha-value>)",
