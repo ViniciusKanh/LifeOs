@@ -55,7 +55,7 @@ export function NotificationsBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`relative w-9 h-9 rounded-full flex items-center justify-center border transition-colors ${
+        className={`relative w-9 h-9 rounded-full flex items-center justify-center border transition-colors rpg:rounded-[4px] rpg:border-2 rpg:bg-rpg-panel rpg:text-rpg-gold-light ${
           hasHighAlert
             ? "border-drop/40 bg-drop/10 text-drop shadow-[0_0_0_4px_rgba(240,68,94,.08)] animate-pulse"
             : "border-paper-border dark:border-ink-border hover:bg-black/5 dark:hover:bg-white/10"

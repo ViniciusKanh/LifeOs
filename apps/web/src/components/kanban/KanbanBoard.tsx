@@ -22,6 +22,10 @@ export interface KanbanBoardProps<T> {
   columnAccent?: Record<string, string>;
   /** Chave para lembrar (neste navegador) quais colunas o usuário recolheu. */
   storageKey?: string;
+  /** Ícone opcional por coluna (tema RPG). */
+  columnIcon?: Record<string, ReactNode>;
+  /** Cabeçalho tingido com a cor da coluna (tema RPG). */
+  tintHeaders?: boolean;
 }
 
 const DEFAULT_ACCENT = "#7C4DFF";
@@ -58,6 +62,8 @@ export function KanbanBoard<T>({
   emptyHint,
   columnAccent,
   storageKey,
+  columnIcon,
+  tintHeaders = false,
 }: KanbanBoardProps<T>) {
   const reduce = useReducedMotion();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -207,16 +213,25 @@ export function KanbanBoard<T>({
                 {...common}
                 aria-label={`${col}: ${count} ${count === 1 ? "item" : "itens"}`}
                 className={`relative rounded-2xl flex flex-col min-w-0 transition-colors ${
-                  isOver ? "ring-2 ring-brand-500/60 bg-brand-500/[0.04]" : "bg-paper dark:bg-ink"
-                } border border-paper-border dark:border-ink-border`}
+                  isOver ? "ring-2 ring-brand-500/60 bg-brand-500/[0.04] rpg:ring-rpg-gold/70" : "bg-paper dark:bg-ink"
+                } border border-paper-border dark:border-ink-border rpg:rpg-panel rpg:bg-rpg-bg-2`}
               >
-                <span className="absolute inset-x-4 top-0 h-[3px] rounded-b-full" style={{ background: accent(col) }} aria-hidden />
-                <header className="flex items-center gap-2 px-3 pt-3.5 pb-2.5">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accent(col) }} />
-                  <span className="text-sm font-semibold truncate">{col}</span>
+                <span className="absolute inset-x-4 top-0 h-[3px] rounded-b-full rpg:inset-x-0 rpg:h-1 rpg:rounded-none" style={{ background: accent(col) }} aria-hidden />
+                <header
+                  className={`flex items-center gap-2 px-3 pt-3.5 pb-2.5 ${tintHeaders ? "mb-2 border-b-2" : ""}`}
+                  style={tintHeaders ? { background: `color-mix(in srgb, ${accent(col)} 26%, transparent)`, borderColor: accent(col) } : undefined}
+                >
+                  {columnIcon?.[col] ? (
+                    <span className="shrink-0" style={{ color: accent(col) }} aria-hidden>
+                      {columnIcon[col]}
+                    </span>
+                  ) : (
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accent(col) }} />
+                  )}
+                  <span className="text-sm font-semibold truncate rpg:font-pixel rpg:uppercase rpg:tracking-wide rpg:text-[13px]">{col}</span>
                   <span
                     className="text-[11px] font-bold rounded-full px-2 py-0.5 tabular-nums"
-                    style={{ background: `${accent(col)}1A`, color: accent(col) }}
+                    style={{ background: `color-mix(in srgb, ${accent(col)} 12%, transparent)`, color: accent(col) }}
                   >
                     {count}
                   </span>

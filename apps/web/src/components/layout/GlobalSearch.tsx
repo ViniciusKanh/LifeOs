@@ -275,7 +275,7 @@ export function DesktopGlobalSearch() {
         aria-label="Busca global e comandos"
         aria-expanded={open}
         role="combobox"
-        className="w-full rounded-full pl-10 pr-16 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 focus:shadow-glow-brand transition-all"
+        className="w-full rounded-full pl-10 pr-16 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 focus:shadow-glow-brand transition-all rpg:rounded-[4px] rpg:border-2 rpg:bg-rpg-bg rpg:border-rpg-border rpg:placeholder:text-rpg-muted rpg:focus:border-rpg-gold rpg:focus:shadow-none"
       />
       <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center gap-0.5 rounded-md border border-paper-border dark:border-ink-border px-1.5 py-0.5 text-[10px] font-sans text-slate">
         Ctrl K

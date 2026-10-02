@@ -90,7 +90,7 @@ export function AchievementHeaderPulse() {
         aria-expanded={open}
         aria-label="Conquistas"
         title={item?.title ?? "Conquistas"}
-        className={`flex h-9 min-w-9 max-w-[220px] items-center justify-center gap-2 rounded-full border px-2 sm:px-3 text-xs font-semibold transition-colors ${item ? "animate-pulse border-brand-500/30 bg-brand-500 text-white" : "border-paper-border text-slate hover:border-brand-500/50 hover:text-brand-600 dark:border-ink-border"}`}
+        className={`flex h-9 min-w-9 max-w-[220px] items-center justify-center gap-2 rounded-full border px-2 sm:px-3 text-xs font-semibold transition-colors rpg:rounded-[4px] rpg:border-2 rpg:border-rpg-border rpg:bg-rpg-panel rpg:text-rpg-text rpg:font-pixel rpg:[&>svg]:text-rpg-gold-light ${item ? "animate-pulse border-brand-500/30 bg-brand-500 text-white" : "border-paper-border text-slate hover:border-brand-500/50 hover:text-brand-600 dark:border-ink-border"}`}
       >
         <Trophy size={15} className="shrink-0" />
         <span className="hidden truncate sm:inline">

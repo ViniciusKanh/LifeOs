@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronRight, Menu, Moon, SunMedium, X } from "lucide-react";
+import { ChevronRight, Menu, X } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationsBell } from "./NotificationsBell";
@@ -20,6 +20,8 @@ import { DEFAULT_QUOTE, findNavItem, visibleGroups } from "./navConfig";
 import { AppScrollContext } from "./AppScrollContext";
 import { OfflineStatus } from "./OfflineStatus";
 import { HubTabs } from "./HubTabs";
+import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
+import { RPG_LOGO } from "@/components/rpg/rpgAssets";
 
 /**
  * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
@@ -59,11 +61,12 @@ function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () =
           >
             <div className="flex items-center justify-between h-16 px-4 border-b border-paper-border dark:border-ink-border">
               <div className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px]">
+                <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px] rpg:hidden">
                   <img src="/logo/icon-64.png" alt="" className="w-full h-full rounded-[10px] object-cover bg-white" />
                 </span>
+                <img src={RPG_LOGO.icon} alt="" loading="lazy" className="hidden rpg:block w-10 h-10 object-contain" />
                 <span className="leading-tight">
-                  <span className="block font-display font-bold">LifeOS</span>
+                  <span className="block font-display font-bold rpg:rpg-title">LifeOS</span>
                   <span className="block text-[10.5px] text-slate">Transforme sua rotina em progresso</span>
                 </span>
               </div>
@@ -82,7 +85,7 @@ function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () =
 }
 
 export function AppShell() {
-  const { isDark, setMode } = useTheme();
+  const { mode, cycle } = useTheme();
   const { isAdmin } = useAuth();
   const location = useLocation();
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
@@ -100,7 +103,7 @@ export function AppShell() {
   }, [location.pathname]);
 
   return (
-    <div className="app-shell fixed inset-0 w-full flex overflow-hidden bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2]">
+    <div className="app-shell fixed inset-0 w-full flex overflow-hidden bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] rpg:rpg-backdrop rpg:text-rpg-text">
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] rounded-lg px-3 py-2 bg-brand-600 text-white text-sm">
         Pular para o conteúdo
       </a>
@@ -108,7 +111,9 @@ export function AppShell() {
       <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} />
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
-        <header className="shrink-0 relative z-30 h-16 flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70">
+        <header className="shrink-0 relative z-30 h-16 flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70 rpg:bg-rpg-bg-2 rpg:backdrop-blur-none rpg:border-b-2 rpg:border-rpg-border">
+          {/* Filete dourado sob o cabeçalho — só no tema RPG */}
+          <div className="hidden rpg:block absolute inset-x-0 -bottom-[3px] rpg-ornament-line opacity-70" aria-hidden />
           <button
             onClick={() => setDrawerOpen(true)}
             className="md:hidden w-9 h-9 -ml-1 rounded-xl flex items-center justify-center text-slate hover:bg-black/5 dark:hover:bg-white/10"
@@ -118,8 +123,8 @@ export function AppShell() {
           </button>
 
           <div className="min-w-0 flex-1 md:flex-none md:w-auto lg:min-w-[220px]">
-            <nav aria-label="Trilha de navegação" className="flex items-center gap-1 text-[11px] text-slate leading-none">
-              <span className="hidden sm:inline">{current?.group.label ?? "LifeOS"}</span>
+            <nav aria-label="Trilha de navegação" className="flex items-center gap-1 text-[11px] text-slate leading-none rpg:font-pixel rpg:uppercase rpg:tracking-[0.14em] rpg:text-rpg-gold">
+              <span className="hidden sm:inline"><span className="hidden rpg:inline" aria-hidden>/ </span>{current?.group.label ?? "LifeOS"}</span>
               {isSubPage && current && (
                 <>
                   <ChevronRight size={11} className="hidden sm:inline" />
@@ -127,7 +132,7 @@ export function AppShell() {
                 </>
               )}
             </nav>
-            <p className="font-display font-semibold text-[15px] md:text-base leading-tight truncate mt-0.5">
+            <p className="font-display font-semibold text-[15px] md:text-base leading-tight truncate mt-0.5 rpg:rpg-title rpg:text-lg">
               {current ? (isSubPage ? "Detalhes" : current.tab && current.tab.to !== current.item.to ? current.tab.label : current.item.label) : "LifeOS"}
             </p>
           </div>
@@ -139,11 +144,11 @@ export function AppShell() {
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto md:ml-0">
             <MobileGlobalSearch />
             <button
-              onClick={() => setMode(isDark ? "light" : "dark")}
+              onClick={cycle}
               className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border"
-              aria-label={isDark ? "Ativar tema claro" : "Ativar tema escuro"}
+              aria-label={themeCycleLabel(mode)}
             >
-              {isDark ? <SunMedium size={16} /> : <Moon size={16} />}
+              <ThemeCycleIcon mode={mode} size={16} />
             </button>
             <AchievementHeaderPulse />
             <NotificationsBell />
@@ -159,9 +164,9 @@ export function AppShell() {
         {current?.item.tabs && <HubTabs tabs={current.item.tabs} activeTo={current.tab?.to ?? current.item.to} />}
         <div className="hidden xl:flex justify-end px-8 pt-3 -mb-1">
           <p className="text-xs italic text-slate">
-            <span className="text-brand-500 not-italic font-display font-semibold mr-0.5">&ldquo;</span>
+            <span className="text-brand-500 rpg:text-rpg-gold not-italic font-display font-semibold mr-0.5">&ldquo;</span>
             {quote}
-            <span className="text-brand-500 not-italic font-display font-semibold ml-0.5">&rdquo;</span>
+            <span className="text-brand-500 rpg:text-rpg-gold not-italic font-display font-semibold ml-0.5">&rdquo;</span>
           </p>
         </div>
 

@@ -2,6 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Tokens de cor (RGB sem vírgula para o Tailwind aplicar opacidade).
+   :root = temas Claro/Escuro. .rpg = tema RPG pixel art — a escala
+   "ink" e o "slate" são remapeados para o navy do RPG, então mesmo as
+   telas ainda não migradas ficam coerentes com o tema.
+   ============================================================ */
+:root {
+  --ink: 10 9 18;
+  --ink-raised: 21 18 31;
+  --ink-overlay: 31 27 46;
+  --ink-border: 46 41 65;
+  --slate: 110 115 145;
+
+  --rpg-bg: 7 11 28;
+  --rpg-bg-secondary: 10 16 38;
+  --rpg-panel: 14 22 48;
+  --rpg-panel-light: 21 32 66;
+  --rpg-panel-hover: 27 40 80;
+  --rpg-gold: 224 176 74;
+  --rpg-gold-light: 246 210 122;
+  --rpg-bronze: 138 96 46;
+  --rpg-purple: 139 92 246;
+  --rpg-blue: 59 130 246;
+  --rpg-green: 74 200 110;
+  --rpg-red: 229 72 77;
+  --rpg-orange: 245 158 11;
+  --rpg-cyan: 34 211 238;
+  --rpg-text: 241 234 216;
+  --rpg-text-muted: 154 166 196;
+  --rpg-border: 92 70 38;
+  --rpg-parchment: 233 214 172;
+  --rpg-parchment-ink: 62 42 20;
+  --rpg-shadow: 0 0 0 1px rgb(0 0 0 / 0.55), 0 10px 24px -12px rgb(0 0 0 / 0.8);
+  --rpg-shadow-inset: inset 0 1px 0 rgb(var(--rpg-gold) / 0.12), inset 0 0 0 1px rgb(var(--rpg-gold) / 0.06);
+}
+
+.rpg {
+  --ink: 7 11 28;
+  --ink-raised: 14 22 48;
+  --ink-overlay: 21 32 66;
+  --ink-border: 58 50 44;
+  --slate: 154 166 196;
+}
+
 @layer base {
   html, body, #root {
     height: 100%;
@@ -27,6 +71,9 @@
   }
   body {
     @apply bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] font-sans antialiased;
+  }
+  .rpg body {
+    @apply bg-rpg-bg text-rpg-text;
   }
   /* Foco de teclado sempre visível — nunca remover outline sem substituir */
   :focus-visible {
@@ -76,4 +123,166 @@
     content: attr(data-placeholder);
     @apply text-slate/60 float-left h-0 pointer-events-none;
   }
+}
+
+/* ============================================================
+   Tema RPG — peças visuais reutilizáveis (usadas pelos componentes
+   em components/rpg). Nada aqui é específico de uma tela.
+   ============================================================ */
+@layer components {
+  /* Fundo navy com textura quase imperceptível (tile 128px). */
+  .rpg-backdrop {
+    background-color: rgb(var(--rpg-bg));
+    background-image: url("/assets/rpg/backgrounds/bg-tile.png");
+    background-size: 128px 128px;
+    image-rendering: pixelated;
+  }
+  /* Painel: retângulo navy, borda bronze, filete dourado interno e
+     quatro "rebites" dourados nos cantos (gradientes, sem pseudo-elemento). */
+  .rpg-panel,
+  .rpg .lifeos-card {
+    position: relative;
+    border-radius: 4px;
+    border: 2px solid rgb(var(--rpg-border));
+    background-color: rgb(var(--rpg-panel));
+    background-image:
+      linear-gradient(rgb(var(--rpg-gold)), rgb(var(--rpg-gold))),
+      linear-gradient(rgb(var(--rpg-gold)), rgb(var(--rpg-gold))),
+      linear-gradient(rgb(var(--rpg-gold)), rgb(var(--rpg-gold))),
+      linear-gradient(rgb(var(--rpg-gold)), rgb(var(--rpg-gold)));
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
+    background-position: 2px 2px, calc(100% - 2px) 2px, 2px calc(100% - 2px), calc(100% - 2px) calc(100% - 2px);
+    box-shadow: var(--rpg-shadow), var(--rpg-shadow-inset);
+  }
+  .rpg-panel-gold {
+    border-color: rgb(var(--rpg-gold) / 0.75);
+    box-shadow: var(--rpg-shadow), inset 0 0 0 1px rgb(var(--rpg-bg)), inset 0 0 0 2px rgb(var(--rpg-gold) / 0.25);
+  }
+  .rpg-panel-legendary {
+    border-color: rgb(var(--rpg-purple) / 0.7);
+    box-shadow: var(--rpg-shadow), inset 0 0 0 1px rgb(var(--rpg-bg)), inset 0 0 18px -6px rgb(var(--rpg-purple) / 0.55);
+  }
+  .rpg-panel-success { border-color: rgb(var(--rpg-green) / 0.55); }
+  .rpg-panel-danger { border-color: rgb(var(--rpg-red) / 0.6); }
+
+  /* Pergaminho — só para missão principal e mensagens especiais. */
+  .rpg-parchment {
+    position: relative;
+    border-radius: 3px;
+    color: rgb(var(--rpg-parchment-ink));
+    background:
+      radial-gradient(120% 80% at 50% 50%, rgb(var(--rpg-parchment)) 55%, rgb(var(--rpg-parchment) / 0.86) 100%),
+      rgb(var(--rpg-parchment));
+    border: 2px solid rgb(var(--rpg-bronze));
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25), inset 0 0 24px rgb(120 80 30 / 0.35), var(--rpg-shadow);
+  }
+  .rpg-parchment::before,
+  .rpg-parchment::after {
+    content: "";
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    height: 8px;
+    border-radius: 3px;
+    background: linear-gradient(rgb(var(--rpg-gold-light)), rgb(var(--rpg-bronze)));
+    border: 1px solid rgb(var(--rpg-parchment-ink) / 0.6);
+  }
+  .rpg-parchment::before { top: -6px; }
+  .rpg-parchment::after { bottom: -6px; }
+
+  /* Filete ornamental (divisor de seção / borda da sidebar e topbar). */
+  .rpg-ornament-line {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgb(var(--rpg-gold) / 0.7) 15%, rgb(var(--rpg-gold-light)) 50%, rgb(var(--rpg-gold) / 0.7) 85%, transparent);
+  }
+
+  /* Botões RPG: borda de 2px, highlight superior e afundamento no clique. */
+  .rpg-btn,
+  .rpg .lifeos-btn {
+    @apply inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 transition-[filter,transform] disabled:opacity-50 disabled:cursor-not-allowed;
+    border-radius: 4px;
+    border: 2px solid rgb(0 0 0 / 0.55);
+    box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.18), inset 0 -3px 0 rgb(0 0 0 / 0.25), 0 2px 0 rgb(0 0 0 / 0.5);
+    color: rgb(var(--rpg-text));
+  }
+  .rpg-btn:hover:not(:disabled),
+  .rpg .lifeos-btn:hover:not(:disabled) { filter: brightness(1.12); }
+  .rpg-btn:active:not(:disabled),
+  .rpg .lifeos-btn:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 0 rgb(0 0 0 / 0.25), 0 1px 0 rgb(0 0 0 / 0.5);
+  }
+  .rpg-btn-primary,
+  .rpg .lifeos-btn-primary { background: linear-gradient(rgb(var(--rpg-purple)), rgb(var(--rpg-purple) / 0.78)); }
+  .rpg-btn-blue { background: linear-gradient(rgb(var(--rpg-blue)), rgb(var(--rpg-blue) / 0.75)); }
+  .rpg-btn-success { background: linear-gradient(rgb(var(--rpg-green)), rgb(var(--rpg-green) / 0.72)); color: rgb(var(--rpg-bg)); }
+  .rpg-btn-danger { background: linear-gradient(rgb(var(--rpg-red)), rgb(var(--rpg-red) / 0.75)); }
+  .rpg-btn-gold { background: linear-gradient(rgb(var(--rpg-gold-light)), rgb(var(--rpg-gold))); color: rgb(var(--rpg-parchment-ink)); }
+  .rpg-btn-secondary,
+  .rpg .lifeos-btn-secondary { background: rgb(var(--rpg-panel-light)); border-color: rgb(var(--rpg-border)); }
+  .rpg-btn-ghost,
+  .rpg .lifeos-btn-ghost { background: transparent; border-color: transparent; box-shadow: none; color: rgb(var(--rpg-text-muted)); }
+  .rpg-btn-ghost:hover:not(:disabled),
+  .rpg .lifeos-btn-ghost:hover:not(:disabled) { background: rgb(var(--rpg-panel-hover)); color: rgb(var(--rpg-text)); }
+
+  /* Barra de status estilo RPG: trilho escuro em moldura, preenchimento com
+     brilho superior e marcações a cada 10%. */
+  .rpg-bar {
+    position: relative;
+    height: 12px;
+    border-radius: 2px;
+    border: 2px solid rgb(0 0 0 / 0.6);
+    background: rgb(var(--rpg-bg));
+    box-shadow: 0 0 0 1px rgb(var(--rpg-border));
+    overflow: hidden;
+  }
+  .rpg-bar > span {
+    display: block;
+    height: 100%;
+    box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.28), inset 0 -2px 0 rgb(0 0 0 / 0.25);
+    transition: width 0.6s ease-out;
+  }
+  .rpg-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgb(0 0 0 / 0.35) calc(10% - 1px) 10%);
+    pointer-events: none;
+  }
+
+  .rpg-title {
+    font-family: Cinzel, Georgia, serif;
+    color: rgb(var(--rpg-gold-light));
+    text-shadow: 0 2px 0 rgb(0 0 0 / 0.65);
+    letter-spacing: 0.02em;
+  }
+
+  /* Só para arte em pixel: nunca em fotos, gráficos ou capas de livro. */
+  .pixelated {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Ajustes globais do tema RPG sobre as classes já usadas no app:
+   cantos retos de RPG em vez do arredondado SaaS, e cartões genéricos
+   ganham o tratamento de painel. Vale para todas as telas. */
+.rpg .rounded-xl,
+.rpg .rounded-2xl,
+.rpg .rounded-3xl,
+.rpg .rounded-xl2 {
+  border-radius: 5px;
+}
+.rpg .rounded-lg {
+  border-radius: 4px;
+}
+.rpg ::selection {
+  background: rgb(var(--rpg-purple) / 0.45);
+}
+.rpg :focus-visible {
+  --tw-ring-color: rgb(var(--rpg-gold));
+}
+.rpg .app-scroll {
+  scrollbar-color: rgb(var(--rpg-border)) rgb(var(--rpg-bg));
 }

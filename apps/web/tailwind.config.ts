@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 /**
  * Tokens de identidade visual do LifeOS — linha "energia/progresso" (v4).
@@ -29,11 +30,35 @@ export default {
     extend: {
       colors: {
         // Fundo/superfícies — modo escuro
+        // A escala "ink" lê variáveis CSS (index.css): no tema RPG ela vira o
+        // navy do RPG, e as telas ainda não migradas já herdam a paleta certa.
         ink: {
-          DEFAULT: "#0A0912",
-          raised: "#15121F",
-          overlay: "#1F1B2E",
-          border: "#2E2941",
+          DEFAULT: "rgb(var(--ink) / <alpha-value>)",
+          raised: "rgb(var(--ink-raised) / <alpha-value>)",
+          overlay: "rgb(var(--ink-overlay) / <alpha-value>)",
+          border: "rgb(var(--ink-border) / <alpha-value>)",
+        },
+        // Tema RPG (pixel art) — tokens centralizados em index.css (.rpg).
+        rpg: {
+          bg: "rgb(var(--rpg-bg) / <alpha-value>)",
+          "bg-2": "rgb(var(--rpg-bg-secondary) / <alpha-value>)",
+          panel: "rgb(var(--rpg-panel) / <alpha-value>)",
+          "panel-light": "rgb(var(--rpg-panel-light) / <alpha-value>)",
+          "panel-hover": "rgb(var(--rpg-panel-hover) / <alpha-value>)",
+          gold: "rgb(var(--rpg-gold) / <alpha-value>)",
+          "gold-light": "rgb(var(--rpg-gold-light) / <alpha-value>)",
+          bronze: "rgb(var(--rpg-bronze) / <alpha-value>)",
+          purple: "rgb(var(--rpg-purple) / <alpha-value>)",
+          blue: "rgb(var(--rpg-blue) / <alpha-value>)",
+          green: "rgb(var(--rpg-green) / <alpha-value>)",
+          red: "rgb(var(--rpg-red) / <alpha-value>)",
+          orange: "rgb(var(--rpg-orange) / <alpha-value>)",
+          cyan: "rgb(var(--rpg-cyan) / <alpha-value>)",
+          text: "rgb(var(--rpg-text) / <alpha-value>)",
+          muted: "rgb(var(--rpg-text-muted) / <alpha-value>)",
+          border: "rgb(var(--rpg-border) / <alpha-value>)",
+          parchment: "rgb(var(--rpg-parchment) / <alpha-value>)",
+          ink: "rgb(var(--rpg-parchment-ink) / <alpha-value>)",
         },
         paper: {
           DEFAULT: "#F6F4FB",
@@ -53,7 +78,7 @@ export default {
           DEFAULT: "#FF7A45",
           deep: "#E8551F",
         },
-        slate: "#6E7391",
+        slate: "rgb(var(--slate) / <alpha-value>)",
         growth: "#12B76A",
         drop: "#FF4757",
         // Cores de categoria — mesmo significado em todo o app.
@@ -77,6 +102,9 @@ export default {
       fontFamily: {
         display: ["Bricolage Grotesque", "Inter", "system-ui", "sans-serif"],
         sans: ["Inter", "system-ui", "sans-serif"],
+        // RPG: serifa clássica para títulos e fonte pixel só em rótulos curtos.
+        rpg: ["Cinzel", "Georgia", "serif"],
+        pixel: ["Pixelify Sans", "Inter", "monospace"],
       },
       borderRadius: {
         xl2: "1.25rem",
@@ -86,6 +114,8 @@ export default {
         "card-dark": "0 1px 0 0 rgba(255,255,255,0.05) inset, 0 10px 28px -14px rgba(0,0,0,0.65)",
         "glow-brand": "0 0 0 1px rgba(124,77,255,0.35), 0 8px 28px -10px rgba(124,77,255,0.5)",
         "glow-signal": "0 8px 24px -8px rgba(232,85,31,0.55)",
+        rpg: "var(--rpg-shadow)",
+        "rpg-inset": "var(--rpg-shadow-inset)",
       },
       backgroundImage: {
         "ink-wash": "radial-gradient(120% 140% at 100% 0%, rgba(124,77,255,0.18) 0%, rgba(124,77,255,0) 55%)",
@@ -120,5 +150,10 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Variante `rpg:` — vale quando <html> tem a classe "rpg" (useTheme).
+    plugin(({ addVariant }) => {
+      addVariant("rpg", ".rpg &");
+    }),
+  ],
 } satisfies Config;

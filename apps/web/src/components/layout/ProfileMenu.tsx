@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { User, Settings, Users, LogOut, ChevronDown } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { RPGAvatar } from "@/components/rpg/RPGAvatar";
 
 export function ProfileMenu() {
   const { user, isAdmin, logout } = useAuth();
@@ -22,16 +23,20 @@ export function ProfileMenu() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full pl-1 pr-2.5 py-1 border border-paper-border dark:border-ink-border hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+        className="flex items-center gap-2 rounded-full pl-1 pr-2.5 py-1 border border-paper-border dark:border-ink-border hover:bg-black/5 dark:hover:bg-white/10 transition-colors rpg:rounded-[4px] rpg:border-2 rpg:border-rpg-border rpg:bg-rpg-panel"
       >
-        <span className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-paper-border dark:bg-ink-border shrink-0">
+        {/* Tema RPG: o retrato do personagem substitui a foto no cabeçalho. */}
+        <span className="hidden rpg:inline-flex">
+          <RPGAvatar size="sm" />
+        </span>
+        <span className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-paper-border dark:bg-ink-border shrink-0 rpg:hidden">
           {user.avatar_url ? (
             <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
           ) : (
             <User size={14} className="text-slate" />
           )}
         </span>
-        <span className="hidden sm:inline text-xs font-medium max-w-[120px] truncate">{user.name.split(" ")[0]}</span>
+        <span className="hidden sm:inline text-xs font-medium max-w-[120px] truncate rpg:font-pixel rpg:text-rpg-gold-light">{user.name.split(" ")[0]}</span>
         <ChevronDown size={13} className="text-slate" />
       </button>
 

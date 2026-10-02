@@ -25,7 +25,7 @@ import {
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
-import { useTheme } from "@/hooks/useTheme";
+import { THEME_LABEL, useTheme } from "@/hooks/useTheme";
 import { usePush } from "@/hooks/usePush";
 import { useWeeklyEmail } from "@/hooks/useReviews";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
@@ -148,7 +148,7 @@ export function PerfilPage() {
     setConfirmPassword("");
   };
 
-  const themeLabel = mode === "dark" ? "Escuro" : mode === "light" ? "Claro" : "Automático (sistema)";
+  const themeLabel = THEME_LABEL[mode];
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">

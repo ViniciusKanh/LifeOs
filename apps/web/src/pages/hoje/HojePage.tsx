@@ -34,6 +34,10 @@ import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { TodayCockpit } from "@/components/today/TodayCockpit";
+import { RpgNextQuest, RpgTodayHero, RpgTodaySignals, RpgTodayStats } from "@/components/today/RpgTodaySections";
+import { RpgCopilotPanel } from "@/components/dashboard/RpgDashboardSections";
+import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
+import { useTheme } from "@/hooks/useTheme";
 import type { Task, TimelineEvent } from "@/types";
 
 // Metas de referência usadas só para calcular "% da meta" nos
@@ -104,6 +108,7 @@ export function HojePage() {
   const { events } = useTimeline({ from: today, to: today });
   const { items: calendarItems } = useEvents(today, today);
   const copilot = useDailyInsight();
+  const { isRpg } = useTheme();
   const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const priorities = useMemo(() => {
@@ -137,26 +142,72 @@ export function HojePage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full">
-      <p className="font-display font-bold text-2xl">Hoje</p>
-      <p className="text-sm text-slate mt-1 mb-5">
-        {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {prioritiesPct}% das
-        prioridades concluídas
-      </p>
+      {isRpg ? (
+        <>
+          <RpgTodayHero prioritiesPct={prioritiesPct} quote={findNavItem("/hoje")?.item.quote ?? DEFAULT_QUOTE} />
+          <div className="mt-4">
+            <RpgTodayStats
+              prioritiesDone={prioritiesDone}
+              prioritiesTotal={prioritiesTotal}
+              prioritiesPct={prioritiesPct}
+              overdue={overdueCount}
+              habitsDone={habitsDone}
+              habitsTotal={habits.length}
+              waterLabel={`${((health?.waterMl ?? 0) / 1000).toFixed(1)} / ${(WATER_GOAL_ML / 1000).toFixed(1)} L`}
+              waterPct={waterPct}
+              onWater={() => void addWater(250)}
+              sleepLabel={health?.lastSleepMinutes ? formatHM(health.lastSleepMinutes) : "—"}
+              sleepPct={health?.lastSleepMinutes ? sleepPct : null}
+              energy={health?.mood?.energy ?? null}
+            />
+          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 mb-4">
+            <RpgNextQuest
+              task={focusTasks[0] ?? null}
+              estimateMinutes={focusTasks[0] ? tasks.find((t) => t.id === focusTasks[0].id)?.estimate_minutes ?? null : null}
+              onComplete={(id) => moveTask({ id, status: "Concluído" })}
+            />
+            <RpgCopilotPanel
+              title="Insight do dia"
+              text={copilot.text}
+              isLoading={copilot.isLoading}
+              error={copilot.error}
+              onRegenerate={() => void copilot.regenerate()}
+              isRegenerating={copilot.isRegenerating}
+            />
+          </div>
+          <div className="mb-4">
+            <RpgTodaySignals />
+          </div>
+        </>
+      ) : (
+        <>
+        <p className="font-display font-bold text-2xl">Hoje</p>
+        <p className="text-sm text-slate mt-1 mb-5">
+          {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {prioritiesPct}% das
+          prioridades concluídas
+        </p>
 
-      <section className="mb-5 grid gap-3 border-y border-paper-border py-4 dark:border-ink-border sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
-        <div className="min-w-0"><p className="text-xs font-semibold text-brand-600">Seu próximo movimento</p><p className="mt-1 truncate text-base font-semibold">{focusTasks[0]?.title ?? priorities[0]?.title ?? "Tudo em dia"}</p><p className="mt-1 text-xs text-slate">{focusTasks[0]?.reasons.join(" · ") || "Escolha uma tarefa para começar"}</p></div>
-        <DaySignal label="Vencidas" value={overdueCount} tone={overdueCount > 0 ? "text-drop" : "text-growth"} />
-        <DaySignal label="Vencem hoje" value={dueTodayCount} tone="text-signal-deep" />
-        <DaySignal label="Agenda" value={todaysAgenda.length} tone="text-brand-600" />
-      </section>
+        <section className="mb-5 grid gap-3 border-y border-paper-border py-4 dark:border-ink-border sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
+          <div className="min-w-0"><p className="text-xs font-semibold text-brand-600">Seu próximo movimento</p><p className="mt-1 truncate text-base font-semibold">{focusTasks[0]?.title ?? priorities[0]?.title ?? "Tudo em dia"}</p><p className="mt-1 text-xs text-slate">{focusTasks[0]?.reasons.join(" · ") || "Escolha uma tarefa para começar"}</p></div>
+          <DaySignal label="Vencidas" value={overdueCount} tone={overdueCount > 0 ? "text-drop" : "text-growth"} />
+          <DaySignal label="Vencem hoje" value={dueTodayCount} tone="text-signal-deep" />
+          <DaySignal label="Agenda" value={todaysAgenda.length} tone="text-brand-600" />
+        </section>
+        </>
+      )}
 
-      <section className="mb-5 flex flex-col gap-3 border-l-4 border-teal-500 bg-teal-500/5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-        <div><p className="flex items-center gap-2 text-xs font-semibold text-teal-700 dark:text-teal-300"><Sparkles size={14} /> Insight do dia</p><p className="mt-1 text-sm leading-relaxed">{copilot.text ?? (copilot.isLoading ? "Analisando seus registros..." : "Registre suas ações para gerar um insight pessoal.")}</p>{copilot.error && <p className="mt-1 text-xs text-drop">{copilot.error.message}</p>}</div>
-        <button onClick={() => copilot.regenerate()} disabled={copilot.isRegenerating} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-teal-500/30 px-3 py-1.5 text-xs font-semibold text-teal-700 disabled:opacity-50 dark:text-teal-300"><Wand2 size={14} /> {copilot.isRegenerating ? "Gerando..." : "Novo insight"}</button>
-      </section>
+      {!isRpg && (
+        <section className="mb-5 flex flex-col gap-3 border-l-4 border-teal-500 bg-teal-500/5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div><p className="flex items-center gap-2 text-xs font-semibold text-teal-700 dark:text-teal-300"><Sparkles size={14} /> Insight do dia</p><p className="mt-1 text-sm leading-relaxed">{copilot.text ?? (copilot.isLoading ? "Analisando seus registros..." : "Registre suas ações para gerar um insight pessoal.")}</p>{copilot.error && <p className="mt-1 text-xs text-drop">{copilot.error.message}</p>}</div>
+          <button onClick={() => copilot.regenerate()} disabled={copilot.isRegenerating} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-teal-500/30 px-3 py-1.5 text-xs font-semibold text-teal-700 disabled:opacity-50 dark:text-teal-300"><Wand2 size={14} /> {copilot.isRegenerating ? "Gerando..." : "Novo insight"}</button>
+        </section>
+      )}
 
       <TodayCockpit focusTaskId={focusTasks[0]?.id ?? null} />
 
+      {isRpg ? null : (
+        <>
       {/* Stat tiles — 2 colunas no celular (mobile-first) para caber bem em telas ~360-400px */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
         <StatTile
@@ -192,6 +243,8 @@ export function HojePage() {
           caption={health?.lastSleepMinutes ? `${sleepPct}% da meta` : "sem registro"}
         />
       </div>
+        </>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4">
         {/* Coluna esquerda */}

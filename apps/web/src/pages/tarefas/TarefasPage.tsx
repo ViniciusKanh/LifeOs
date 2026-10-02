@@ -3,10 +3,15 @@ import { useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   AlertTriangle,
+  Archive,
+  Hourglass,
+  ScrollText,
+  Swords,
   CalendarClock,
   CalendarDays,
   Check,
   CheckCircle2,
+  Clock,
   Eye,
   EyeOff,
   Flame,
@@ -24,6 +29,9 @@ import { TASK_STATUSES, DONE_STATUS } from "@/utils/taskStatus";
 import { useTasks } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
 import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGButton, RPGPageHeader, RPGPanel, RPGQuestCard } from "@/components/rpg";
+import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
@@ -51,6 +59,24 @@ const COLUMN_ACCENT: Record<string, string> = {
   "Em Andamento": "#9550FF",
   "Em Revisão": "#F59E0B",
   Concluído: "#12B76A",
+};
+
+// Tema RPG: mesma semântica de cores, lida dos tokens (bronze, azul, roxo, laranja, verde).
+const COLUMN_ACCENT_RPG: Record<string, string> = {
+  Backlog: "rgb(var(--rpg-bronze))",
+  "A Fazer": "rgb(var(--rpg-blue))",
+  "Em Andamento": "rgb(var(--rpg-purple))",
+  "Em Revisão": "rgb(var(--rpg-orange))",
+  Concluído: "rgb(var(--rpg-green))",
+};
+
+// Ícone de cada coluna no tema RPG (lucide — sem emoji).
+const COLUMN_ICON_RPG: Record<string, JSX.Element> = {
+  Backlog: <Archive size={16} />,
+  "A Fazer": <Swords size={16} />,
+  "Em Andamento": <Hourglass size={16} />,
+  "Em Revisão": <ScrollText size={16} />,
+  Concluído: <CheckCircle2 size={16} />,
 };
 
 const PRIORITIES: Array<Task["priority"]> = ["Alta", "Média", "Baixa"];
@@ -87,6 +113,7 @@ export function TarefasPage() {
   const [modal, setModal] = useState<{ open: boolean; task: Task | null; initialStatus?: string }>({ open: false, task: null });
   const searchRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const { isRpg } = useTheme();
 
   useEffect(() => {
     try {
@@ -206,71 +233,146 @@ export function TarefasPage() {
 
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
-      <PageHeader
-        icon={<ListChecks size={20} />}
-        title="Tarefas"
-        subtitle="Planeje, execute e conclua — o progresso vem do que foi finalizado de verdade."
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setImportOpen(true)} title="Importar do Todoist, Notion ou Google Tasks">
-              <Upload size={15} /> Importar
-            </Button>
-            <Button onClick={() => openNew()} title="Nova tarefa (N)">
-              <Plus size={15} /> Nova tarefa
-            </Button>
-          </>
-        }
-      />
+      {isRpg ? (
+        <RPGPageHeader
+          banner="tarefas"
+          eyebrow="Quadro de missões"
+          title="Tarefas"
+          aside={
+            <p className="rpg-parchment hidden md:block mx-1.5 my-1.5 max-w-[280px] px-4 py-3 text-center text-sm italic">
+              &ldquo;{findNavItem("/tarefas")?.item.quote ?? DEFAULT_QUOTE}&rdquo;
+            </p>
+          }
+          subtitle="Planeje, execute e conclua — o progresso vem do que foi finalizado de verdade."
+          actions={
+            <>
+              <RPGButton variant="secondary" onClick={() => setImportOpen(true)} title="Importar do Todoist, Notion ou Google Tasks">
+                <Upload size={15} /> Importar
+              </RPGButton>
+              <RPGButton variant="gold" onClick={() => openNew()} title="Nova tarefa (N)">
+                <Plus size={15} /> Nova tarefa
+              </RPGButton>
+            </>
+          }
+          className="mb-4"
+        />
+      ) : (
+        <PageHeader
+          icon={<ListChecks size={20} />}
+          title="Tarefas"
+          subtitle="Planeje, execute e conclua — o progresso vem do que foi finalizado de verdade."
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setImportOpen(true)} title="Importar do Todoist, Notion ou Google Tasks">
+                <Upload size={15} /> Importar
+              </Button>
+              <Button onClick={() => openNew()} title="Nova tarefa (N)">
+                <Plus size={15} /> Nova tarefa
+              </Button>
+            </>
+          }
+        />
+      )}
 
       {/* Resumo: foco + filtros rápidos clicáveis */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-3 mb-4">
-        <div className="relative overflow-hidden rounded-2xl p-4 sm:p-5 text-white bg-gradient-to-br from-brand-600 via-cat-purple to-signal shadow-card">
-          <div className="absolute -right-10 -top-14 h-40 w-40 rounded-full bg-white/15 blur-2xl" aria-hidden />
-          <div className="relative flex items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/80">
-                <Sparkles size={12} /> Foque nisso agora
-              </p>
-              {focusTask ? (
-                <>
-                  <button onClick={() => openEdit(focusTask)} className="mt-1.5 block text-left font-display text-lg sm:text-xl font-bold leading-snug hover:underline underline-offset-4 line-clamp-2">
-                    {focusTask.title}
-                  </button>
-                  <p className="mt-1 text-xs text-white/80">
-                    {focusTask.priority} · {focusTask.status}
-                    {dueInfo(focusTask) ? ` · ${dueInfo(focusTask)!.label}` : ""}
-                    {focusTask.project_id && projectName.get(focusTask.project_id) ? ` · ${projectName.get(focusTask.project_id)}` : ""}
-                  </p>
-                </>
-              ) : (
-                <p className="mt-1.5 text-sm text-white/90">Nada pendente. Bom momento para planejar a próxima entrega.</p>
+        {isRpg ? (
+          <RPGPanel title="Foque nisso agora" icon={<Sparkles size={14} />} variant="quest" className="h-full">
+            <RPGQuestCard
+              label="Missão em destaque"
+              title={focusTask?.title ?? null}
+              onTitleClick={focusTask ? () => openEdit(focusTask) : undefined}
+              priority={focusTask?.priority}
+              reasons={
+                focusTask
+                  ? [focusTask.status, focusTask.project_id ? projectName.get(focusTask.project_id) : null, focusTask.description].filter(Boolean).join(" · ")
+                  : null
+              }
+              facts={
+                focusTask
+                  ? [
+                      { icon: <CalendarClock size={15} />, label: "Prazo", value: dueInfo(focusTask)?.label ?? "Sem prazo" },
+                      { icon: <Clock size={15} />, label: "Tempo estimado", value: focusTask.estimate_minutes ? `${focusTask.estimate_minutes} min` : "Não estimado" },
+                      { icon: <Flame size={15} />, label: "Prioridade", value: focusTask.priority },
+                    ]
+                  : []
+              }
+              emptyText="Nada pendente. Bom momento para planejar a próxima entrega."
+              actions={
+                focusTask ? (
+                  <RPGButton variant="success" onClick={() => toggleDone(focusTask)} className="flex-1">
+                    <Check size={15} /> Concluir missão
+                  </RPGButton>
+                ) : undefined
+              }
+            />
+          </RPGPanel>
+        ) : (
+          <div className="relative overflow-hidden rounded-2xl p-4 sm:p-5 text-white bg-gradient-to-br from-brand-600 via-cat-purple to-signal shadow-card">
+            <div className="absolute -right-10 -top-14 h-40 w-40 rounded-full bg-white/15 blur-2xl" aria-hidden />
+            <div className="relative flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                  <Sparkles size={12} /> Foque nisso agora
+                </p>
+                {focusTask ? (
+                  <>
+                    <button onClick={() => openEdit(focusTask)} className="mt-1.5 block text-left font-display text-lg sm:text-xl font-bold leading-snug hover:underline underline-offset-4 line-clamp-2">
+                      {focusTask.title}
+                    </button>
+                    <p className="mt-1 text-xs text-white/80">
+                      {focusTask.priority} · {focusTask.status}
+                      {dueInfo(focusTask) ? ` · ${dueInfo(focusTask)!.label}` : ""}
+                      {focusTask.project_id && projectName.get(focusTask.project_id) ? ` · ${projectName.get(focusTask.project_id)}` : ""}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1.5 text-sm text-white/90">Nada pendente. Bom momento para planejar a próxima entrega.</p>
+                )}
+              </div>
+              {focusTask && (
+                <button
+                  onClick={() => toggleDone(focusTask)}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-white/20 hover:bg-white/30 px-3 py-2 text-xs font-semibold transition-colors"
+                >
+                  <Check size={14} /> Concluir
+                </button>
               )}
             </div>
-            {focusTask && (
-              <button
-                onClick={() => toggleDone(focusTask)}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-white/20 hover:bg-white/30 px-3 py-2 text-xs font-semibold transition-colors"
-              >
-                <Check size={14} /> Concluir
-              </button>
-            )}
+            <div className="relative mt-4 grid grid-cols-3 gap-2 text-center">
+              {[
+                { v: open.length, l: "abertas" },
+                { v: inProgress, l: "em andamento" },
+                { v: `${donePct}%`, l: "concluído" },
+              ].map((s) => (
+                <div key={s.l} className="rounded-xl bg-white/15 px-2 py-2">
+                  <p className="text-lg font-bold leading-none">{s.v}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-wide text-white/75">{s.l}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="relative mt-4 grid grid-cols-3 gap-2 text-center">
-            {[
-              { v: open.length, l: "abertas" },
-              { v: inProgress, l: "em andamento" },
-              { v: `${donePct}%`, l: "concluído" },
-            ].map((s) => (
-              <div key={s.l} className="rounded-xl bg-white/15 px-2 py-2">
-                <p className="text-lg font-bold leading-none">{s.v}</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-white/75">{s.l}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
-        <div className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 shadow-card">
-          <p className="text-xs font-semibold text-slate mb-2">Filtros rápidos</p>
+        <div className="space-y-3 min-w-0">
+        {isRpg && (
+          <RPGPanel title="Progresso das tarefas" icon={<ListChecks size={14} />}>
+            <dl className="grid grid-cols-3 gap-2">
+              {[
+                { v: open.length, l: "abertas", tone: "text-rpg-blue" },
+                { v: inProgress, l: "em andamento", tone: "text-rpg-purple" },
+                { v: `${donePct}%`, l: "concluído", tone: "text-rpg-green" },
+              ].map((st) => (
+                <div key={st.l} className="border-2 border-rpg-border bg-rpg-bg/60 px-2.5 py-2" style={{ borderRadius: 3 }}>
+                  <dd className={`font-pixel text-2xl font-bold leading-none tabular-nums ${st.tone}`}>{st.v}</dd>
+                  <dt className="mt-1 font-pixel text-[10px] uppercase tracking-wide text-rpg-muted">{st.l}</dt>
+                </div>
+              ))}
+            </dl>
+          </RPGPanel>
+        )}
+        <div className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 shadow-card rpg:rpg-panel">
+          <p className="text-xs font-semibold text-slate mb-2 rpg:font-pixel rpg:uppercase rpg:tracking-[0.12em] rpg:text-rpg-gold rpg:text-[13px]">Filtros rápidos</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {QUICK_FILTERS.map((f) => {
               const active = quick === f.key;
@@ -280,7 +382,7 @@ export function TarefasPage() {
                   onClick={() => setQuick(active ? null : f.key)}
                   aria-pressed={active}
                   className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-left border transition-all ${
-                    active ? "border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/30" : "border-paper-border dark:border-ink-border hover:border-brand-500/40"
+                    active ? "border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/30 rpg:border-rpg-gold rpg:bg-rpg-gold/10 rpg:ring-rpg-gold/40" : "border-paper-border dark:border-ink-border hover:border-brand-500/40 rpg:bg-rpg-bg/50 rpg:hover:border-rpg-gold/50"
                   }`}
                 >
                   <span className={f.tone}>{f.icon}</span>
@@ -296,11 +398,12 @@ export function TarefasPage() {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Barra de ferramentas (fica presa no topo ao rolar) */}
-      <div className="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-3 bg-paper/85 dark:bg-ink/85 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-2 shadow-card">
+      <div className="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-3 bg-paper/85 dark:bg-ink/85 backdrop-blur rpg:bg-rpg-bg/90 rpg:backdrop-blur-none">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-2 shadow-card rpg:rpg-panel">
           <div role="tablist" aria-label="Visualização" className="flex items-center rounded-xl bg-black/[0.03] dark:bg-white/[0.05] p-0.5">
             {([
               { key: "quadro", label: "Quadro", icon: <LayoutGrid size={13} /> },
@@ -313,7 +416,7 @@ export function TarefasPage() {
                 onClick={() => setView(v.key)}
                 className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${view === v.key ? "text-brand-700 dark:text-brand-100" : "text-slate"}`}
               >
-                {view === v.key && <motion.span layoutId="tasks-view-pill" className="absolute inset-0 rounded-lg bg-white dark:bg-ink-raised shadow-sm" />}
+                {view === v.key && <motion.span layoutId="tasks-view-pill" className="absolute inset-0 rounded-lg bg-white dark:bg-ink-raised shadow-sm rpg:bg-rpg-purple/35 rpg:ring-1 rpg:ring-rpg-gold/50" />}
                 <span className="relative flex items-center gap-1.5">
                   {v.icon} {v.label}
                 </span>
@@ -414,7 +517,9 @@ export function TarefasPage() {
           getId={(t) => t.id}
           getStatus={(t) => t.status}
           onMove={(id, status) => moveTask({ id, status })}
-          columnAccent={COLUMN_ACCENT}
+          columnAccent={isRpg ? COLUMN_ACCENT_RPG : COLUMN_ACCENT}
+          columnIcon={isRpg ? COLUMN_ICON_RPG : undefined}
+          tintHeaders={isRpg}
           storageKey="lifeos.tasks.collapsedColumns"
           emptyHint={activeFilters > 0 ? "Nada com esses filtros" : "Solte uma tarefa aqui"}
           renderCard={(task, dragProps) => (

@@ -26,14 +26,16 @@ export function Button({
       "border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised text-inherit hover:bg-paper dark:hover:bg-ink-overlay",
     ghost: "text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06]",
   };
-  return <button className={clsx(base, variants[variant], className)} {...props} />;
+  // "lifeos-btn-*" liga o visual de botão RPG quando o tema RPG está ativo (index.css).
+  return <button className={clsx(base, variants[variant], `lifeos-btn lifeos-btn-${variant}`, className)} {...props} />;
 }
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={clsx(
-        "rounded-2xl border bg-paper-raised border-paper-border shadow-card dark:bg-ink-raised dark:border-ink-border/60 dark:shadow-card-dark",
+        // "lifeos-card" vira painel RPG (borda bronze + rebites) no tema RPG.
+        "lifeos-card rounded-2xl border bg-paper-raised border-paper-border shadow-card dark:bg-ink-raised dark:border-ink-border/60 dark:shadow-card-dark",
         className
       )}
       {...props}
@@ -139,7 +141,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center text-center max-w-md mx-auto py-16 px-5">
-      <p className="font-display font-semibold text-2xl tracking-tight">{title}</p>
+      <p className="font-display font-semibold text-2xl tracking-tight rpg:rpg-title">{title}</p>
       <p className="text-sm mt-2 text-slate">{description}</p>
       <Button className="mt-6" onClick={onCta}>
         {ctaLabel}
@@ -217,11 +219,11 @@ export function StatTile({
     <Card className="p-4">
       <div className="flex items-center gap-2.5 mb-2.5">
         <IconBadge tone={tone} icon={icon} size={36} />
-        <span className="text-xs text-slate leading-tight">{label}</span>
+        <span className="text-xs text-slate leading-tight rpg:font-pixel rpg:uppercase rpg:tracking-wide rpg:text-[11px]">{label}</span>
       </div>
-      <p className="font-display font-bold text-xl leading-none">{value}</p>
+      <p className="font-display font-bold text-xl leading-none rpg:font-pixel">{value}</p>
       {progressPct !== undefined && (
-        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3">
+        <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border mt-3 rpg:h-3 rpg:rounded-sm rpg:border-2 rpg:border-black/60 rpg:bg-rpg-bg">
           <div className={clsx("h-full rounded-full", STAT_BAR_TONE[tone])} style={{ width: `${Math.min(progressPct, 100)}%` }} />
         </div>
       )}
@@ -250,12 +252,12 @@ export function PageHeader({
     <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
       <div className="flex items-center gap-3">
         {icon && (
-          <span className="hidden sm:inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500/15 to-signal/15 text-brand-600 dark:text-brand-400 shrink-0">
+          <span className="hidden sm:inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500/15 to-signal/15 text-brand-600 dark:text-brand-400 shrink-0 rpg:bg-none rpg:bg-rpg-bg rpg:border-2 rpg:border-rpg-gold/70 rpg:text-rpg-gold-light">
             {icon}
           </span>
         )}
         <div>
-          <p className="font-display font-bold text-2xl">{title}</p>
+          <p className="font-display font-bold text-2xl rpg:rpg-title">{title}</p>
           {subtitle && <p className="text-sm text-slate mt-0.5">{subtitle}</p>}
         </div>
       </div>
