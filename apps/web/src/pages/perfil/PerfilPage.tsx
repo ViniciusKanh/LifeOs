@@ -35,6 +35,7 @@ import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
 import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
+import { AppearanceCard } from "@/components/profile/AppearanceCard";
 import { api } from "@/services/api";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
@@ -54,7 +55,7 @@ function formatFullDate(dateStr: string) {
 
 export function PerfilPage() {
   const { user } = useAuth();
-  const { mode, setMode } = useTheme();
+  const { mode } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
 
   /**
@@ -243,15 +244,15 @@ export function PerfilPage() {
                   <p className="text-[11px] text-slate">{monthsSince(user.created_at)}</p>
                 </div>
               </div>
-              <Link to="/configuracoes" className="rounded-xl p-3.5 bg-paper dark:bg-ink flex items-center gap-2.5 hover:border-brand-500/50 border border-transparent transition-colors">
+              <a href="#aparencia" className="rounded-xl p-3.5 bg-paper dark:bg-ink flex items-center gap-2.5 hover:border-brand-500/50 border border-transparent transition-colors">
                 <IconBadge tone="purple" size={30} icon={<MoonIcon size={14} />} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-slate">Tema preferido</p>
                   <p className="text-sm font-semibold truncate">{themeLabel}</p>
-                  <p className="text-[11px] text-slate">Você pode alterar nas configurações</p>
+                  <p className="text-[11px] text-slate">Altere em “Aparência”, logo abaixo</p>
                 </div>
                 <ChevronRight size={14} className="text-slate shrink-0" />
-              </Link>
+              </a>
               <div className="rounded-xl p-3.5 bg-paper dark:bg-ink flex items-center gap-2.5">
                 <IconBadge
                   tone={user.google_linked ? "green" : "amber"}
@@ -268,6 +269,8 @@ export function PerfilPage() {
               </div>
             </div>
           </Card>
+
+          <AppearanceCard />
 
           <Card className="p-5 md:p-6">
             <div className="flex items-center gap-2.5 mb-4">
