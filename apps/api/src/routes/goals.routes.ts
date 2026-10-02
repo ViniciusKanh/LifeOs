@@ -291,8 +291,8 @@ goalsRouter.post("/", async (req, res) => {
 
   const id = nanoid();
   await db.execute({
-    sql: `INSERT INTO goals (id, owner_id, parent_goal_id, title, description, category, kind, target_value, unit, due_date, period, next_action, next_action_due)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO goals (id, owner_id, parent_goal_id, title, description, category, kind, target_value, unit, due_date, period, next_action, next_action_due, life_area, cycle)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       req.user!.id,
@@ -307,6 +307,8 @@ goalsRouter.post("/", async (req, res) => {
       d.period ?? null,
       d.nextAction ?? null,
       d.nextActionDue ?? null,
+      d.lifeArea ?? null,
+      d.cycle ?? null,
     ],
   });
   const created = await db.execute({ sql: "SELECT * FROM goals WHERE id = ?", args: [id] });
@@ -349,6 +351,8 @@ goalsRouter.patch("/:id", async (req, res) => {
     nextAction: "next_action",
     nextActionDue: "next_action_due",
     parentGoalId: "parent_goal_id",
+    lifeArea: "life_area",
+    cycle: "cycle",
   };
   const sets: string[] = [];
   const args: Array<string | number | null> = [];

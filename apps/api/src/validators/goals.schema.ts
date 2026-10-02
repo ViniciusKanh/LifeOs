@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CYCLE_REGEX, LIFE_AREAS } from "./direction.schema.js";
 
 export const createGoalSchema = z.object({
   parentGoalId: z.string().trim().min(1).optional().nullable(),
@@ -12,6 +13,9 @@ export const createGoalSchema = z.object({
   period: z.enum(["semanal", "mensal", "semestral", "anual"]).optional(),
   nextAction: z.string().trim().max(160).optional(),
   nextActionDue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato YYYY-MM-DD").optional(),
+  // Direção: área da roda da vida e ciclo (2026 | 2026-Q4 | 2026-10).
+  lifeArea: z.enum(LIFE_AREAS).optional().nullable(),
+  cycle: z.string().regex(CYCLE_REGEX, "Ciclo inválido (use 2026, 2026-Q4 ou 2026-10).").optional().nullable(),
 });
 
 export const updateGoalSchema = createGoalSchema.partial().extend({

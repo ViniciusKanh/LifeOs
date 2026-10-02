@@ -32,6 +32,8 @@ const projectDetailsShape = {
   repositoryUrl: z.string().trim().url("URL do repositório inválida.").max(500).optional().nullable().or(z.literal("").transform(() => null)),
   links: z.array(linkSchema).max(20).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  /** Meta a que o projeto serve (Direção) — o dono é validado na rota. */
+  goalId: z.string().trim().min(1).max(64).optional().nullable(),
 };
 
 function datesInOrder(d: { startDate?: string | null; dueDate?: string | null }) {

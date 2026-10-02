@@ -1,3 +1,5 @@
+import { getDb } from "../db/client.js";
+import { runLifeAdminRemindersForAll } from "../services/lifeAdminService.js";
 import { Router } from "express";
 import { mondayOf, sendWeeklySummariesToAllOptedIn } from "../services/weeklyEmailService.js";
 import { runTaskDeadlineTriggersForAll, runJournalReminderTriggersForAll } from "../services/notificationTriggersService.js";
@@ -43,7 +45,9 @@ cronRouter.get("/notification-triggers", async (req, res) => {
     return res.status(401).json({ error: "Não autorizado." });
   }
   const result = await runTaskDeadlineTriggersForAll();
-  return res.json(result);
+  // Administração da vida: lembretes de vencimento (antes / hoje / atrasado), no mesmo cron diário.
+  const lifeAdmin = await runLifeAdminRemindersForAll(getDb());
+  return res.json({ ...result, lifeAdmin });
 });
 
 /**

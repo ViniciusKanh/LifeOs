@@ -42,6 +42,10 @@ import { goalForecastRouter } from "./routes/goal-forecast.routes.js";
 import { dataHealthRouter } from "./routes/data-health.routes.js";
 import { journalRouter } from "./routes/journal.routes.js";
 import { journalsRouter } from "./routes/journals.routes.js";
+import { lifeAdminRouter } from "./routes/lifeAdmin.routes.js";
+import { directionRouter } from "./routes/direction.routes.js";
+import { notesRouter } from "./routes/notes.routes.js";
+import { importRouter } from "./routes/import.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -124,6 +128,10 @@ app.use("/api/events", eventsRouter);
 app.use("/api/achievements", achievementsRouter);
 app.use("/api/export", exportRouter);
 app.use("/api/search", searchRouter);
+app.use("/api/life-admin", lifeAdminRouter);
+app.use("/api/direction", directionRouter);
+app.use("/api/notes", notesRouter);
+app.use("/api/import", importRouter);
 app.use("/api/inbox", inboxRouter);
 app.use("/api/work-notes", workNotesRouter);
 app.use("/api/professional", professionalRouter);

@@ -228,6 +228,23 @@ tasksRouter.get("/:id", async (req, res) => {
   return res.json(task);
 });
 
+
+/**
+ * project_id / goal_id só podem apontar para registros do próprio usuário —
+ * sem isso, um id de outro usuário poderia ser gravado na tarefa.
+ */
+async function validateTaskLinks(db: ReturnType<typeof getDb>, ownerId: string, d: { projectId?: string | null; goalId?: string | null }): Promise<string | null> {
+  if (d.projectId) {
+    const r = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [d.projectId, ownerId] });
+    if (r.rows.length === 0) return "Projeto inválido.";
+  }
+  if (d.goalId) {
+    const r = await db.execute({ sql: "SELECT id FROM goals WHERE id = ? AND owner_id = ?", args: [d.goalId, ownerId] });
+    if (r.rows.length === 0) return "Meta inválida.";
+  }
+  return null;
+}
+
 /** POST /api/tasks */
 tasksRouter.post("/", async (req, res) => {
   const parsed = createTaskSchema.safeParse(req.body);
@@ -236,6 +253,8 @@ tasksRouter.post("/", async (req, res) => {
   }
   const d = parsed.data;
   const db = getDb();
+  const linkError = await validateTaskLinks(db, req.user!.id, d);
+  if (linkError) return res.status(400).json({ error: linkError });
   const id = nanoid();
 
   const status = d.status ?? "Backlog";
@@ -287,6 +306,8 @@ tasksRouter.patch("/:id", async (req, res) => {
   if (existing.rows.length === 0) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
+  const linkError = await validateTaskLinks(db, req.user!.id, parsed.data);
+  if (linkError) return res.status(400).json({ error: linkError });
 
   const fieldMap: Record<string, string> = {
     title: "title",

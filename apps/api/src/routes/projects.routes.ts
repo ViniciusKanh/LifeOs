@@ -12,6 +12,14 @@ import {
 } from "../services/projectDetailsService.js";
 import { getProjectWorkload, resolveClientToday } from "../services/workloadService.js";
 
+
+/** goal_id só é aceito se a meta for do próprio usuário. */
+async function goalBelongsTo(db: ReturnType<typeof getDb>, ownerId: string, goalId: string | null | undefined) {
+  if (!goalId) return true;
+  const r = await db.execute({ sql: "SELECT id FROM goals WHERE id = ? AND owner_id = ?", args: [goalId, ownerId] });
+  return r.rows.length > 0;
+}
+
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
@@ -58,6 +66,8 @@ projectsRouter.post("/", async (req, res) => {
     const parent = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [d.parentId, ownerId] });
     if (parent.rows.length === 0) return res.status(400).json({ error: "Projeto pai inválido." });
   }
+
+  if (!(await goalBelongsTo(db, ownerId, d.goalId))) return res.status(400).json({ error: "Meta inválida." });
 
   const id = nanoid();
   const pairs = buildProjectColumnValues(d);
@@ -127,6 +137,7 @@ projectsRouter.patch("/:id", async (req, res) => {
   const ownerId = req.user!.id;
   const existing = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
   if (existing.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+  if (!(await goalBelongsTo(db, ownerId, parsed.data.goalId))) return res.status(400).json({ error: "Meta inválida." });
 
   const pairs = buildProjectColumnValues(parsed.data);
   const sets = pairs.map(([c]) => `${c} = ?`);

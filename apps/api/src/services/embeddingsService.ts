@@ -15,7 +15,7 @@ import { getGeminiConfig, embedText, type GeminiConfig } from "./geminiService.j
 
 type Db = ReturnType<typeof getDb>;
 
-export type SearchEntityType = "task" | "goal" | "habit" | "book" | "academic_project" | "project" | "journal_entry";
+export type SearchEntityType = "task" | "goal" | "habit" | "book" | "academic_project" | "project" | "journal_entry" | "note" | "life_admin";
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex");

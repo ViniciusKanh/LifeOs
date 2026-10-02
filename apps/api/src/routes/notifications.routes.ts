@@ -1,3 +1,4 @@
+import { getLifeAdminSummary } from "../services/lifeAdminService.js";
 import { Router } from "express";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
@@ -20,7 +21,7 @@ notificationsRouter.use(requireAuth);
 
 interface LiveNotification {
   id: string;
-  kind: "task_overdue" | "task_due_today" | "daily_insight" | "custom_trigger" | "habit_pending" | "weekly_review_pending";
+  kind: "task_overdue" | "task_due_today" | "daily_insight" | "custom_trigger" | "habit_pending" | "weekly_review_pending" | "life_admin";
   title: string;
   body: string;
   link: string;
@@ -214,6 +215,19 @@ notificationsRouter.get("/live", async (req, res) => {
       body: names,
       link: "/habitos",
       severity: "baixa",
+    });
+  }
+  // Administração da vida: o que está atrasado, vence hoje ou entrou na janela de aviso.
+  const lifeAdmin = await getLifeAdminSummary(db, ownerId);
+  for (const item of lifeAdmin.next) {
+    notifications.push({
+      // Com o vencimento no id: depois de renovado, o próximo ciclo avisa de novo.
+      id: `life_admin_${item.id}_${item.dueDate}`,
+      kind: "life_admin",
+      title: item.urgency === "overdue" ? "Venceu" : item.urgency === "today" ? "Vence hoje" : `Vence em ${item.daysLeft} dia(s)`,
+      body: item.title,
+      link: `/administracao?item=${item.id}`,
+      severity: item.urgency === "overdue" ? "alta" : item.urgency === "today" ? "media" : "baixa",
     });
   }
   if (weeklyReview.rows.length === 0) {

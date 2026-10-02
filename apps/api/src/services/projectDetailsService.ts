@@ -32,6 +32,7 @@ const DETAIL_COLUMNS: Record<string, string> = {
   area: "area",
   budget: "budget",
   repositoryUrl: "repository_url",
+  goalId: "goal_id",
 };
 
 /**

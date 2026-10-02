@@ -217,7 +217,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
 
-  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded, journalEntries] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded, journalEntries, lifeAdminDone, periodicReviews] = await Promise.all([
     // LEFT JOIN com projects: deixa claro a que projeto (profissional,
     // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
@@ -278,6 +278,15 @@ analyticsRouter.get("/timeline", async (req, res) => {
             AND (COALESCE(thoughts, '') != '' OR COALESCE(intention, '') != '')`,
       args: [ownerId, from, to],
     }),
+    db.execute({
+      sql: `SELECT h.id, i.title AS label, i.kind, h.done_at AS at FROM life_admin_history h JOIN life_admin_items i ON i.id = h.item_id
+            WHERE h.owner_id = ? AND h.done_at >= ? AND h.done_at <= ?`,
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, kind, period_key, updated_at AS at FROM periodic_reviews WHERE owner_id = ? AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
   ]);
 
   type TimelineRow = Record<string, unknown> & { at: string };
@@ -301,6 +310,18 @@ analyticsRouter.get("/timeline", async (req, res) => {
       ...r,
     })),
     ...asRows(journalEntries.rows).map((r) => ({ type: "journal", icon: "📔", label: "Entrada do diário", ...r })),
+    ...asRows(lifeAdminDone.rows).map((r) => ({
+      type: "life_admin",
+      icon: r.kind === "conta" ? "🧾" : r.kind === "manutencao" ? "🔧" : "📄",
+      ...r,
+      label: `${r.kind === "conta" ? "Conta paga" : r.kind === "manutencao" ? "Manutenção feita" : "Renovado"}: ${r.label}`,
+    })),
+    ...asRows(periodicReviews.rows).map((r) => ({
+      type: "review",
+      icon: "🧭",
+      ...r,
+      label: `Revisão ${r.kind === "monthly" ? "mensal" : r.kind === "quarterly" ? "trimestral" : "anual"} (${r.period_key})`,
+    })),
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
   return res.json({ from, to, events });
