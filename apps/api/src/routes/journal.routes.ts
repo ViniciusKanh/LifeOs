@@ -2,9 +2,9 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema, journalAiApplySchema } from "../validators/journal.schema.js";
+import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema, journalAiApplySchema, journalAiAssistSchema } from "../validators/journal.schema.js";
 import { mimeFromDataUri } from "../validators/attachment.schema.js";
-import { organizeJournalDay, applyJournalOrganization, clearJournalOrganization } from "../services/journalAIService.js";
+import { organizeJournalDay, applyJournalOrganization, clearJournalOrganization, assistJournalDay } from "../services/journalAIService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { buildJournalEntryPdf } from "../services/journalPdfService.js";
 import {
@@ -481,6 +481,21 @@ journalRouter.post("/:date/ai/organize", rateLimit({ windowMs: 60_000, max: 6 })
   return res.json(result.suggestion);
 });
 
+/**
+ * POST /api/journal/:date/ai/assist — ajuda a escrever o dia (perguntas sobre
+ * o que de fato aconteceu, rascunho e sugestões para amanhã). Só sugere: o
+ * texto do usuário não é alterado aqui.
+ */
+journalRouter.post("/:date/ai/assist", rateLimit({ windowMs: 60_000, max: 8 }), async (req, res) => {
+  const { date } = req.params;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
+  const parsed = journalAiAssistSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const result = await assistJournalDay(getDb(), req.user!.id, date, parsed.data.notes ?? null);
+  if (!result.ok) return res.status(result.status).json({ error: result.message });
+  return res.json(result.assist);
+});
+
 /** POST /api/journal/:date/ai/organize/apply — salva a organização que o usuário confirmou. */
 journalRouter.post("/:date/ai/organize/apply", async (req, res) => {
   const { date } = req.params;
@@ -521,17 +536,15 @@ journalRouter.put("/:date", async (req, res) => {
   });
   const existingRow = existing.rows[0] as unknown as { id: string } | undefined;
 
+  // Desde a 0050 o diário é texto corrido: intention, challenges, lighter_plan,
+  // feel_good, night_helped e night_mood não são mais gravados por aqui — o que
+  // já existia foi movido para thoughts (ou, no caso do humor, segue como
+  // registro antigo). Assim um cliente novo nunca apaga dado não migrado.
   const values = {
-    intention: data.intention ?? null,
     thoughts: data.thoughts ?? null,
     gratitude: JSON.stringify(data.gratitude ?? []),
     self_care: JSON.stringify(data.selfCare ?? []),
     self_care_other: data.selfCareOther ?? null,
-    challenges: data.challenges ?? null,
-    lighter_plan: data.lighterPlan ?? null,
-    feel_good: data.feelGood ?? null,
-    night_mood: data.nightMood ?? null,
-    night_helped: data.nightHelped ?? null,
     night_takeaway: data.nightTakeaway ?? null,
     focus_task_ids: JSON.stringify(data.focusTaskIds ?? []),
     location_label: data.locationLabel ?? null,
@@ -545,22 +558,15 @@ journalRouter.put("/:date", async (req, res) => {
   if (existingRow) {
     await db.execute({
       sql: `UPDATE journal_entries SET
-              intention = ?, thoughts = ?, gratitude = ?, self_care = ?, self_care_other = ?,
-              challenges = ?, lighter_plan = ?, feel_good = ?, night_mood = ?, night_helped = ?,
-              night_takeaway = ?, focus_task_ids = ?, location_label = ?, location_lat = ?,
-              location_lng = ?, tags = ?, updated_at = datetime('now')
-            WHERE id = ?`,
+              thoughts = ?, gratitude = ?, self_care = ?, self_care_other = ?, night_takeaway = ?,
+              focus_task_ids = ?, location_label = ?, location_lat = ?, location_lng = ?, tags = ?,
+              updated_at = datetime('now')
+            WHERE id = ? AND owner_id = ?`,
       args: [
-        values.intention,
         values.thoughts,
         values.gratitude,
         values.self_care,
         values.self_care_other,
-        values.challenges,
-        values.lighter_plan,
-        values.feel_good,
-        values.night_mood,
-        values.night_helped,
         values.night_takeaway,
         values.focus_task_ids,
         values.location_label,
@@ -568,29 +574,23 @@ journalRouter.put("/:date", async (req, res) => {
         values.location_lng,
         values.tags,
         entryId,
+        ownerId,
       ],
     });
   } else {
     await db.execute({
       sql: `INSERT INTO journal_entries
-              (id, owner_id, entry_date, intention, thoughts, gratitude, self_care, self_care_other,
-               challenges, lighter_plan, feel_good, night_mood, night_helped, night_takeaway, focus_task_ids,
-               location_label, location_lat, location_lng, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              (id, owner_id, entry_date, thoughts, gratitude, self_care, self_care_other, night_takeaway,
+               focus_task_ids, location_label, location_lat, location_lng, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         entryId,
         ownerId,
         date,
-        values.intention,
         values.thoughts,
         values.gratitude,
         values.self_care,
         values.self_care_other,
-        values.challenges,
-        values.lighter_plan,
-        values.feel_good,
-        values.night_mood,
-        values.night_helped,
         values.night_takeaway,
         values.focus_task_ids,
         values.location_label,

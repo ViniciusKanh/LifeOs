@@ -1,17 +1,11 @@
 import { api } from "./api";
-import type { JournalEntry, JournalCollection, JournalMedia, JournalAiSuggestion } from "@/types";
+import type { JournalEntry, JournalCollection, JournalMedia, JournalAiSuggestion, JournalWritingAssist } from "@/types";
 
 export interface JournalUpsertInput {
-  intention?: string | null;
   thoughts?: string | null;
   gratitude?: string[];
   selfCare?: string[];
   selfCareOther?: string | null;
-  challenges?: string | null;
-  lighterPlan?: string | null;
-  feelGood?: string | null;
-  nightMood?: number | null;
-  nightHelped?: string | null;
   nightTakeaway?: string | null;
   focusTaskIds?: string[];
   journalIds?: string[];
@@ -90,6 +84,7 @@ export const journalService = {
   updateMedia: (date: string, mediaId: string, patch: { caption?: string | null; story?: string | null }) =>
     api.patch<JournalEntry>(`/journal/${date}/media/${mediaId}`, patch),
   // IA: a sugestão NÃO é salva; applyOrganization grava só o que o usuário confirmou.
+  assistWriting: (date: string, notes?: string) => api.post<JournalWritingAssist>(`/journal/${date}/ai/assist`, { notes: notes || null }),
   suggestOrganization: (date: string) => api.post<JournalAiSuggestion>(`/journal/${date}/ai/organize`),
   applyOrganization: (date: string, input: Omit<JournalAiSuggestion, "suggestedTags"> & { tagsToAdd?: string[] }) =>
     api.post<JournalEntry>(`/journal/${date}/ai/organize/apply`, input),

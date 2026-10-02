@@ -11,16 +11,11 @@ import { IMAGE_DATA_URI, PDF_DATA_URI, VIDEO_DATA_URI, fileNameSchema } from "./
  * links etc. — que ocupa mais caracteres que o texto visível).
  */
 export const journalUpsertSchema = z.object({
-  intention: z.string().trim().max(4000).optional().nullable(),
-  thoughts: z.string().trim().max(8000).optional().nullable(),
+  /** "Como foi meu dia" — texto corrido (HTML do editor rico). Teto maior por ser o texto principal. */
+  thoughts: z.string().trim().max(40000).optional().nullable(),
   gratitude: z.array(z.string().trim().max(300)).max(3).optional(),
   selfCare: z.array(z.string().trim().max(60)).max(20).optional(),
   selfCareOther: z.string().trim().max(300).optional().nullable(),
-  challenges: z.string().trim().max(8000).optional().nullable(),
-  lighterPlan: z.string().trim().max(4000).optional().nullable(),
-  feelGood: z.string().trim().max(4000).optional().nullable(),
-  nightMood: z.number().int().min(1).max(5).optional().nullable(),
-  nightHelped: z.string().trim().max(4000).optional().nullable(),
   nightTakeaway: z.string().trim().max(4000).optional().nullable(),
   focusTaskIds: z.array(z.string()).max(10).optional(),
   journalIds: z.array(z.string()).max(20).optional(),
@@ -90,4 +85,9 @@ export const journalAudioCreateSchema = z.object({
   dataUri: JOURNAL_AUDIO_DATA_URI,
   durationSeconds: z.number().int().min(1).max(1800),
   caption: z.string().trim().max(200).optional().nullable(),
+});
+
+/** Assistente de escrita: anotações soltas opcionais que a IA ajuda a transformar em texto. */
+export const journalAiAssistSchema = z.object({
+  notes: z.string().trim().max(2000).optional().nullable(),
 });

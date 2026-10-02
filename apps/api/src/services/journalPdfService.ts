@@ -81,8 +81,9 @@ export async function buildJournalEntryPdf(entry: JournalEntryForPdf): Promise<B
     doc.moveDown(0.8);
   };
 
+  // Campos guiados antigos só aparecem se ainda não foram migrados (0050).
   section("Intenção do dia", entry.intention);
-  section("Pensamentos e reflexões", entry.thoughts);
+  section("Como foi meu dia", entry.thoughts);
 
   if (entry.gratitude.length > 0) {
     doc.fillColor(PINK).font("Helvetica-Bold").fontSize(11).text("GRATIDÃO", { characterSpacing: 0.5 });
@@ -105,12 +106,12 @@ export async function buildJournalEntryPdf(entry: JournalEntryForPdf): Promise<B
   section("O que me fez bem hoje", entry.feelGood);
 
   if (entry.nightMood != null || entry.nightHelped || entry.nightTakeaway) {
-    doc.fillColor(PINK).font("Helvetica-Bold").fontSize(11).text("REFLEXÃO DA NOITE", { characterSpacing: 0.5 });
+    doc.fillColor(PINK).font("Helvetica-Bold").fontSize(11).text("O QUE LEVO PARA AMANHÃ", { characterSpacing: 0.5 });
     doc.moveDown(0.2);
     doc.fillColor(INK).font("Helvetica").fontSize(11);
-    if (entry.nightMood != null) doc.text(`Humor à noite: ${entry.nightMood}/5`, { lineGap: 3 });
-    if (entry.nightHelped) doc.text(stripHtml(entry.nightHelped), { lineGap: 3 });
     if (entry.nightTakeaway) doc.text(stripHtml(entry.nightTakeaway), { lineGap: 3 });
+    if (entry.nightHelped) doc.text(stripHtml(entry.nightHelped), { lineGap: 3 });
+    if (entry.nightMood != null) doc.text(`Humor anotado no diário: ${entry.nightMood}/5`, { lineGap: 3 });
     doc.moveDown(0.8);
   }
 

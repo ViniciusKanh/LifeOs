@@ -47,6 +47,7 @@ export function useJournal(date: string) {
 
   // IA (Gemini): sugerir não grava nada; aplicar/descartar sim.
   const suggestOrganization = useMutation({ mutationFn: () => journalService.suggestOrganization(date) });
+  const assistWriting = useMutation({ mutationFn: (notes?: string) => journalService.assistWriting(date, notes) });
   const applyOrganization = useMutation({
     mutationFn: (input: Parameters<typeof journalService.applyOrganization>[1]) => journalService.applyOrganization(date, input),
     onSuccess: onMediaChange,
@@ -105,6 +106,8 @@ export function useJournal(date: string) {
     addAudioMedia: addAudioMedia.mutateAsync,
     isAddingAudioMedia: addAudioMedia.isPending,
     updateMedia: updateMedia.mutateAsync,
+    assistWriting: assistWriting.mutateAsync,
+    isAssistingWriting: assistWriting.isPending,
     suggestOrganization: suggestOrganization.mutateAsync,
     isSuggestingOrganization: suggestOrganization.isPending,
     applyOrganization: applyOrganization.mutateAsync,

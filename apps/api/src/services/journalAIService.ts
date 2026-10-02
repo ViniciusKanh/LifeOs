@@ -1,7 +1,7 @@
 import type { getDb } from "../db/client.js";
 import { extractJson, str } from "./aiJson.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
-import { getJournalMedia, stripHtml } from "./journalService.js";
+import { getJournalAutoData, getJournalMedia, stripHtml } from "./journalService.js";
 import type { JournalAiApplyInput } from "../validators/journal.schema.js";
 
 /**
@@ -30,14 +30,11 @@ export type JournalOrganizeResult =
   | { ok: true; suggestion: JournalOrganizationSuggestion }
   | { ok: false; status: number; message: string };
 
+// Desde a 0050 o diário é texto corrido: as perguntas guiadas antigas foram
+// fundidas dentro de thoughts ("Como foi meu dia").
 const TEXT_FIELDS: Array<[string, string]> = [
-  ["intention", "Intenção do dia"],
-  ["thoughts", "Reflexões"],
-  ["feel_good", "O que me fez bem"],
-  ["challenges", "Desafios"],
-  ["lighter_plan", "Plano para um dia mais leve"],
-  ["night_helped", "O que ajudou hoje"],
-  ["night_takeaway", "Aprendizado do dia"],
+  ["thoughts", "Como foi meu dia"],
+  ["night_takeaway", "O que levo para amanhã"],
 ];
 
 const MEDIA_LABEL: Record<string, string> = { photo: "foto", video: "vídeo", document: "PDF", audio: "nota de voz" };
@@ -178,4 +175,155 @@ export async function clearJournalOrganization(db: Db, ownerId: string, date: st
           WHERE owner_id = ? AND entry_id IN (SELECT id FROM journal_entries WHERE owner_id = ? AND entry_date = ?)`,
     args: [ownerId, ownerId, date],
   });
+}
+
+// ------------------------------------------------------------
+// Assistente de escrita do Diário
+// ------------------------------------------------------------
+
+export interface JournalWritingAssist {
+  /** Perguntas sobre o que DE FATO aconteceu no dia (tarefas, treino, leitura…) — substituem as perguntas genéricas. */
+  questions: string[];
+  /** Rascunho em primeira pessoa só com fatos registrados + o que o usuário escreveu. Nunca é salvo sem confirmação. */
+  draft: string | null;
+  /** Sugestões para "O que levo para amanhã". */
+  takeaways: string[];
+  /** Fatos reais que a IA recebeu — montados aqui no backend, não pelo modelo, para a UI mostrar a procedência. */
+  dataUsed: string[];
+}
+
+export type JournalAssistResult = { ok: true; assist: JournalWritingAssist } | { ok: false; status: number; message: string };
+
+function minutesLabel(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (h <= 0) return `${m} min`;
+  return m > 0 ? `${h}h${m}min` : `${h}h`;
+}
+
+const MOOD_WORD = ["muito baixo", "baixo", "neutro", "bom", "ótimo"];
+
+function nextDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Fatos do dia vindos dos outros módulos, em frases curtas e verificáveis. */
+async function collectDayFacts(db: Db, ownerId: string, date: string): Promise<{ facts: string[]; pendingTomorrow: string[] }> {
+  const auto = await getJournalAutoData(db, ownerId, date);
+  const [doneTasks, habits, workouts, focus, tomorrow] = await Promise.all([
+    db.execute({
+      sql: `SELECT title FROM tasks WHERE owner_id = ? AND status = 'Concluído'
+            AND date(COALESCE(completed_at, updated_at)) = date(?) ORDER BY COALESCE(completed_at, updated_at) LIMIT 8`,
+      args: [ownerId, date],
+    }),
+    db.execute({
+      sql: `SELECT h.name AS name FROM habit_entries he JOIN habits h ON h.id = he.habit_id
+            WHERE he.owner_id = ? AND he.entry_date = ? AND he.count >= h.target_count LIMIT 10`,
+      args: [ownerId, date],
+    }),
+    db.execute({
+      sql: "SELECT kind, duration_minutes FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?) LIMIT 5",
+      args: [ownerId, date],
+    }),
+    db.execute({
+      sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS total, COUNT(*) AS n FROM focus_sessions WHERE owner_id = ? AND date(started_at) = date(?) AND actual_minutes > 0",
+      args: [ownerId, date],
+    }),
+    db.execute({
+      sql: `SELECT title FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND date(due_date) <= date(?)
+            ORDER BY CASE priority WHEN 'Alta' THEN 0 WHEN 'Média' THEN 1 ELSE 2 END, due_date ASC LIMIT 5`,
+      args: [ownerId, nextDay(date)],
+    }),
+  ]);
+
+  const facts: string[] = [];
+  const taskTitles = (doneTasks.rows as unknown as Array<{ title: string }>).map((r) => r.title);
+  if (taskTitles.length > 0) facts.push(`Tarefas concluídas: ${taskTitles.join("; ")}`);
+  const habitNames = (habits.rows as unknown as Array<{ name: string }>).map((r) => r.name);
+  if (habitNames.length > 0) facts.push(`Hábitos cumpridos: ${habitNames.join(", ")}`);
+  for (const w of workouts.rows as unknown as Array<{ kind: string; duration_minutes: number | null }>) {
+    facts.push(`Exercício: ${w.kind}${w.duration_minutes ? ` (${minutesLabel(Number(w.duration_minutes))})` : ""}`);
+  }
+  const focusRow = focus.rows[0] as unknown as { total: number; n: number } | undefined;
+  if (focusRow && Number(focusRow.total) > 0) facts.push(`Foco: ${Number(focusRow.n)} sessão(ões), ${minutesLabel(Number(focusRow.total))}`);
+  if (auto.reading.pages > 0 || auto.reading.minutes > 0) {
+    const book = auto.currentBook ? ` de "${auto.currentBook.title}"` : "";
+    facts.push(`Leitura: ${auto.reading.pages} páginas${book}${auto.reading.minutes > 0 ? ` em ${minutesLabel(auto.reading.minutes)}` : ""}`);
+  }
+  if (auto.waterMl > 0) facts.push(`Água: ${(auto.waterMl / 1000).toFixed(1)} L`);
+  if (auto.sleep?.durationMinutes) facts.push(`Sono: ${minutesLabel(auto.sleep.durationMinutes)}${auto.sleep.qualityScore ? `, qualidade ${auto.sleep.qualityScore}/5` : ""}`);
+  if (auto.mood) facts.push(`Humor registrado em Saúde: ${auto.mood.mood}/5 (${MOOD_WORD[auto.mood.mood - 1]}), energia ${auto.mood.energy}/5`);
+
+  const pendingTomorrow = (tomorrow.rows as unknown as Array<{ title: string }>).map((r) => r.title);
+  return { facts, pendingTomorrow };
+}
+
+const asStrings = (v: unknown, max: number, limit: number): string[] =>
+  Array.isArray(v) ? v.map((x) => str(x, max)).filter((x): x is string => !!x).slice(0, limit) : [];
+
+/**
+ * Ajuda a escrever o dia: perguntas sobre o que realmente aconteceu, um
+ * rascunho opcional e sugestões para amanhã. Não grava nada — a UI insere
+ * o rascunho no texto só quando o usuário clica.
+ */
+export async function assistJournalDay(db: Db, ownerId: string, date: string, notes: string | null): Promise<JournalAssistResult> {
+  const config = await getGeminiConfig();
+  if (!config) {
+    return { ok: false, status: 503, message: "A IA do LifeOS ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
+  }
+
+  const entryRes = await db.execute({ sql: "SELECT thoughts, night_takeaway FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, date] });
+  const row = entryRes.rows[0] as unknown as { thoughts: string | null; night_takeaway: string | null } | undefined;
+  const written = stripHtml(row?.thoughts).slice(0, 4000);
+  const quickNotes = (notes ?? "").trim().slice(0, 2000);
+  const { facts, pendingTomorrow } = await collectDayFacts(db, ownerId, date);
+
+  if (facts.length === 0 && !written && !quickNotes) {
+    return {
+      ok: false,
+      status: 422,
+      message: "Ainda não há registros deste dia nem texto escrito. Anote umas palavras soltas e a IA ajuda a transformar em texto.",
+    };
+  }
+
+  const prompt = [
+    "Você é o LifeOS Copilot ajudando o usuário a escrever o diário do dia, em primeira pessoa.",
+    "",
+    "Regras obrigatórias:",
+    "- Use SOMENTE os fatos registrados, o texto já escrito e as anotações rápidas abaixo. Nunca invente acontecimentos, pessoas, lugares, números ou sentimentos.",
+    "- Sentimentos só podem aparecer se o usuário escreveu ou se o humor foi registrado em Saúde (cite-o como registro).",
+    "- questions: 2 a 4 perguntas curtas e específicas sobre coisas que de fato aconteceram (cite a tarefa, o treino, o livro). Nada genérico como 'como foi seu dia'. Não pergunte o que já está respondido no texto.",
+    "- draft: rascunho natural de 1 a 3 parágrafos curtos que una anotações + fatos, na voz do usuário. Se já houver texto escrito, o rascunho deve CONTINUAR o texto sem repeti-lo. Se não houver nada além dos fatos, faça um rascunho factual e curto. Use null se não fizer sentido.",
+    "- takeaways: 1 a 3 itens curtos para 'O que levo para amanhã', baseados no texto e nas pendências reais listadas.",
+    "- Sem diagnósticos, conselhos médicos ou julgamentos. Português do Brasil.",
+    "",
+    "Responda APENAS com JSON válido:",
+    '{"questions":["…"],"draft":"…","takeaways":["…"]}',
+    "",
+    `Dia: ${date}`,
+    facts.length > 0 ? `Fatos registrados no LifeOS:\n- ${facts.join("\n- ")}` : "Fatos registrados no LifeOS: nenhum.",
+    pendingTomorrow.length > 0 ? `Pendências reais até amanhã: ${pendingTomorrow.join("; ")}` : "",
+    written ? `Texto já escrito pelo usuário:\n${written}` : "Texto já escrito pelo usuário: (vazio)",
+    quickNotes ? `Anotações rápidas do usuário:\n${quickNotes}` : "",
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+
+  const result = await generateText(prompt, config);
+  if (!result.ok) return { ok: false, status: 502, message: result.message };
+  const raw = extractJson(result.text) as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object") return { ok: false, status: 502, message: "A IA respondeu em um formato inesperado. Tente novamente." };
+
+  const assist: JournalWritingAssist = {
+    questions: asStrings(raw.questions, 240, 4),
+    draft: str(raw.draft, 3000),
+    takeaways: asStrings(raw.takeaways, 240, 3),
+    dataUsed: facts,
+  };
+  if (assist.questions.length === 0 && !assist.draft && assist.takeaways.length === 0) {
+    return { ok: false, status: 502, message: "A IA não conseguiu montar uma sugestão agora. Tente novamente." };
+  }
+  return { ok: true, assist };
 }

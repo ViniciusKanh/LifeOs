@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Brain,
   Lightbulb,
   Heart,
   Sparkles,
@@ -38,6 +37,7 @@ import {
   MapPin,
   Tag,
   Map as MapIcon,
+  PenLine,
 } from "lucide-react";
 import {
   useJournal,
@@ -56,6 +56,11 @@ import type { JournalMedia, JournalEntryLink, GeocodeResult } from "@/types";
 import { JournalMediaSection } from "@/components/journal/JournalMediaSection";
 import { SpotlightSlider, type SpotlightSlide } from "@/components/media/SpotlightSlider";
 import { JournalAiOrganizer } from "@/components/journal/JournalAiOrganizer";
+import { JournalWritingAssistant } from "@/components/journal/JournalWritingAssistant";
+import { JournalDayClosing } from "@/components/journal/JournalDayClosing";
+import { MOOD_EMOJI } from "@/utils/journalMood";
+import { useQueryClient } from "@tanstack/react-query";
+import { healthService } from "@/services/healthService";
 import { buildJournalMoments, type JournalMoment, type JournalMomentKind } from "@/utils/journalMoments";
 import type { JournalCollection } from "@/types";
 import { useHabits } from "@/hooks/useHabits";
@@ -126,7 +131,6 @@ function useCountUp(value: number, durationMs = 700) {
 }
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
-const MOOD_EMOJI = ["😠", "😟", "😕", "🙂", "😀"];
 
 /**
  * "Compartilhar entrada" (Fase 16): baixa o PDF de um dia — endpoint devolve
@@ -146,7 +150,6 @@ async function downloadJournalPdf(date: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-const MOOD_LABEL = ["Raiva", "Ansiedade", "Frustração", "Alegria", "Bem"];
 const AUTOSAVE_DELAY_MS = 900;
 
 const SELF_CARE_OPTIONS: Array<{ key: string; label: string }> = [
@@ -557,7 +560,7 @@ function JournalMomentsRow({ moments, addedIds, onInsert }: { moments: JournalMo
       <div className="flex items-center gap-2 mb-2">
         <Sparkles size={14} className="text-cat-purple" />
         <p className="text-xs font-semibold">Sugestões de hoje</p>
-        <p className="text-[11px] text-slate italic">toque para adicionar à reflexão</p>
+        <p className="text-[11px] text-slate italic">toque para adicionar ao texto do dia</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {moments.map((moment) => {
@@ -587,16 +590,11 @@ function JournalMomentsRow({ moments, addedIds, onInsert }: { moments: JournalMo
 }
 
 type FormState = {
-  intention: string;
+  /** "Como foi meu dia" — texto corrido. */
   thoughts: string;
   gratitude: string[];
   selfCare: string[];
   selfCareOther: string;
-  challenges: string;
-  lighterPlan: string;
-  feelGood: string;
-  nightMood: number | null;
-  nightHelped: string;
   nightTakeaway: string;
   journalIds: string[];
   locationLabel: string;
@@ -606,16 +604,10 @@ type FormState = {
 };
 
 const EMPTY_FORM: FormState = {
-  intention: "",
   thoughts: "",
   gratitude: ["", "", ""],
   selfCare: [],
   selfCareOther: "",
-  challenges: "",
-  lighterPlan: "",
-  feelGood: "",
-  nightMood: null,
-  nightHelped: "",
   nightTakeaway: "",
   journalIds: [],
   locationLabel: "",
@@ -642,6 +634,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     isAddingAudioMedia,
     updateMedia,
     removeMedia,
+    assistWriting,
+    isAssistingWriting,
     suggestOrganization,
     isSuggestingOrganization,
     applyOrganization,
@@ -675,16 +669,10 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   useEffect(() => {
     if (!entry) return;
     setForm({
-      intention: entry.intention ?? "",
       thoughts: entry.thoughts ?? "",
       gratitude: [0, 1, 2].map((i) => entry.gratitude[i] ?? ""),
       selfCare: entry.selfCare,
       selfCareOther: entry.selfCareOther ?? "",
-      challenges: entry.challenges ?? "",
-      lighterPlan: entry.lighterPlan ?? "",
-      feelGood: entry.feelGood ?? "",
-      nightMood: entry.nightMood,
-      nightHelped: entry.nightHelped ?? "",
       nightTakeaway: entry.nightTakeaway ?? "",
       journalIds: entry.journalIds,
       locationLabel: entry.locationLabel ?? "",
@@ -704,16 +692,10 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   const persistNow = (state: FormState) => {
     save({
-      intention: state.intention || null,
       thoughts: state.thoughts || null,
       gratitude: state.gratitude.filter((g) => g.trim().length > 0),
       selfCare: state.selfCare,
       selfCareOther: state.selfCareOther || null,
-      challenges: state.challenges || null,
-      lighterPlan: state.lighterPlan || null,
-      feelGood: state.feelGood || null,
-      nightMood: state.nightMood,
-      nightHelped: state.nightHelped || null,
       nightTakeaway: state.nightTakeaway || null,
       journalIds: state.journalIds,
       locationLabel: state.locationLabel || null,
@@ -790,13 +772,38 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     return ids;
   }, [moments, form.thoughts]);
 
-  /** Insere a frase pronta do momento como um novo parágrafo na reflexão e salva na hora. */
-  const handleInsertMoment = (moment: JournalMoment) => {
-    const safeText = escapeHtml(moment.text);
-    const trimmed = form.thoughts.trim();
+  /** Acrescenta parágrafos (HTML já seguro) ao fim de um campo de texto rico e salva na hora. */
+  const appendHtml = (field: "thoughts" | "nightTakeaway", html: string) => {
+    const current = form[field];
+    const trimmed = current.trim();
     const isEmpty = trimmed.length === 0 || trimmed === "<p></p>";
-    const nextThoughts = isEmpty ? `<p>${safeText}</p>` : `${form.thoughts}<p>${safeText}</p>`;
-    saveNow({ thoughts: nextThoughts });
+    saveNow({ [field]: isEmpty ? html : `${current}${html}` } as Partial<FormState>);
+  };
+
+  /** Texto puro da IA → parágrafos HTML escapados (uma quebra dupla = novo parágrafo). */
+  const toParagraphs = (text: string) =>
+    text
+      .split(/\n{2,}|\n/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `<p>${escapeHtml(p)}</p>`)
+      .join("");
+
+  /** Insere a frase pronta do momento como um novo parágrafo no texto do dia e salva na hora. */
+  const handleInsertMoment = (moment: JournalMoment) => appendHtml("thoughts", `<p>${escapeHtml(moment.text)}</p>`);
+
+  const queryClient = useQueryClient();
+  /** Humor do fechamento vai para Saúde (mood_entries) — fonte única de humor/energia no LifeOS. */
+  const registerMood = async (mood: number, energy: number) => {
+    const nowIso = new Date().toISOString();
+    // Fora do dia corrente (ou à noite, quando o UTC já virou), ancora no meio do dia escolhido.
+    const recordedAt = nowIso.slice(0, 10) === date ? nowIso : `${date}T12:00:00.000Z`;
+    await healthService.addMood({ mood, energy, recordedAt });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["journal"] }),
+      queryClient.invalidateQueries({ queryKey: ["health"] }),
+      queryClient.invalidateQueries({ queryKey: ["analytics"] }),
+    ]);
   };
 
   const combinedSelfCare = useMemo(() => {
@@ -829,8 +836,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   const currentWeekday = new Date(`${date}T00:00:00`).getDay();
   const book = entry?.auto.currentBook;
-  const mood = entry?.auto.mood;
-  const sleep = entry?.auto.sleep;
   const auto = entry?.auto;
 
   return (
@@ -1002,6 +1007,41 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <SectionCard
+              icon={<PenLine size={16} />}
+              title="Como foi meu dia"
+              subtitle="Escreva do seu jeito, corrido — sem perguntas prontas"
+              className="sm:col-span-2 xl:col-span-3"
+            >
+              <div className="space-y-3">
+                <RichTextEditor
+                  value={form.thoughts}
+                  onChange={(v) => updateField({ thoughts: v })}
+                  onBlur={() => saveNow()}
+                  placeholder="Querido diário, hoje…"
+                  minHeightClass="min-h-[260px]"
+                />
+                <JournalWritingAssistant
+                  onAssist={(notes) => assistWriting(notes)}
+                  isLoading={isAssistingWriting}
+                  onInsertDraft={(text) => appendHtml("thoughts", toParagraphs(text))}
+                  onInsertQuestion={(q) => appendHtml("thoughts", `<p><strong>${escapeHtml(q)}</strong></p><p></p>`)}
+                  onUseTakeaway={(t) => appendHtml("nightTakeaway", `<p>${escapeHtml(t)}</p>`)}
+                />
+              </div>
+            </SectionCard>
+
+            <div className="sm:col-span-2 xl:col-span-3">
+              <JournalDayClosing
+                auto={auto}
+                legacyNightMood={entry?.nightMood ?? null}
+                takeaway={form.nightTakeaway}
+                onTakeawayChange={(v) => updateField({ nightTakeaway: v })}
+                onTakeawayBlur={() => saveNow()}
+                onRegisterMood={registerMood}
+              />
+            </div>
+
             <SectionCard icon={<Camera size={16} />} title="Fotos, vídeos e documentos" subtitle="Cada mídia guarda a história que você contar sobre ela" className="xl:col-span-3">
               <JournalMediaSection
                 media={entry?.media ?? []}
@@ -1050,10 +1090,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               />
             </SectionCard>
 
-            <SectionCard icon={<Sun size={16} />} title="Intenção do dia" subtitle="Como quero me sentir hoje?">
-              <RichTextEditor value={form.intention} onChange={(v) => updateField({ intention: v })} onBlur={() => saveNow()} placeholder="Como quero me sentir hoje?" />
-            </SectionCard>
-
             <SectionCard
               icon={<Quote size={16} />}
               title={auto?.dailyQuote.kind === "versiculo" ? "Versículo do dia" : "Provérbio do dia"}
@@ -1069,50 +1105,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               ) : (
                 <p className="text-xs text-slate">Carregando reflexão do dia…</p>
               )}
-            </SectionCard>
-
-            <SectionCard icon={<Heart size={16} />} title="Meu estado hoje" subtitle="Registrado em Saúde">
-              {mood ? (
-                <div className="flex items-center justify-between">
-                  {MOOD_EMOJI.map((emoji, i) => (
-                    <div key={i} className={`flex flex-col items-center gap-1 ${mood.mood === i + 1 ? "" : "opacity-30"}`}>
-                      <span className="text-2xl">{emoji}</span>
-                      <span className="text-[10px] text-slate">{MOOD_LABEL[i]}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate">
-                  Ainda sem humor registrado hoje.{" "}
-                  <Link to="/saude" className="text-cat-pink font-medium">
-                    Registrar em Saúde →
-                  </Link>
-                </p>
-              )}
-            </SectionCard>
-
-            <SectionCard icon={<Sparkles size={16} />} title="Energia e sono" subtitle="Registrados em Saúde">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-[11px] text-slate mb-1">Nível de energia</p>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <span key={n} className={`h-2 flex-1 rounded-full ${mood && n <= mood.energy ? "bg-cat-pink" : "bg-paper-border dark:bg-ink-border"}`} />
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[11px] text-slate mb-1">Qualidade do sono</p>
-                  <p className="text-sm font-semibold">
-                    {sleep?.qualityScore ? `${sleep.qualityScore}/5` : "Sem registro"}
-                    {sleep?.durationMinutes ? <span className="text-xs text-slate font-normal"> · {fmtMinutes(sleep.durationMinutes)}</span> : null}
-                  </p>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard icon={<Brain size={16} />} title="Pensamentos e reflexões" subtitle="O que está passando pela minha mente hoje?" className="xl:col-span-2">
-              <RichTextEditor value={form.thoughts} onChange={(v) => updateField({ thoughts: v })} onBlur={() => saveNow()} placeholder="O que está passando pela minha mente hoje?" minHeightClass="min-h-[104px]" />
             </SectionCard>
 
             <SectionCard icon={<Lightbulb size={16} />} title="Insight do dia" subtitle="Gerado pelo LifeOS Copilot a partir dos seus dados reais">
@@ -1178,18 +1170,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               </div>
             </SectionCard>
 
-            <SectionCard icon={<Brain size={16} />} title="Desafios" subtitle="O que pode me gerar ansiedade hoje? Como posso lidar?">
-              <RichTextEditor value={form.challenges} onChange={(v) => updateField({ challenges: v })} onBlur={() => saveNow()} placeholder="O que pode me gerar ansiedade hoje? Como posso lidar?" />
-            </SectionCard>
-
-            <SectionCard icon={<Sun size={16} />} title="Como posso tornar este dia mais leve?">
-              <RichTextEditor value={form.lighterPlan} onChange={(v) => updateField({ lighterPlan: v })} onBlur={() => saveNow()} placeholder="Como posso tornar este dia mais leve?" />
-            </SectionCard>
-
-            <SectionCard icon={<Heart size={16} />} title="O que me fez bem hoje?" subtitle="Pequenos momentos que importam.">
-              <RichTextEditor value={form.feelGood} onChange={(v) => updateField({ feelGood: v })} onBlur={() => saveNow()} placeholder="Pequenos momentos que importam." />
-            </SectionCard>
-
             {book && (
               <SectionCard icon={<BookOpen size={16} />} title="Leitura atual" subtitle="Registrado na Biblioteca">
                 <div className="flex gap-3">
@@ -1228,38 +1208,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               </SectionCard>
             )}
 
-            <Card className="p-4 sm:p-5 sm:col-span-2 xl:col-span-3 border-t-2 border-t-cat-purple/40">
-              <div className="flex items-center gap-2 mb-3">
-                <Moon size={16} className="text-cat-purple" />
-                <p className="text-sm font-semibold">Revisão da noite</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs text-slate mb-2">Como me sinto agora?</p>
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => saveNow({ nightMood: n })}
-                        className={`w-8 h-8 rounded-full text-xs font-semibold flex items-center justify-center border ${
-                          form.nightMood === n ? "bg-cat-purple text-white border-cat-purple" : "border-paper-border dark:border-ink-border"
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-slate mb-2">O que me ajudou a reduzir a ansiedade hoje?</p>
-                  <RichTextEditor value={form.nightHelped} onChange={(v) => updateField({ nightHelped: v })} onBlur={() => saveNow()} placeholder="O que me ajudou a reduzir a ansiedade hoje?" minHeightClass="min-h-[52px]" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate mb-2">O que levo para amanhã?</p>
-                  <RichTextEditor value={form.nightTakeaway} onChange={(v) => updateField({ nightTakeaway: v })} onBlur={() => saveNow()} placeholder="O que levo para amanhã?" minHeightClass="min-h-[52px]" />
-                </div>
-              </div>
-            </Card>
           </div>
         </div>
       )}
@@ -1769,7 +1717,7 @@ function EntryCard({
             {day.selfCareCount} cuidado comigo
           </span>
         )}
-        {day.nightMood != null && (
+        {day.nightMood != null && !day.mood && (
           <span className="flex items-center gap-1">
             <Moon size={11} />
             {day.nightMood}/5 à noite
@@ -1962,7 +1910,7 @@ function JournalFeedTab({
       ) : days.length === 0 ? (
         <EmptyState
           title={favoritesOnly ? "Nenhum dia favoritado ainda" : journalFilter ? "Nenhuma entrada neste diário ainda" : "Seu diário está esperando a primeira entrada"}
-          description="Escreva sobre sua intenção do dia, uma reflexão ou o que te fez bem — o LifeOS guarda tudo com data e monta seus Insights a partir disso."
+          description="Escreva como foi o seu dia, do seu jeito — o LifeOS guarda tudo com data e monta seus Insights a partir disso."
           ctaLabel="Escrever hoje"
           onCta={() => onOpenDay(todayIso())}
         />

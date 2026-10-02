@@ -715,18 +715,25 @@ export interface JournalAutoData {
   dailyQuote: DailyWisdom;
 }
 
+/** Assistente de escrita do Diário — só sugestão; nada é salvo sem o usuário inserir. */
+export interface JournalWritingAssist {
+  questions: string[];
+  draft: string | null;
+  takeaways: string[];
+  /** Fatos reais (montados no backend) que a IA recebeu. */
+  dataUsed: string[];
+}
+
 export interface JournalEntry {
   date: string;
-  intention: string | null;
+  /** "Como foi meu dia" — texto corrido (HTML do editor rico). */
   thoughts: string | null;
   gratitude: string[];
   selfCare: string[];
   selfCareOther: string | null;
-  challenges: string | null;
-  lighterPlan: string | null;
-  feelGood: string | null;
+  /** Humor anotado no próprio diário antes de vir de Saúde — só leitura, registros antigos. */
   nightMood: number | null;
-  nightHelped: string | null;
+  /** "O que levo para amanhã". */
   nightTakeaway: string | null;
   focusTaskIds: string[];
   /** Ids dos diários (coleções) a que a entrada deste dia pertence — ver JournalCollection. */
