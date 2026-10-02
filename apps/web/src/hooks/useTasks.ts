@@ -18,6 +18,7 @@ export function useTasks() {
     queryClient.invalidateQueries({ queryKey: ["academic-projects"] });
     // Progresso, tarefas e documentos de Projetos são derivados das tarefas.
     queryClient.invalidateQueries({ queryKey: ["projects"] });
+    queryClient.invalidateQueries({ queryKey: ["direction"] });
   };
 
   const tasksQuery = useQuery({ queryKey: TASKS_KEY, queryFn: taskService.list });

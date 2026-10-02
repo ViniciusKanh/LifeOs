@@ -27,6 +27,8 @@ export const inboxService = {
     api.get<InboxItem[]>(`/inbox?includeProcessed=${includeProcessed}&limit=${limit}`),
   stats: () => api.get<InboxStats>("/inbox/stats"),
   create: (content: string) => api.post<InboxItem>("/inbox", { content }),
+  /** Captura que funciona offline: devolve null quando ficou na fila para sincronizar depois. */
+  capture: (content: string) => api.postOrQueue<InboxItem>("/inbox", { content }, content.slice(0, 80)),
   process: (id: string, input: ProcessInboxInput) => api.patch<{ processed: boolean; taskId: string | null }>(`/inbox/${id}/process`, input),
   remove: (id: string) => api.delete<void>(`/inbox/${id}`),
 };

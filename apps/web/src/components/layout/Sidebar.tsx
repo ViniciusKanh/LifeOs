@@ -72,7 +72,10 @@ export function NavGroups({
   layoutPrefix: string;
 }) {
   const location = useLocation();
-  const activeGroupId = findNavItem(location.pathname)?.group.id;
+  const currentNav = findNavItem(location.pathname);
+  const activeGroupId = currentNav?.group.id;
+  // Hubs: /signals ativa "Analytics", /capacity-planner ativa "Tarefas" etc.
+  const activeTo = currentNav?.item.to;
   const [closed, setClosed] = useState<string[]>(() => readStorage(CLOSED_GROUPS_KEY, []));
 
   // O grupo da rota atual sempre abre — nunca esconder onde o usuário está.
@@ -144,13 +147,16 @@ export function NavGroups({
                         onFocus={(e) => showTooltip(label, e.currentTarget)}
                         onBlur={hideTooltip}
                         aria-label={compact ? label : undefined}
-                        className={({ isActive }) =>
-                          `relative flex items-center gap-3 rounded-xl text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${
+                        className={({ isActive: routeActive }) => {
+                          const isActive = routeActive || activeTo === to;
+                          return `relative flex items-center gap-3 rounded-xl text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${
                             compact ? "justify-center h-10 w-10 mx-auto" : "px-3 py-2"
-                          } ${isActive ? "text-brand-700 dark:text-brand-100 font-semibold" : "text-slate hover:text-[#1E2537] dark:hover:text-white hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"}`
-                        }
+                          } ${isActive ? "text-brand-700 dark:text-brand-100 font-semibold" : "text-slate hover:text-[#1E2537] dark:hover:text-white hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"}`;
+                        }}
                       >
-                        {({ isActive }) => (
+                        {({ isActive: routeActive }) => {
+                          const isActive = routeActive || activeTo === to;
+                          return (
                           <>
                             {isActive && (
                               <motion.span
@@ -168,7 +174,8 @@ export function NavGroups({
                             <Icon size={17} className="relative shrink-0" />
                             {!compact && <span className="relative truncate">{label}</span>}
                           </>
-                        )}
+                          );
+                        }}
                       </NavLink>
                     </li>
                   ))}
@@ -211,7 +218,7 @@ export function Sidebar({ groups, collapsed, canToggle, onToggle }: { groups: Na
       <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-aurora opacity-50 dark:opacity-30" aria-hidden />
 
       <div className={`relative flex items-center gap-2.5 h-16 shrink-0 ${collapsed ? "justify-center px-2" : "px-5"}`}>
-        <NavLink to="/dashboard" className="flex items-center gap-2.5 min-w-0" aria-label="LifeOS — ir para o Dashboard">
+        <NavLink to="/hoje" className="flex items-center gap-2.5 min-w-0" aria-label="LifeOS — ir para Hoje">
           <span className="relative shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px] shadow-glow-brand">
             <img src="/logo/icon-64.png" alt="" className="w-full h-full rounded-[10px] object-cover bg-white" />
           </span>

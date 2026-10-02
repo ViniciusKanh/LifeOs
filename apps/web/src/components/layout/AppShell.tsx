@@ -18,6 +18,8 @@ import { MobileMagicNav } from "./MobileMagicNav";
 import { TermsGate } from "@/components/legal/TermsGate";
 import { DEFAULT_QUOTE, findNavItem, visibleGroups } from "./navConfig";
 import { AppScrollContext } from "./AppScrollContext";
+import { OfflineStatus } from "./OfflineStatus";
+import { HubTabs } from "./HubTabs";
 
 /**
  * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
@@ -87,7 +89,8 @@ export function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const current = findNavItem(location.pathname);
-  const isSubPage = !!current && location.pathname !== current.item.to;
+  // Sub-página = rota mais funda que o item/aba (ex.: /projetos/:id); uma aba do hub não é sub-página.
+  const isSubPage = !!current && location.pathname !== (current.tab?.to ?? current.item.to);
   const quote = current?.item.quote ?? DEFAULT_QUOTE;
 
   // A janela nunca rola (comportamento de app): só este contêiner. Cada troca de rota volta ao topo dele.
@@ -125,7 +128,7 @@ export function AppShell() {
               )}
             </nav>
             <p className="font-display font-semibold text-[15px] md:text-base leading-tight truncate mt-0.5">
-              {current ? (isSubPage ? "Detalhes" : current.item.label) : "LifeOS"}
+              {current ? (isSubPage ? "Detalhes" : current.tab && current.tab.to !== current.item.to ? current.tab.label : current.item.label) : "LifeOS"}
             </p>
           </div>
 
@@ -149,9 +152,11 @@ export function AppShell() {
           </div>
         </header>
 
+        <OfflineStatus />
         {/* Única área rolável do app: limitada entre o cabeçalho e a borda da tela, sem "elástico" além dos limites. */}
         <div ref={scrollRef} id="app-scroll" className="app-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain">
         <AppScrollContext.Provider value={scrollRef}>
+        {current?.item.tabs && <HubTabs tabs={current.item.tabs} activeTo={current.tab?.to ?? current.item.to} />}
         <div className="hidden xl:flex justify-end px-8 pt-3 -mb-1">
           <p className="text-xs italic text-slate">
             <span className="text-brand-500 not-italic font-display font-semibold mr-0.5">&ldquo;</span>

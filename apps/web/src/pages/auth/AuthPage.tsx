@@ -126,7 +126,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
         setMfaToken(result.mfaToken);
         return;
       }
-      navigate("/dashboard");
+      navigate("/hoje");
     } catch (err) {
       if ((err as { status?: number })?.status === 403) setPendingEmail(values.email);
     }
@@ -150,7 +150,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
               throw err;
             }
           }}
-          onSuccess={() => navigate("/dashboard")}
+          onSuccess={() => navigate("/hoje")}
           successLabel="Acesso liberado"
         />
         <button type="button" onClick={() => setMfaToken(null)} className="mt-5 inline-flex items-center gap-1.5 text-xs text-[var(--auth-muted)] hover:text-[var(--auth-accent)]">

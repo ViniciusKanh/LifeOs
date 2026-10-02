@@ -14,6 +14,7 @@ const ITEM_COLORS: Record<string, string> = {
   "/hoje": "#FF7A45",
   "/tarefas": "#2F80FF",
   "/projetos": "#12B76A",
+  "/notas": "#FF3D93",
 };
 const MODULES_COLOR = "#FF3D93";
 

@@ -18,6 +18,8 @@ export interface ProjectDetailsInput {
   repositoryUrl?: string | null;
   links?: ProjectLink[];
   tags?: string[];
+  /** Meta a que o projeto serve (Direção). */
+  goalId?: string | null;
 }
 
 export interface ProjectCreateInput extends ProjectDetailsInput {

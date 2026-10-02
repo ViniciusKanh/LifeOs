@@ -49,3 +49,12 @@ export const taskService = {
   startTime: (id: string) => api.post<TimeEntry>(`/tasks/${id}/time/start`),
   stopTime: (id: string) => api.patch<Task>(`/tasks/${id}/time/stop`),
 };
+
+/** Importação em lote de tarefas convertidas de outros apps (ver utils/taskImport.ts). */
+export const taskImportService = {
+  importTasks: (input: {
+    source: "todoist" | "notion" | "google_tasks" | "csv";
+    createProjects: boolean;
+    items: Array<{ title: string; description: string | null; dueDate: string | null; priority: string; status: string; projectName: string | null }>;
+  }) => api.post<{ imported: number; projectsCreated: number }>("/import/tasks", input),
+};

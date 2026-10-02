@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { Goal, GoalDetail, GoalForecast, GoalKind, GoalPeriod, GoalStats, GoalStatus } from "@/types";
+import type { Goal, GoalDetail, GoalForecast, GoalKind, GoalPeriod, GoalStats, GoalStatus, LifeArea } from "@/types";
 
 export interface GoalCreateInput {
   parentGoalId?: string | null;
@@ -13,6 +13,9 @@ export interface GoalCreateInput {
   period?: GoalPeriod;
   nextAction?: string;
   nextActionDue?: string;
+  /** Direção: área da roda da vida e ciclo (2026, 2026-Q4, 2026-10). */
+  lifeArea?: LifeArea | null;
+  cycle?: string | null;
 }
 
 export interface GoalUpdateInput extends Omit<Partial<GoalCreateInput>, "nextAction" | "nextActionDue"> {

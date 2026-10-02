@@ -22,6 +22,7 @@ export function useProjects(includeArchived = false) {
     // Mudar o "kind" de um projeto (ex.: flegar como Profissional) muda
     // quais tarefas contam na dimensão Profissional do Life Score.
     queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["direction"] });
   };
 
   const createProject = useMutation({ mutationFn: (input: ProjectCreateInput) => projectsService.create(input), onSuccess: invalidate });

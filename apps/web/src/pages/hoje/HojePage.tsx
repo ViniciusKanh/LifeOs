@@ -33,6 +33,7 @@ import { useTimeline } from "@/hooks/useAnalytics";
 import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
+import { TodayCockpit } from "@/components/today/TodayCockpit";
 import type { Task, TimelineEvent } from "@/types";
 
 // Metas de referência usadas só para calcular "% da meta" nos
@@ -153,6 +154,8 @@ export function HojePage() {
         <div><p className="flex items-center gap-2 text-xs font-semibold text-teal-700 dark:text-teal-300"><Sparkles size={14} /> Insight do dia</p><p className="mt-1 text-sm leading-relaxed">{copilot.text ?? (copilot.isLoading ? "Analisando seus registros..." : "Registre suas ações para gerar um insight pessoal.")}</p>{copilot.error && <p className="mt-1 text-xs text-drop">{copilot.error.message}</p>}</div>
         <button onClick={() => copilot.regenerate()} disabled={copilot.isRegenerating} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-teal-500/30 px-3 py-1.5 text-xs font-semibold text-teal-700 disabled:opacity-50 dark:text-teal-300"><Wand2 size={14} /> {copilot.isRegenerating ? "Gerando..." : "Novo insight"}</button>
       </section>
+
+      <TodayCockpit focusTaskId={focusTasks[0]?.id ?? null} />
 
       {/* Stat tiles — 2 colunas no celular (mobile-first) para caber bem em telas ~360-400px */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-4">

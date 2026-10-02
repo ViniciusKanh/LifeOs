@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LinkedNotes } from "@/components/notes/LinkedNotes";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, BookOpen, Plus, Trash2 } from "lucide-react";
 import { useBook, useBooks } from "@/hooks/useBooks";
@@ -49,6 +50,10 @@ export function LivroDetalhePage() {
       <button onClick={() => navigate("/biblioteca")} className="flex items-center gap-1.5 text-xs text-slate mb-4">
         <ArrowLeft size={14} /> Voltar para a biblioteca
       </button>
+
+      <div className="mb-4">
+        <LinkedNotes type="book" id={book.id} defaultTitle={book.title} />
+      </div>
 
       <div className="flex flex-col md:flex-row gap-6 mb-6">
         <div className="w-32 h-44 shrink-0 rounded-lg overflow-hidden mx-auto md:mx-0 flex items-center justify-center bg-paper-border dark:bg-ink-border">

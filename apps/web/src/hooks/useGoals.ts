@@ -19,6 +19,8 @@ export function useGoals(params?: { parentGoalId?: string }) {
     // do Life Score — sem isso, o Dashboard só refletia depois de um
     // reload manual da página.
     queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    // Direção (visão → metas → projetos) e Life Map são derivados das metas.
+    queryClient.invalidateQueries({ queryKey: ["direction"] });
   };
 
   const createGoal = useMutation({ mutationFn: (input: GoalCreateInput) => goalsService.create(input), onSuccess: invalidate });

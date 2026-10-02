@@ -33,7 +33,19 @@ export default defineConfig({
         theme_color: "#14181F",
         background_color: "#14181F",
         display: "standalone",
-        start_url: "/",
+        start_url: "/hoje",
+        // Compartilhar do celular (menu "Compartilhar" do Android/Windows) → /compartilhar
+        // já com título, texto e link preenchidos para virar Inbox, nota ou tarefa.
+        share_target: {
+          action: "/compartilhar",
+          method: "GET",
+          params: { title: "title", text: "text", url: "url" },
+        },
+        shortcuts: [
+          { name: "Captura rápida", short_name: "Capturar", url: "/compartilhar", icons: [{ src: "/logo/icon-192.png", sizes: "192x192" }] },
+          { name: "Hoje", url: "/hoje", icons: [{ src: "/logo/icon-192.png", sizes: "192x192" }] },
+          { name: "Nova nota", url: "/notas?nova=1", icons: [{ src: "/logo/icon-192.png", sizes: "192x192" }] },
+        ],
         icons: [
           { src: "/logo/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
           { src: "/logo/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

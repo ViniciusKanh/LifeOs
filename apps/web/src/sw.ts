@@ -1,8 +1,12 @@
 /// <reference lib="webworker" />
 declare const self: ServiceWorkerGlobalScope;
 
-import { precacheAndRoute } from "workbox-precaching";
+import { createHandlerBoundToURL, precacheAndRoute } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
+import { NavigationRoute, registerRoute } from "workbox-routing";
+import { NetworkFirst } from "workbox-strategies";
+import { ExpirationPlugin } from "workbox-expiration";
+import { CacheableResponsePlugin } from "workbox-cacheable-response";
 
 /**
  * Service worker customizado (estratégia injectManifest): precisa ser
@@ -60,3 +64,23 @@ self.addEventListener("notificationclick", (event) => {
     })()
   );
 });
+
+/* ------------------------------------------------------------------
+ * Offline: leituras da API em "rede primeiro, cache como reserva" — sem
+ * conexão, as telas abrem com o último dado visto neste aparelho. Ficam
+ * de fora rotas sensíveis ou pesadas (login, admin, cron, arquivos,
+ * exportações). O cache é apagado no logout (lib/offlineQueue.ts).
+ * ------------------------------------------------------------------ */
+const API_CACHE_EXCLUDE = /^\/api\/(auth\/(?!me$)|admin|cron|push|export|copilot|search)|\/file$|\/export\//;
+
+registerRoute(
+  ({ url, request }) => request.method === "GET" && url.pathname.startsWith("/api/") && !API_CACHE_EXCLUDE.test(url.pathname),
+  new NetworkFirst({
+    cacheName: "lifeos-api",
+    networkTimeoutSeconds: 5,
+    plugins: [new CacheableResponsePlugin({ statuses: [200] }), new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 14 * 24 * 60 * 60 })],
+  })
+);
+
+// Navegação offline (SPA): qualquer rota do app abre o index.html do cache.
+registerRoute(new NavigationRoute(createHandlerBoundToURL("/index.html"), { denylist: [/^\/api\//] }));

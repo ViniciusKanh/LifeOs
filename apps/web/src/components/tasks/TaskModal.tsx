@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { WhyChain } from "@/components/direction/WhyChain";
 import { X, Trash2, Repeat } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
 import { useProjects } from "@/hooks/useProjects";
@@ -161,6 +162,7 @@ export function TaskModal({
         </div>
 
         <div className="p-5 md:p-6 space-y-4">
+          {isEditing && task && <WhyChain type="task" id={task.id} compact />}
           <Field label="Título" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="O que precisa ser feito?" />
 
           <div>

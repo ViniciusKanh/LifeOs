@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { WhyChain } from "@/components/direction/WhyChain";
+import { ProjectNotes } from "@/components/notes/LinkedNotes";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -104,6 +106,8 @@ function OverviewTab({ project, overview, onOpenTask }: { project: Project; over
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <Card className="p-5 xl:col-span-2 space-y-4">
           <p className="text-sm font-semibold">Sobre o projeto</p>
+          <WhyChain type="project" id={project.id} />
+          <ProjectNotes projectId={project.id} />
           {!project.description && !project.objective && !project.scope && !project.success_criteria ? (
             <p className="text-sm text-slate">Nenhuma descrição, objetivo ou escopo cadastrado ainda. Use “Editar” para completar o cadastro.</p>
           ) : (

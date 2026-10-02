@@ -39,7 +39,30 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/**
+ * POST que sobrevive à falta de conexão: se a rede falhar (e a rota estiver
+ * na lista da fila offline), guarda o pedido e devolve `null` — quem chama
+ * mostra "salvo offline". Ver lib/offlineQueue.ts.
+ */
+async function postOrQueue<T>(path: string, body: unknown, label: string): Promise<T | null> {
+  const { canQueue, enqueue, isNetworkError } = await import("@/lib/offlineQueue");
+  if (canQueue(path) && typeof navigator !== "undefined" && navigator.onLine === false) {
+    enqueue(path, body, label);
+    return null;
+  }
+  try {
+    return await request<T>(path, { method: "POST", body: JSON.stringify(body) });
+  } catch (err) {
+    if (canQueue(path) && isNetworkError(err)) {
+      enqueue(path, body, label);
+      return null;
+    }
+    throw err;
+  }
+}
+
 export const api = {
+  postOrQueue,
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),

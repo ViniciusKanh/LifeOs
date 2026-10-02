@@ -81,6 +81,11 @@ const LifeMapPage = lazy(() => import("@/pages/lifemap/LifeMapPage").then((m) =>
 const DataHealthPage = lazy(() => import("@/pages/data-health/DataHealthPage").then((m) => ({ default: m.DataHealthPage })));
 const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
+const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
+const DirecaoPage = lazy(() => import("@/pages/direcao/DirecaoPage").then((m) => ({ default: m.DirecaoPage })));
+const RevisoesPage = lazy(() => import("@/pages/revisoes/RevisoesPage").then((m) => ({ default: m.RevisoesPage })));
+const NotasPage = lazy(() => import("@/pages/notas/NotasPage").then((m) => ({ default: m.NotasPage })));
+const CompartilharPage = lazy(() => import("@/pages/compartilhar/CompartilharPage").then((m) => ({ default: m.CompartilharPage })));
 
 function PageFallback() {
   return (
@@ -162,6 +167,11 @@ export default function App() {
           <Route path="/data-health" element={<DataHealthPage />} />
           <Route path="/gatilhos" element={<GatilhosPage />} />
           <Route path="/diario" element={<DiarioPage />} />
+          <Route path="/administracao" element={<AdministracaoPage />} />
+          <Route path="/direcao" element={<DirecaoPage />} />
+          <Route path="/revisoes" element={<RevisoesPage />} />
+          <Route path="/notas" element={<NotasPage />} />
+          <Route path="/compartilhar" element={<CompartilharPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route
             path="/configuracoes"
@@ -181,7 +191,7 @@ export default function App() {
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/hoje" replace />} />
       </Routes>
     </Suspense>
   );

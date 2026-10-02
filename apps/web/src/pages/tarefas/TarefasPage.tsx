@@ -17,6 +17,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Upload,
   X,
 } from "lucide-react";
 import { TASK_STATUSES, DONE_STATUS } from "@/utils/taskStatus";
@@ -26,6 +27,7 @@ import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
+import { TaskImportModal } from "@/components/tasks/TaskImportModal";
 import {
   DUE_GROUPS,
   compareTasks,
@@ -84,6 +86,7 @@ export function TarefasPage() {
   const [showAllDone, setShowAllDone] = useState(false);
   const [modal, setModal] = useState<{ open: boolean; task: Task | null; initialStatus?: string }>({ open: false, task: null });
   const searchRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -114,6 +117,25 @@ export function TarefasPage() {
       { replace: true }
     );
   }, [searchParams, tasks, setSearchParams]);
+
+  // Comandos vindos da paleta (Ctrl K) e atalhos do PWA: ?nova=1 e ?importar=1.
+  useEffect(() => {
+    const nova = searchParams.get("nova");
+    const importar = searchParams.get("importar");
+    if (!nova && !importar) return;
+    if (nova) openNew();
+    if (importar) setImportOpen(true);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("nova");
+        next.delete("importar");
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, setSearchParams]);
 
   // Atalhos: "n" nova tarefa, "/" busca.
   useEffect(() => {
@@ -189,9 +211,14 @@ export function TarefasPage() {
         title="Tarefas"
         subtitle="Planeje, execute e conclua — o progresso vem do que foi finalizado de verdade."
         actions={
-          <Button onClick={() => openNew()} title="Nova tarefa (N)">
-            <Plus size={15} /> Nova tarefa
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setImportOpen(true)} title="Importar do Todoist, Notion ou Google Tasks">
+              <Upload size={15} /> Importar
+            </Button>
+            <Button onClick={() => openNew()} title="Nova tarefa (N)">
+              <Plus size={15} /> Nova tarefa
+            </Button>
+          </>
         }
       />
 
@@ -426,6 +453,7 @@ export function TarefasPage() {
         <TaskListView tasks={filtered} projectName={projectName} onOpen={openEdit} onToggleDone={toggleDone} onMove={(t, s) => moveTask({ id: t.id, status: s })} />
       )}
 
+      <TaskImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       {modal.open && <TaskModal task={modal.task} statusOptions={COLUMNS} onClose={close} onSave={handleSave} onDelete={removeTask} />}
     </div>
   );

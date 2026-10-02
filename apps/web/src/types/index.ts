@@ -165,6 +165,8 @@ export interface Project {
   links: ProjectLink[];
   tags: string[];
   completed_at: string | null;
+  /** Meta a que o projeto serve (Direção). */
+  goal_id?: string | null;
 }
 
 /** Indicadores do projeto — sempre derivados das tarefas, anexos e Diário. */
@@ -556,6 +558,9 @@ export interface Goal {
   is_overdue?: boolean;
   /** Tarefas vinculadas (tasks.goal_id) a esta meta "task_based" — presente/derivado pela API; current_value já vem calculado a partir dele quando houver. */
   linked_tasks?: { total: number; done: number } | null;
+  /** Direção: área da roda da vida e ciclo ("2026", "2026-Q4" ou "2026-10"). */
+  life_area?: LifeArea | null;
+  cycle?: string | null;
 }
 
 export interface GoalPeriodStat {
@@ -1993,4 +1998,169 @@ export interface ExperimentTailorDraft {
   verificationConfig?: Record<string, unknown> | null;
   successCriteriaType?: ExperimentSuccessCriteriaType;
   successCriteriaValue?: number | null;
+}
+
+
+/* -------------------------- Administração da vida -------------------------- */
+
+export type LifeAdminKind = "vencimento" | "manutencao" | "documento" | "conta";
+export type LifeAdminCategory = "veiculo" | "casa" | "documentos" | "saude" | "seguros" | "impostos" | "assinaturas" | "pets" | "outro";
+export type LifeAdminUrgency = "overdue" | "today" | "soon" | "ok" | "no_date";
+
+export interface LifeAdminItem {
+  id: string;
+  kind: LifeAdminKind;
+  title: string;
+  category: LifeAdminCategory;
+  dueDate: string | null;
+  recurrenceMonths: number | null;
+  remindDaysBefore: number;
+  amount: number | null;
+  reference: string | null;
+  location: string | null;
+  notes: string | null;
+  fileName: string | null;
+  fileMime: string | null;
+  hasFile: boolean;
+  status: "active" | "archived";
+  lastDoneAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  daysLeft: number | null;
+  urgency: LifeAdminUrgency;
+}
+
+export interface LifeAdminDetail extends LifeAdminItem {
+  history: Array<{ id: string; doneAt: string; dueDate: string | null; amount: number | null; note: string | null }>;
+}
+
+export interface LifeAdminSummary {
+  overdue: number;
+  dueSoon: number;
+  next: Array<Pick<LifeAdminItem, "id" | "title" | "kind" | "category" | "dueDate" | "daysLeft" | "urgency">>;
+}
+
+/* -------------------------- Direção -------------------------- */
+
+export type LifeArea = "saude" | "carreira" | "financas" | "relacionamentos" | "familia" | "desenvolvimento" | "lazer" | "espiritualidade";
+
+export interface VisionValue {
+  name: string;
+  description: string | null;
+}
+
+export interface LifeVision {
+  vision: string | null;
+  purpose: string | null;
+  values: VisionValue[];
+  updatedAt: string | null;
+}
+
+export interface WheelAreaScore {
+  area: LifeArea;
+  score: number | null;
+  note: string | null;
+  assessedOn: string | null;
+  previousScore: number | null;
+}
+
+export interface WheelData {
+  latest: WheelAreaScore[];
+  history: Array<{ assessedOn: string; average: number; scores: Partial<Record<LifeArea, number>> }>;
+}
+
+export interface DirectionGoal {
+  id: string;
+  title: string;
+  status: string;
+  lifeArea: LifeArea | null;
+  cycle: string | null;
+  parentGoalId: string | null;
+  dueDate: string | null;
+  progressPct: number | null;
+  progressSource: "tasks" | "value" | null;
+  openTasks: number;
+  doneTasks: number;
+  projects: Array<{ id: string; name: string; doneCount: number; taskCount: number }>;
+}
+
+export interface DirectionOverview {
+  vision: LifeVision;
+  wheel: WheelData;
+  cycles: { year: string; quarter: string; month: string };
+  goals: DirectionGoal[];
+  alignment: {
+    openTasks: number;
+    alignedOpenTasks: number;
+    alignedPct: number | null;
+    activeGoalsWithoutArea: number;
+    activeGoalsWithoutWork: number;
+  };
+  balance: Array<{ area: LifeArea; score: number | null; activeGoals: number; doneLast30: number }>;
+}
+
+export interface WhyStep {
+  type: "task" | "project" | "goal" | "value" | "vision";
+  id: string | null;
+  label: string;
+  detail: string | null;
+}
+
+export type PeriodicKind = "monthly" | "quarterly" | "annual";
+
+export interface PeriodMetrics {
+  from: string;
+  to: string;
+  label: string;
+  tasksCompleted: number;
+  goalsCompleted: number;
+  habitCheckins: number;
+  journalEntries: number;
+  pagesRead: number;
+  workouts: number;
+  workoutMinutes: number;
+  avgMood: number | null;
+  avgSleepMinutes: number | null;
+  lifeAdminDone: number;
+  wheelAverage: number | null;
+  goals: Array<Pick<DirectionGoal, "id" | "title" | "status" | "cycle" | "lifeArea" | "progressPct">>;
+}
+
+export interface PeriodicReview {
+  id: string | null;
+  kind: PeriodicKind;
+  periodKey: string;
+  wins: string | null;
+  lessons: string | null;
+  focusNext: string | null;
+  energyScore: number | null;
+  savedAt: string | null;
+  metrics: PeriodMetrics;
+}
+
+/* -------------------------- Notas e conhecimento -------------------------- */
+
+export type NoteKind = "nota" | "ideia" | "referencia";
+export type NoteLinkType = "note" | "task" | "project" | "goal" | "book" | "journal" | "education";
+
+export interface NoteSummary {
+  id: string;
+  title: string;
+  kind: NoteKind;
+  tags: string[];
+  pinned: boolean;
+  preview: string;
+  sourceUrl: string | null;
+  linkCount: number;
+  backlinkCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteDetail extends NoteSummary {
+  content: string;
+  archived: boolean;
+  links: Array<{ linkId: string; targetType: NoteLinkType; targetId: string; label: string; path: string; origin: "manual" | "wiki" }>;
+  backlinks: Array<{ id: string; title: string; preview: string }>;
+  unresolvedWikiLinks: string[];
 }

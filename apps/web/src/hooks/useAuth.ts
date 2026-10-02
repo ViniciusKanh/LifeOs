@@ -45,7 +45,13 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: authService.logout,
-    onSuccess: () => queryClient.setQueryData(["auth", "me"], null),
+    onSuccess: async () => {
+      // Dados offline (fila e cache de leituras) são deste usuário: saem junto com a sessão.
+      const { clearOfflineData } = await import("@/lib/offlineQueue");
+      await clearOfflineData();
+      queryClient.clear();
+      queryClient.setQueryData(["auth", "me"], null);
+    },
   });
 
   return {

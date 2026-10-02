@@ -21,7 +21,7 @@ export function useInbox(includeProcessed = false) {
   });
   const statsQuery = useQuery({ queryKey: [...INBOX_KEY, "stats"], queryFn: inboxService.stats });
 
-  const capture = useMutation({ mutationFn: (content: string) => inboxService.create(content), onSuccess: invalidate });
+  const capture = useMutation({ mutationFn: (content: string) => inboxService.capture(content), onSuccess: invalidate });
   const process = useMutation({
     mutationFn: ({ id, input }: { id: string; input: ProcessInboxInput }) => inboxService.process(id, input),
     onSuccess: invalidate,
@@ -47,7 +47,7 @@ export function useInbox(includeProcessed = false) {
 /** Captura rápida global: não carrega a lista do Inbox em todas as páginas. */
 export function useInboxCapture() {
   const invalidate = useInboxInvalidation();
-  const capture = useMutation({ mutationFn: (content: string) => inboxService.create(content), onSuccess: invalidate });
+  const capture = useMutation({ mutationFn: (content: string) => inboxService.capture(content), onSuccess: invalidate });
 
   return {
     capture: capture.mutateAsync,

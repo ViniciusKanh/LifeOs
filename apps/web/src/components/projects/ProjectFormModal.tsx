@@ -4,6 +4,8 @@ import { Link2, Plus, Tag, X } from "lucide-react";
 import { Button, Field } from "@/components/ui/primitives";
 import type { Project, ProjectKind, ProjectLink, ProjectPriority, ProjectStatus } from "@/types";
 import type { ProjectCreateInput } from "@/services/projectsService";
+import { useGoals } from "@/hooks/useGoals";
+import { cycleLabel } from "@/utils/lifeOsLabels";
 import { KIND_META, PRIORITY_META, PROJECT_COLORS, STATUS_META } from "./projectMeta";
 
 /**
@@ -54,6 +56,9 @@ export function ProjectFormModal({
   const [startDate, setStartDate] = useState(project?.start_date?.slice(0, 10) ?? "");
   const [dueDate, setDueDate] = useState(project?.due_date?.slice(0, 10) ?? "");
   const [objective, setObjective] = useState(project?.objective ?? "");
+  const [goalId, setGoalId] = useState(project?.goal_id ?? "");
+  const { goals } = useGoals();
+  const activeGoals = goals.filter((g) => g.status === "active" || g.id === project?.goal_id);
   const [scope, setScope] = useState(project?.scope ?? "");
   const [successCriteria, setSuccessCriteria] = useState(project?.success_criteria ?? "");
   const [client, setClient] = useState(project?.client ?? "");
@@ -109,6 +114,7 @@ export function ProjectFormModal({
         startDate: startDate || null,
         dueDate: dueDate || null,
         objective: objective.trim() || null,
+        goalId: goalId || null,
         scope: scope.trim() || null,
         successCriteria: successCriteria.trim() || null,
         client: client.trim() || null,
@@ -211,6 +217,20 @@ export function ProjectFormModal({
             <div className="grid grid-cols-2 gap-3">
               <Field label="Início" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               <Field label="Prazo final" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-slate" htmlFor="project-goal">
+                Serve a qual meta? <span className="text-slate/70">(o “porquê” do projeto)</span>
+              </label>
+              <select id="project-goal" value={goalId} onChange={(e) => setGoalId(e.target.value)} className={inputClass}>
+                <option value="">Nenhuma meta</option>
+                {activeGoals.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.title}
+                    {g.cycle ? ` · ${cycleLabel(g.cycle)}` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
             <TextArea label="Objetivo" value={objective} onChange={setObjective} placeholder="Qual resultado este projeto precisa entregar?" rows={2} />
             <TextArea label="Escopo" value={scope} onChange={setScope} placeholder="O que está dentro (e fora) do projeto" />

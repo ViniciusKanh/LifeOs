@@ -7,6 +7,9 @@ import { LifeMapGraph, AREA_COLOR, AREA_ICON } from "@/components/lifemap/LifeMa
 import { LifeMapDetailPanel } from "@/components/lifemap/LifeMapDetailPanel";
 import { LifeMapAreaDistribution } from "@/components/lifemap/LifeMapAreaDistribution";
 import { LifeMapAlerts } from "@/components/lifemap/LifeMapAlerts";
+import { WheelOfLife } from "@/components/direction/WheelOfLife";
+import { AreaBalance } from "@/components/direction/AreaBalance";
+import { useDirection } from "@/hooks/useLifeOs";
 import type { LifeMapAreaId } from "@/types";
 
 const AREA_LABEL: Record<LifeMapAreaId, string> = {
@@ -38,6 +41,7 @@ const VIEWS: ViewOption[] = [
 export function LifeMapPage() {
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch, createLink, isCreatingLink, deleteLink, isDeletingLink } = useLifeMap();
+  const { data: direction } = useDirection();
   const [viewId, setViewId] = useState("geral");
   const [hidden, setHidden] = useState<Set<LifeMapAreaId>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -280,6 +284,14 @@ export function LifeMapPage() {
       </div>
 
       <LifeMapAreaDistribution distribution={data.distribution} />
+
+      {/* Equilíbrio da vida (Direção): roda da vida × metas × execução real por área. */}
+      {direction && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          <WheelOfLife wheel={direction.wheel} compact />
+          <AreaBalance balance={direction.balance} />
+        </div>
+      )}
     </div>
   );
 }

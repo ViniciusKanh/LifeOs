@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Inbox, Check } from "lucide-react";
+import { Inbox, Check, Mic } from "lucide-react";
 import { useInboxCapture } from "@/hooks/useInbox";
+import { useSpeechCapture } from "@/hooks/useSpeechCapture";
 
 /**
  * Captura rápida (Inbox/GTD) — botão flutuante disponível em qualquer
@@ -15,6 +16,9 @@ export function QuickCaptureButton() {
   const [justCaptured, setJustCaptured] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { capture, isCapturing } = useInboxCapture();
+  const [offlineSaved, setOfflineSaved] = useState(false);
+  // Ditado por voz: o texto reconhecido entra direto no campo (dá para revisar antes de capturar).
+  const speech = useSpeechCapture((t) => setText((cur) => (cur ? `${cur} ${t}` : t)));
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -22,11 +26,14 @@ export function QuickCaptureButton() {
     if (!content || isCapturing) return;
     setError(null);
     try {
-      await capture(content);
+      speech.stop();
+      const saved = await capture(content);
       setText("");
       setOpen(false);
+      setOfflineSaved(saved === null);
       setJustCaptured(true);
       setTimeout(() => setJustCaptured(false), 1800);
+      setTimeout(() => setOfflineSaved(false), 3200);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível capturar agora. Tente de novo.");
     }
@@ -41,6 +48,11 @@ export function QuickCaptureButton() {
       >
         {justCaptured ? <Check size={20} className="text-growth" /> : <Inbox size={19} />}
       </button>
+      {offlineSaved && (
+        <div role="status" className="fixed z-30 bottom-[14.5rem] md:bottom-[9rem] right-4 md:right-6 max-w-[240px] rounded-xl bg-[#1E2537] text-white text-xs px-3 py-2 shadow-lg">
+          Sem conexão: guardado no aparelho. Sobe sozinho quando a internet voltar.
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-40 flex items-end md:items-center justify-center md:justify-start bg-black/40" onClick={() => setOpen(false)}>
@@ -52,13 +64,30 @@ export function QuickCaptureButton() {
             <p className="text-sm font-semibold mb-2.5 flex items-center gap-2">
               <Inbox size={15} className="text-brand-600 dark:text-brand-400" /> Captura rápida
             </p>
-            <input
-              autoFocus
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Escreva uma ideia, lembrete ou tarefa solta..."
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500"
-            />
+            <div className="relative">
+              <input
+                autoFocus
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={speech.listening ? "Pode falar…" : "Escreva ou dite uma ideia, lembrete ou tarefa solta..."}
+                className="w-full rounded-xl pl-3.5 pr-12 py-2.5 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500"
+              />
+              {speech.supported && (
+                <button
+                  type="button"
+                  onClick={speech.listening ? speech.stop : speech.start}
+                  aria-pressed={speech.listening}
+                  aria-label={speech.listening ? "Parar ditado" : "Ditar por voz"}
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                    speech.listening ? "bg-drop text-white animate-pulse" : "text-slate hover:text-brand-600 hover:bg-black/[0.04]"
+                  }`}
+                >
+                  <Mic size={15} />
+                </button>
+              )}
+            </div>
+            {speech.interim && <p className="text-xs text-slate italic mt-1.5">{speech.interim}…</p>}
+            {speech.error && <p className="text-xs text-drop mt-1.5">{speech.error}</p>}
             <p className="text-[11px] text-slate mt-2">
               Não precisa decidir projeto nem prioridade agora — isso é só pra não perder a ideia. Depois você processa tudo em Inbox.
             </p>

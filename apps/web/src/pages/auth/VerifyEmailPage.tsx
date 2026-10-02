@@ -23,7 +23,7 @@ export function VerifyEmailPage() {
     verifyEmail(token)
       .then(() => {
         setStatus("success");
-        setTimeout(() => navigate("/dashboard"), 1500);
+        setTimeout(() => navigate("/hoje"), 1500);
       })
       .catch(() => setStatus("error"));
   }, [token, verifyEmail, navigate]);
