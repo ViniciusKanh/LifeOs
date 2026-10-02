@@ -985,6 +985,17 @@ export interface LifeMapOrphans {
   habitsUnlinked: number;
 }
 
+/** Alerta estrutural acionável do Life Map — itens reais (até 5) e para onde ir para resolver. */
+export interface LifeMapAlert {
+  id: "tasks_without_project" | "goals_without_habit" | "projects_without_deadline" | "habits_without_goal";
+  severity: "warning" | "info";
+  title: string;
+  description: string;
+  count: number;
+  items: Array<{ id: string; label: string; openPath: string; nodeId: string | null }>;
+  cta: { label: string; path: string } | null;
+}
+
 export interface LifeMapSuggestion {
   text: string;
 }
@@ -1009,6 +1020,8 @@ export interface LifeMapData {
   nodes: LifeMapNode[];
   edges: LifeMapEdge[];
   orphans: LifeMapOrphans;
+  /** Pode faltar se o backend ainda não foi atualizado — a UI cai nas contagens de `orphans`. */
+  alerts?: LifeMapAlert[];
   suggestions: LifeMapSuggestion[];
   distribution: LifeMapDistributionItem[];
 }

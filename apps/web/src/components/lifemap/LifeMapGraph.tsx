@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Maximize2, Minimize2, Minus, Plus, ScanSearch } from "lucide-react";
 import type { LifeMapAreaId, LifeMapEdge, LifeMapNode } from "@/types";
+import { AREA_RADIUS, CENTER_RADIUS, ITEM_HEIGHT, boundsOf, itemLabel, layoutLifeMap, type MapNodeBox } from "@/utils/lifeMapLayout";
 
 /**
- * Mapa em grafo, desenhado à mão em SVG (sem biblioteca de grafo) —
- * combina melhor com o design system do LifeOS do que uma lib
- * genérica de força/física, e para um número pequeno e conhecido de
- * nós (1 centro + áreas + até ~6 itens por área) um layout fixo fica
- * mais limpo e previsível do que uma simulação de física.
- *
- * Estrutura: "Você" no centro, áreas da vida num anel ao redor, e os
- * itens de cada área num pequeno "buquê" local ao redor do próprio nó
- * da área — não num anel global único, que é o que fazia os itens de
- * áreas diferentes colidirem entre si quando havia muitos nós.
+ * Life Map — grafo em SVG desenhado à mão (sem lib de grafo), com layout
+ * determinístico (utils/lifeMapLayout.ts), zoom ancorado no cursor,
+ * pinça no toque, botões de zoom/ajustar/tela cheia e foco animado no
+ * nó selecionado. Itens são "chips" com o nome legível, não pontinhos.
  */
 
 export const AREA_COLOR: Record<LifeMapAreaId, string> = {
@@ -24,7 +21,7 @@ export const AREA_COLOR: Record<LifeMapAreaId, string> = {
   profissional: "#7C4DFF",
 };
 
-const AREA_ICON: Record<LifeMapAreaId, string> = {
+export const AREA_ICON: Record<LifeMapAreaId, string> = {
   metas: "🎯",
   projetos: "📁",
   habitos: "🔁",
@@ -35,67 +32,46 @@ const AREA_ICON: Record<LifeMapAreaId, string> = {
 };
 
 const KIND_ICON: Partial<Record<LifeMapNode["kind"], string>> = {
-  goal: "◎",
-  project: "▣",
-  habit: "↻",
+  goal: "🎯",
+  project: "📁",
+  habit: "🔁",
   education: "🎓",
   academic_project: "📄",
   book: "📖",
-  health: "•",
+  health: "💧",
 };
 
-const VIEW = 860;
-const CENTER = VIEW / 2;
-const RING_AREA = 250;
-const CHILD_RING_RADII = [82, 118];
-const MAX_CHILD_ARC = Math.PI * 0.92;
+const MIN_K = 0.3;
+const MAX_K = 2.6;
 
-interface Positioned extends LifeMapNode {
+interface View {
+  k: number;
   x: number;
   y: number;
-  angle: number;
 }
 
-function layout(nodes: LifeMapNode[], visibleAreas: LifeMapAreaId[] | "all"): Positioned[] {
-  const areaNodes = nodes.filter((n) => n.kind === "area" && (visibleAreas === "all" || visibleAreas.includes(n.area as LifeMapAreaId)));
-  const areaCount = areaNodes.length || 1;
-  const positioned: Positioned[] = [];
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, size };
+}
 
-  const center = nodes.find((n) => n.kind === "center");
-  if (center) positioned.push({ ...center, x: CENTER, y: CENTER, angle: 0 });
+const clampK = (k: number) => Math.min(MAX_K, Math.max(MIN_K, k));
 
-  areaNodes.forEach((area, i) => {
-    const angle = (i / areaCount) * Math.PI * 2 - Math.PI / 2;
-    const x = CENTER + RING_AREA * Math.cos(angle);
-    const y = CENTER + RING_AREA * Math.sin(angle);
-    positioned.push({ ...area, x, y, angle });
-
-    const children = nodes.filter((n) => n.kind !== "area" && n.kind !== "center" && n.area === area.area);
-
-    // Dois mini-anéis locais intercalados ao redor do próprio nó da
-    // área — em vez de um anel global — para que itens de áreas
-    // diferentes nunca colidam entre si, mesmo com o mapa cheio.
-    const rings: LifeMapNode[][] = [[], []];
-    children.forEach((child, ci) => rings[ci % 2].push(child));
-
-    rings.forEach((ring, ringIdx) => {
-      if (ring.length === 0) return;
-      const radius = CHILD_RING_RADII[ringIdx];
-      const arc = Math.min(MAX_CHILD_ARC, (Math.PI / 4.5) * Math.max(ring.length, 1));
-      ring.forEach((child, ci) => {
-        const t = ring.length === 1 ? 0 : ci / (ring.length - 1) - 0.5;
-        const childAngle = angle + t * arc;
-        positioned.push({
-          ...child,
-          x: x + radius * Math.cos(childAngle),
-          y: y + radius * Math.sin(childAngle),
-          angle: childAngle,
-        });
-      });
-    });
-  });
-
-  return positioned;
+/** Curva suave entre dois nós: o controle é puxado levemente para o centro do mapa. */
+function curve(a: MapNodeBox, b: MapNodeBox, bend: number) {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const cx = mx * (1 - bend);
+  const cy = my * (1 - bend);
+  return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
 }
 
 export function LifeMapGraph({
@@ -104,6 +80,7 @@ export function LifeMapGraph({
   visibleAreas,
   selectedId,
   onSelect,
+  onOpen,
   resetToken,
 }: {
   nodes: LifeMapNode[];
@@ -111,181 +88,383 @@ export function LifeMapGraph({
   visibleAreas: LifeMapAreaId[] | "all";
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Duplo clique / Enter duas vezes: abre o item na tela de origem. */
+  onOpen?: (node: LifeMapNode) => void;
   resetToken: number;
 }) {
-  const positioned = useMemo(() => layout(nodes, visibleAreas), [nodes, visibleAreas]);
-  const byId = useMemo(() => new Map(positioned.map((n) => [n.id, n])), [positioned]);
-  const visibleIds = useMemo(() => new Set(positioned.map((n) => n.id)), [positioned]);
+  const reduce = useReducedMotion();
+  const { ref: wrapRef, size } = useSize<HTMLDivElement>();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
-  const connectedToSelected = useMemo(() => {
-    if (!selectedId) return null;
-    const set = new Set<string>();
+  const boxes = useMemo(() => layoutLifeMap(nodes, visibleAreas), [nodes, visibleAreas]);
+  const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+  const bounds = useMemo(() => boundsOf(boxes), [boxes]);
+
+  const neighbors = useMemo(() => {
+    const focus = selectedId ?? hoverId;
+    if (!focus) return null;
+    const set = new Set<string>([focus]);
     for (const e of edges) {
-      if (e.from === selectedId) set.add(e.to);
-      if (e.to === selectedId) set.add(e.from);
+      if (e.from === focus) set.add(e.to);
+      if (e.to === focus) set.add(e.from);
     }
     return set;
-  }, [edges, selectedId]);
+  }, [edges, selectedId, hoverId]);
 
-  const [view, setView] = useState({ scale: 1, tx: 0, ty: 0 });
-  const dragRef = useRef<{ x: number; y: number; active: boolean; moved: boolean }>({ x: 0, y: 0, active: false, moved: false });
+  // ---- Visão (zoom/pan) -------------------------------------------------
+  const [view, setView] = useState<View>({ k: 1, x: 0, y: 0 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const animRef = useRef<number | null>(null);
 
-  // Recentralizar quando o botão "Centralizar mapa" pedir —
-  // resetToken muda a cada clique.
+  const animateTo = useCallback(
+    (target: View) => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      if (reduce) {
+        setView(target);
+        return;
+      }
+      const from = viewRef.current;
+      const start = performance.now();
+      const dur = 420;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / dur);
+        const e = 1 - Math.pow(1 - t, 3);
+        setView({ k: from.k + (target.k - from.k) * e, x: from.x + (target.x - from.x) * e, y: from.y + (target.y - from.y) * e });
+        if (t < 1) animRef.current = requestAnimationFrame(step);
+      };
+      animRef.current = requestAnimationFrame(step);
+    },
+    [reduce]
+  );
+
+  const fitView = useCallback((): View => {
+    const { w, h } = size;
+    if (!w || !h) return { k: 1, x: 0, y: 0 };
+    const pad = 36;
+    const bw = bounds.x1 - bounds.x0;
+    const bh = bounds.y1 - bounds.y0;
+    const k = clampK(Math.min((w - pad * 2) / bw, (h - pad * 2) / bh));
+    return { k, x: w / 2 - ((bounds.x0 + bounds.x1) / 2) * k, y: h / 2 - ((bounds.y0 + bounds.y1) / 2) * k };
+  }, [size, bounds]);
+
+  // Ajusta ao abrir, ao mudar de tamanho/visão e quando pedirem "Centralizar".
+  const fitKey = `${size.w}x${size.h}|${boxes.length}|${resetToken}|${fullscreen}`;
+  const lastFit = useRef("");
   useEffect(() => {
-    setView({ scale: 1, tx: 0, ty: 0 });
-  }, [resetToken]);
+    if (!size.w || !size.h || lastFit.current === fitKey) return;
+    const first = lastFit.current === "";
+    lastFit.current = fitKey;
+    const target = fitView();
+    if (first) setView(target);
+    else animateTo(target);
+  }, [fitKey, fitView, animateTo, size.w, size.h]);
 
-  const handleWheel = (e: ReactWheelEvent<SVGSVGElement>) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.08 : 0.08;
-    setView((v) => ({ ...v, scale: Math.min(2.2, Math.max(0.45, v.scale + delta)) }));
+  // Seleção vinda de fora (busca, alerta): leva o nó para o centro.
+  useEffect(() => {
+    if (!selectedId || !size.w) return;
+    const b = byId.get(selectedId);
+    if (!b) return;
+    const k = Math.max(viewRef.current.k, 1.05);
+    animateTo({ k, x: size.w / 2 - b.x * k, y: size.h / 2 - b.y * k });
+  }, [selectedId, byId, size.w, size.h, animateTo]);
+
+  const zoomAt = useCallback((factor: number, cx: number, cy: number) => {
+    setView((v) => {
+      const k = clampK(v.k * factor);
+      const f = k / v.k;
+      return { k, x: cx - (cx - v.x) * f, y: cy - (cy - v.y) * f };
+    });
+  }, []);
+
+  // Roda do mouse dá zoom no ponto do cursor (listener nativo, não passivo,
+  // para não rolar a página junto).
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = svg.getBoundingClientRect();
+      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, [zoomAt]);
+
+  // Arrastar (1 dedo/mouse) e pinça (2 dedos).
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ moved: boolean; pinchDist: number | null }>({ moved: false, pinchDist: null });
+
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    gesture.current.moved = false;
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      gesture.current.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  };
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const prev = pointers.current.get(e.pointerId);
+    if (!prev) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    pointers.current.set(e.pointerId, cur);
+    if (pointers.current.size === 2 && gesture.current.pinchDist) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const r = svgRef.current!.getBoundingClientRect();
+      zoomAt(dist / gesture.current.pinchDist, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      gesture.current.pinchDist = dist;
+      gesture.current.moved = true;
+      return;
+    }
+    const dx = cur.x - prev.x;
+    const dy = cur.y - prev.y;
+    if (Math.abs(dx) + Math.abs(dy) > 1) gesture.current.moved = true;
+    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+  };
+  const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) gesture.current.pinchDist = null;
   };
 
-  const handlePointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
-    dragRef.current = { x: e.clientX, y: e.clientY, active: true, moved: false };
-  };
-  const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (!dragRef.current.active) return;
-    const dx = e.clientX - dragRef.current.x;
-    const dy = e.clientY - dragRef.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragRef.current.moved = true;
-    dragRef.current = { ...dragRef.current, x: e.clientX, y: e.clientY };
-    setView((v) => ({ ...v, tx: v.tx + dx, ty: v.ty + dy }));
-  };
-  const stopDrag = () => {
-    dragRef.current.active = false;
+  const zoomButton = (factor: number) => zoomAt(factor, size.w / 2, size.h / 2);
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "+" || e.key === "=") zoomButton(1.2);
+    else if (e.key === "-") zoomButton(1 / 1.2);
+    else if (e.key === "0") animateTo(fitView());
+    else if (e.key === "Escape") {
+      if (fullscreen) setFullscreen(false);
+      else onSelect(null);
+    }
   };
 
-  // Clicar no fundo (fora de qualquer nó) sem ter arrastado limpa a
-  // seleção — assim dá pra "desdestacar" as conexões sem precisar
-  // clicar em outro nó.
-  const handleBackgroundClick = (e: ReactMouseEvent<SVGSVGElement>) => {
-    if (dragRef.current.moved) return;
-    if (e.target === e.currentTarget) onSelect(null);
-  };
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setFullscreen(false);
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [fullscreen]);
 
-  const nodeRadius = (n: Positioned) => (n.kind === "center" ? 38 : n.kind === "area" ? 30 : 12);
+  const hovered = hoverId ? byId.get(hoverId) ?? null : null;
 
   return (
-    <svg
-      viewBox={`0 0 ${VIEW} ${VIEW}`}
-      className="w-full h-full select-none touch-none cursor-grab active:cursor-grabbing"
-      onWheel={handleWheel}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={stopDrag}
-      onPointerLeave={stopDrag}
-      onClick={handleBackgroundClick}
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[60] bg-paper dark:bg-ink p-3 sm:p-5 flex flex-col"
+          : "relative w-full h-full"
+      }
     >
-      <g transform={`translate(${view.tx} ${view.ty}) translate(${CENTER} ${CENTER}) scale(${view.scale}) translate(${-CENTER} ${-CENTER})`}>
-        {/* Arestas — apagadas por padrão; quando um nó está
-            selecionado, só as conexões dele ficam em destaque, o
-            resto quase some. Isso evita a "teia de aranha" quando o
-            mapa tem muitos nós. */}
-        {edges.map((e, i) => {
-          const a = byId.get(e.from);
-          const b = byId.get(e.to);
-          if (!a || !b || !visibleIds.has(e.from) || !visibleIds.has(e.to)) return null;
-          // Cor vem da área envolvida (o nó central não tem área própria,
-          // então herda a da ponta que tem — assim todo raio Você→área
-          // já nasce colorido em vez de cinza neutro).
-          const area = a.area ?? b.area;
-          const color = area ? AREA_COLOR[area] : "#98A2B3";
-          const isHub = e.kind === "hub";
-          const isSelectedEdge = selectedId != null && (e.from === selectedId || e.to === selectedId);
-          const isDimmed = selectedId != null && !isSelectedEdge;
-          const dash = e.kind === "manual" ? "2 5" : e.kind === "habit_health" ? "4 4" : undefined;
-          return (
-            <line
-              key={`${e.from}-${e.to}-${i}`}
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              stroke={color}
-              strokeOpacity={isDimmed ? 0.05 : isSelectedEdge ? 0.9 : isHub ? 0.4 : 0.16}
-              strokeWidth={isSelectedEdge ? 2.2 : isHub ? 1.6 : 1.2}
-              strokeDasharray={dash}
-              strokeLinecap="round"
-            />
-          );
-        })}
+      <div
+        ref={wrapRef}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        aria-label="Mapa interativo. Use + e − para zoom, 0 para ajustar e Esc para limpar a seleção."
+        className="relative w-full h-full flex-1 overflow-hidden rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-500
+          bg-[radial-gradient(circle_at_center,rgba(149,80,255,0.07),transparent_65%),radial-gradient(rgba(30,37,55,0.08)_1px,transparent_1px)]
+          dark:bg-[radial-gradient(circle_at_center,rgba(149,80,255,0.14),transparent_65%),radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)]
+          [background-size:100%_100%,22px_22px]"
+      >
+        <svg
+          ref={svgRef}
+          width={size.w}
+          height={size.h}
+          className="block select-none touch-none cursor-grab active:cursor-grabbing"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onClick={(e) => {
+            if (!gesture.current.moved && e.target === e.currentTarget) onSelect(null);
+          }}
+        >
+          <defs>
+            <radialGradient id="lm-center" cx="0.35" cy="0.3" r="0.8">
+              <stop offset="0%" stopColor="#B37CFF" />
+              <stop offset="100%" stopColor="#6D3BFF" />
+            </radialGradient>
+            <filter id="lm-shadow" x="-30%" y="-30%" width="160%" height="170%">
+              <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#1E2537" floodOpacity="0.14" />
+            </filter>
+          </defs>
 
-        {/* Nós */}
-        {positioned.map((n) => {
-          const r = nodeRadius(n);
-          const color = n.kind === "center" ? "#7C4DFF" : n.area ? AREA_COLOR[n.area] : "#98A2B3";
-          const selected = selectedId === n.id;
-          const isHub = n.kind === "area" || n.kind === "center";
-          const related = connectedToSelected?.has(n.id) ?? false;
-          const dimmed = selectedId != null && !selected && !related && !isHub;
-          // Chip de item: rótulo ao lado do ponto, na direção pra fora
-          // do centro (nunca "por baixo" apontando pro meio do mapa),
-          // pra não empilhar texto em cima de outros nós.
-          const labelSide = Math.cos(n.angle) >= 0 ? "right" : "left";
-          return (
-            <g
-              key={n.id}
-              transform={`translate(${n.x} ${n.y})`}
-              className="cursor-pointer"
-              opacity={dimmed ? 0.35 : 1}
-              onClick={() => onSelect(n.id)}
+          <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
+            {/* Arestas */}
+            {edges.map((e, i) => {
+              const a = byId.get(e.from);
+              const b = byId.get(e.to);
+              if (!a || !b) return null;
+              const area = a.area ?? b.area;
+              const color = area ? AREA_COLOR[area] : "#98A2B3";
+              const structural = e.kind === "hub";
+              const active = neighbors ? neighbors.has(e.from) && neighbors.has(e.to) && (e.from === (selectedId ?? hoverId) || e.to === (selectedId ?? hoverId)) : false;
+              const dimmed = neighbors != null && !active;
+              const dash = e.kind === "manual" ? "3 6" : structural ? undefined : "6 6";
+              return (
+                <path
+                  key={`${e.from}-${e.to}-${i}`}
+                  d={curve(a, b, structural ? 0.04 : 0.35)}
+                  fill="none"
+                  stroke={color}
+                  strokeOpacity={dimmed ? 0.06 : active ? 0.95 : structural ? 0.32 : 0.45}
+                  strokeWidth={(active ? 2.6 : structural ? 1.6 : 1.4) / Math.max(view.k, 0.6)}
+                  strokeDasharray={dash}
+                  strokeLinecap="round"
+                  className="transition-[stroke-opacity] duration-200"
+                />
+              );
+            })}
+
+            {/* Nós */}
+            {boxes.map((n, idx) => {
+              const selected = selectedId === n.id;
+              const dimmed = neighbors != null && !neighbors.has(n.id) && n.kind !== "center";
+              const color = n.kind === "center" ? "#7C4DFF" : n.area ? AREA_COLOR[n.area] : "#98A2B3";
+              const common = {
+                role: "button" as const,
+                tabIndex: 0,
+                "aria-label": `${n.label}${n.sublabel ? `, ${n.sublabel}` : ""}${n.progressPct != null ? `, ${n.progressPct}%` : ""}`,
+                "aria-pressed": selected,
+                onPointerEnter: () => setHoverId(n.id),
+                onPointerLeave: () => setHoverId((h) => (h === n.id ? null : h)),
+                onClick: (ev: React.MouseEvent) => {
+                  ev.stopPropagation();
+                  if (gesture.current.moved) return;
+                  onSelect(selected ? null : n.id);
+                },
+                onDoubleClick: () => n.openPath && onOpen?.(n),
+                onKeyDown: (ev: React.KeyboardEvent) => {
+                  if (ev.key === "Enter") {
+                    ev.stopPropagation();
+                    if (selected && n.openPath) onOpen?.(n);
+                    else onSelect(n.id);
+                  }
+                },
+                className: "cursor-pointer outline-none [&:focus-visible>*:first-child]:stroke-brand-500",
+              };
+              return (
+                <motion.g
+                  key={n.id}
+                  initial={reduce ? false : { opacity: 0, scale: 0.6 }}
+                  animate={{ opacity: dimmed ? 0.28 : 1, scale: 1 }}
+                  transition={{ duration: 0.35, delay: reduce ? 0 : Math.min(idx * 0.012, 0.5) }}
+                  style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "view-box" }}
+                >
+                  {n.kind === "center" ? (
+                    <g {...common} transform={`translate(${n.x} ${n.y})`}>
+                      <circle r={CENTER_RADIUS + 14} fill="#9550FF" opacity={0.12} />
+                      <circle r={CENTER_RADIUS} fill="url(#lm-center)" filter="url(#lm-shadow)" stroke="white" strokeOpacity={0.7} strokeWidth={3} />
+                      <text textAnchor="middle" dy={9} fontSize={28} className="pointer-events-none">🧑</text>
+                      <text textAnchor="middle" y={CENTER_RADIUS + 20} fontSize={14} fontWeight={800} className="fill-[#111936] dark:fill-[#F2F0FA] pointer-events-none">
+                        {n.label}
+                      </text>
+                    </g>
+                  ) : n.kind === "area" ? (
+                    <g {...common} transform={`translate(${n.x} ${n.y})`}>
+                      {selected && <circle r={AREA_RADIUS + 10} fill={color} opacity={0.2} />}
+                      <circle r={AREA_RADIUS} fill={color} filter="url(#lm-shadow)" stroke="white" strokeOpacity={0.8} strokeWidth={3} />
+                      <text textAnchor="middle" dy={7} fontSize={21} className="pointer-events-none">
+                        {AREA_ICON[n.area as LifeMapAreaId]}
+                      </text>
+                      {n.linkedCount > 0 && (
+                        <g transform={`translate(${AREA_RADIUS * 0.72} ${-AREA_RADIUS * 0.72})`} className="pointer-events-none">
+                          <circle r={10} className="fill-white dark:fill-[#1B1830]" stroke={color} strokeWidth={1.5} />
+                          <text textAnchor="middle" dy={3.5} fontSize={10} fontWeight={700} fill={color}>
+                            {n.linkedCount > 99 ? "99+" : n.linkedCount}
+                          </text>
+                        </g>
+                      )}
+                      <text textAnchor="middle" y={AREA_RADIUS + 18} fontSize={12.5} fontWeight={700} className="fill-[#111936] dark:fill-[#F2F0FA] pointer-events-none">
+                        {n.label}
+                      </text>
+                    </g>
+                  ) : (
+                    <g {...common} transform={`translate(${n.x - n.w / 2} ${n.y - ITEM_HEIGHT / 2})`}>
+                      <rect
+                        width={n.w}
+                        height={ITEM_HEIGHT}
+                        rx={ITEM_HEIGHT / 2}
+                        className="fill-white dark:fill-[#1B1830]"
+                        stroke={color}
+                        strokeOpacity={selected ? 1 : 0.45}
+                        strokeWidth={selected ? 2.2 : 1.2}
+                        filter="url(#lm-shadow)"
+                      />
+                      <circle cx={ITEM_HEIGHT / 2} cy={ITEM_HEIGHT / 2} r={10} fill={color} fillOpacity={0.14} />
+                      <text x={ITEM_HEIGHT / 2} y={ITEM_HEIGHT / 2} dy={4} textAnchor="middle" fontSize={11} className="pointer-events-none">
+                        {KIND_ICON[n.kind] ?? "•"}
+                      </text>
+                      <text x={ITEM_HEIGHT + 2} y={ITEM_HEIGHT / 2} dy={4} fontSize={11.5} fontWeight={selected ? 700 : 600} className="fill-[#1E2537] dark:fill-[#E7EAF2] pointer-events-none">
+                        {itemLabel(n.label)}
+                      </text>
+                      {n.progressPct != null && (
+                        <>
+                          <rect x={ITEM_HEIGHT} y={ITEM_HEIGHT - 5} width={n.w - ITEM_HEIGHT - 12} height={2.5} rx={1.25} className="fill-black/[0.06] dark:fill-white/[0.08]" />
+                          <rect x={ITEM_HEIGHT} y={ITEM_HEIGHT - 5} width={((n.w - ITEM_HEIGHT - 12) * Math.min(n.progressPct, 100)) / 100} height={2.5} rx={1.25} fill={color} />
+                        </>
+                      )}
+                    </g>
+                  )}
+                </motion.g>
+              );
+            })}
+          </g>
+        </svg>
+
+        {/* Dica flutuante do nó sob o cursor */}
+        <AnimatePresence>
+          {hovered && hovered.kind !== "center" && (
+            <motion.div
+              key={hovered.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="pointer-events-none absolute z-10 max-w-[240px] rounded-xl border border-paper-border dark:border-ink-border bg-paper-raised/95 dark:bg-ink-raised/95 backdrop-blur px-3 py-2 shadow-lg"
+              style={{
+                left: Math.min(Math.max(8, hovered.x * view.k + view.x + 14), Math.max(8, size.w - 250)),
+                top: Math.min(Math.max(8, hovered.y * view.k + view.y + 18), Math.max(8, size.h - 80)),
+              }}
             >
-              {isHub && (
-                <circle r={r + 10} fill={color} opacity={0.16} style={{ filter: "blur(7px)" }} />
-              )}
-              {selected && <circle r={r + 6} fill={color} fillOpacity={0.18} />}
-              <circle
-                r={r}
-                fill={isHub ? color : "white"}
-                fillOpacity={isHub ? 1 : 1}
-                stroke={isHub ? "white" : color}
-                strokeWidth={isHub ? 2 : selected ? 2.5 : 1.6}
-                strokeOpacity={isHub ? 0.55 : 1}
-                className={isHub ? "" : "dark:fill-[#15121F]"}
-              />
-              {isHub ? (
-                <text textAnchor="middle" dy={n.kind === "center" ? 6 : 5} fontSize={n.kind === "center" ? 20 : 16} className="pointer-events-none">
-                  {n.kind === "center" ? "🧑" : AREA_ICON[n.area as LifeMapAreaId]}
-                </text>
-              ) : (
-                <text textAnchor="middle" dy={4} fontSize={10} fill={color} className="pointer-events-none">
-                  {KIND_ICON[n.kind] ?? "•"}
-                </text>
-              )}
-              {isHub ? (
-                <text
-                  textAnchor="middle"
-                  dy={r + 16}
-                  fontSize={n.kind === "center" ? 13.5 : 12}
-                  fontWeight={700}
-                  fill="currentColor"
-                  className="text-[#111936] dark:text-[#F2F0FA] pointer-events-none"
-                >
-                  {truncateLabel(n.label, n.kind === "center" ? 20 : 18)}
-                </text>
-              ) : (
-                <text
-                  textAnchor={labelSide === "right" ? "start" : "end"}
-                  x={labelSide === "right" ? r + 6 : -(r + 6)}
-                  dy={3.5}
-                  fontSize={10.5}
-                  fontWeight={selected ? 700 : 500}
-                  fill="currentColor"
-                  className="text-[#111936] dark:text-[#F2F0FA] pointer-events-none"
-                >
-                  {truncateLabel(n.label, 16)}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </g>
-    </svg>
-  );
-}
+              <p className="text-xs font-semibold leading-snug">{hovered.label}</p>
+              {hovered.sublabel && <p className="text-[11px] text-slate mt-0.5">{hovered.sublabel}</p>}
+              {hovered.progressPct != null && <p className="text-[11px] text-slate">{hovered.progressPct}% concluído</p>}
+              {hovered.openPath && <p className="text-[10px] text-brand-600 dark:text-brand-400 mt-1">Duplo clique para abrir</p>}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-function truncateLabel(label: string, max: number) {
-  return label.length > max ? `${label.slice(0, max - 1)}…` : label;
+        {/* Controles */}
+        <div className="absolute right-3 top-3 flex flex-col gap-1.5">
+          {[
+            { label: "Aproximar", icon: <Plus size={15} />, onClick: () => zoomButton(1.25) },
+            { label: "Afastar", icon: <Minus size={15} />, onClick: () => zoomButton(1 / 1.25) },
+            { label: "Ajustar à tela", icon: <ScanSearch size={15} />, onClick: () => animateTo(fitView()) },
+            {
+              label: fullscreen ? "Sair da tela cheia" : "Tela cheia",
+              icon: fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />,
+              onClick: () => setFullscreen((v) => !v),
+            },
+          ].map((b) => (
+            <button
+              key={b.label}
+              type="button"
+              onClick={b.onClick}
+              aria-label={b.label}
+              title={b.label}
+              className="w-9 h-9 rounded-xl flex items-center justify-center bg-paper-raised/90 dark:bg-ink-raised/90 backdrop-blur border border-paper-border dark:border-ink-border shadow-sm text-slate hover:text-brand-600 transition-colors"
+            >
+              {b.icon}
+            </button>
+          ))}
+        </div>
+        <div className="absolute left-3 bottom-3 rounded-lg bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur border border-paper-border dark:border-ink-border px-2 py-1 text-[10px] text-slate tabular-nums">
+          {Math.round(view.k * 100)}%
+        </div>
+      </div>
+    </div>
+  );
 }

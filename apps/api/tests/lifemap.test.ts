@@ -57,6 +57,23 @@ describe("Life Map", () => {
     expect(res.body.orphans.projectsWithoutDeadline).toBeGreaterThanOrEqual(1);
   });
 
+  it("alertas acionáveis: ignoram tarefas concluídas e trazem os itens reais", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const done = await agent.post("/api/tasks").send({ title: "Já feita" });
+    await agent.patch(`/api/tasks/${done.body.id}`).send({ status: "Concluído" });
+    await agent.post("/api/tasks").send({ title: "Aberta solta" });
+    await agent.post("/api/goals").send({ title: "Correr 10 km", category: "Saúde", kind: "task_based" });
+
+    const res = await agent.get("/api/lifemap");
+    expect(res.body.orphans.tasksWithoutProject).toBe(1);
+    const tasksAlert = res.body.alerts.find((a: { id: string }) => a.id === "tasks_without_project");
+    expect(tasksAlert.items.map((i: { label: string }) => i.label)).toEqual(["Aberta solta"]);
+    expect(tasksAlert.items[0].openPath).toMatch(/^\/tarefas\?task=/);
+    const goalsAlert = res.body.alerts.find((a: { id: string }) => a.id === "goals_without_habit");
+    expect(goalsAlert.items[0]).toMatchObject({ label: "Correr 10 km", openPath: "/metas" });
+    expect(goalsAlert.items[0].nodeId).toMatch(/^goal:/);
+  });
+
   it("exige autenticação", async () => {
     const request = (await import("supertest")).default;
     const { app } = await import("../src/app.js");

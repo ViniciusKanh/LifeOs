@@ -69,6 +69,16 @@ export interface LifeMapOrphans {
   habitsUnlinked: number;
 }
 
+export interface LifeMapAlert {
+  id: "tasks_without_project" | "goals_without_habit" | "projects_without_deadline" | "habits_without_goal";
+  severity: "warning" | "info";
+  title: string;
+  description: string;
+  count: number;
+  items: Array<{ id: string; label: string; openPath: string; nodeId: string | null }>;
+  cta: { label: string; path: string } | null;
+}
+
 export interface LifeMapSuggestion {
   text: string;
 }
@@ -93,6 +103,7 @@ export interface LifeMapData {
   nodes: LifeMapNode[];
   edges: LifeMapEdge[];
   orphans: LifeMapOrphans;
+  alerts: LifeMapAlert[];
   suggestions: LifeMapSuggestion[];
   distribution: LifeMapDistributionItem[];
 }
@@ -539,20 +550,46 @@ export async function getLifeMap(ownerId: string): Promise<LifeMapData> {
   }
 
   // ---- Órfãos (contagens reais) ---------------------------------------
-  const tasksWithoutProject = tasks.filter((t) => !t.project_id).length;
+  // Só tarefas ABERTAS contam: uma tarefa concluída sem projeto não é um
+  // problema de estrutura (antes elas inflavam o alerta).
+  const openTasks = tasks.filter((t) => t.status !== "Concluído");
+  const looseTasks = openTasks.filter((t) => !t.project_id && !t.goal_id);
+  const tasksWithoutProject = openTasks.filter((t) => !t.project_id).length;
 
-  const goalCategoriesWithHabit = new Set(
-    activeHabits.filter((h) => h.category).map((h) => normalize(String(h.category)))
-  );
-  const goalsWithoutHabit = goals.filter((g) => g.status === "active" && (!g.category || !goalCategoriesWithHabit.has(normalize(String(g.category))))).length;
+  // Meta ↔ hábito: mesma categoria OU vínculo manual criado no próprio Life Map.
+  const manualPairs = new Set<string>();
+  for (const link of manualLinks) {
+    const a = `${String(link.source_type)}:${String(link.source_id)}`;
+    const b = `${String(link.target_type)}:${String(link.target_id)}`;
+    manualPairs.add(`${a}|${b}`);
+    manualPairs.add(`${b}|${a}`);
+  }
+  const goalHasHabit = (g: Row) =>
+    activeHabits.some(
+      (h) =>
+        (g.category && h.category && normalize(String(h.category)) === normalize(String(g.category))) ||
+        manualPairs.has(`goal:${String(g.id)}|habit:${String(h.id)}`)
+    );
+  const habitHasGoal = (h: Row) =>
+    goals.some(
+      (g) =>
+        g.status === "active" &&
+        ((g.category && h.category && normalize(String(h.category)) === normalize(String(g.category))) ||
+          manualPairs.has(`goal:${String(g.id)}|habit:${String(h.id)}`))
+    );
 
-  const projectsWithoutDeadline = activeProjects.filter((p) => {
-    const projectTasks = tasks.filter((t) => t.project_id === p.id);
-    return projectTasks.length === 0 || projectTasks.every((t) => !t.due_date);
-  }).length;
+  const goalsNeedingHabit = goals.filter((g) => g.status === "active" && !goalHasHabit(g));
+  const habitsWithoutGoal = activeHabits.filter((h) => !habitHasGoal(h));
+  const projectsNeedingDeadline = activeProjects.filter((p) => {
+    const open = openTasks.filter((t) => t.project_id === p.id);
+    const all = tasks.filter((t) => t.project_id === p.id);
+    // Projeto sem nenhuma tarefa também entra: não há como medir prazo nem progresso.
+    return all.length === 0 || (open.length > 0 && open.every((t) => !t.due_date));
+  });
 
-  const goalCategoriesSet = new Set(goals.filter((g) => g.category).map((g) => normalize(String(g.category))));
-  const habitsUnlinked = activeHabits.filter((h) => !h.category || !goalCategoriesSet.has(normalize(String(h.category)))).length;
+  const goalsWithoutHabit = goalsNeedingHabit.length;
+  const projectsWithoutDeadline = projectsNeedingDeadline.length;
+  const habitsUnlinked = habitsWithoutGoal.length;
 
   const orphans: LifeMapOrphans = {
     tasksWithoutProject,
@@ -561,23 +598,80 @@ export async function getLifeMap(ownerId: string): Promise<LifeMapData> {
     habitsUnlinked,
   };
 
+  // Alertas acionáveis: cada um traz os itens reais (até 5) e para onde ir
+  // para resolver. nodeId só vem quando o item está desenhado no mapa.
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const item = (nodeId: string, label: string, openPath: string) => ({
+    id: nodeId,
+    label,
+    openPath,
+    nodeId: nodeIds.has(nodeId) ? nodeId : null,
+  });
+  const alerts: LifeMapAlert[] = [];
+  if (tasksWithoutProject > 0) {
+    alerts.push({
+      id: "tasks_without_project",
+      severity: tasksWithoutProject >= 10 ? "warning" : "info",
+      title: `${tasksWithoutProject} ${tasksWithoutProject === 1 ? "tarefa aberta" : "tarefas abertas"} sem projeto`,
+      description: "Ligar a tarefa a um projeto ou meta faz o progresso dela aparecer onde importa.",
+      count: tasksWithoutProject,
+      items: openTasks
+        .filter((t) => !t.project_id)
+        .slice(0, 5)
+        .map((t) => item(`task:${String(t.id)}`, String(t.title), `/tarefas?task=${String(t.id)}`)),
+      cta: { label: "Organizar tarefas", path: "/tarefas" },
+    });
+  }
+  if (goalsWithoutHabit > 0) {
+    alerts.push({
+      id: "goals_without_habit",
+      severity: "warning",
+      title: `${goalsWithoutHabit} ${goalsWithoutHabit === 1 ? "meta ativa" : "metas ativas"} sem hábito de apoio`,
+      description: "Uma meta avança com repetição: crie um hábito da mesma categoria ou vincule um aqui no mapa.",
+      count: goalsWithoutHabit,
+      items: goalsNeedingHabit.slice(0, 5).map((g) => item(`goal:${String(g.id)}`, String(g.title), "/metas")),
+      cta: { label: "Criar hábito", path: "/habitos" },
+    });
+  }
+  if (projectsWithoutDeadline > 0) {
+    alerts.push({
+      id: "projects_without_deadline",
+      severity: "info",
+      title: `${projectsWithoutDeadline} ${projectsWithoutDeadline === 1 ? "projeto" : "projetos"} sem prazo definido`,
+      description: "Nenhuma tarefa aberta desses projetos tem data — sem prazo, eles não entram no radar de entregas.",
+      count: projectsWithoutDeadline,
+      items: projectsNeedingDeadline
+        .slice(0, 5)
+        .map((p) => item(`project:${String(p.id)}`, String(p.name), `/projetos/${String(p.id)}`)),
+      cta: null,
+    });
+  }
+  if (habitsUnlinked > 0) {
+    alerts.push({
+      id: "habits_without_goal",
+      severity: "info",
+      title: `${habitsUnlinked} ${habitsUnlinked === 1 ? "hábito" : "hábitos"} sem meta`,
+      description: "Use a mesma categoria de uma meta ou crie um vínculo manual para o hábito contar no objetivo.",
+      count: habitsUnlinked,
+      items: habitsWithoutGoal.slice(0, 5).map((h) => item(`habit:${String(h.id)}`, String(h.name), "/habitos")),
+      cta: { label: "Ver metas", path: "/metas" },
+    });
+  }
+
   // ---- Sugestões (regras simples sobre os órfãos, sempre com dado real) --
   const suggestions: LifeMapSuggestion[] = [];
-  const unlinkedHabit = activeHabits.find((h) => !h.category || !goalCategoriesSet.has(normalize(String(h.category))));
-  const goalNeedingHabit = goals.find((g) => g.status === "active" && (!g.category || !goalCategoriesWithHabit.has(normalize(String(g.category)))));
+  const unlinkedHabit = habitsWithoutGoal[0];
+  const goalNeedingHabit = goalsNeedingHabit[0];
   if (unlinkedHabit && goalNeedingHabit) {
     suggestions.push({
       text: `Vincule o hábito "${unlinkedHabit.name}" à meta "${goalNeedingHabit.title}" usando a mesma categoria.`,
     });
   }
-  const projectNeedingDeadline = activeProjects.find((p) => {
-    const projectTasks = tasks.filter((t) => t.project_id === p.id);
-    return projectTasks.length > 0 && projectTasks.every((t) => !t.due_date);
-  });
+  const projectNeedingDeadline = projectsNeedingDeadline.find((p) => tasks.some((t) => t.project_id === p.id));
   if (projectNeedingDeadline) {
     suggestions.push({ text: `Defina um prazo para as tarefas do projeto "${projectNeedingDeadline.name}".` });
   }
-  const looseTask = tasks.find((t) => !t.project_id && !t.goal_id);
+  const looseTask = looseTasks[0];
   if (looseTask) {
     suggestions.push({ text: `A tarefa "${looseTask.title}" não está vinculada a nenhum projeto ou meta — considere organizá-la.` });
   }
@@ -616,7 +710,7 @@ export async function getLifeMap(ownerId: string): Promise<LifeMapData> {
     .filter((d) => d.count > 0)
     .sort((a, b) => b.count - a.count);
 
-  return { summary, nodes, edges, orphans, suggestions, distribution };
+  return { summary, nodes, edges, orphans, alerts, suggestions, distribution };
 }
 
 /** Garante que a entidade (tipo + id) pertence ao usuário autenticado antes de criar/ler um vínculo manual. */
