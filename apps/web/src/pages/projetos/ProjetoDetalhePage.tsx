@@ -435,7 +435,7 @@ export function ProjetoDetalhePage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8 space-y-4">
+      <div className="w-full px-4 py-6 md:px-8 md:py-8 space-y-4">
         <div className="h-8 w-40 rounded-lg bg-paper-border dark:bg-ink-border animate-pulse" />
         <Card className="h-36 animate-pulse" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <Card key={i} className="h-24 animate-pulse" />)}</div>
@@ -458,7 +458,7 @@ export function ProjetoDetalhePage() {
   const status = STATUS_META[project.status] ?? STATUS_META.active;
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+    <div className="w-full px-4 py-6 md:px-8 md:py-8">
       <Link to="/projetos" className="inline-flex items-center gap-1.5 text-xs text-slate hover:text-brand-600 mb-4">
         <ArrowLeft size={14} /> Projetos
       </Link>

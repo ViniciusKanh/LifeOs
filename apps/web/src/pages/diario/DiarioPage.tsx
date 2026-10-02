@@ -840,7 +840,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   const auto = entry?.auto;
 
   return (
-    <div className="mx-auto max-w-6xl px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
+    <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
       {/* Masthead — inspirado no app Diário/Journal da Apple: gradiente suave do
           ícone do app, navegação de dia limpa, e um painel de Insights reais
           sobre o hábito de escrever (sequência, recorde, entradas, palavras) */}
@@ -1890,7 +1890,7 @@ function JournalFeedTab({
   let lastGroup: ReturnType<typeof feedGroupKey> | null = null;
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full">
       <FeedInsightsStrip onOpenInsights={onOpenInsights} />
       <OnThisDaySection onOpenDay={onOpenDay} />
       <div className="flex flex-wrap items-center gap-1.5 mb-1">
@@ -2010,7 +2010,7 @@ function JournalInsightsTab({ collections, onOpenDay }: { collections: JournalCo
   ];
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {tiles.map((t) => (
           <Card key={t.label} className="p-4 sm:p-5 flex flex-col items-start gap-2 transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md">
@@ -2275,7 +2275,7 @@ function EntriesByMonthChart() {
  */
 function DiarioSidebar({ collections, onOpenDay, onOpenCollections }: { collections: JournalCollection[]; onOpenDay: (date: string) => void; onOpenCollections: () => void }) {
   return (
-    <aside className="hidden lg:flex lg:flex-col gap-4 w-[280px] shrink-0">
+    <aside className="hidden lg:flex lg:flex-col gap-4 w-[280px] xl:w-[320px] 2xl:w-[360px] shrink-0">
       <MiniCalendarWidget onOpenDay={onOpenDay} />
       <MyJournalsWidget collections={collections} onOpenCollections={onOpenCollections} />
       <EntriesByMonthChart />
@@ -2664,13 +2664,15 @@ function JournalCollectionsTab() {
   if (isLoading) return <p className="text-sm text-slate">Carregando…</p>;
 
   return (
-    <div className="max-w-lg space-y-4">
+    <div className="w-full grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4 items-start">
+      <div className="space-y-4">
       <JournalPinSettingsCard />
 
       <Card className="p-4 sm:p-5">
         <p className="text-sm font-semibold mb-3">Novo diário</p>
         <JournalCollectionForm onSubmit={(input) => create(input)} isSaving={isSaving} />
       </Card>
+      </div>
 
       {collections.length === 0 ? (
         <p className="text-sm text-slate">
@@ -2770,7 +2772,7 @@ function DiarioPageContent() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
+    <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <p className="text-2xl sm:text-3xl font-bold tracking-tight text-cat-pink">Diário</p>

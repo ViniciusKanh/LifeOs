@@ -30,7 +30,7 @@ export function DeadlineRadarPage() {
   const isEmpty = !isLoading && data && data.items.length === 0;
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       <PageHeader
         icon={<Radar size={22} />}
         title="🛰️ Deadline Radar"

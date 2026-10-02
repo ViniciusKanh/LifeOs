@@ -187,7 +187,7 @@ export function SaudePage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+    <div className="w-full px-4 py-6 md:px-8 md:py-8">
       <PageHeader
         icon={<HeartPulse size={21} />}
         title="Saúde e bem-estar"

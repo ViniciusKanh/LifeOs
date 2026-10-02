@@ -18,7 +18,7 @@ export function DataHealthPage() {
 
   if (isLoading) {
     return (
-      <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1440px] mx-auto space-y-4">
+      <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
         <div className="h-20 rounded-2xl bg-paper dark:bg-ink animate-pulse" />
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -52,7 +52,7 @@ export function DataHealthPage() {
   }
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1440px] mx-auto space-y-4">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
       <PageHeader
         icon={<Database size={20} />}
         title="Data Health"

@@ -222,7 +222,7 @@ export function AnalyticsPage() {
   }, [overview, insights]);
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-7xl mx-auto space-y-5">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
         <div>
           <p className="font-display font-semibold text-2xl">Analytics</p>

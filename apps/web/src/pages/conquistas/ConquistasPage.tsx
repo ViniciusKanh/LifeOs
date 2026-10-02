@@ -223,7 +223,7 @@ export function ConquistasPage() {
   }, [achievements]);
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto space-y-8">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-8">
       <div>
         <p className="font-display font-bold text-2xl tracking-tight flex items-center gap-2">🏆 Conquistas</p>
         <p className="text-sm text-slate mt-1">

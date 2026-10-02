@@ -292,7 +292,7 @@ export function WeeklyReviewPage() {
   const weakest = dimensionSignals[dimensionSignals.length - 1];
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-4">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="font-display font-semibold text-2xl">Weekly Review</p>

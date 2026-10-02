@@ -45,7 +45,7 @@ export function LivroDetalhePage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-4xl mx-auto">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full">
       <button onClick={() => navigate("/biblioteca")} className="flex items-center gap-1.5 text-xs text-slate mb-4">
         <ArrowLeft size={14} /> Voltar para a biblioteca
       </button>

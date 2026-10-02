@@ -31,7 +31,7 @@ export function AppFooter() {
 
   return (
     <footer className="mt-auto border-t border-paper-border dark:border-ink-border bg-paper-raised/60 dark:bg-ink-raised/60">
-      <div className="mx-auto max-w-[1440px] px-4 md:px-8 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-xs text-slate">
+      <div className="w-full px-4 md:px-8 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-xs text-slate">
         <div className="flex items-center gap-2 min-w-0">
           <img src="/logo/icon-64.png" alt="" className="w-5 h-5 rounded-md" />
           <span className="font-semibold text-[#1E2537] dark:text-[#E7EAF2]">LifeOS</span>

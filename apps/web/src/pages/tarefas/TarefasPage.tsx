@@ -105,7 +105,7 @@ export function TarefasPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+    <div className="w-full px-4 py-6 md:px-8 md:py-8">
       <PageHeader
         icon={<ListChecks size={20} />}
         title="Tarefas"
@@ -279,7 +279,7 @@ export function TarefasPage() {
           )}
         />
       ) : (
-        <div className="max-w-4xl space-y-2">
+        <div className="space-y-2">
           {filtered.length === 0 ? (
             <p className="text-sm text-slate">Nenhuma tarefa encontrada.</p>
           ) : (

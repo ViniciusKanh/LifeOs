@@ -276,8 +276,10 @@ export function ConfiguracoesPage() {
   const googleClientSecret = findSetting(settings, "google_oauth", "client_secret");
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-3xl mx-auto space-y-4">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
       <PageHeader icon={<ShieldCheck size={20} />} title="Configurações" subtitle="Integrações, segurança e administração do LifeOS." />
+      {/* Duas colunas em telas largas para ocupar a área do app; uma coluna no celular/tablet. */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
 
       <SectionCard
         icon={<IconBadge tone="purple" size={30} icon={<KeyRound size={14} />} />}
@@ -434,6 +436,7 @@ export function ConfiguracoesPage() {
       </Card>
 
       {userModalOpen && <NovoUsuarioModal onClose={() => setUserModalOpen(false)} onCreate={createUser} />}
+      </div>
     </div>
   );
 }

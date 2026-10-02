@@ -80,7 +80,7 @@ export function ExperimentsPage() {
 
   if (isLoading) {
     return (
-      <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
+      <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
         <div className="h-24 rounded-2xl bg-paper dark:bg-ink animate-pulse" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 rounded-2xl bg-paper dark:bg-ink animate-pulse" />)}
@@ -90,7 +90,7 @@ export function ExperimentsPage() {
   }
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-5">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       <PageHeader
         icon={<FlaskConical size={20} />}
         title="Experimentos Pessoais"

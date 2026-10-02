@@ -119,7 +119,7 @@ export function AdminUsuariosPage() {
   }, [users, search]);
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto space-y-4">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
       <div>
         <Link to="/configuracoes" className="inline-flex items-center gap-1.5 text-xs text-slate hover:underline mb-1.5">
           <ArrowLeft size={13} /> Configurações

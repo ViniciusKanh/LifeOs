@@ -75,7 +75,7 @@ export function CalendarioPage() {
   };
 
   return (
-    <div className="px-3 py-5 sm:px-4 md:px-8 md:py-8 max-w-5xl mx-auto space-y-4 md:space-y-5">
+    <div className="px-3 py-5 sm:px-4 md:px-8 md:py-8 w-full space-y-4 md:space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="min-w-0">
           <p className="font-display font-bold text-xl md:text-2xl tracking-tight capitalize truncate">{monthLabel}</p>

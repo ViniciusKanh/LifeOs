@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Cloud, EyeOff, TrendingUp, X } from "lucide-react";
 import type { JournalCollection } from "@/types";
@@ -6,6 +6,7 @@ import type { JournalWordPeriod } from "@/services/journalService";
 import { useJournalWordCloud } from "@/hooks/useJournal";
 import { Card } from "@/components/ui/primitives";
 import { ProvenanceBadge } from "@/components/experiments/AiThinking";
+import { NARROW_CLOUD, WIDE_CLOUD, layoutCloud, type CloudShape } from "@/utils/wordCloudLayout";
 
 const PERIODS: Array<{ key: JournalWordPeriod; label: string }> = [
   { key: "30", label: "30 dias" },
@@ -15,20 +16,173 @@ const PERIODS: Array<{ key: JournalWordPeriod; label: string }> = [
 ];
 
 // Paleta do design system (rosa = diário, roxo, azul, verde, laranja), alternada por posição.
-const TONES = ["text-cat-pink", "text-cat-purple", "text-cat-blue", "text-cat-green", "text-signal"];
+const TONES = [
+  "fill-cat-pink dark:fill-cat-pink-dark",
+  "fill-cat-purple dark:fill-cat-purple-dark",
+  "fill-cat-blue dark:fill-cat-blue-dark",
+  "fill-cat-green dark:fill-cat-green-dark",
+  "fill-cat-teal dark:fill-cat-teal-dark",
+];
+const CLOUD_FONT = '"Bricolage Grotesque", Inter, system-ui, sans-serif';
 
-function fmtDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+type CloudWord = { word: string; count: number; days: number; recentDates: string[] };
+
+/** Largura do contêiner — decide entre a nuvem larga e a estreita (celular). */
+function useContainerWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, width };
 }
 
 /**
- * Coloca as palavras mais usadas no centro e alterna as demais para os
- * lados — dá o formato de "nuvem" sem precisar de biblioteca de layout.
+ * Desenho da nuvem: silhueta em SVG (bolhas sobrepostas com gradiente e
+ * sombra suave) e as palavras posicionadas por layoutCloud dentro dela.
  */
-function centerOut<T>(items: T[]): T[] {
-  const out: T[] = [];
-  items.forEach((item, i) => (i % 2 === 0 ? out.push(item) : out.unshift(item)));
-  return out;
+function CloudCanvas({
+  words,
+  selected,
+  onSelect,
+  compact,
+}: {
+  words: CloudWord[];
+  selected: string | null;
+  onSelect: (word: string | null) => void;
+  compact: boolean;
+}) {
+  const reduce = useReducedMotion();
+  const uid = useId().replace(/:/g, "");
+  const { ref, width } = useContainerWidth<HTMLDivElement>();
+  const narrow = width > 0 && width < 560;
+  const shape: CloudShape = narrow ? NARROW_CLOUD : WIDE_CLOUD;
+  const limit = narrow ? 28 : compact ? 32 : 60;
+  // A largura das palavras é medida na fonte de exibição; quando ela termina de carregar, refaz o layout.
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    document.fonts?.ready.then(() => alive && setFontsReady(true)).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const placed = useMemo(() => {
+    const list = words.slice(0, limit);
+    if (list.length === 0) return [];
+    const max = list[0].count;
+    const min = list[list.length - 1].count;
+    const [lo, hi] = narrow ? [20, 64] : [17, 70];
+    // Escala por raiz quadrada: diferença visível sem a palavra campeã engolir o resto.
+    const size = (c: number) => (max === min ? (lo + hi) / 2 : lo + ((Math.sqrt(c) - Math.sqrt(min)) / (Math.sqrt(max) - Math.sqrt(min))) * (hi - lo));
+    return layoutCloud(
+      shape,
+      list.map((w, rank) => ({ item: { ...w, rank }, text: w.word, size: size(w.count) })),
+      CLOUD_FONT
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [words, narrow, limit, fontsReady]);
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <motion.svg
+        viewBox={`0 0 ${shape.width} ${shape.height}`}
+        className="w-full h-auto select-none"
+        role="img"
+        aria-label="Nuvem de palavras mais frequentes"
+        animate={reduce ? undefined : { y: [0, -6, 0] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <defs>
+          <linearGradient id={`cloud-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" className="[stop-color:#FFFFFF] dark:[stop-color:#2B2740]" />
+            <stop offset="100%" className="[stop-color:#F6EEFB] dark:[stop-color:#1F1C2E]" />
+          </linearGradient>
+          <radialGradient id={`cloud-glow-${uid}`} cx="0.35" cy="0.25" r="0.8">
+            <stop offset="0%" className="[stop-color:#FF3D93] [stop-opacity:0.10]" />
+            <stop offset="60%" className="[stop-color:#9550FF] [stop-opacity:0.06]" />
+            <stop offset="100%" className="[stop-color:#2F80FF] [stop-opacity:0]" />
+          </radialGradient>
+          <filter id={`cloud-shadow-${uid}`} x="-10%" y="-10%" width="120%" height="130%">
+            <feDropShadow dx="0" dy="14" stdDeviation="16" floodColor="#9550FF" floodOpacity="0.16" />
+          </filter>
+        </defs>
+
+        {/* Silhueta: bolhas + base com o mesmo preenchimento formam uma única nuvem. */}
+        <g filter={`url(#cloud-shadow-${uid})`}>
+          <g fill={`url(#cloud-fill-${uid})`}>
+            {shape.puffs.map((p, i) => (
+              <circle key={i} cx={p.cx} cy={p.cy} r={p.r} />
+            ))}
+            <rect x={shape.base.x} y={shape.base.y} width={shape.base.w} height={shape.base.h} rx={shape.base.r} />
+          </g>
+        </g>
+        <g fill={`url(#cloud-glow-${uid})`} pointerEvents="none">
+          {shape.puffs.map((p, i) => (
+            <circle key={i} cx={p.cx} cy={p.cy} r={p.r} />
+          ))}
+          <rect x={shape.base.x} y={shape.base.y} width={shape.base.w} height={shape.base.h} rx={shape.base.r} />
+        </g>
+
+        {placed.map(({ item, x, y, size }) => {
+          const active = selected === item.word;
+          const dim = selected !== null && !active;
+          return (
+            // Grupo externo: só a entrada escalonada. Interno: seleção/hover, sem atraso.
+            <motion.g
+              key={item.word}
+              initial={reduce ? false : { opacity: 0, scale: 0.4 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 220, damping: 18, delay: reduce ? 0 : Math.min(item.rank * 0.02, 0.8) }}
+              style={{ transformOrigin: `${x}px ${y}px`, transformBox: "view-box" }}
+            >
+              <motion.g
+                role="button"
+                tabIndex={0}
+                aria-pressed={active}
+                aria-label={`${item.word}: ${item.count} vezes em ${item.days} ${item.days === 1 ? "dia" : "dias"}`}
+                onClick={() => onSelect(active ? null : item.word)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelect(active ? null : item.word);
+                  }
+                }}
+                className="cursor-pointer outline-none focus-visible:[&>text]:underline"
+                animate={{ opacity: dim ? 0.28 : 1, scale: active ? 1.12 : 1 }}
+                whileHover={reduce ? undefined : { scale: active ? 1.12 : 1.08 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                style={{ transformOrigin: `${x}px ${y}px`, transformBox: "view-box" }}
+              >
+                <title>{`${item.count}× em ${item.days} ${item.days === 1 ? "dia" : "dias"}`}</title>
+                <text
+                  x={x}
+                  y={y}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={size}
+                  fontWeight={700}
+                  fontFamily={CLOUD_FONT}
+                  className={TONES[item.rank % TONES.length]}
+                >
+                  {item.word}
+                </text>
+              </motion.g>
+            </motion.g>
+          );
+        })}
+      </motion.svg>
+    </div>
+  );
+}
+
+function fmtDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
 /**
@@ -49,7 +203,6 @@ export function JournalWordCloud({
   fixedJournalId?: string | null;
   compact?: boolean;
 }) {
-  const reduce = useReducedMotion();
   const [period, setPeriod] = useState<JournalWordPeriod>("90");
   const [scope, setScope] = useState<string | null>(null);
   const journalId = fixedJournalId !== undefined ? fixedJournalId : scope;
@@ -57,19 +210,9 @@ export function JournalWordCloud({
   const [selected, setSelected] = useState<string | null>(null);
   const [showExcluded, setShowExcluded] = useState(false);
 
-  const words = useMemo(() => (cloud ? cloud.words.slice(0, compact ? 28 : 60) : []), [cloud, compact]);
-  const max = words[0]?.count ?? 1;
-  const min = words[words.length - 1]?.count ?? 1;
-  const arranged = useMemo(() => centerOut(words.map((w, i) => ({ ...w, rank: i }))), [words]);
+  const words = useMemo(() => cloud?.words ?? [], [cloud]);
   const selectedWord = words.find((w) => w.word === selected) ?? null;
   const collectionName = journalId ? collections.find((c) => c.id === journalId)?.name : null;
-
-  // Escala por raiz quadrada: diferença visível sem a palavra campeã engolir o resto.
-  const size = (count: number) => {
-    const t = max === min ? 0.5 : (Math.sqrt(count) - Math.sqrt(min)) / (Math.sqrt(max) - Math.sqrt(min));
-    const [lo, hi] = compact ? [12, 30] : [13, 44];
-    return Math.round(lo + t * (hi - lo));
-  };
 
   return (
     <Card className="p-4 sm:p-5">
@@ -147,34 +290,7 @@ export function JournalWordCloud({
             </span>
           </div>
 
-          <div
-            className={`flex flex-wrap justify-center items-center content-center gap-x-3 gap-y-1.5 px-1 ${compact ? "py-3 min-h-[120px]" : "py-6 min-h-[200px]"}`}
-            aria-label="Palavras mais frequentes"
-          >
-            {arranged.map((w) => {
-              const active = selected === w.word;
-              return (
-                <motion.button
-                  key={`${period}-${journalId ?? "all"}-${w.word}`}
-                  type="button"
-                  initial={reduce ? false : { opacity: 0, scale: 0.6, y: 6 }}
-                  animate={{ opacity: selected && !active ? 0.35 : 1, scale: 1, y: 0 }}
-                  whileHover={reduce ? undefined : { scale: 1.08 }}
-                  whileTap={reduce ? undefined : { scale: 0.95 }}
-                  transition={{ type: "spring", stiffness: 260, damping: 20, delay: reduce ? 0 : Math.min(w.rank * 0.015, 0.6) }}
-                  onClick={() => setSelected(active ? null : w.word)}
-                  aria-pressed={active}
-                  title={`${w.count}× em ${w.days} ${w.days === 1 ? "dia" : "dias"}`}
-                  className={`font-display font-semibold leading-tight rounded-lg px-1 ${TONES[w.rank % TONES.length]} ${
-                    active ? "bg-cat-pink/10 ring-1 ring-cat-pink/40" : ""
-                  }`}
-                  style={{ fontSize: size(w.count) }}
-                >
-                  {w.word}
-                </motion.button>
-              );
-            })}
-          </div>
+          <CloudCanvas words={words} selected={selected} onSelect={setSelected} compact={compact} />
 
           <AnimatePresence>
             {selectedWord && (

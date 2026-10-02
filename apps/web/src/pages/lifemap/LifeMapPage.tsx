@@ -113,7 +113,7 @@ export function LifeMapPage() {
   const { summary, orphans, suggestions } = data;
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-[1440px] mx-auto">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full">
       <PageHeader
         icon={<Share2 size={20} />}
         title="Life Map"

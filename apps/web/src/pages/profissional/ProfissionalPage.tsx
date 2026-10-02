@@ -78,7 +78,7 @@ export function ProfissionalPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 mx-auto max-w-[1440px]">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full">
       <PageHeader
         icon={<Briefcase size={20} />}
         title="Profissional"

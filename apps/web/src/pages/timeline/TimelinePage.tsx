@@ -245,7 +245,7 @@ export function TimelinePage() {
   }, [events]);
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-7xl mx-auto space-y-5">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       <div>
         <p className="text-[11px] font-semibold tracking-wide text-slate">HISTÓRICO</p>
         <p className="font-display font-bold text-2xl mt-0.5">Timeline</p>

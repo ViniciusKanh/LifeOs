@@ -84,7 +84,7 @@ export function ExperimentDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-4">
+      <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
         <div className="h-8 w-40 rounded-lg bg-paper dark:bg-ink animate-pulse" />
         <div className="h-48 rounded-2xl bg-paper dark:bg-ink animate-pulse" />
       </div>
@@ -93,7 +93,7 @@ export function ExperimentDetailPage() {
 
   if (isError || !detail) {
     return (
-      <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto">
+      <div className="px-4 py-6 md:px-8 md:py-8 w-full">
         <Button variant="ghost" onClick={() => navigate("/experimentos")}>
           <ArrowLeft size={15} /> Voltar
         </Button>
@@ -119,7 +119,7 @@ export function ExperimentDetailPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto space-y-4">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <Button variant="ghost" onClick={() => navigate("/experimentos")}>
           <ArrowLeft size={15} /> Voltar

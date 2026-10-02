@@ -135,7 +135,7 @@ export function HojePage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl mx-auto">
+    <div className="px-4 py-6 md:px-8 md:py-8 w-full">
       <p className="font-display font-bold text-2xl">Hoje</p>
       <p className="text-sm text-slate mt-1 mb-5">
         {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {prioritiesPct}% das

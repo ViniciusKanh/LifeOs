@@ -143,7 +143,7 @@ export function GatilhosPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 py-6 md:px-8 md:py-8">
+    <div className="w-full px-4 py-6 md:px-8 md:py-8">
       <PageHeader
         icon={<BellRing size={21} />}
         title="Gatilhos"

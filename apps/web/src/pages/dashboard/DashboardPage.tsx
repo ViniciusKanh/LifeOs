@@ -282,7 +282,7 @@ export function DashboardPage() {
     <>
       <motion.div aria-hidden style={{ scaleX: progress }} className="fixed left-0 right-0 top-16 z-20 h-[3px] origin-left bg-gradient-to-r from-brand-500 via-cat-purple to-signal" />
 
-      <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8 space-y-4">
+      <div className="w-full px-4 py-6 md:px-8 md:py-8 space-y-4">
         <DashboardHero
           firstName={user?.name?.split(" ")[0] ?? ""}
           subtitle={subtitle}
