@@ -57,6 +57,17 @@ export const GAMIFICATION_RULES = {
     byKind: { vencimento: { xp: 10, coins: 2 }, documento: { xp: 10, coins: 2 }, conta: { xp: 10, coins: 2 }, manutencao: { xp: 15, coins: 3 } } as Record<string, { xp: number; coins: number }>,
     maxDaysAhead: 60,
   },
+  /**
+   * Conquista do catálogo oficial desbloqueada → XP e moedas por raridade,
+   * uma única vez. Troféus personalizados (criados pelo próprio usuário)
+   * NÃO rendem nada: seriam uma forma trivial de "farmar" recompensa.
+   */
+  achievementByTier: {
+    bronze: { xp: 25, coins: 5 },
+    silver: { xp: 50, coins: 10 },
+    gold: { xp: 100, coins: 20 },
+    platinum: { xp: 250, coins: 50 },
+  } as Record<string, { xp: number; coins: number }>,
   focus: {
     /** Cada bloco completo de 25 min de foco rende XP. */
     blockMinutes: 25,

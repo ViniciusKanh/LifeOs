@@ -19,6 +19,9 @@ export interface CurrentUser {
   terms_current_version: string;
   /** true quando ainda não aceitou a versão vigente do Termo/Política. */
   terms_pending: boolean;
+  /** Preferências da conta (já devolvidas por /auth/me). */
+  language?: string | null;
+  timezone?: string | null;
 }
 
 /** Resposta do login quando a conta tem MFA: a sessão só nasce na 2ª etapa. */
@@ -906,7 +909,15 @@ export interface Achievement {
   tier: AchievementTier;
   progress: number;
   unlockedAt: string | null;
+  /** Valor real atual da métrica (ex.: 27 de 365). */
+  currentValue?: number;
+  /** Categoria derivada da métrica no backend. */
+  category?: AchievementCategory;
+  /** Recompensa por raridade (paga uma única vez ao desbloquear). */
+  reward?: { xp: number; coins: number };
 }
+
+export type AchievementCategory = "missoes" | "contratos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
 
 /** Um troféu que o próprio usuário cadastrou (estilo PlayStation/Xbox) — desbloqueia sozinho ao atingir a métrica. */
 export interface CustomAchievement {

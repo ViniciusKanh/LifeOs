@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
+import { GAMIFICATION_RULES } from "../config/gamification.js";
+import { awardUnlockedAchievements } from "./gamificationService.js";
 
 type Db = ReturnType<typeof getDb>;
 type MetricMap = Record<string, number>;
@@ -258,6 +260,33 @@ export interface AchievementView {
   tier: AchievementTier;
   progress: number;
   unlockedAt: string | null;
+  /** Valor real atual da métrica (para "27 / 365"). */
+  currentValue: number;
+  /** Categoria derivada da métrica (agrupamento da UI). */
+  category: AchievementCategory;
+  /** Recompensa por raridade, concedida uma única vez ao desbloquear. */
+  reward: { xp: number; coins: number };
+}
+
+export type AchievementCategory = "missoes" | "contratos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
+
+/** Agrupa a conquista pela métrica que ela mede — sem campo novo no banco. */
+export function achievementCategory(metric: string | null): AchievementCategory {
+  if (!metric) return "outros";
+  if (metric.startsWith("tasks_")) return "missoes";
+  if (metric.startsWith("habit_")) return "contratos";
+  if (metric.startsWith("books_") || metric.startsWith("pages_")) return "leitura";
+  if (metric.startsWith("water_") || metric.startsWith("workouts_")) return "saude";
+  if (metric.startsWith("focus_")) return "foco";
+  if (metric.startsWith("weekly_reviews")) return "revisoes";
+  if (metric.startsWith("goals_")) return "metas";
+  if (metric.startsWith("study_")) return "educacao";
+  if (metric.startsWith("experiments_")) return "experimentos";
+  return "outros";
+}
+
+function rewardFor(tier: string) {
+  return GAMIFICATION_RULES.achievementByTier[tier] ?? GAMIFICATION_RULES.achievementByTier.bronze;
 }
 
 /** Catálogo completo com o progresso real do usuário em cada conquista (destravada ou não). */
@@ -297,6 +326,9 @@ export async function listAchievements(ownerId: string): Promise<AchievementView
       tier: row.tier,
       progress,
       unlockedAt: unlockedMap.get(row.id) ?? null,
+      currentValue,
+      category: achievementCategory(row.metric),
+      reward: rewardFor(row.tier),
     };
   });
 }
@@ -313,6 +345,8 @@ export async function evaluateAchievements(ownerId: string): Promise<Achievement
   const catalog = await db.execute("SELECT id, metric, threshold FROM achievements");
   const already = await db.execute({ sql: "SELECT achievement_id FROM user_achievements WHERE owner_id = ?", args: [ownerId] });
   const alreadySet = new Set((already.rows as unknown as Array<{ achievement_id: string }>).map((r) => r.achievement_id));
+  // Paga (uma vez) qualquer conquista já desbloqueada que ainda não rendeu XP.
+  await awardUnlockedAchievements(db, ownerId);
   const pendingRows = (catalog.rows as unknown as Array<{ id: string; metric: string | null; threshold: number | null }>).filter(
     (row): row is { id: string; metric: string; threshold: number } =>
       !alreadySet.has(row.id) && typeof row.metric === "string" && row.metric.length > 0 && typeof row.threshold === "number"
@@ -333,6 +367,7 @@ export async function evaluateAchievements(ownerId: string): Promise<Achievement
   }
 
   if (newlyUnlocked.length === 0) return [];
+  await awardUnlockedAchievements(db, ownerId);
   const placeholders = newlyUnlocked.map(() => "?").join(", ");
   const details = await db.execute({
     sql: `SELECT * FROM achievements WHERE id IN (${placeholders})`,
@@ -358,5 +393,8 @@ export async function evaluateAchievements(ownerId: string): Promise<Achievement
     tier: row.tier,
     progress: 100,
     unlockedAt: new Date().toISOString(),
+    currentValue: row.threshold ?? 0,
+    category: achievementCategory(row.metric),
+    reward: rewardFor(row.tier),
   }));
 }

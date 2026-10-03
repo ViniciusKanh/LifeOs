@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Coins, Crown, Sparkles } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { useGamificationProfile } from "@/hooks/useGamification";
 import { GAMIFICATION_REFRESH_EVENT, type PlayerEvent } from "@/services/gamificationService";
 import { RPGButton } from "@/components/rpg";
@@ -22,6 +23,7 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
   if (main.sourceType === "task") return { title: "MISSÃO CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Missão concluída: /, "") ?? null };
   if (main.sourceType === "habit_entry") return { title: "CONTRATO CUMPRIDO", stamp: "contract", detail: main.label?.replace(/^Contrato cumprido: /, "") ?? null };
   if (main.sourceType === "project") return { title: "CAMPANHA CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Campanha concluída: /, "") ?? null };
+  if (main.sourceType === "achievement") return { title: "CONQUISTA DESBLOQUEADA", stamp: "mission", detail: main.label?.replace(/^Conquista: /, "") ?? null };
   if (main.sourceType === "life_admin") return { title: "ITEM RESOLVIDO", stamp: "contract", detail: main.label?.replace(/^Resolvido: /, "") ?? null };
   if (main.sourceType === "habit_streak") return { title: "MARCO DE SEQUÊNCIA", stamp: "contract", detail: main.label };
   if (main.sourceType === "review") return { title: "CICLO CONCLUÍDO", stamp: "mission", detail: main.label };
@@ -39,7 +41,10 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
 export function GamificationFeedback() {
   const { isRpg } = useTheme();
   const qc = useQueryClient();
-  const reduce = useReducedMotion();
+  const { prefs } = useRpgPreferences();
+  // Preferência do usuário soma-se ao prefers-reduced-motion do sistema.
+  const reduce = useReducedMotion() || prefs.animations === "reduced";
+  const silent = !prefs.gamification || prefs.animations === "off";
   const { data } = useGamificationProfile(isRpg);
   const seen = useRef<Set<string> | null>(null);
   const lastLevel = useRef<number | null>(null);
@@ -66,7 +71,7 @@ export function GamificationFeedback() {
     }
     const fresh = data.recentEvents.filter((e) => !seen.current!.has(e.id));
     fresh.forEach((e) => seen.current!.add(e.id));
-    if (fresh.length > 0) {
+    if (fresh.length > 0 && !silent) {
       setBurst({
         key: fresh[0].id,
         xp: fresh.reduce((a, e) => a + e.xp, 0),
@@ -74,8 +79,9 @@ export function GamificationFeedback() {
         ...describe(fresh),
       });
     }
-    if (lastLevel.current !== null && data.level > lastLevel.current) setLevelUp(data.level);
+    if (lastLevel.current !== null && data.level > lastLevel.current && !silent) setLevelUp(data.level);
     lastLevel.current = data.level;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   useEffect(() => {

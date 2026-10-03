@@ -14,7 +14,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement";
 
 export interface XpGrant {
   sourceType: XpSourceType;
@@ -434,6 +434,35 @@ export async function awardReviewClosed(
   });
 }
 
+/**
+ * Concede a recompensa de toda conquista oficial já desbloqueada que ainda
+ * não foi paga (inclui conquistas anteriores a esta regra). Idempotente:
+ * a chave é achievement:<id>, então rodar de novo não paga duas vezes.
+ */
+export async function awardUnlockedAchievements(db: Client, ownerId: string): Promise<void> {
+  await safely("conquista", async () => {
+    const r = await db.execute({
+      sql: `SELECT ua.achievement_id, a.title, a.tier FROM user_achievements ua
+            JOIN achievements a ON a.id = ua.achievement_id
+            WHERE ua.owner_id = ? AND NOT EXISTS (
+              SELECT 1 FROM xp_events x WHERE x.owner_id = ua.owner_id AND x.source_type = 'achievement' AND x.source_id = ua.achievement_id
+            )`,
+      args: [ownerId],
+    });
+    if (r.rows.length === 0) return;
+    const dayKey = await todayKeyFor(db, ownerId);
+    for (const row of r.rows) {
+      const rule = GAMIFICATION_RULES.achievementByTier[String(row.tier)] ?? GAMIFICATION_RULES.achievementByTier.bronze;
+      await award(
+        db,
+        ownerId,
+        { sourceType: "achievement", sourceId: String(row.achievement_id), eventType: "unlocked", xp: rule.xp, coins: rule.coins, label: `Conquista: ${row.title}` },
+        dayKey,
+      );
+    }
+  });
+}
+
 /** Recompensa (regra + se já foi concedida) de uma revisão, para a UI mostrar o selo real. */
 export async function reviewRewardStatus(db: Client, ownerId: string, kind: ReviewKind, periodKey: string) {
   const r = await db.execute({
@@ -647,5 +676,6 @@ export function publicRules() {
     review: GAMIFICATION_RULES.review,
     habitStreakMilestones: GAMIFICATION_RULES.habitStreakMilestones,
     lifeAdmin: GAMIFICATION_RULES.lifeAdmin.byKind,
+    achievementByTier: GAMIFICATION_RULES.achievementByTier,
   };
 }

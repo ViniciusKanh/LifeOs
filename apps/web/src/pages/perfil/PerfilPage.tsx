@@ -26,6 +26,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { THEME_LABEL, useTheme } from "@/hooks/useTheme";
+import { RpgProfileView } from "@/components/profile/RpgProfileView";
 import { usePush } from "@/hooks/usePush";
 import { useWeeklyEmail } from "@/hooks/useReviews";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
@@ -55,7 +56,7 @@ function formatFullDate(dateStr: string) {
 
 export function PerfilPage() {
   const { user } = useAuth();
-  const { mode } = useTheme();
+  const { mode, isRpg } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
 
   /**
@@ -151,25 +152,9 @@ export function PerfilPage() {
 
   const themeLabel = THEME_LABEL[mode];
 
-  return (
-    <div className="px-4 py-6 md:px-8 md:py-8">
-      <PageHeader icon={<User size={20} />} title="Meu perfil" subtitle="Gerencie suas informações pessoais e preferências da sua conta LifeOS." />
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
-        <div className="space-y-4">
-          <Card className="p-5 md:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm font-semibold">Dados do perfil</p>
-                <p className="text-xs text-slate">Atualize suas informações e personalize seu perfil.</p>
-              </div>
-              {user.role === "admin" && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-growth/10 text-growth">
-                  <Crown size={12} /> Administrador
-                </span>
-              )}
-            </div>
-
+  // Blocos compartilhados entre o layout clássico e a ficha do personagem (RPG).
+  const identityEditor = (
+    <>
             {/* No celular a foto fica acima e o campo de nome ocupa a linha toda,
                 em vez de espremer avatar + input + botão numa única linha */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -215,6 +200,171 @@ export function PerfilPage() {
             <p className="text-xs text-slate mt-1.5 sm:ml-24">Esse é o nome que será exibido na sua conta.</p>
             {avatarError && <p className="text-xs text-drop mt-2">{avatarError}</p>}
             {updateProfileError && <p className="text-xs text-drop mt-2">{updateProfileError.message}</p>}
+    </>
+  );
+
+  const passwordCard = (
+    <>
+          <Card className="p-5 md:p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <IconBadge tone="purple" size={32} icon={<Lock size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">{user.has_password ? "Alterar senha" : "Definir senha"}</p>
+                <p className="text-xs text-slate">
+                  {user.has_password ? "Mantenha sua conta segura com uma senha forte." : "Crie uma senha para entrar também com e-mail e senha."}
+                </p>
+              </div>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              {user.has_password && (
+                <div className="relative">
+                  <Field
+                    label="Senha atual"
+                    type={showPasswords ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </div>
+              )}
+              <div className="relative">
+                <Field
+                  label="Nova senha"
+                  type={showPasswords ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords((v) => !v)}
+                  className="absolute right-3 top-[34px] text-slate"
+                  tabIndex={-1}
+                >
+                  {showPasswords ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+
+              {newPassword.length > 0 && <PasswordStrengthPanel password={newPassword} />}
+
+              <Field
+                label="Confirmar nova senha"
+                type={showPasswords ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                error={passwordMismatch ? "As senhas não coincidem" : undefined}
+              />
+              {changePasswordError && <p className="text-xs text-drop">{changePasswordError.message}</p>}
+              {setPasswordError && <p className="text-xs text-drop">{setPasswordError.message}</p>}
+              {changePasswordSuccess && <p className="text-xs text-growth">Senha atualizada com sucesso.</p>}
+              {setPasswordSuccess && <p className="text-xs text-growth">Senha definida. Agora você também pode entrar com e-mail e senha.</p>}
+              <Button
+                type="submit"
+                disabled={isChangingPassword || isSettingPassword || (user.has_password && !currentPassword) || !newPassword}
+                className="w-full"
+              >
+                {isChangingPassword || isSettingPassword ? "Salvando..." : user.has_password ? "Atualizar senha" : "Definir senha"}
+              </Button>
+            </form>
+          </Card>
+    </>
+  );
+
+  const triggersCard = (
+    <>
+          <Card className="p-5">
+            <div className="flex items-center gap-2.5 mb-3">
+              <IconBadge tone="amber" size={32} icon={<BellRing size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">Gatilhos e alertas</p>
+                <p className="text-xs text-slate">Controle tarefas vencidas, conquistas, resumo semanal, push e e-mail em um só lugar.</p>
+              </div>
+            </div>
+            <Link to="/gatilhos" className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm">
+              <span className="font-semibold">Abrir central de gatilhos</span>
+              <ChevronRight size={14} className="text-slate shrink-0" />
+            </Link>
+          </Card>
+    </>
+  );
+
+  const exportCard = (
+    <>
+          <Card className="p-5">
+            <div className="flex items-center gap-2.5 mb-3">
+              <IconBadge tone="green" size={32} icon={<Download size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">Exportar meus dados</p>
+                <p className="text-xs text-slate">Baixe tudo o que você registrou no LifeOS — tarefas, hábitos, livros, saúde, metas e mais — num único arquivo JSON.</p>
+              </div>
+            </div>
+            <Button variant="secondary" className="w-full" onClick={handleExportData} disabled={isExporting}>
+              <Download size={14} /> {isExporting ? "Gerando arquivo..." : "Baixar meus dados (.json)"}
+            </Button>
+          </Card>
+    </>
+  );
+
+  const helpCard = (
+    <>
+          <Card className="p-5">
+            <div className="flex items-center gap-2.5 mb-3">
+              <IconBadge tone="blue" size={32} icon={<HelpCircle size={15} />} />
+              <div>
+                <p className="text-sm font-semibold">Precisa de ajuda?</p>
+                <p className="text-xs text-slate">Fale com o administrador da sua conta LifeOS.</p>
+              </div>
+            </div>
+            <a
+              href={`mailto:${ADMIN_EMAIL}`}
+              className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm"
+            >
+              <span className="flex items-center gap-2 min-w-0 truncate">
+                <Mail size={14} className="text-slate shrink-0" /> <span className="truncate">{ADMIN_EMAIL}</span>
+              </span>
+              <ChevronRight size={14} className="text-slate shrink-0" />
+            </a>
+          </Card>
+    </>
+  );
+
+  // Tema RPG: "Ficha do personagem" reaproveita os mesmos blocos funcionais da tela clássica.
+  if (isRpg) {
+    return (
+      <>
+        <RpgProfileView
+          user={user}
+          identityEditor={identityEditor}
+          passwordCard={passwordCard}
+          pushCard={<PushNotificationsCard />}
+          weeklyEmailCard={<WeeklyEmailCard />}
+          triggersCard={triggersCard}
+          exportCard={exportCard}
+          helpCard={helpCard}
+        />
+        {cropFile && <ImageCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={handleCropConfirm} />}
+      </>
+    );
+  }
+
+  return (
+    <div className="px-4 py-6 md:px-8 md:py-8">
+      <PageHeader icon={<User size={20} />} title="Meu perfil" subtitle="Gerencie suas informações pessoais e preferências da sua conta LifeOS." />
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
+        <div className="space-y-4">
+          <Card className="p-5 md:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold">Dados do perfil</p>
+                <p className="text-xs text-slate">Atualize suas informações e personalize seu perfil.</p>
+              </div>
+              {user.role === "admin" && (
+                <span className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-growth/10 text-growth">
+                  <Crown size={12} /> Administrador
+                </span>
+              )}
+            </div>
+
+            {identityEditor}
 
             {/* 1 coluna no celular: evita apertar ícone + textos em ~170px de largura */}
             <div className="mt-5 pt-5 border-t border-paper-border dark:border-ink-border grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -312,66 +462,7 @@ export function PerfilPage() {
         </div>
 
         <div className="space-y-4">
-          <Card className="p-5 md:p-6">
-            <div className="flex items-center gap-2.5 mb-4">
-              <IconBadge tone="purple" size={32} icon={<Lock size={15} />} />
-              <div>
-                <p className="text-sm font-semibold">{user.has_password ? "Alterar senha" : "Definir senha"}</p>
-                <p className="text-xs text-slate">
-                  {user.has_password ? "Mantenha sua conta segura com uma senha forte." : "Crie uma senha para entrar também com e-mail e senha."}
-                </p>
-              </div>
-            </div>
-            <form onSubmit={handleChangePassword} className="space-y-3">
-              {user.has_password && (
-                <div className="relative">
-                  <Field
-                    label="Senha atual"
-                    type={showPasswords ? "text" : "password"}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                </div>
-              )}
-              <div className="relative">
-                <Field
-                  label="Nova senha"
-                  type={showPasswords ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswords((v) => !v)}
-                  className="absolute right-3 top-[34px] text-slate"
-                  tabIndex={-1}
-                >
-                  {showPasswords ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-
-              {newPassword.length > 0 && <PasswordStrengthPanel password={newPassword} />}
-
-              <Field
-                label="Confirmar nova senha"
-                type={showPasswords ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                error={passwordMismatch ? "As senhas não coincidem" : undefined}
-              />
-              {changePasswordError && <p className="text-xs text-drop">{changePasswordError.message}</p>}
-              {setPasswordError && <p className="text-xs text-drop">{setPasswordError.message}</p>}
-              {changePasswordSuccess && <p className="text-xs text-growth">Senha atualizada com sucesso.</p>}
-              {setPasswordSuccess && <p className="text-xs text-growth">Senha definida. Agora você também pode entrar com e-mail e senha.</p>}
-              <Button
-                type="submit"
-                disabled={isChangingPassword || isSettingPassword || (user.has_password && !currentPassword) || !newPassword}
-                className="w-full"
-              >
-                {isChangingPassword || isSettingPassword ? "Salvando..." : user.has_password ? "Atualizar senha" : "Definir senha"}
-              </Button>
-            </form>
-          </Card>
+          {passwordCard}
 
           <GoogleAccountCard user={user} />
           <MfaSettingsCard user={user} />
@@ -380,51 +471,11 @@ export function PerfilPage() {
           <WeeklyEmailCard />
           <DeleteAccountCard user={user} />
 
-          <Card className="p-5">
-            <div className="flex items-center gap-2.5 mb-3">
-              <IconBadge tone="amber" size={32} icon={<BellRing size={15} />} />
-              <div>
-                <p className="text-sm font-semibold">Gatilhos e alertas</p>
-                <p className="text-xs text-slate">Controle tarefas vencidas, conquistas, resumo semanal, push e e-mail em um só lugar.</p>
-              </div>
-            </div>
-            <Link to="/gatilhos" className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm">
-              <span className="font-semibold">Abrir central de gatilhos</span>
-              <ChevronRight size={14} className="text-slate shrink-0" />
-            </Link>
-          </Card>
+          {triggersCard}
 
-          <Card className="p-5">
-            <div className="flex items-center gap-2.5 mb-3">
-              <IconBadge tone="green" size={32} icon={<Download size={15} />} />
-              <div>
-                <p className="text-sm font-semibold">Exportar meus dados</p>
-                <p className="text-xs text-slate">Baixe tudo o que você registrou no LifeOS — tarefas, hábitos, livros, saúde, metas e mais — num único arquivo JSON.</p>
-              </div>
-            </div>
-            <Button variant="secondary" className="w-full" onClick={handleExportData} disabled={isExporting}>
-              <Download size={14} /> {isExporting ? "Gerando arquivo..." : "Baixar meus dados (.json)"}
-            </Button>
-          </Card>
+          {exportCard}
 
-          <Card className="p-5">
-            <div className="flex items-center gap-2.5 mb-3">
-              <IconBadge tone="blue" size={32} icon={<HelpCircle size={15} />} />
-              <div>
-                <p className="text-sm font-semibold">Precisa de ajuda?</p>
-                <p className="text-xs text-slate">Fale com o administrador da sua conta LifeOS.</p>
-              </div>
-            </div>
-            <a
-              href={`mailto:${ADMIN_EMAIL}`}
-              className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm"
-            >
-              <span className="flex items-center gap-2 min-w-0 truncate">
-                <Mail size={14} className="text-slate shrink-0" /> <span className="truncate">{ADMIN_EMAIL}</span>
-              </span>
-              <ChevronRight size={14} className="text-slate shrink-0" />
-            </a>
-          </Card>
+          {helpCard}
         </div>
       </div>
 

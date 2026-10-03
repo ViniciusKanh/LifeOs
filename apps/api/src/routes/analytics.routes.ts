@@ -304,7 +304,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT ua.id, a.title AS label, a.description, ua.unlocked_at AS at FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id
+      sql: `SELECT ua.id, ua.achievement_id, a.title AS label, a.description, a.tier, ua.unlocked_at AS at FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id
             WHERE ua.owner_id = ? AND date(ua.unlocked_at) >= date(?) AND date(ua.unlocked_at) <= date(?)`,
       args: [ownerId, from, to],
     }),
@@ -375,6 +375,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       : e.type === "journal" ? `journal:${String(e.at).slice(0, 10)}`
       : e.type === "review" ? `review:${e.kind}:${e.period_key}`
       : e.type === "life_admin" ? `life_admin:${e.item_id}:${e.due_date}`
+      : e.type === "achievement" && e.achievement_id ? `achievement:${e.achievement_id}`
       : null;
     const hit = key ? xpIndex.bySource[key] : undefined;
     return hit && hit.xp > 0 ? { xp: hit.xp, coins: hit.coins } : {};

@@ -11,11 +11,13 @@ const KEY = ["achievements"];
  * explícito (ex.: dado importado, ou uma ação de uma versão anterior
  * do app que ainda não chamava triggerAchievementsCheck).
  */
-export function useAchievements() {
+export function useAchievements(runCheck = true) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: KEY, queryFn: achievementsService.list });
 
   useEffect(() => {
+    // Leitores secundários (ex.: retrato do jogador) só leem o catálogo.
+    if (!runCheck) return;
     achievementsService.check().then(({ newlyUnlocked }) => {
       if (newlyUnlocked.length > 0) {
         queryClient.invalidateQueries({ queryKey: KEY });
@@ -34,5 +36,7 @@ export function useAchievements() {
     unlocked,
     locked,
     isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
   };
 }

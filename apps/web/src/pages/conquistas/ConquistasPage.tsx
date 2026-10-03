@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Store, Target, Timer, Trash2, Trophy, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Target, Timer, Trash2, Trophy, X } from "lucide-react";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useTheme } from "@/hooks/useTheme";
-import { RPGPanel, RPGPlayerHUD, rpgButtonClass } from "@/components/rpg";
+import { RpgAchievementsView } from "@/components/achievements/RpgAchievementsView";
+import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useCustomAchievements } from "@/hooks/useCustomAchievements";
 import { Button, Card, EmptyState, Field } from "@/components/ui/primitives";
 import { TIER_BORDER_TONE, TIER_EMOJI, TIER_GLOW, TIER_LABEL, TIER_MEDAL_GRADIENT, TIER_ORDER, TIER_TEXT_TONE } from "@/components/achievements/tierDisplay";
@@ -213,7 +213,7 @@ function CreateTrophyModal({
 }
 
 export function ConquistasPage() {
-  const { achievements, unlocked, isLoading } = useAchievements();
+  const { achievements, unlocked, isLoading, isError, refetch } = useAchievements();
   const { trophies, unlockedCount, metrics, isLoading: trophiesLoading, create, remove } = useCustomAchievements();
   const [modalOpen, setModalOpen] = useState(false);
   const { isRpg } = useTheme();
@@ -228,24 +228,22 @@ export function ConquistasPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-8">
+      {isRpg ? (
+        <RpgAchievementsView
+          achievements={achievements}
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => void refetch()}
+          quote={findNavItem("/conquistas")?.item.quote ?? DEFAULT_QUOTE}
+        />
+      ) : (
+        <>
       <div>
         <p className="font-display font-bold text-2xl tracking-tight flex items-center gap-2">🏆 Conquistas</p>
         <p className="text-sm text-slate mt-1">
           {unlocked.length} de {achievements.length} destravadas — sempre calculadas a partir dos seus dados reais, nunca marcadas à mão.
         </p>
       </div>
-
-      {isRpg && (
-        <RPGPanel variant="gold">
-          <RPGPlayerHUD
-            actions={
-              <Link to="/loja" className={rpgButtonClass("gold")}>
-                <Store size={14} aria-hidden /> Loja de recompensas
-              </Link>
-            }
-          />
-        </RPGPanel>
-      )}
 
       {isLoading ? (
         <p className="text-sm text-slate">Carregando…</p>
@@ -274,10 +272,14 @@ export function ConquistasPage() {
         </div>
       )}
 
+        </>
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="font-display font-semibold text-lg">Meus troféus</p>
+            <p className="font-display font-semibold text-lg rpg:font-rpg rpg:text-rpg-text">Meus troféus</p>
+            {isRpg && <p className="text-[11px] text-rpg-muted">Troféus criados por você não rendem XP nem moedas — só as conquistas oficiais.</p>}
             <p className="text-xs text-slate mt-0.5">
               {trophies.length > 0
                 ? `${unlockedCount} de ${trophies.length} destravados — desafios que você mesmo criou.`

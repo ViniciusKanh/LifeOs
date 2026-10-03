@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { User, Settings, Users, LogOut, ChevronDown } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { RPGAvatar } from "@/components/rpg/RPGAvatar";
+import { RPGPortrait } from "@/components/rpg/RPGPortrait";
 
 export function ProfileMenu() {
   const { user, isAdmin, logout } = useAuth();
@@ -27,7 +27,7 @@ export function ProfileMenu() {
       >
         {/* Tema RPG: o retrato do personagem substitui a foto no cabeçalho. */}
         <span className="hidden rpg:inline-flex">
-          <RPGAvatar size="sm" />
+          <RPGPortrait size="sm" />
         </span>
         <span className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-paper-border dark:bg-ink-border shrink-0 rpg:hidden">
           {user.avatar_url ? (

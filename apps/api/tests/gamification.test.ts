@@ -280,3 +280,27 @@ describe("Anti dupla recompensa e marcos", () => {
     expect((await profile(agent)).totalXp).toBe(R.lifeAdmin.byKind.vencimento.xp);
   });
 });
+
+describe("Conquistas oficiais", () => {
+  it("pagam XP/moedas por raridade uma única vez e expõem categoria/progresso real", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    for (let i = 0; i < 10; i++) {
+      const t = await agent.post("/api/tasks").send({ title: `T${i}`, priority: "Baixa" });
+      await agent.patch(`/api/tasks/${t.body.id}`).send({ status: "Concluído" });
+    }
+    await agent.post("/api/achievements/check");
+    await agent.post("/api/achievements/check");
+    const db = getDb();
+    const rows = await db.execute({
+      sql: "SELECT xp FROM xp_events WHERE owner_id = ? AND source_type = 'achievement' AND source_id = 'ach_tasks_10'",
+      args: [userId],
+    });
+    expect(rows.rows.length).toBe(1);
+    expect(Number(rows.rows[0].xp)).toBe(R.achievementByTier.bronze.xp);
+    const list = await agent.get("/api/achievements");
+    const t10 = list.body.find((a: { code: string }) => a.code === "tasks_10");
+    expect(t10.category).toBe("missoes");
+    expect(t10.currentValue).toBe(10);
+    expect(t10.reward.xp).toBe(R.achievementByTier.bronze.xp);
+  });
+});

@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { Flame, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useGamificationProfile } from "@/hooks/useGamification";
+import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { RPGCharacterCard } from "./RPGCharacterCard";
 import { RPGProgressBar } from "./RPGProgressBar";
 import { RPGWallet } from "./RPGWallet";
@@ -16,10 +17,12 @@ import { RPGWallet } from "./RPGWallet";
 export function RPGPlayerHUD({ compact = false, actions, className }: { compact?: boolean; actions?: ReactNode; className?: string }) {
   const { user } = useAuth();
   const { data: p, isLoading, isError } = useGamificationProfile();
+  const { prefs } = useRpgPreferences();
   const firstName = user?.name?.split(" ")[0] ?? "Aventureiro";
 
   if (compact) {
-    if (!p) return null;
+    // Gamificação desligada: o progresso continua no backend, só some do cabeçalho.
+    if (!p || !prefs.gamification) return null;
     return (
       <Link
         to="/loja"
@@ -29,8 +32,8 @@ export function RPGPlayerHUD({ compact = false, actions, className }: { compact?
         title="Abrir loja de recompensas"
       >
         <span className="font-pixel text-xs text-rpg-gold-light">Nv. {p.level}</span>
-        <RPGProgressBar className="w-24" tone="purple" label="Experiência" value={p.xpIntoLevel} max={p.xpForNextLevel} showLabel={false} />
-        <RPGWallet coins={p.coins} size="sm" />
+        {prefs.showXp && <RPGProgressBar className="w-24" tone="purple" label="Experiência" value={p.xpIntoLevel} max={p.xpForNextLevel} showLabel={false} />}
+        {prefs.showCoins && <RPGWallet coins={p.coins} size="sm" />}
       </Link>
     );
   }

@@ -51,3 +51,11 @@ export const TIER_BORDER_TONE: Record<AchievementTier, string> = {
 
 /** Ordem de exibição — do mais raro pro mais comum, como uma vitrine de troféus. */
 export const TIER_ORDER: AchievementTier[] = ["platinum", "gold", "silver", "bronze"];
+
+/** Tom RPG de cada raridade (tokens do tema, sem hex). */
+export const TIER_RPG_TONE: Record<AchievementTier, "orange" | "muted" | "gold" | "cyan"> = {
+  bronze: "orange",
+  silver: "muted",
+  gold: "gold",
+  platinum: "cyan",
+};

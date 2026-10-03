@@ -6,6 +6,7 @@ import { DONE_STATUS } from "@/utils/taskStatus";
 import type { KanbanDragProps } from "@/components/kanban/KanbanBoard";
 import { useTheme } from "@/hooks/useTheme";
 import { useGamificationRules } from "@/hooks/useGamification";
+import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { localToday, previewTaskReward } from "@/utils/gamification";
 
 const PRIORITY_BAR: Record<Task["priority"], string> = {
@@ -52,7 +53,9 @@ export function TaskCard({
   const due = dueInfo(task);
   const isDone = task.status === DONE_STATUS;
   const recurrenceLabel = describeRecurrenceRule(task.recurrence_rule);
-  const { isRpg } = useTheme();
+  const { isRpg: themeRpg } = useTheme();
+  const { prefs } = useRpgPreferences();
+  const isRpg = themeRpg && prefs.gamification;
   // Recompensa prevista pelas regras do backend (o valor real é concedido lá, ao concluir).
   const { data: rules } = useGamificationRules(isRpg);
   const today = localToday();
