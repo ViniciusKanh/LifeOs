@@ -1,3 +1,4 @@
+import { RpgActiveContracts, RpgLevelSpotlight, RpgXpSources } from "@/components/dashboard/RpgHeroSpotlight";
 import { useMemo, useState } from "react";
 import { useAppScrollRef } from "@/components/layout/AppScrollContext";
 import { motion, useScroll, useSpring } from "motion/react";
@@ -22,7 +23,7 @@ import { useLifeScore, useLifeScoreHistory, useAnalyticsOverview, useInsights, u
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useProjectWorkload } from "@/hooks/useProjects";
 import { Link } from "react-router-dom";
-import { RpgJourneyPlayer, RpgJourneyRhythm, RpgMissionWaffle, RpgXpHistory } from "@/components/dashboard/RpgProgressionSection";
+import { RpgJourneyRhythm, RpgMissionWaffle, RpgXpHistory } from "@/components/dashboard/RpgProgressionSection";
 import { RPGPanel } from "@/components/rpg";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { useHabits } from "@/hooks/useHabits";
@@ -435,6 +436,8 @@ export function DashboardPage() {
       <>
         {progressBar}
         <div className="w-full px-4 py-6 md:px-8 md:py-8 space-y-4">
+          {/* Tela principal: o nível do personagem vem primeiro. */}
+          <RpgLevelSpotlight dimensions={dimensions} />
           <RpgDashboardHero
             firstName={user?.name?.split(" ")[0] ?? ""}
             subtitle={subtitle}
@@ -445,7 +448,6 @@ export function DashboardPage() {
             history={recentHistory.map((h) => h.overall)}
           />
           <RpgKpiStrip items={kpis} />
-          <RpgJourneyPlayer lifeScore={scoreLoading ? null : overall} />
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
             <RpgMainQuest task={nextTask} estimateMinutes={nextTaskEstimate} onComplete={completeNext} isCompleting={completing} />
             <RpgDayAttributes health={health} pagesRead14d={overview?.pagesRead ?? null} agendaCount={agendaToday.length} />
@@ -479,6 +481,14 @@ export function DashboardPage() {
           <Reveal>
             <DimensionScroller items={dimensions} />
           </Reveal>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Reveal>
+              <RpgActiveContracts />
+            </Reveal>
+            <Reveal delay={0.05}>
+              <RpgXpSources />
+            </Reveal>
+          </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <Reveal>
               <RpgXpHistory />

@@ -1,5 +1,5 @@
 import { api, API_URL } from "./api";
-import type { CurrentUser, MfaChallenge, MfaSetup, MfaStatus } from "@/types";
+import type { CurrentUser, MfaChallenge, MfaSetup, MfaStatus, RpgPrefsPayload } from "@/types";
 
 export interface RegisterResult {
   message: string;
@@ -48,6 +48,8 @@ export const authService = {
     language?: string;
     timezone?: string;
     onboardingDone?: boolean;
+    rpgAvatarImage?: string | null;
+    rpgPrefs?: Partial<RpgPrefsPayload>;
   }) => api.patch<CurrentUser>("/auth/me", patch),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post<{ message: string }>("/auth/change-password", { currentPassword, newPassword }),

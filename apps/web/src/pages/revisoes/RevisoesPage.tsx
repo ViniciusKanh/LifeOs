@@ -167,7 +167,7 @@ export function RevisoesPage() {
                 <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 gap-2">
                   <RpgMetricTile icon={<CheckCircle2 size={18} />} tone="blue" label="Missões concluídas (tarefas)" value={String(m.tasksCompleted)} current={m.tasksCompleted} previous={pm?.tasksCompleted} previousLabel={prevLabel} />
                   <RpgMetricTile icon={<Target size={18} />} tone="pink" label="Metas concluídas" value={String(m.goalsCompleted)} current={m.goalsCompleted} previous={pm?.goalsCompleted} previousLabel={prevLabel} />
-                  <RpgMetricTile icon={<RefreshCw size={18} />} tone="green" label="Contratos cumpridos (hábitos)" value={String(m.habitCheckins)} current={m.habitCheckins} previous={pm?.habitCheckins} previousLabel={prevLabel} />
+                  <RpgMetricTile icon={<RefreshCw size={18} />} tone="green" label="Hábitos cumpridos" value={String(m.habitCheckins)} current={m.habitCheckins} previous={pm?.habitCheckins} previousLabel={prevLabel} />
                   <RpgMetricTile icon={<Feather size={18} />} tone="pink" label="Dias no diário" value={String(m.journalEntries)} current={m.journalEntries} previous={pm?.journalEntries} previousLabel={prevLabel} />
                   <RpgMetricTile icon={<BookOpen size={18} />} tone="purple" label="Páginas lidas" value={String(m.pagesRead)} current={m.pagesRead} previous={pm?.pagesRead} previousLabel={prevLabel} />
                   <RpgMetricTile icon={<Dumbbell size={18} />} tone="orange" label="Treinos realizados" value={String(m.workouts)} current={m.workouts} previous={pm?.workouts} previousLabel={prevLabel} />

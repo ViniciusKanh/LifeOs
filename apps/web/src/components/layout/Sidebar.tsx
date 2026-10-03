@@ -228,7 +228,7 @@ export function Sidebar({ groups, collapsed, canToggle, onToggle }: { groups: Na
       <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-aurora opacity-50 dark:opacity-30 rpg:hidden" aria-hidden />
 
       <div className={`relative flex items-center gap-2.5 h-16 shrink-0 ${collapsed ? "justify-center px-2" : "px-5"}`}>
-        <NavLink to="/hoje" className="flex items-center gap-2.5 min-w-0" aria-label="LifeOS — ir para Hoje">
+        <NavLink to="/dashboard" className="flex items-center gap-2.5 min-w-0" aria-label="LifeOS — ir para o Dashboard">
           {isRpg ? (
             <img src={RPG_LOGO.icon} alt="" width={44} height={44} className="shrink-0 w-11 h-11 object-contain drop-shadow-[0_2px_0_rgb(0_0_0/0.6)]" />
           ) : (

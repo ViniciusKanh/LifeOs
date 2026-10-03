@@ -22,6 +22,23 @@ export interface CurrentUser {
   /** Preferências da conta (já devolvidas por /auth/me). */
   language?: string | null;
   timezone?: string | null;
+  /** Arte própria do personagem RPG (data URI) — só o dono altera. */
+  rpg_avatar_image?: string | null;
+  /** Preferências cosméticas do personagem, persistidas no backend. */
+  rpg_prefs?: Partial<RpgPrefsPayload>;
+}
+
+/** Espelho de rpgPrefsSchema (API). */
+export interface RpgPrefsPayload {
+  avatarId: "aventureiro" | "mago" | "arqueiro" | "cavaleiro" | "inventor" | "alquimista";
+  avatarMode: "rpg" | "photo" | "initials" | "custom";
+  frame: "bronze" | "silver" | "gold" | "rare";
+  banner: string;
+  title: string | null;
+  gamification: boolean;
+  showXp: boolean;
+  showCoins: boolean;
+  animations: "full" | "reduced" | "off";
 }
 
 /** Resposta do login quando a conta tem MFA: a sessão só nasce na 2ª etapa. */
@@ -113,7 +130,12 @@ export interface Task {
   recurrence_rule: string | null;
   /** Preenchido quando a tarefa foi gerada a partir de um hábito ("Gerar tarefas de hoje" em Hábitos) — concluir a tarefa faz o check-in automático do hábito do dia. */
   habit_id: string | null;
+  /** Dificuldade (define XP/moedas pelos valores do usuário) e contrato a que pertence. */
+  difficulty?: Difficulty | null;
+  contract_id?: string | null;
 }
+
+export type Difficulty = "facil" | "medio" | "dificil" | "epico";
 
 /**
  * Item retornado por GET /api/tasks/focus — priorização automática
@@ -829,7 +851,7 @@ export interface JournalCollection {
 export interface TimelineEvent {
   type:
     | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
-    | "life_admin" | "review" | "focus" | "project" | "achievement" | "reward" | "level_up";
+    | "life_admin" | "review" | "focus" | "project" | "contract" | "achievement" | "reward" | "level_up";
   icon: string;
   id: string;
   label: string;
@@ -917,7 +939,7 @@ export interface Achievement {
   reward?: { xp: number; coins: number };
 }
 
-export type AchievementCategory = "missoes" | "contratos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
+export type AchievementCategory = "missoes" | "habitos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
 
 /** Um troféu que o próprio usuário cadastrou (estilo PlayStation/Xbox) — desbloqueia sozinho ao atingir a métrica. */
 export interface CustomAchievement {

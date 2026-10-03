@@ -8,6 +8,9 @@ export const createTaskSchema = z.object({
   goalId: z.string().optional().nullable(),
   status: z.string().max(50).optional(),
   priority: z.enum(["Baixa", "Média", "Alta"]).optional().default("Média"),
+  // Dificuldade define o XP/moedas (valores configuráveis em Meu Perfil).
+  difficulty: z.enum(["facil", "medio", "dificil", "epico"]).optional().nullable(),
+  contractId: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   startDate: z.string().optional().nullable(),
   estimateMinutes: z.number().int().nonnegative().optional().nullable(),

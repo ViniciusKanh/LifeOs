@@ -292,7 +292,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
 
   // Crônica da jornada: marcos do motor de gamificação e sessões de foco,
   // todos lidos de registros reais (nunca derivados de suposição).
-  const [focusEntries, projectsDone, achievementsUnlocked, customUnlocked, redemptions, levelUps, xpIndex] = await Promise.all([
+  const [focusEntries, projectsDone, achievementsUnlocked, customUnlocked, redemptions, levelUps, xpIndex, contractsDone] = await Promise.all([
     db.execute({
       sql: `SELECT te.id, te.ended_at AS at, te.duration_minutes, t.title AS label FROM time_entries te LEFT JOIN tasks t ON t.id = te.task_id
             WHERE te.owner_id = ? AND te.ended_at IS NOT NULL AND COALESCE(te.duration_minutes, 0) > 0
@@ -318,6 +318,10 @@ analyticsRouter.get("/timeline", async (req, res) => {
     }),
     getLevelHistory(db, ownerId),
     getXpIndex(db, ownerId, from, to),
+    db.execute({
+      sql: "SELECT id, title AS label, completed_at AS at FROM contracts WHERE owner_id = ? AND status = 'concluido' AND completed_at IS NOT NULL AND date(completed_at) >= date(?) AND date(completed_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
   ]);
 
   type TimelineRow = Record<string, unknown> & { at: string };
@@ -358,6 +362,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(achievementsUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r })),
     ...asRows(customUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r, id: `custom-${r.id}` })),
     ...asRows(redemptions.rows).map((r) => ({ type: "reward", icon: "🎁", ...r })),
+    ...asRows(contractsDone.rows).map((r) => ({ type: "contract", icon: "📜", ...r, label: `Contrato cumprido: ${String(r.label)}` })),
     ...levelUps
       .filter((l) => l.dayKey >= from && l.dayKey <= to)
       .map((l) => ({ type: "level_up", icon: "👑", id: `level-${l.level}`, label: `Nível ${l.level}`, level: l.level, at: l.reachedAt })),
@@ -376,6 +381,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       : e.type === "review" ? `review:${e.kind}:${e.period_key}`
       : e.type === "life_admin" ? `life_admin:${e.item_id}:${e.due_date}`
       : e.type === "achievement" && e.achievement_id ? `achievement:${e.achievement_id}`
+      : e.type === "contract" ? `contract:${e.id}`
       : null;
     const hit = key ? xpIndex.bySource[key] : undefined;
     return hit && hit.xp > 0 ? { xp: hit.xp, coins: hit.coins } : {};

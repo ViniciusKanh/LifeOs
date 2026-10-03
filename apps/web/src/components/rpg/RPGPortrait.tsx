@@ -9,8 +9,8 @@ const SIZE = { sm: 32, md: 56, lg: 104, xl: 148 } as const;
 const FRAME_BORDER = { gold: "border-rpg-gold", silver: "border-rpg-muted", bronze: "border-rpg-bronze", rare: "border-rpg-purple" } as const;
 
 /**
- * Retrato do jogador conforme a preferência: personagem RPG, foto real ou
- * iniciais. A moldura escolhida só vale se estiver desbloqueada de verdade.
+ * Retrato do jogador conforme a preferência: personagem RPG, arte própria,
+ * foto real ou iniciais. A moldura escolhida só vale se estiver desbloqueada de verdade.
  */
 export function RPGPortrait({ size = "md", className }: { size?: keyof typeof SIZE; className?: string }) {
   const { user } = useAuth();
@@ -18,7 +18,7 @@ export function RPGPortrait({ size = "md", className }: { size?: keyof typeof SI
   const { achievements } = useAchievements(false);
   const frame = isFrameUnlocked(prefs.frame, unlockedTiers(achievements)) ? prefs.frame : "bronze";
   const px = SIZE[size];
-  if (prefs.avatarMode === "rpg" || !user) return <RPGAvatar size={size} frame={frame} className={className} />;
+  if (prefs.avatarMode === "rpg" || prefs.avatarMode === "custom" || !user) return <RPGAvatar size={size} frame={frame} className={className} />;
   const initials = (user.name || "?").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
   return (
     <span

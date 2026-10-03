@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { gamificationService, type RewardInput } from "@/services/gamificationService";
+import { gamificationService, type DifficultyRewards, type RewardInput } from "@/services/gamificationService";
 
 const KEY = ["gamification"] as const;
 
@@ -43,4 +43,18 @@ export function useLevelHistory(enabled = true) {
 
 export function useRedemptions() {
   return useQuery({ queryKey: [...KEY, "redemptions"], queryFn: gamificationService.redemptions });
+}
+
+/** XP/moedas por dificuldade do próprio usuário (Meu Perfil). */
+export function useDifficultySettings(enabled = true) {
+  const qc = useQueryClient();
+  const query = useQuery({ queryKey: [...KEY, "settings"], queryFn: gamificationService.settings, enabled, staleTime: 5 * 60_000 });
+  const save = useMutation({
+    mutationFn: (d: DifficultyRewards) => gamificationService.saveSettings(d),
+    onSuccess: (data) => {
+      qc.setQueryData([...KEY, "settings"], data);
+      void qc.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
+  return { ...query, rewards: query.data?.difficulty, save };
 }

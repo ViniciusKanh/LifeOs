@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Gift, History, Plus, ScrollText, Store, Trophy } from "lucide-react";
+import { Gift, History, PackagePlus, Plus, ScrollText, Store, Trophy, Wand2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { RewardAIModal } from "@/components/rewards/RewardAIModal";
 import { Modal, FormRow } from "@/components/ui/Modal";
-import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGPlayerHUD, RPGRewardCard, RPGWallet, RewardRedeemModal, rpgButtonClass } from "@/components/rpg";
+import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGPlayerHUD, RPGRewardCard, RPGToast, RPGWallet, RewardRedeemModal, rpgButtonClass } from "@/components/rpg";
 import { useGamificationProfile, useGamificationRules, useRedemptions, useRewards } from "@/hooks/useGamification";
-import { REWARD_CATEGORIES, type Reward, type RewardCategory, type RewardInput } from "@/services/gamificationService";
+import { REWARD_CATEGORIES, gamificationService, type Reward, type RewardCategory, type RewardInput } from "@/services/gamificationService";
 
 const ICONS = ["🎁", "🎬", "🎮", "☕", "🍫", "🍕", "📚", "🛁", "😴", "🎧", "🛍️", "🌳", "🍿", "🎟️"];
 
@@ -154,6 +156,18 @@ export function LojaPage() {
   const [editing, setEditing] = useState<Reward | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [redeeming, setRedeeming] = useState<Reward | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const qc = useQueryClient();
+  // Pacote inicial: idempotente no backend (não duplica recompensas pelo nome).
+  const starter = useMutation({
+    mutationFn: gamificationService.starterRewards,
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["gamification"] });
+      setToast(r.created > 0 ? `${r.created} recompensa(s) do pacote inicial adicionadas.` : "Você já tem todas as recompensas do pacote inicial.");
+    },
+    onError: () => setToast("Não foi possível adicionar o pacote inicial."),
+  });
 
   const balance = profile.data?.coins ?? 0;
   const visible = useMemo(() => rewards.filter((r) => category === "all" || r.category === category), [rewards, category]);
@@ -169,11 +183,19 @@ export function LojaPage() {
         size="md"
         eyebrow="Recompensas"
         title="Loja do Aventureiro"
-        subtitle="Troque moedas ganhas com missões, contratos e foco por recompensas definidas por você."
+        subtitle="Troque moedas ganhas com missões, contratos, hábitos e foco por recompensas definidas por você."
         actions={
-          <RPGButton variant="gold" onClick={openCreate}>
-            <Plus size={15} aria-hidden /> Nova recompensa
-          </RPGButton>
+          <>
+            <RPGButton variant="gold" onClick={openCreate}>
+              <Plus size={15} aria-hidden /> Nova recompensa
+            </RPGButton>
+            <RPGButton variant="primary" onClick={() => setAiOpen(true)}>
+              <Wand2 size={15} aria-hidden /> Montar com IA
+            </RPGButton>
+            <RPGButton variant="secondary" disabled={starter.isPending} onClick={() => starter.mutate()} title="Café, série, videogame, folga… custos calibrados pela economia atual">
+              <PackagePlus size={15} aria-hidden /> Pacote inicial
+            </RPGButton>
+          </>
         }
       />
 
@@ -217,9 +239,21 @@ export function LojaPage() {
               <Gift size={32} className="text-rpg-gold" aria-hidden />
               <p className="font-rpg text-rpg-text">Nenhuma recompensa {category === "all" ? "na loja ainda" : "nesta categoria"}.</p>
               <p className="text-sm text-rpg-muted max-w-sm">Crie recompensas que valham a pena para você — um episódio, um café especial, uma tarde livre.</p>
-              <RPGButton variant="gold" onClick={openCreate}>
-                <Plus size={15} aria-hidden /> Criar recompensa
-              </RPGButton>
+              <div className="flex flex-wrap justify-center gap-2">
+                <RPGButton variant="gold" onClick={openCreate}>
+                  <Plus size={15} aria-hidden /> Criar recompensa
+                </RPGButton>
+                {category === "all" && (
+                  <>
+                    <RPGButton variant="secondary" disabled={starter.isPending} onClick={() => starter.mutate()}>
+                      <PackagePlus size={15} aria-hidden /> Pacote inicial
+                    </RPGButton>
+                    <RPGButton variant="primary" onClick={() => setAiOpen(true)}>
+                      <Wand2 size={15} aria-hidden /> Montar com IA
+                    </RPGButton>
+                  </>
+                )}
+              </div>
             </div>
           )}
           {visible.length > 0 && (
@@ -253,7 +287,7 @@ export function LojaPage() {
                   </li>
                 ))}
                 <li className="flex items-center justify-between gap-2">
-                  <span className="text-rpg-text">Contrato cumprido</span>
+                  <span className="text-rpg-text">Hábito cumprido</span>
                   <span className="font-pixel text-xs text-rpg-muted">
                     +{rules.data.habit.xp} XP · +{rules.data.habit.coins} 🪙
                   </span>
@@ -305,6 +339,16 @@ export function LojaPage() {
         onClose={() => setRedeeming(null)}
         onConfirm={async (r) => redeem.mutateAsync(r.id)}
       />
+      {aiOpen && (
+        <RewardAIModal
+          onClose={() => setAiOpen(false)}
+          onDone={(msg) => {
+            setAiOpen(false);
+            setToast(msg);
+          }}
+        />
+      )}
+      <RPGToast message={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

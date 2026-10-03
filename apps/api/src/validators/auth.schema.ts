@@ -51,9 +51,31 @@ const AVATAR_DATA_URI = z
   .max(2_000_000, "Imagem muito grande — escolha uma foto menor.")
   .regex(/^data:image\/(png|jpe?g|webp|gif);base64,/, "Formato de imagem inválido.");
 
+/**
+ * Preferências cosméticas do personagem RPG (sem efeito em regra de jogo).
+ * Só o próprio usuário altera, via PATCH /auth/me.
+ */
+export const rpgPrefsSchema = z
+  .object({
+    avatarId: z.enum(["aventureiro", "mago", "arqueiro", "cavaleiro", "inventor", "alquimista"]),
+    avatarMode: z.enum(["rpg", "photo", "initials", "custom"]),
+    frame: z.enum(["bronze", "silver", "gold", "rare"]),
+    banner: z.string().regex(/^[a-z]{2,20}$/),
+    title: z.string().trim().max(60).nullable(),
+    gamification: z.boolean(),
+    showXp: z.boolean(),
+    showCoins: z.boolean(),
+    animations: z.enum(["full", "reduced", "off"]),
+  })
+  .partial()
+  .strict();
+
 export const updateProfileSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto").max(120).optional(),
   avatarUrl: AVATAR_DATA_URI.optional().nullable(),
+  /** Arte própria do personagem (data URI comprimida no cliente, ~até 1,5 MB). */
+  rpgAvatarImage: AVATAR_DATA_URI.optional().nullable(),
+  rpgPrefs: rpgPrefsSchema.optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
   language: z.string().trim().min(2).max(10).optional(),
   timezone: z.string().trim().min(1).max(60).optional(),

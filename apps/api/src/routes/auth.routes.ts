@@ -27,6 +27,7 @@ import {
   verifyEmailSchema,
   resendVerificationSchema,
   updateProfileSchema,
+  rpgPrefsSchema,
   changePasswordSchema,
   setPasswordSchema,
   unlinkGoogleSchema,
@@ -224,12 +225,23 @@ authRouter.post("/logout", (_req, res) => {
   return res.status(204).send();
 });
 
+/** Preferências RPG salvas (JSON validado na escrita); inválido vira objeto vazio. */
+function parseRpgPrefs(raw: unknown): Record<string, unknown> {
+  if (typeof raw !== "string" || !raw) return {};
+  try {
+    const parsed = rpgPrefsSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : {};
+  } catch {
+    return {};
+  }
+}
+
 /** GET /api/auth/me */
 authRouter.get("/me", requireAuth, async (req, res) => {
   const db = getDb();
   const result = await db.execute({
     sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, google_id, password_set,
-                 mfa_enabled, terms_version, terms_accepted_at
+                 mfa_enabled, terms_version, terms_accepted_at, rpg_avatar_image, rpg_prefs_json
           FROM users WHERE id = ?`,
     args: [req.user!.id],
   });
@@ -245,9 +257,10 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   }
   // google_id nunca é exposto (é só um identificador interno do Google) — só se
   // a conta está vinculada, pra frontend mostrar "Conectado com Google" no perfil.
-  const { google_id, password_set, mfa_enabled, terms_version, ...user } = row as Record<string, unknown>;
+  const { google_id, password_set, mfa_enabled, terms_version, rpg_prefs_json, ...user } = row as Record<string, unknown>;
   return res.json({
     ...user,
+    rpg_prefs: parseRpgPrefs(rpg_prefs_json),
     google_linked: !!google_id,
     has_password: Number(password_set ?? 1) === 1,
     mfa_enabled: Number(mfa_enabled ?? 0) === 1,
@@ -284,6 +297,16 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
       args.push(typeof value === "boolean" ? (value ? 1 : 0) : (value ?? null));
     }
   }
+  if ("rpgAvatarImage" in data) {
+    sets.push("rpg_avatar_image = ?");
+    args.push(data.rpgAvatarImage ?? null);
+  }
+  if (data.rpgPrefs) {
+    // Mescla com o que já está salvo: cada tela envia só o que mudou.
+    const current = await db.execute({ sql: "SELECT rpg_prefs_json FROM users WHERE id = ?", args: [req.user!.id] });
+    sets.push("rpg_prefs_json = ?");
+    args.push(JSON.stringify({ ...parseRpgPrefs(current.rows[0]?.rpg_prefs_json), ...data.rpgPrefs }));
+  }
   if (sets.length === 0) {
     return res.status(400).json({ error: "Nenhum campo para atualizar." });
   }
@@ -293,11 +316,12 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
   await db.execute({ sql: `UPDATE users SET ${sets.join(", ")} WHERE id = ?`, args });
 
   const updated = await db.execute({
-    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at
+    sql: `SELECT id, name, email, role, avatar_url, language, timezone, theme, onboarding_done, created_at, rpg_avatar_image, rpg_prefs_json
           FROM users WHERE id = ?`,
     args: [req.user!.id],
   });
-  return res.json(updated.rows[0]);
+  const { rpg_prefs_json, ...user } = updated.rows[0] as unknown as Record<string, unknown>;
+  return res.json({ ...user, rpg_prefs: parseRpgPrefs(rpg_prefs_json) });
 });
 
 /** POST /api/auth/change-password — sempre exige a senha atual, mesmo sendo admin */

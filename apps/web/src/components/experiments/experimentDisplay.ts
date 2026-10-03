@@ -83,3 +83,12 @@ export function experimentEmoji(e: { emoji?: string | null; category: Experiment
 
 /** Opções do seletor de emoji do assistente. */
 export const EMOJI_CHOICES = ["🧪", "🌙", "😴", "💧", "🏃", "🏋️", "🧘", "🎯", "⚡", "📚", "🎓", "📵", "☕", "🥗", "🍎", "🌿", "❤️", "🧠", "✍️", "🎵", "🌅", "🚶", "🔥", "🌱"];
+
+/** Linguagem do laboratório (só apresentação; o status real continua o mesmo). */
+export const LAB_STAGE: Record<import("@/types").ExperimentStatus, string> = {
+  draft: "Esboço na mesa",
+  active: "Criatura viva",
+  paused: "Em estase",
+  completed: "Desperta",
+  cancelled: "Desmontada",
+};

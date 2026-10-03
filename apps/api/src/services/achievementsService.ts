@@ -268,13 +268,13 @@ export interface AchievementView {
   reward: { xp: number; coins: number };
 }
 
-export type AchievementCategory = "missoes" | "contratos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
+export type AchievementCategory = "missoes" | "habitos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
 
 /** Agrupa a conquista pela métrica que ela mede — sem campo novo no banco. */
 export function achievementCategory(metric: string | null): AchievementCategory {
   if (!metric) return "outros";
   if (metric.startsWith("tasks_")) return "missoes";
-  if (metric.startsWith("habit_")) return "contratos";
+  if (metric.startsWith("habit_")) return "habitos";
   if (metric.startsWith("books_") || metric.startsWith("pages_")) return "leitura";
   if (metric.startsWith("water_") || metric.startsWith("workouts_")) return "saude";
   if (metric.startsWith("focus_")) return "foco";

@@ -30,22 +30,24 @@ import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 import { AppearanceCard } from "@/components/profile/AppearanceCard";
+import { RpgAvatarStudio } from "@/components/profile/RpgAvatarStudio";
+import { DifficultyRewardsPanel } from "@/components/profile/DifficultyRewardsPanel";
 import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGPortrait, RPGProgressBar, RPGStatCard, RPGTabs, RPGWallet, rpgButtonClass } from "@/components/rpg";
 import { useTheme, THEME_LABEL } from "@/hooks/useTheme";
 import { useProfile } from "@/hooks/useProfile";
-import { useGamificationProfile, useXpHistory } from "@/hooks/useGamification";
+import { useGamificationProfile, useGamificationRules, useXpHistory } from "@/hooks/useGamification";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useAnalyticsOverview, useLifeScore } from "@/hooks/useAnalytics";
 import { useHabits } from "@/hooks/useHabits";
 import { useProjects } from "@/hooks/useProjects";
 import { useLifeAdmin } from "@/hooks/useLifeOs";
 import { useExperiments } from "@/hooks/useExperiments";
-import { useRpgPreferences, type AnimationLevel, type AvatarMode } from "@/hooks/useRpgPreferences";
+import { useRpgPreferences, type AnimationLevel } from "@/hooks/useRpgPreferences";
 import { FRAMES, PROFILE_BANNERS, TITLES, bannerSrc, isFrameUnlocked, resolveTitle, unlockedTiers } from "@/utils/cosmetics";
 import { XP_SOURCES } from "@/utils/gamification";
 import type { CurrentUser } from "@/types";
 
-type Tab = "overview" | "stats" | "custom" | "security" | "integrations" | "prefs";
+type Tab = "overview" | "stats" | "custom" | "rewards" | "security" | "integrations" | "prefs";
 
 const TIMEZONES = ["America/Sao_Paulo", "America/Manaus", "America/Fortaleza", "America/Recife", "America/Belem", "America/Cuiaba", "America/Rio_Branco", "America/Noronha", "Europe/Lisbon", "UTC"];
 
@@ -113,7 +115,7 @@ export function RpgProfileView({
 
   const stats = [
     { icon: <ListChecks size={18} />, tone: "blue" as const, v: overview ? String(overview.tasksCompleted) : "—", l: "Missões concluídas", c: `últimos ${statsDays} dias` },
-    { icon: <Repeat size={18} />, tone: "red" as const, v: `${contractsDone} / ${habits.length}`, l: "Contratos cumpridos hoje" },
+    { icon: <Repeat size={18} />, tone: "red" as const, v: `${contractsDone} / ${habits.length}`, l: "Hábitos cumpridos hoje" },
     { icon: <Swords size={18} />, tone: "gold" as const, v: String(projects.filter((x) => x.status === "completed").length), l: "Campanhas concluídas" },
     { icon: <FlaskConical size={18} />, tone: "purple" as const, v: String(experiments.length), l: "Experimentos" },
     { icon: <ReceiptText size={18} />, tone: "pink" as const, v: String(adminItems.filter((i) => i.status === "active").length), l: "Itens administrados" },
@@ -185,6 +187,7 @@ export function RpgProfileView({
           { value: "overview" as Tab, label: "Visão geral" },
           { value: "stats" as Tab, label: "Estatísticas" },
           { value: "custom" as Tab, label: "Personalização" },
+          { value: "rewards" as Tab, label: "XP e recompensas" },
           { value: "security" as Tab, label: "Segurança" },
           { value: "integrations" as Tab, label: "Integrações" },
           { value: "prefs" as Tab, label: "Preferências" },
@@ -270,22 +273,9 @@ export function RpgProfileView({
 
       {tab === "custom" && (
         <div className="grid gap-4 xl:grid-cols-2 items-start">
-          <div className="min-w-0"><AppearanceCard /></div>
+          <div className="min-w-0"><AppearanceCard hideAvatar /></div>
           <div className="space-y-4 min-w-0">
-            <RPGPanel title="Retrato" icon={<Gamepad2 size={16} />}>
-              <div role="radiogroup" aria-label="Tipo de retrato" className="grid grid-cols-3 gap-2">
-                {([
-                  { v: "rpg", l: "Personagem RPG" },
-                  { v: "photo", l: "Foto" },
-                  { v: "initials", l: "Iniciais" },
-                ] as Array<{ v: AvatarMode; l: string }>).map((o) => (
-                  <button key={o.v} type="button" role="radio" aria-checked={prefs.avatarMode === o.v} onClick={() => update({ avatarMode: o.v })} className={radio(prefs.avatarMode === o.v)} style={{ borderRadius: 3 }}>
-                    {o.l}
-                  </button>
-                ))}
-              </div>
-              {prefs.avatarMode === "photo" && !user.avatar_url && <p className="mt-2 text-[11px] text-rpg-orange">Você ainda não enviou uma foto — use "Editar perfil". Até lá, mostramos suas iniciais.</p>}
-            </RPGPanel>
+            <RpgAvatarStudio radio={radio} />
 
             <RPGPanel title="Moldura" icon={<Crown size={16} />}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -328,6 +318,17 @@ export function RpgProfileView({
               </div>
             </RPGPanel>
           </div>
+        </div>
+      )}
+
+      {tab === "rewards" && (
+        <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr] items-start">
+          <div className="min-w-0"><DifficultyRewardsPanel /></div>
+          <RPGPanel title="Regras fixas da jornada" icon={<Settings2 size={16} />}>
+            <p className="-mt-1 mb-2 text-xs text-rpg-muted">Estas recompensas são iguais para todos e vêm do servidor (hábitos, foco, revisões, conquistas, laboratório).</p>
+            <FixedRules />
+            <Link to="/contratos" className={rpgButtonClass("secondary", "mt-3")}>Gestão de contratos →</Link>
+          </RPGPanel>
         </div>
       )}
 
@@ -374,7 +375,7 @@ export function RpgProfileView({
                 </select>
               </label>
               <label className="block text-xs text-rpg-muted">
-                Fuso horário (define o "dia" das missões, contratos e XP)
+                Fuso horário (define o "dia" das missões, hábitos e XP)
                 <select className={`${field} mt-1`} style={{ borderRadius: 3 }} value={user.timezone ?? "America/Sao_Paulo"} disabled={isUpdatingProfile} onChange={(e) => void updateProfile({ timezone: e.target.value })}>
                   {[...new Set([user.timezone ?? "America/Sao_Paulo", ...TIMEZONES])].map((tz) => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
@@ -425,5 +426,31 @@ export function RpgProfileView({
         {identityEditor}
       </Modal>
     </div>
+  );
+}
+
+/** Tabela das regras fixas (públicas) do motor — valores reais de /gamification/rules. */
+function FixedRules() {
+  const { data: r } = useGamificationRules();
+  if (!r) return <p className="text-sm text-rpg-muted">Carregando regras…</p>;
+  const rows: Array<[string, { xp: number; coins: number }]> = [
+    ["Hábito cumprido no dia", r.habit],
+    [`Foco (${r.focus.blockMinutes} min)`, { xp: r.focus.xpPerBlock, coins: r.focus.coinsPerBlock }],
+    ["Campanha (projeto) concluída", r.project],
+    ["Primeira crônica do dia", r.journal],
+    ["Revisão semanal", r.review.weekly],
+    ["Experimento iniciado", r.experiment.started],
+    ["Registro no laboratório", r.experiment.checkin],
+    ["Experimento concluído", r.experiment.concluded],
+  ];
+  return (
+    <ul className="divide-y divide-rpg-border/50 text-sm">
+      {rows.map(([label, v]) => (
+        <li key={label} className="flex items-center justify-between gap-2 py-1.5">
+          <span className="text-rpg-text">{label}</span>
+          <span className="font-pixel text-xs text-rpg-muted shrink-0">+{v.xp} XP · +{v.coins} 🪙</span>
+        </li>
+      ))}
+    </ul>
   );
 }

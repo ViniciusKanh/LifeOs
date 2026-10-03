@@ -90,8 +90,8 @@ describe("XP de tarefas", () => {
   });
 });
 
-describe("XP de hábitos (contratos)", () => {
-  it("concede XP ao cumprir o contrato hoje, sem duplicar ao repetir o check-in", async () => {
+describe("XP de hábitos", () => {
+  it("concede XP ao cumprir o hábito hoje, sem duplicar ao repetir o check-in", async () => {
     const { agent } = await createAuthenticatedAgent();
     const h = await agent.post("/api/habits").send({ name: "Ler 10 páginas" });
     expect(h.status).toBe(201);
@@ -246,7 +246,7 @@ describe("Timeline e histórico de nível", () => {
 });
 
 describe("Anti dupla recompensa e marcos", () => {
-  it("tarefa gerada por hábito paga só o contrato, nunca a missão também", async () => {
+  it("tarefa gerada por hábito paga só o hábito, nunca a missão também", async () => {
     const { agent } = await createAuthenticatedAgent();
     const h = await agent.post("/api/habits").send({ name: "Ler" });
     const gen = await agent.post("/api/habits/generate-tasks").send({ habitIds: [h.body.id], from: today(), to: today() });

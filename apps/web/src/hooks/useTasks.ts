@@ -20,6 +20,8 @@ export function useTasks() {
     // Progresso, tarefas e documentos de Projetos são derivados das tarefas.
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["direction"] });
+    // Contratos são cumpridos quando todas as suas tarefas são concluídas.
+    queryClient.invalidateQueries({ queryKey: ["contracts"] });
   };
 
   const tasksQuery = useQuery({ queryKey: TASKS_KEY, queryFn: taskService.list });

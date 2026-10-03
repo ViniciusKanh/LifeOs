@@ -1,11 +1,12 @@
-import { ArrowRightLeft, Calendar, Check, Clock, FolderKanban, Repeat, Sparkles, Target } from "lucide-react";
+import { ArrowRightLeft, Calendar, Check, Clock, FolderKanban, Repeat, ScrollText, Sparkles, Target } from "lucide-react";
 import type { Task } from "@/types";
 import { describeRecurrenceRule } from "@/utils/recurrence";
 import { dueInfo } from "@/utils/taskInsights";
 import { DONE_STATUS } from "@/utils/taskStatus";
 import type { KanbanDragProps } from "@/components/kanban/KanbanBoard";
 import { useTheme } from "@/hooks/useTheme";
-import { useGamificationRules } from "@/hooks/useGamification";
+import { useDifficultySettings, useGamificationRules } from "@/hooks/useGamification";
+import { difficultyLabel } from "@/services/gamificationService";
 import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { localToday, previewTaskReward } from "@/utils/gamification";
 
@@ -59,7 +60,9 @@ export function TaskCard({
   // Recompensa prevista pelas regras do backend (o valor real é concedido lá, ao concluir).
   const { data: rules } = useGamificationRules(isRpg);
   const today = localToday();
-  const reward = isRpg ? previewTaskReward(rules, { priority: task.priority, dueDate: task.due_date, habitId: task.habit_id }, today) : null;
+  const { rewards: scale } = useDifficultySettings(isRpg);
+  const reward = isRpg ? previewTaskReward(rules, { priority: task.priority, dueDate: task.due_date, habitId: task.habit_id, difficulty: task.difficulty }, today, false, scale) : null;
+  const diffLabel = difficultyLabel(task.difficulty);
   const isDaily = !isDone && task.due_date?.slice(0, 10) === today;
 
   return (
@@ -126,9 +129,19 @@ export function TaskCard({
                 <Target size={10} />
               </span>
             )}
+            {diffLabel && (
+              <span className="inline-flex items-center text-[10px] font-semibold text-slate rpg:text-rpg-gold-light" title="Dificuldade (define XP e moedas)">
+                {diffLabel}
+              </span>
+            )}
+            {task.contract_id && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-brand-600 rpg:text-rpg-gold" title="Faz parte de um contrato">
+                <ScrollText size={10} /> Contrato
+              </span>
+            )}
             {task.habit_id && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-cat-green rpg:text-rpg-green" title="Gerada a partir de um hábito — a recompensa vem do contrato">
-                <Sparkles size={10} /> {isRpg ? "Origem: contrato" : "Hábito"}
+              <span className="inline-flex items-center gap-1 text-[10px] text-cat-green rpg:text-rpg-green" title="Gerada a partir de um hábito — a recompensa vem do hábito">
+                <Sparkles size={10} /> {isRpg ? "Origem: hábito" : "Hábito"}
               </span>
             )}
           </span>

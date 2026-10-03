@@ -61,7 +61,7 @@ export function RpgXpHistory() {
     <RPGPanel title="XP ganho — últimos 30 dias" icon={<Sparkles size={16} />} className="h-full">
       {isLoading && <div className="h-56 rpg-bar animate-pulse" aria-label="Carregando histórico de XP" />}
       {isError && <p className="text-sm text-rpg-red">Não foi possível carregar o histórico de XP.</p>}
-      {data && total === 0 && <p className="py-10 text-center text-sm text-rpg-muted">Nenhum XP no período. Conclua uma missão ou cumpra um contrato para começar.</p>}
+      {data && total === 0 && <p className="py-10 text-center text-sm text-rpg-muted">Nenhum XP no período. Conclua uma missão ou cumpra um hábito para começar.</p>}
       {data && total > 0 && (
         <>
           <p className="mb-2 text-xs text-rpg-muted">
@@ -156,7 +156,7 @@ export function RpgMissionWaffle({ tasks, today }: { tasks: Task[]; today: strin
   );
 }
 
-/** Ritmo da jornada (14 dias): missões, contratos, exercícios e XP — todos de registros reais. */
+/** Ritmo da jornada (14 dias): missões, hábitos, exercícios e XP — todos de registros reais. */
 export function RpgJourneyRhythm({ series }: { series: { tasks: DailySeriesPoint[]; habits: DailySeriesPoint[]; workouts: DailySeriesPoint[] } | undefined }) {
   const xp = useXpHistory(14);
   const lines = useMemo(() => {
@@ -165,7 +165,7 @@ export function RpgJourneyRhythm({ series }: { series: { tasks: DailySeriesPoint
     const days = series.tasks.map((p) => p.day.slice(0, 10));
     return [
       { key: "tasks", label: "Missões", color: tok("purple"), values: series.tasks.map((p) => Number(p.total)) },
-      { key: "habits", label: "Contratos", color: tok("green"), values: series.habits.map((p) => Number(p.total)) },
+      { key: "habits", label: "Hábitos", color: tok("green"), values: series.habits.map((p) => Number(p.total)) },
       { key: "workouts", label: "Exercícios", color: tok("orange"), values: series.workouts.map((p) => Number(p.total)) },
       { key: "focus", label: "XP de foco", color: tok("cyan"), values: days.map((d) => xpByDay.get(d)?.bySource.focus ?? 0) },
       { key: "xp", label: "XP total", color: tok("gold"), values: days.map((d) => xpByDay.get(d)?.total ?? 0) },

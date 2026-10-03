@@ -1,7 +1,8 @@
 import clsx from "clsx";
 import { Lock } from "lucide-react";
 import { rpgAvatar, type RpgAvatarId } from "./rpgAssets";
-import { useRpgAvatar } from "@/hooks/useRpgAvatar";
+import { useAuth } from "@/hooks/useAuth";
+import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 
 const SIZE = { sm: 32, md: 56, lg: 104, xl: 148 } as const;
 const FRAME = {
@@ -31,9 +32,12 @@ export function RPGAvatar({
   alt?: string;
   className?: string;
 }) {
-  const chosen = useRpgAvatar().avatarId;
-  const a = rpgAvatar(avatarId ?? chosen);
+  const { prefs } = useRpgPreferences();
+  const { user } = useAuth();
+  const a = rpgAvatar(avatarId ?? prefs.avatarId);
   const px = SIZE[size];
+  // Arte própria enviada pelo usuário: vale quando nenhum personagem específico foi pedido.
+  const custom = !avatarId && prefs.avatarMode === "custom" ? user?.rpg_avatar_image ?? null : null;
   return (
     <span
       className={clsx(
@@ -45,13 +49,13 @@ export function RPGAvatar({
       style={{ width: px, height: px, borderRadius: 3 }}
     >
       <img
-        src={px <= 56 ? a.srcSm : a.src}
-        alt={alt ?? `Personagem: ${a.label}`}
+        src={custom ?? (px <= 56 ? a.srcSm : a.src)}
+        alt={alt ?? (custom ? "Avatar personalizado" : `Personagem: ${a.label}`)}
         width={px}
         height={px}
         loading="lazy"
         decoding="async"
-        className={clsx("pixelated w-full h-full object-cover", state === "locked" && "grayscale opacity-40")}
+        className={clsx(!custom && "pixelated", "w-full h-full object-cover", state === "locked" && "grayscale opacity-40")}
       />
       {state === "locked" && (
         <span className="absolute inset-0 flex items-center justify-center text-rpg-muted" aria-hidden>

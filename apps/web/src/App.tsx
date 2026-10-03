@@ -28,6 +28,7 @@ const VerifyEmailPage = lazy(() =>
 const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const HojePage = lazy(() => import("@/pages/hoje/HojePage").then((m) => ({ default: m.HojePage })));
 const TarefasPage = lazy(() => import("@/pages/tarefas/TarefasPage").then((m) => ({ default: m.TarefasPage })));
+const ContratosPage = lazy(() => import("@/pages/contratos/ContratosPage").then((m) => ({ default: m.ContratosPage })));
 const ProjetosPage = lazy(() => import("@/pages/projetos/ProjetosPage").then((m) => ({ default: m.ProjetosPage })));
 const ProjetoDetalhePage = lazy(() =>
   import("@/pages/projetos/ProjetoDetalhePage").then((m) => ({ default: m.ProjetoDetalhePage }))
@@ -140,6 +141,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/hoje" element={<HojePage />} />
           <Route path="/tarefas" element={<TarefasPage />} />
+          <Route path="/contratos" element={<ContratosPage />} />
           <Route path="/projetos" element={<ProjetosPage />} />
           <Route path="/projetos/:id" element={<ProjetoDetalhePage />} />
           <Route path="/inbox" element={<InboxPage />} />
@@ -193,7 +195,7 @@ export default function App() {
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/hoje" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Suspense>
   );

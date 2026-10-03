@@ -30,7 +30,7 @@ export function RpgAnalyticsSidebar() {
     [rewards, p?.coins],
   );
 
-  // Missões diárias reais: tarefas com prazo hoje + contratos (hábitos) diários.
+  // Missões diárias reais: tarefas com prazo hoje + hábitos diários.
   const daily = useMemo(() => {
     const t = tasks
       .filter((x) => x.due_date?.slice(0, 10) === today)
@@ -95,7 +95,7 @@ export function RpgAnalyticsSidebar() {
 
       <RPGPanel title="Missões diárias" icon={<Swords size={16} />} actions={daily.length > 0 ? <span className="text-xs text-rpg-muted">{doneCount} de {daily.length}</span> : undefined}>
         {daily.length === 0 ? (
-          <p className="text-sm text-rpg-muted">Nenhuma tarefa com prazo hoje nem contrato diário.</p>
+          <p className="text-sm text-rpg-muted">Nenhuma tarefa com prazo hoje nem hábito diário.</p>
         ) : (
           <>
             <RPGProgressBar tone="green" label="Missões diárias concluídas" value={doneCount} max={daily.length} showLabel={false} className="mb-3" />

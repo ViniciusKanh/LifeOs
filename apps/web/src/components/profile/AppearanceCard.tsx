@@ -14,10 +14,11 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: JSX.Element; hint: string }>
 
 /**
  * Aparência no Perfil: escolha do tema (Claro/Escuro/Automático/RPG) e do
- * personagem do tema RPG. As duas escolhas são preferências de interface
- * guardadas neste navegador — não mudam nenhum dado nem regra do app.
+ * personagem do tema RPG. São preferências de interface — não mudam nenhum
+ * dado nem regra do app. No tema RPG, o personagem é escolhido no estúdio da
+ * Ficha do personagem (hideAvatar).
  */
-export function AppearanceCard() {
+export function AppearanceCard({ hideAvatar = false }: { hideAvatar?: boolean } = {}) {
   const { mode, setMode } = useTheme();
   const { avatarId, setAvatar } = useRpgAvatar();
 
@@ -58,6 +59,7 @@ export function AppearanceCard() {
         })}
       </div>
 
+      {!hideAvatar && (<>
       <p className="text-xs font-semibold text-slate mb-1">Personagem</p>
       <p className="text-[11px] text-slate mb-2">Aparece no tema RPG (cabeçalho, Dashboard, Hoje). É só visual.</p>
       <div role="radiogroup" aria-label="Personagem" className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -87,6 +89,7 @@ export function AppearanceCard() {
           );
         })}
       </div>
+      </>)}
     </Card>
   );
 }

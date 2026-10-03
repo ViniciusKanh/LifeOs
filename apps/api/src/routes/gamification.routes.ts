@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getLevelHistory, getPlayerProfile, getProjectsXp, getXpHistory, publicRules } from "../services/gamificationService.js";
+import { getDifficultyRewards, getLevelHistory, getPlayerProfile, getProjectsXp, getXpHistory, publicRules, saveDifficultyRewards } from "../services/gamificationService.js";
+import { addStarterRewards, suggestRewards } from "../services/rewardsAIService.js";
+import { rateLimit } from "../middleware/rateLimit.js";
+import { difficultySettingsSchema } from "../validators/contracts.schema.js";
+import { z } from "zod";
 import {
   createReward,
   deleteReward,
@@ -44,6 +48,39 @@ gamificationRouter.get("/projects", async (req, res) => {
 /** GET /api/gamification/rules — valores públicos das regras (para prévia na UI) */
 gamificationRouter.get("/rules", (_req, res) => {
   return res.json(publicRules());
+});
+
+/** GET /api/gamification/settings — XP/moedas por dificuldade do próprio usuário */
+gamificationRouter.get("/settings", async (req, res) => {
+  return res.json({ difficulty: await getDifficultyRewards(getDb(), req.user!.id) });
+});
+
+/**
+ * PUT /api/gamification/settings — o usuário ajusta as SUAS recompensas por
+ * dificuldade. Valores são limitados no serviço e valem só para o futuro
+ * (XP já concedido nunca muda).
+ */
+gamificationRouter.put("/settings", async (req, res) => {
+  const parsed = difficultySettingsSchema.safeParse(req.body?.difficulty);
+  if (!parsed.success) return res.status(400).json({ error: "Valores de recompensa inválidos." });
+  return res.json({ difficulty: await saveDifficultyRewards(getDb(), req.user!.id, parsed.data) });
+});
+
+/** POST /api/gamification/rewards/starter — adiciona o pacote inicial (sem duplicar por nome) */
+gamificationRouter.post("/rewards/starter", async (req, res) => {
+  return res.status(201).json(await addStarterRewards(getDb(), req.user!.id));
+});
+
+const aiLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 20 });
+const suggestSchema = z.object({ wish: z.string().trim().max(600).optional() });
+
+/** POST /api/gamification/rewards/ai/suggest — o Gemini propõe recompensas (nada é salvo) */
+gamificationRouter.post("/rewards/ai/suggest", aiLimit, async (req, res) => {
+  const parsed = suggestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "Dados inválidos." });
+  const result = await suggestRewards(getDb(), req.user!.id, parsed.data.wish);
+  if (!result.ok) return res.status(422).json({ error: result.message });
+  return res.json(result.data);
 });
 
 /** GET /api/gamification/rewards?all=1 */

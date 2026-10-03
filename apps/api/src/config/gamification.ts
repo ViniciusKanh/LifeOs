@@ -30,14 +30,14 @@ export const GAMIFICATION_RULES = {
     dailyXpCap: 400,
   },
   habit: {
-    /** Contrato (hábito) cumprido no dia: atingiu target_count. */
+    /** Hábito cumprido no dia: atingiu target_count. */
     xp: 5,
     coins: 1,
     /** Só check-ins de hoje ou ontem rendem XP (evita farm retroativo). */
     maxDaysBack: 1,
   },
   /**
-   * Marcos de sequência de um contrato (hábito diário): bônus único por
+   * Marcos de sequência de um hábito diário: bônus único por
    * hábito e por marco. Sequência não é XP — quebrar a sequência não tira nada.
    */
   habitStreakMilestones: [
@@ -68,6 +68,46 @@ export const GAMIFICATION_RULES = {
     gold: { xp: 100, coins: 20 },
     platinum: { xp: 250, coins: 50 },
   } as Record<string, { xp: number; coins: number }>,
+  /**
+   * Dificuldade (fácil → épico). Os valores abaixo são o PADRÃO: cada
+   * usuário pode ajustar os seus em Meu Perfil, sempre dentro dos limites
+   * (o backend corta qualquer valor fora da faixa). Tarefa com dificuldade
+   * usa estes valores no lugar dos de prioridade; o bônus de contrato é
+   * pago uma vez quando todas as tarefas do contrato são concluídas.
+   */
+  difficulty: {
+    levels: ["facil", "medio", "dificil", "epico"] as const,
+    defaults: {
+      facil: { taskXp: 10, taskCoins: 2, contractXp: 30, contractCoins: 6 },
+      medio: { taskXp: 20, taskCoins: 4, contractXp: 60, contractCoins: 12 },
+      dificil: { taskXp: 35, taskCoins: 7, contractXp: 120, contractCoins: 24 },
+      epico: { taskXp: 60, taskCoins: 12, contractXp: 250, contractCoins: 50 },
+    } as Record<"facil" | "medio" | "dificil" | "epico", { taskXp: number; taskCoins: number; contractXp: number; contractCoins: number }>,
+    limits: { taskXp: 150, taskCoins: 30, contractXp: 600, contractCoins: 120 },
+  },
+  contract: {
+    /** Contrato precisa de ao menos N tarefas para render bônus (evita contrato de 1 clique). */
+    minTasks: 2,
+    /** Máximo de contratos premiados por dia (trava contra farm). */
+    maxRewardedPerDay: 3,
+  },
+  /**
+   * Laboratório (Experimentos Pessoais): dar vida a um experimento,
+   * registrar o check-in do dia e concluir com uma conclusão escrita.
+   * Conclusão só paga se o experimento durou o mínimo de dias e teve
+   * registros — evita "concluir" um experimento vazio.
+   */
+  experiment: {
+    started: { xp: 15, coins: 3 },
+    /** Máximo de experimentos iniciados premiados por dia (criar/apagar não farma). */
+    maxStartedPerDay: 2,
+    checkin: { xp: 3, coins: 1 },
+    checkinMaxDaysBack: 1,
+    concluded: { xp: 80, coins: 16 },
+    concludeMinDays: 7,
+    concludeMinLogs: 3,
+    concludeMinConclusionChars: 20,
+  },
   focus: {
     /** Cada bloco completo de 25 min de foco rende XP. */
     blockMinutes: 25,

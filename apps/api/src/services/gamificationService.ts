@@ -14,7 +14,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment";
 
 export interface XpGrant {
   sourceType: XpSourceType;
@@ -144,6 +144,8 @@ export function buildTaskGrants(input: {
   projectId: string | null;
   dayKey: string;
   isMainMission: boolean;
+  /** Recompensa pela dificuldade (configurada pelo usuário); substitui a de prioridade. */
+  difficultyReward?: { xp: number; coins: number } | null;
 }): XpGrant[] {
   const R = GAMIFICATION_RULES.task;
   const base = { sourceType: "task" as const, sourceId: input.taskId, projectId: input.projectId };
@@ -151,8 +153,8 @@ export function buildTaskGrants(input: {
     {
       ...base,
       eventType: "completed",
-      xp: R.xpByPriority[input.priority] ?? R.xpByPriority["Média"],
-      coins: R.coinsByPriority[input.priority] ?? R.coinsByPriority["Média"],
+      xp: input.difficultyReward?.xp ?? R.xpByPriority[input.priority] ?? R.xpByPriority["Média"],
+      coins: input.difficultyReward?.coins ?? R.coinsByPriority[input.priority] ?? R.coinsByPriority["Média"],
       label: `Missão concluída: ${input.title}`,
     },
   ];
@@ -189,18 +191,92 @@ async function taskXpToday(db: Client, ownerId: string, dayKey: string): Promise
   return Number(r.rows[0]?.total ?? 0);
 }
 
+/* ------------------------- Dificuldade (configurável) ------------------------- */
+
+export type DifficultyKey = "facil" | "medio" | "dificil" | "epico";
+export type DifficultyRewards = Record<DifficultyKey, { taskXp: number; taskCoins: number; contractXp: number; contractCoins: number }>;
+
+export const DIFFICULTY_KEYS: readonly DifficultyKey[] = GAMIFICATION_RULES.difficulty.levels;
+
+export function isDifficulty(v: unknown): v is DifficultyKey {
+  return typeof v === "string" && (DIFFICULTY_KEYS as readonly string[]).includes(v);
+}
+
+/** Mescla o salvo com o padrão e corta tudo nos limites (puro — testável). */
+export function sanitizeDifficultyRewards(raw: unknown): DifficultyRewards {
+  const D = GAMIFICATION_RULES.difficulty;
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, Record<string, unknown> | undefined>;
+  const clamp = (v: unknown, fallback: number, max: number) => {
+    const n = typeof v === "number" && Number.isFinite(v) ? Math.round(v) : fallback;
+    return Math.min(max, Math.max(0, n));
+  };
+  const out = {} as DifficultyRewards;
+  for (const key of DIFFICULTY_KEYS) {
+    const d = D.defaults[key];
+    const v = src[key] ?? {};
+    out[key] = {
+      taskXp: clamp(v.taskXp, d.taskXp, D.limits.taskXp),
+      taskCoins: clamp(v.taskCoins, d.taskCoins, D.limits.taskCoins),
+      contractXp: clamp(v.contractXp, d.contractXp, D.limits.contractXp),
+      contractCoins: clamp(v.contractCoins, d.contractCoins, D.limits.contractCoins),
+    };
+  }
+  return out;
+}
+
+export async function getDifficultyRewards(db: Client, ownerId: string): Promise<DifficultyRewards> {
+  const r = await db.execute({ sql: "SELECT difficulty_json FROM gamification_settings WHERE owner_id = ?", args: [ownerId] });
+  let parsed: unknown = null;
+  try {
+    parsed = r.rows[0]?.difficulty_json ? JSON.parse(String(r.rows[0].difficulty_json)) : null;
+  } catch {
+    parsed = null;
+  }
+  return sanitizeDifficultyRewards(parsed);
+}
+
+/** Salva os valores do usuário (já limitados). Vale só para recompensas futuras. */
+export async function saveDifficultyRewards(db: Client, ownerId: string, raw: unknown): Promise<DifficultyRewards> {
+  const clean = sanitizeDifficultyRewards(raw);
+  await db.execute({
+    sql: `INSERT INTO gamification_settings (owner_id, difficulty_json, updated_at) VALUES (?, ?, datetime('now'))
+          ON CONFLICT (owner_id) DO UPDATE SET difficulty_json = excluded.difficulty_json, updated_at = datetime('now')`,
+    args: [ownerId, JSON.stringify(clean)],
+  });
+  return clean;
+}
+
 /** Tarefa concluída → XP/moedas + bônus determinísticos do dia. */
 export async function awardTaskCompletion(db: Client, ownerId: string, taskId: string): Promise<void> {
-  await safely("tarefa", async () => {
+  await safely("tarefa", () => awardTaskCompletionInner(db, ownerId, taskId));
+  // O bônus do contrato é verificado mesmo se a tarefa já tinha sido paga antes.
+  await safely("contrato", () => maybeCompleteContract(db, ownerId, taskId));
+}
+
+async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: string): Promise<void> {
+  {
     const r = await db.execute({
-      sql: "SELECT id, title, priority, due_date, project_id, status, habit_id FROM tasks WHERE id = ? AND owner_id = ?",
+      sql: `SELECT t.id, t.title, t.priority, t.due_date, t.project_id, t.status, t.habit_id, t.difficulty,
+                   c.difficulty AS contract_difficulty
+            FROM tasks t LEFT JOIN contracts c ON c.id = t.contract_id AND c.owner_id = t.owner_id
+            WHERE t.id = ? AND t.owner_id = ?`,
       args: [taskId, ownerId],
     });
     const task = r.rows[0] as unknown as
-      | { id: string; title: string; priority: string; due_date: string | null; project_id: string | null; status: string; habit_id: string | null }
+      | {
+          id: string;
+          title: string;
+          priority: string;
+          due_date: string | null;
+          project_id: string | null;
+          status: string;
+          habit_id: string | null;
+          difficulty: string | null;
+          contract_difficulty: string | null;
+        }
       | undefined;
     if (!task || task.status !== "Concluído") return;
-    // Anti dupla recompensa: tarefa gerada por um contrato (hábito) é só a
+    // Anti dupla recompensa: tarefa gerada por um hábito é só a
     // representação do check-in — quem paga é o hábito (awardHabitCheckIn).
     if (task.habit_id) return;
 
@@ -212,6 +288,9 @@ export async function awardTaskCompletion(db: Client, ownerId: string, taskId: s
     const isMainMission = parseJsonArray(journal.rows[0]?.focus_task_ids).includes(taskId);
 
     const R = GAMIFICATION_RULES.task;
+    // Dificuldade da própria tarefa ou, na falta, a do contrato a que pertence.
+    const diff = isDifficulty(task.difficulty) ? task.difficulty : isDifficulty(task.contract_difficulty) ? task.contract_difficulty : null;
+    const difficultyReward = diff ? (await getDifficultyRewards(db, ownerId))[diff] : null;
     const grants = buildTaskGrants({
       taskId,
       title: task.title,
@@ -220,6 +299,7 @@ export async function awardTaskCompletion(db: Client, ownerId: string, taskId: s
       projectId: task.project_id,
       dayKey,
       isMainMission,
+      difficultyReward: difficultyReward ? { xp: difficultyReward.taskXp, coins: difficultyReward.taskCoins } : null,
     });
     grants.push({ sourceType: "day", sourceId: dayKey, eventType: "first_mission", xp: R.firstOfDayXp, coins: 0, label: "Primeira missão do dia" });
 
@@ -247,10 +327,132 @@ export async function awardTaskCompletion(db: Client, ownerId: string, taskId: s
       );
       if (bonus) await award(db, ownerId, bonus, dayKey);
     }
+  }
+}
+
+/**
+ * Contrato cumprido: todas as tarefas concluídas (mínimo de tarefas) →
+ * status "concluido" + bônus único pela dificuldade. Reabrir tarefa
+ * devolve o contrato para "ativo", mas o bônus nunca é pago de novo.
+ */
+export async function maybeCompleteContract(db: Client, ownerId: string, taskId: string): Promise<void> {
+  const t = await db.execute({ sql: "SELECT contract_id FROM tasks WHERE id = ? AND owner_id = ?", args: [taskId, ownerId] });
+  const contractId = t.rows[0]?.contract_id;
+  if (typeof contractId !== "string" || !contractId) return;
+  await syncContractStatus(db, ownerId, contractId, { reward: true });
+}
+
+/**
+ * Recalcula o status do contrato. O bônus só é pago quando a conclusão vem
+ * de uma tarefa concluída de verdade (`reward: true`) — apagar tarefas ou
+ * vincular tarefas antigas nunca "cumpre" um contrato com recompensa.
+ */
+export async function syncContractStatus(db: Client, ownerId: string, contractId: string, opts: { reward?: boolean } = {}): Promise<void> {
+  const c = await db.execute({
+    sql: `SELECT c.id, c.title, c.difficulty, c.status,
+                 (SELECT COUNT(*) FROM tasks WHERE contract_id = c.id AND owner_id = c.owner_id) AS total,
+                 (SELECT COUNT(*) FROM tasks WHERE contract_id = c.id AND owner_id = c.owner_id AND status = 'Concluído') AS done
+          FROM contracts c WHERE c.id = ? AND c.owner_id = ?`,
+    args: [contractId, ownerId],
+  });
+  const row = c.rows[0];
+  if (!row || String(row.status) === "arquivado") return;
+  const total = Number(row.total ?? 0);
+  const done = Number(row.done ?? 0);
+  const complete = total > 0 && done === total;
+  if (!complete) {
+    if (String(row.status) === "concluido") {
+      await db.execute({ sql: "UPDATE contracts SET status = 'ativo', completed_at = NULL, updated_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [contractId, ownerId] });
+    }
+    return;
+  }
+  if (String(row.status) !== "concluido") {
+    await db.execute({
+      sql: "UPDATE contracts SET status = 'concluido', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+      args: [contractId, ownerId],
+    });
+  }
+  const C = GAMIFICATION_RULES.contract;
+  if (!opts.reward || total < C.minTasks) return;
+  const dayKey = await todayKeyFor(db, ownerId);
+  const today = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM xp_events WHERE owner_id = ? AND source_type = 'contract' AND day_key = ?",
+    args: [ownerId, dayKey],
+  });
+  if (Number(today.rows[0]?.n ?? 0) >= C.maxRewardedPerDay) return;
+  const diff = isDifficulty(row.difficulty) ? row.difficulty : "medio";
+  const reward = (await getDifficultyRewards(db, ownerId))[diff];
+  await award(
+    db,
+    ownerId,
+    { sourceType: "contract", sourceId: contractId, eventType: "completed", xp: reward.contractXp, coins: reward.contractCoins, label: `Contrato cumprido: ${String(row.title)}` },
+    dayKey,
+  );
+}
+
+/* ------------------------------ Laboratório ------------------------------ */
+
+/** Experimento ganhou vida (rascunho → ativo): bônus único por experimento. */
+export async function awardExperimentStarted(db: Client, ownerId: string, experimentId: string, title: string): Promise<void> {
+  await safely("experimento", async () => {
+    const E = GAMIFICATION_RULES.experiment;
+    const dayKey = await todayKeyFor(db, ownerId);
+    const today = await db.execute({
+      sql: "SELECT COUNT(*) AS n FROM xp_events WHERE owner_id = ? AND source_type = 'experiment' AND event_type = 'started' AND day_key = ?",
+      args: [ownerId, dayKey],
+    });
+    if (Number(today.rows[0]?.n ?? 0) >= E.maxStartedPerDay) return;
+    await award(db, ownerId, { sourceType: "experiment", sourceId: experimentId, eventType: "started", xp: E.started.xp, coins: E.started.coins, label: `Experimento iniciado: ${title}` }, dayKey);
   });
 }
 
-/** Contrato (hábito) cumprido → XP, só para hoje/ontem e só ao bater a meta do dia. */
+/** Check-in "feito" de hoje/ontem: um por dia por experimento. */
+export async function awardExperimentCheckin(db: Client, ownerId: string, experimentId: string, logDate: string, title: string): Promise<void> {
+  await safely("experimento", async () => {
+    const R = GAMIFICATION_RULES.experiment;
+    const dayKey = await todayKeyFor(db, ownerId);
+    const diff = daysBetweenKeys(logDate, dayKey);
+    if (diff < 0 || diff > R.checkinMaxDaysBack) return;
+    await award(
+      db,
+      ownerId,
+      { sourceType: "experiment", sourceId: `${experimentId}:${logDate}`, eventType: "checkin", xp: R.checkin.xp, coins: R.checkin.coins, label: `Registro no laboratório: ${title}` },
+      dayKey,
+    );
+  });
+}
+
+/** Elegibilidade da conclusão (pura — testável). */
+export function isExperimentConclusionEligible(input: { startDate: string; today: string; logs: number; conclusion: string | null | undefined }): boolean {
+  const R = GAMIFICATION_RULES.experiment;
+  return (
+    daysBetweenKeys(input.startDate, input.today) >= R.concludeMinDays &&
+    input.logs >= R.concludeMinLogs &&
+    (input.conclusion ?? "").trim().length >= R.concludeMinConclusionChars
+  );
+}
+
+/** Experimento concluído com conclusão escrita, duração mínima e registros reais. */
+export async function awardExperimentConcluded(db: Client, ownerId: string, experimentId: string): Promise<boolean> {
+  let granted = false;
+  await safely("experimento", async () => {
+    const r = await db.execute({
+      sql: `SELECT e.title, e.start_date, e.personal_conclusion,
+                   (SELECT COUNT(*) FROM personal_experiment_logs l WHERE l.experiment_id = e.id AND l.owner_id = e.owner_id) AS logs
+            FROM personal_experiments e WHERE e.id = ? AND e.owner_id = ? AND e.status = 'completed'`,
+      args: [experimentId, ownerId],
+    });
+    const row = r.rows[0];
+    if (!row) return;
+    const today = await todayKeyFor(db, ownerId);
+    if (!isExperimentConclusionEligible({ startDate: String(row.start_date), today, logs: Number(row.logs ?? 0), conclusion: row.personal_conclusion == null ? null : String(row.personal_conclusion) })) return;
+    const R = GAMIFICATION_RULES.experiment.concluded;
+    granted = await award(db, ownerId, { sourceType: "experiment", sourceId: experimentId, eventType: "concluded", xp: R.xp, coins: R.coins, label: `Experimento concluído: ${String(row.title)}` }, today);
+  });
+  return granted;
+}
+
+/** Hábito cumprido → XP, só para hoje/ontem e só ao bater a meta do dia. */
 export async function awardHabitCheckIn(db: Client, ownerId: string, habitId: string, entryDate: string): Promise<void> {
   await safely("hábito", async () => {
     const r = await db.execute({
@@ -275,12 +477,12 @@ export async function awardHabitCheckIn(db: Client, ownerId: string, habitId: st
         eventType: "fulfilled",
         xp: GAMIFICATION_RULES.habit.xp,
         coins: GAMIFICATION_RULES.habit.coins,
-        label: `Contrato cumprido: ${row.name}`,
+        label: `Hábito cumprido: ${row.name}`,
       },
       dayKey,
     );
 
-    // Marcos de sequência (só contratos diários): um bônus por marco, para sempre.
+    // Marcos de sequência (só hábitos diários): um bônus por marco, para sempre.
     if (row.frequency !== "daily") return;
     const streak = await habitStreakEndingAt(db, ownerId, habitId, entryDate, Number(row.target_count));
     for (const m of GAMIFICATION_RULES.habitStreakMilestones) {
@@ -295,7 +497,7 @@ export async function awardHabitCheckIn(db: Client, ownerId: string, habitId: st
   });
 }
 
-/** Dias consecutivos (terminando em `endDate`) em que o contrato bateu a meta. */
+/** Dias consecutivos (terminando em `endDate`) em que o hábito bateu a meta. */
 export async function habitStreakEndingAt(db: Client, ownerId: string, habitId: string, endDate: string, target: number): Promise<number> {
   const r = await db.execute({
     sql: "SELECT entry_date FROM habit_entries WHERE habit_id = ? AND owner_id = ? AND entry_date <= ? AND count >= ? ORDER BY entry_date DESC LIMIT 400",
@@ -677,5 +879,8 @@ export function publicRules() {
     habitStreakMilestones: GAMIFICATION_RULES.habitStreakMilestones,
     lifeAdmin: GAMIFICATION_RULES.lifeAdmin.byKind,
     achievementByTier: GAMIFICATION_RULES.achievementByTier,
+    difficulty: { defaults: GAMIFICATION_RULES.difficulty.defaults, limits: GAMIFICATION_RULES.difficulty.limits },
+    contract: GAMIFICATION_RULES.contract,
+    experiment: GAMIFICATION_RULES.experiment,
   };
 }

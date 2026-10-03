@@ -11,7 +11,7 @@ import { OPTIONAL_TABS, RANGE_OPTIONS, TABS, dayHeaderLabel, eventContent, forma
 import { categoryCounts, eventDay, type timelineHighlights } from "@/utils/timelineMetrics";
 
 const tok = (name: string) => `rgb(var(--rpg-${name}))`;
-const SPECIAL = new Set<EventType>(["achievement", "level_up", "reward", "project"]);
+const SPECIAL = new Set<EventType>(["achievement", "level_up", "reward", "project", "contract"]);
 
 /**
  * Timeline no tema RPG — "Crônica da Jornada". Só apresentação: recebe os
@@ -154,7 +154,7 @@ export function RpgTimelineView(props: {
                             <Icon size={17} />
                           </span>
                           <div className="min-w-0 flex-1">
-                            {special && <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold-light">{e.type === "level_up" ? "Level up" : e.type === "achievement" ? "Conquista desbloqueada" : e.type === "reward" ? "Recompensa resgatada" : "Campanha concluída"}</p>}
+                            {special && <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold-light">{e.type === "level_up" ? "Level up" : e.type === "achievement" ? "Conquista desbloqueada" : e.type === "reward" ? "Recompensa resgatada" : e.type === "contract" ? "Contrato cumprido" : "Campanha concluída"}</p>}
                             <p className={`text-sm font-semibold truncate ${special ? "text-rpg-gold-light" : "text-rpg-text"}`}>{special ? detail ?? title : title}</p>
                             {!special && detail && <p className="text-xs text-rpg-muted truncate">{detail}</p>}
                           </div>
@@ -219,7 +219,7 @@ export function RpgTimelineView(props: {
                 <Highlight icon={<Crown size={14} />} tone="gold" label="Dia mais ativo" value={highlights.mostActiveDay ? relativeDayLabel(highlights.mostActiveDay) : "—"} sub={highlights.mostActiveCount ? `${highlights.mostActiveCount} atividades` : undefined} />
                 <Highlight icon={<Flame size={14} />} tone="orange" label="Maior sequência" value={highlights.bestStreakHabit ? `${highlights.bestStreakHabit.streak} dias` : "—"} sub={highlights.bestStreakHabit?.name} />
                 <Highlight icon={<ListChecks size={14} />} tone="blue" label="Missões concluídas" value={String(highlights.tasksDone)} sub="tarefas" />
-                <Highlight icon={<Repeat size={14} />} tone="green" label="Contratos cumpridos" value={String(highlights.habitsDone)} sub="hábitos" />
+                <Highlight icon={<Repeat size={14} />} tone="green" label="Hábitos cumpridos" value={String(highlights.habitsDone)} sub="hábitos" />
               </dl>
             )}
           </RPGPanel>

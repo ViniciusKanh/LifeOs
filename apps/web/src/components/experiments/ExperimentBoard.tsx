@@ -4,7 +4,8 @@ import { AnimatePresence, LayoutGroup, motion, useMotionValue, useReducedMotion,
 import clsx from "clsx";
 import { Bot, CalendarRange, Columns3, LayoutGrid, PenLine, Search } from "lucide-react";
 import { RingProgress } from "@/components/charts/motion/RingProgress";
-import { CATEGORY_LABEL, STATUS_LABEL_PT, experimentEmoji } from "./experimentDisplay";
+import { CATEGORY_LABEL, LAB_STAGE, STATUS_LABEL_PT as STATUS_LABEL_CLASSIC, experimentEmoji } from "./experimentDisplay";
+import { useTheme } from "@/hooks/useTheme";
 import type { ExperimentListItem, ExperimentStatus } from "@/types";
 
 /**
@@ -36,6 +37,12 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 
 const BOARD_COLUMNS: ExperimentStatus[] = ["draft", "active", "paused", "completed"];
 
+/** No tema RPG os estágios usam a linguagem do Laboratório (o status real não muda). */
+function useStatusLabels() {
+  const { isRpg } = useTheme();
+  return isRpg ? LAB_STAGE : STATUS_LABEL_CLASSIC;
+}
+
 function RecentDots({ recent }: { recent: ExperimentListItem["recent"] }) {
   if (!recent || recent.length === 0) return <span className="text-[10px] text-slate">sem check-ins ainda</span>;
   return (
@@ -56,6 +63,7 @@ function RecentDots({ recent }: { recent: ExperimentListItem["recent"] }) {
 
 /** Cartão com leve inclinação 3D seguindo o mouse (desliga com "reduzir movimento"). */
 function ExperimentTile({ e, index }: { e: ExperimentListItem; index: number }) {
+  const STATUS_LABEL_PT = useStatusLabels();
   const reduce = useReducedMotion();
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
@@ -199,6 +207,7 @@ function TimelineView({ items }: { items: ExperimentListItem[] }) {
 }
 
 function BoardView({ items }: { items: ExperimentListItem[] }) {
+  const STATUS_LABEL_PT = useStatusLabels();
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
       {BOARD_COLUMNS.map((status) => {

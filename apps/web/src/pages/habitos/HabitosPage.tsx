@@ -31,7 +31,7 @@ import type { Habit, HabitTaskGenerationInput } from "@/types";
 import { HabitTaskGeneratorModal } from "@/components/habits/HabitTaskGeneratorModal";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RPGButton, RPGIconSlot, RPGPageHeader, RPGStatCard } from "@/components/rpg";
-import { RpgContractsPanel } from "@/components/habits/RpgContractsPanel";
+import { RpgHabitsPanel } from "@/components/habits/RpgHabitsPanel";
 
 /* ------------------------------------------------------------------ */
 /* Categorias predefinidas de hábito — mesmo padrão visual (ícone +    */
@@ -111,7 +111,7 @@ export function HabitosPage() {
     try {
       await checkIn({ id: habit.id, entryDate: today, count: Math.max(1, habit.target_count) });
     } catch (err) {
-      setToast(err instanceof Error ? err.message : "Não foi possível registrar o contrato.");
+      setToast(err instanceof Error ? err.message : "Não foi possível registrar o hábito.");
     } finally {
       setFulfillingId(null);
     }
@@ -253,26 +253,26 @@ export function HabitosPage() {
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       {isRpg ? (
         <RPGPageHeader
-          banner="contratos"
+          banner="habitos"
           size="md"
           leading={<RPGIconSlot icon={<ScrollText size={26} />} />}
           eyebrow="Jornada"
-          title="Contratos da Jornada"
-          subtitle="Ações repetidas se tornam contratos. Honre seus compromissos e construa a vida que você deseja."
+          title="Hábitos da Jornada"
+          subtitle="Pequenas ações repetidas constroem a vida que você deseja. Mantenha a sequência e evolua o personagem."
           actions={
             <>
               {habits.length > 0 && (
-                <RPGButton variant="secondary" onClick={() => document.getElementById("historico-contratos")?.scrollIntoView({ behavior: "smooth" })}>
+                <RPGButton variant="secondary" onClick={() => document.getElementById("historico-habitos")?.scrollIntoView({ behavior: "smooth" })}>
                   <History size={14} aria-hidden /> Ver história
                 </RPGButton>
               )}
               {habits.length > 0 && (
-                <RPGButton variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Gera tarefas (missões) a partir dos hábitos — a recompensa continua vindo do contrato">
+                <RPGButton variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Gera tarefas (missões) a partir dos hábitos — a recompensa continua vindo do hábito">
                   {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ListChecks size={14} aria-hidden />} Gerar missões
                 </RPGButton>
               )}
               <RPGButton variant="primary" onClick={() => setModalOpen(true)}>
-                <Plus size={14} aria-hidden /> Novo contrato
+                <Plus size={14} aria-hidden /> Novo hábito
               </RPGButton>
             </>
           }
@@ -302,12 +302,12 @@ export function HabitosPage() {
               <RPGStatCard icon={<Flame size={18} />} label="Sequência atual" value={diasLabel(stats?.currentStreakMax ?? 0)} tone="red" />
               <RPGStatCard
                 icon={<Target size={18} />}
-                label="Contratos cumpridos hoje"
+                label="Hábitos cumpridos hoje"
                 value={`${completedToday} / ${totalHabits}`}
                 tone="blue"
                 pct={totalHabits ? Math.round((completedToday / totalHabits) * 100) : 0}
               />
-              <RPGStatCard icon={<Activity size={18} />} label="Contratos ativos" value={String(totalHabits)} tone="purple" />
+              <RPGStatCard icon={<Activity size={18} />} label="Hábitos ativos" value={String(totalHabits)} tone="purple" />
               <RPGStatCard
                 icon={<TrendingUp size={18} />}
                 label="Consistência (30 dias)"
@@ -392,9 +392,9 @@ export function HabitosPage() {
           </>
           )}
 
-          {isRpg && <RpgContractsPanel items={habitsWithStatus} today={today} onFulfill={fulfillContract} onEdit={(h) => setEditingHabit(h)} pendingId={fulfillingId} />}
+          {isRpg && <RpgHabitsPanel items={habitsWithStatus} today={today} onFulfill={fulfillContract} onEdit={(h) => setEditingHabit(h)} pendingId={fulfillingId} />}
 
-          <div id="historico-contratos" className="grid lg:grid-cols-[1fr_320px] gap-4 items-start scroll-mt-4">
+          <div id="historico-habitos" className="grid lg:grid-cols-[1fr_320px] gap-4 items-start scroll-mt-4">
             {/* Coluna principal: tabela de hábitos + categorias + horários */}
             <div className="space-y-4 min-w-0">
               <Card className="p-5">

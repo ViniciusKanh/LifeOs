@@ -27,11 +27,11 @@ const SORTS: Array<{ value: SortKey; label: string }> = [
 type Item = { habit: Habit; summary: HabitSummary | undefined; checkedInToday: boolean; atRisk: boolean };
 
 /**
- * "Contratos de hoje": visão gamificada dos hábitos reais (sem tabela nova).
+ * "Hábitos de hoje": visão gamificada dos hábitos reais.
  * Cumprir = o mesmo check-in de Hábitos; a recompensa exibida vem das regras
  * públicas do backend e só é concedida lá, depois de persistir.
  */
-export function RpgContractsPanel({
+export function RpgHabitsPanel({
   items,
   today,
   onFulfill,
@@ -74,14 +74,14 @@ export function RpgContractsPanel({
   const field = "w-full pl-8 pr-3 py-2 text-sm bg-rpg-bg-2 text-rpg-text border border-rpg-border focus:border-rpg-gold outline-none placeholder:text-rpg-muted/70";
 
   return (
-    <RPGPanel title="Contratos de hoje" icon={<ScrollText size={16} />} actions={<span className="font-pixel text-xs text-rpg-muted">{done}/{items.length} cumpridos</span>}>
-      <p className="-mt-1 mb-3 text-xs text-rpg-muted">Honre seus contratos diários e fortaleça a sua jornada.</p>
+    <RPGPanel title="Hábitos de hoje" icon={<ScrollText size={16} />} actions={<span className="font-pixel text-xs text-rpg-muted">{done}/{items.length} cumpridos</span>}>
+      <p className="-mt-1 mb-3 text-xs text-rpg-muted">Mantenha seus hábitos diários e fortaleça a sua jornada.</p>
       <div className="flex flex-col lg:flex-row lg:items-center gap-2 mb-4">
         <RPGTabs label="Frequência" size="sm" tabs={freqTabs} value={freq} onChange={setFreq} />
         <label className="relative flex-1 min-w-0">
-          <span className="sr-only">Buscar contratos</span>
+          <span className="sr-only">Buscar hábitos</span>
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rpg-muted" aria-hidden />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar contratos…" className={field} style={{ borderRadius: 3 }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar hábitos…" className={field} style={{ borderRadius: 3 }} />
         </label>
         <label className="shrink-0">
           <span className="sr-only">Ordenar</span>
@@ -92,7 +92,7 @@ export function RpgContractsPanel({
       </div>
 
       {visible.length === 0 ? (
-        <p className="text-sm text-rpg-muted py-6 text-center">Nenhum contrato com esses filtros.</p>
+        <p className="text-sm text-rpg-muted py-6 text-center">Nenhum hábito com esses filtros.</p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map(({ habit, summary, checkedInToday, atRisk }) => (
@@ -109,7 +109,7 @@ export function RpgContractsPanel({
                   {habit.target_count > 1 && <p className="text-[11px] text-rpg-text/80 mt-0.5">Meta: {habit.target_count}× no dia</p>}
                 </div>
                 {onEdit && (
-                  <button type="button" onClick={() => onEdit(habit)} className="shrink-0 w-8 h-8 -mr-1 flex items-center justify-center text-rpg-muted hover:text-rpg-gold-light" aria-label={`Editar contrato ${habit.name}`}>
+                  <button type="button" onClick={() => onEdit(habit)} className="shrink-0 w-8 h-8 -mr-1 flex items-center justify-center text-rpg-muted hover:text-rpg-gold-light" aria-label={`Editar hábito ${habit.name}`}>
                     <MoreHorizontal size={16} />
                   </button>
                 )}
@@ -141,7 +141,7 @@ export function RpgContractsPanel({
                       type="button"
                       disabled={pendingId === habit.id}
                       onClick={() => onFulfill(habit)}
-                      aria-label={`Marcar contrato ${habit.name} como cumprido hoje (${today})`}
+                      aria-label={`Marcar hábito ${habit.name} como cumprido hoje (${today})`}
                       className="inline-flex items-center gap-1.5 border-2 border-rpg-border hover:border-rpg-gold bg-rpg-bg-2 px-2 py-1 font-pixel text-[11px] text-rpg-text disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold"
                       style={{ borderRadius: 3 }}
                     >

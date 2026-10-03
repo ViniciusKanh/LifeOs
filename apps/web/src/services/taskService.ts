@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { FocusTask, Task, TaskAttachment, TimeEntry } from "@/types";
+import type { Difficulty, FocusTask, Task, TaskAttachment, TimeEntry } from "@/types";
 
 export interface TaskInput {
   title: string;
@@ -15,6 +15,8 @@ export interface TaskInput {
   urgency?: number | null;
   effort?: number | null;
   recurrenceRule?: string | null;
+  difficulty?: Difficulty | null;
+  contractId?: string | null;
 }
 
 export const taskService = {

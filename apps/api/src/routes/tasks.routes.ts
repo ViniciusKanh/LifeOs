@@ -5,7 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
-import { awardFocusSession, awardHabitCheckIn, awardTaskCompletion } from "../services/gamificationService.js";
+import { awardFocusSession, awardHabitCheckIn, awardTaskCompletion, maybeCompleteContract, syncContractStatus } from "../services/gamificationService.js";
 import { computeNextOccurrence, parseRecurrenceRule } from "../services/recurrenceService.js";
 import { taskAttachmentCreateSchema, taskAttachmentUpdateSchema } from "../validators/attachment.schema.js";
 import {
@@ -235,7 +235,15 @@ tasksRouter.get("/:id", async (req, res) => {
  * project_id / goal_id só podem apontar para registros do próprio usuário —
  * sem isso, um id de outro usuário poderia ser gravado na tarefa.
  */
-async function validateTaskLinks(db: ReturnType<typeof getDb>, ownerId: string, d: { projectId?: string | null; goalId?: string | null }): Promise<string | null> {
+async function validateTaskLinks(
+  db: ReturnType<typeof getDb>,
+  ownerId: string,
+  d: { projectId?: string | null; goalId?: string | null; contractId?: string | null },
+): Promise<string | null> {
+  if (d.contractId) {
+    const r = await db.execute({ sql: "SELECT id FROM contracts WHERE id = ? AND owner_id = ?", args: [d.contractId, ownerId] });
+    if (r.rows.length === 0) return "Contrato inválido.";
+  }
   if (d.projectId) {
     const r = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [d.projectId, ownerId] });
     if (r.rows.length === 0) return "Projeto inválido.";
@@ -262,8 +270,8 @@ tasksRouter.post("/", async (req, res) => {
   const status = d.status ?? "Backlog";
 
   await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, goal_id, title, description, status, priority, due_date, start_date, estimate_minutes, completed_at, impact, urgency, effort, recurrence_rule)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO tasks (id, owner_id, project_id, goal_id, title, description, status, priority, due_date, start_date, estimate_minutes, completed_at, impact, urgency, effort, recurrence_rule, difficulty, contract_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       req.user!.id,
@@ -281,9 +289,12 @@ tasksRouter.post("/", async (req, res) => {
       d.urgency ?? null,
       d.effort ?? null,
       d.recurrenceRule ?? null,
+      d.difficulty ?? null,
+      d.contractId ?? null,
     ],
   });
   await recomputePriorityScore(db, id, req.user!.id);
+  if (d.contractId) await syncContractStatus(db, req.user!.id, d.contractId);
 
   const created = await db.execute({
     sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
@@ -302,12 +313,13 @@ tasksRouter.patch("/:id", async (req, res) => {
   const db = getDb();
 
   const existing = await db.execute({
-    sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?",
+    sql: "SELECT id, contract_id FROM tasks WHERE id = ? AND owner_id = ?",
     args: [req.params.id, req.user!.id],
   });
   if (existing.rows.length === 0) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
+  const previousContract = existing.rows[0].contract_id == null ? null : String(existing.rows[0].contract_id);
   const linkError = await validateTaskLinks(db, req.user!.id, parsed.data);
   if (linkError) return res.status(400).json({ error: linkError });
 
@@ -327,6 +339,8 @@ tasksRouter.patch("/:id", async (req, res) => {
     urgency: "urgency",
     effort: "effort",
     recurrenceRule: "recurrence_rule",
+    difficulty: "difficulty",
+    contractId: "contract_id",
   };
 
   const dataForUpdate: Record<string, string | number | null> = { ...(parsed.data as Record<string, string | number | null>) };
@@ -356,6 +370,12 @@ tasksRouter.patch("/:id", async (req, res) => {
     await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
     await awardTaskCompletion(db, req.user!.id, req.params.id);
   }
+  // Contrato acompanha reabertura/troca de vínculo (o bônus pago nunca se repete).
+  if ("contractId" in parsed.data && previousContract && previousContract !== parsed.data.contractId) {
+    await syncContractStatus(db, req.user!.id, previousContract);
+  }
+  const currentContract = "contractId" in parsed.data ? parsed.data.contractId ?? null : previousContract;
+  if (currentContract && parsed.data.status !== "Concluído") await syncContractStatus(db, req.user!.id, currentContract);
 
   const updated = await db.execute({
     sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
@@ -390,6 +410,8 @@ tasksRouter.patch("/:id/move", async (req, res) => {
     await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
     await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
     await awardTaskCompletion(db, req.user!.id, req.params.id);
+  } else {
+    await maybeCompleteContract(db, req.user!.id, req.params.id);
   }
   return res.status(204).send();
 });
@@ -558,6 +580,8 @@ tasksRouter.delete("/:id/attachments/:attachmentId", async (req, res) => {
 /** DELETE /api/tasks/:id */
 tasksRouter.delete("/:id", async (req, res) => {
   const db = getDb();
+  const linked = await db.execute({ sql: "SELECT contract_id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  const contractId = linked.rows[0]?.contract_id;
   const result = await db.execute({
     sql: "DELETE FROM tasks WHERE id = ? AND owner_id = ?",
     args: [req.params.id, req.user!.id],
@@ -565,5 +589,6 @@ tasksRouter.delete("/:id", async (req, res) => {
   if (result.rowsAffected === 0) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
+  if (typeof contractId === "string" && contractId) await syncContractStatus(db, req.user!.id, contractId);
   return res.status(204).send();
 });

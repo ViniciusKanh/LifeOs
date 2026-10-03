@@ -17,12 +17,19 @@ interface Burst {
   detail: string | null;
 }
 
-/** Título da explosão a partir dos eventos novos (missão, contrato ou genérico). */
+/** Título da explosão a partir dos eventos novos (missão, hábito, contrato ou genérico). */
 function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
   const main = events.find((e) => e.eventType === "completed" || e.eventType === "fulfilled" || e.eventType === "session" || e.eventType === "first_entry") ?? events[0];
   if (main.sourceType === "task") return { title: "MISSÃO CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Missão concluída: /, "") ?? null };
-  if (main.sourceType === "habit_entry") return { title: "CONTRATO CUMPRIDO", stamp: "contract", detail: main.label?.replace(/^Contrato cumprido: /, "") ?? null };
+  if (main.sourceType === "habit_entry") return { title: "HÁBITO CUMPRIDO", stamp: "contract", detail: main.label?.replace(/^Hábito cumprido: /, "") ?? null };
   if (main.sourceType === "project") return { title: "CAMPANHA CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Campanha concluída: /, "") ?? null };
+  if (main.sourceType === "contract") return { title: "CONTRATO SELADO", stamp: "mission", detail: main.label?.replace(/^Contrato cumprido: /, "") ?? null };
+  if (main.sourceType === "experiment")
+    return {
+      title: main.eventType === "concluded" ? "ESTÁ VIVO!" : main.eventType === "started" ? "CRIATURA GANHOU VIDA" : "LABORATÓRIO",
+      stamp: null,
+      detail: main.label,
+    };
   if (main.sourceType === "achievement") return { title: "CONQUISTA DESBLOQUEADA", stamp: "mission", detail: main.label?.replace(/^Conquista: /, "") ?? null };
   if (main.sourceType === "life_admin") return { title: "ITEM RESOLVIDO", stamp: "contract", detail: main.label?.replace(/^Resolvido: /, "") ?? null };
   if (main.sourceType === "habit_streak") return { title: "MARCO DE SEQUÊNCIA", stamp: "contract", detail: main.label };

@@ -21,6 +21,7 @@ import { analyzeExperiment, suggestExperiment } from "../services/experimentAISe
 import { getExperimentAnalysis, getMetricBaselinePreview } from "../services/experimentAnalysisService.js";
 import { designExperiments, generateInsightReport, listInsightReports, parseDailyLog, tailorDraft, type TailorDraft } from "../services/experimentCoachService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { awardExperimentCheckin, awardExperimentConcluded, awardExperimentStarted } from "../services/gamificationService.js";
 import { METRIC_KEYS } from "../services/experimentMetricsService.js";
 import { VERIFICATION_RULES } from "../services/experimentVerificationService.js";
 
@@ -177,6 +178,7 @@ experimentsRouter.post("/", async (req, res) => {
   try {
     const db = getDb();
     const created = await createExperiment(db, req.user!.id, parsed.data as Parameters<typeof createExperiment>[2]);
+    if (created.status === "active") await awardExperimentStarted(db, req.user!.id, created.id, created.title);
     return res.status(201).json(created);
   } catch (err) {
     return handleError(res, err);
@@ -280,6 +282,8 @@ experimentsRouter.post("/:id/status", async (req, res) => {
   try {
     const db = getDb();
     const updated = await transitionStatus(db, req.user!.id, req.params.id, parsed.data.status);
+    // Laboratório: dar vida ao experimento rende XP uma única vez (pausar/retomar não duplica).
+    if (updated.status === "active") await awardExperimentStarted(db, req.user!.id, updated.id, updated.title);
     return res.json(updated);
   } catch (err) {
     return handleError(res, err);
@@ -293,7 +297,8 @@ experimentsRouter.post("/:id/conclude", async (req, res) => {
   try {
     const db = getDb();
     const updated = await concludeExperiment(db, req.user!.id, req.params.id, parsed.data);
-    return res.json(updated);
+    const rewarded = await awardExperimentConcluded(db, req.user!.id, updated.id);
+    return res.json({ ...updated, rewarded });
   } catch (err) {
     return handleError(res, err);
   }
@@ -306,6 +311,10 @@ experimentsRouter.post("/:id/logs", async (req, res) => {
   try {
     const db = getDb();
     const log = await upsertLog(db, req.user!.id, req.params.id, parsed.data);
+    if (parsed.data.checkinStatus === "done") {
+      const exp = await db.execute({ sql: "SELECT title FROM personal_experiments WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+      await awardExperimentCheckin(db, req.user!.id, req.params.id, parsed.data.logDate, String(exp.rows[0]?.title ?? "experimento"));
+    }
     return res.status(201).json(log);
   } catch (err) {
     return handleError(res, err);

@@ -16,9 +16,13 @@ import { ExperimentWizard } from "@/components/experiments/ExperimentWizard";
 import { ExperimentTodayCheckin } from "@/components/experiments/ExperimentTodayCheckin";
 import { ExperimentAIDesigner } from "@/components/experiments/ExperimentAIDesigner";
 import type { ExperimentAISuggestion, ExperimentProposal } from "@/types";
+import { RPGButton, RPGPageHeader } from "@/components/rpg";
+import { RpgLabHUD } from "@/components/experiments/RpgLabHUD";
+import { useTheme } from "@/hooks/useTheme";
 
 export function ExperimentsPage() {
   const { experiments, isLoading, summary, insights, createExperiment, isCreating, setStatus } = useExperiments();
+  const { isRpg } = useTheme();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSuggestion, setWizardSuggestion] = useState<ExperimentAISuggestion | null>(null);
   const [wizardProposal, setWizardProposal] = useState<ExperimentProposal | null>(null);
@@ -91,19 +95,45 @@ export function ExperimentsPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
-      <PageHeader
-        icon={<FlaskConical size={20} />}
-        title="Experimentos Pessoais"
-        subtitle="Teste mudanças na sua rotina e acompanhe os efeitos nos seus próprios dados."
-        actions={
-          <Button onClick={() => openWizard()}>
-            <Plus size={15} /> Novo experimento
-          </Button>
-        }
-      />
-      <p className="text-xs text-slate italic -mt-3">"Mudanças pequenas ficam mais claras quando são medidas."</p>
-
-      {summary && <ExperimentSummaryCards summary={summary} />}
+      {isRpg ? (
+        // Tema RPG: o "Laboratório" — cada experimento é uma criatura que ganha
+        // vida, é alimentada com registros e desperta ao ser concluída.
+        <>
+          <RPGPageHeader
+            banner="laboratorio"
+            eyebrow="Experimentos Pessoais"
+            title="Laboratório da Jornada"
+            subtitle="Costure hipóteses, dê vida a elas com um raio de disciplina e veja o que desperta nos seus próprios dados."
+            footnote={<span className="italic">&ldquo;Está vivo!&rdquo; — só quando os números confirmam.</span>}
+            actions={
+              <>
+                <RPGButton variant="gold" onClick={() => openWizard()}>
+                  <Plus size={15} aria-hidden /> Nova criatura
+                </RPGButton>
+                <RPGButton variant="primary" onClick={() => setDesignerOpen(true)}>
+                  <Wand2 size={15} aria-hidden /> Desenhar com IA
+                </RPGButton>
+              </>
+            }
+          />
+          <RpgLabHUD experiments={experiments} />
+        </>
+      ) : (
+        <>
+          <PageHeader
+            icon={<FlaskConical size={20} />}
+            title="Experimentos Pessoais"
+            subtitle="Teste mudanças na sua rotina e acompanhe os efeitos nos seus próprios dados."
+            actions={
+              <Button onClick={() => openWizard()}>
+                <Plus size={15} /> Novo experimento
+              </Button>
+            }
+          />
+          <p className="text-xs text-slate italic -mt-3">"Mudanças pequenas ficam mais claras quando são medidas."</p>
+          {summary && <ExperimentSummaryCards summary={summary} />}
+        </>
+      )}
 
       {designer}
 

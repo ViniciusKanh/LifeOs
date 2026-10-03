@@ -1,4 +1,4 @@
-import type { GamificationRules } from "@/services/gamificationService";
+import type { DifficultyRewards, GamificationRules } from "@/services/gamificationService";
 
 /**
  * Prévia da recompensa de uma tarefa a partir das regras públicas do
@@ -6,16 +6,20 @@ import type { GamificationRules } from "@/services/gamificationService";
  */
 export function previewTaskReward(
   rules: GamificationRules | undefined,
-  task: { priority?: string | null; dueDate?: string | null; habitId?: string | null },
+  task: { priority?: string | null; dueDate?: string | null; habitId?: string | null; difficulty?: string | null },
   today: string,
   isMainMission = false,
-): { xp: number; coins: number; fromContract?: boolean } | null {
+  /** Balança do usuário (Meu Perfil); sem ela, usa o padrão público. */
+  difficultyRewards?: DifficultyRewards,
+): { xp: number; coins: number; fromHabit?: boolean } | null {
   if (!rules) return null;
-  // Tarefa gerada por contrato: quem paga é o check-in do hábito (sem dupla recompensa).
-  if (task.habitId) return { xp: rules.habit.xp, coins: rules.habit.coins, fromContract: true };
+  // Tarefa gerada por hábito: quem paga é o check-in do hábito (sem dupla recompensa).
+  if (task.habitId) return { xp: rules.habit.xp, coins: rules.habit.coins, fromHabit: true };
   const priority = task.priority ?? "Média";
-  let xp = rules.task.xpByPriority[priority] ?? rules.task.xpByPriority["Média"] ?? 0;
-  const coins = rules.task.coinsByPriority[priority] ?? rules.task.coinsByPriority["Média"] ?? 0;
+  const scale = difficultyRewards ?? rules.difficulty?.defaults;
+  const byDifficulty = task.difficulty && scale ? scale[task.difficulty as keyof DifficultyRewards] : undefined;
+  let xp = byDifficulty?.taskXp ?? rules.task.xpByPriority[priority] ?? rules.task.xpByPriority["Média"] ?? 0;
+  const coins = byDifficulty?.taskCoins ?? rules.task.coinsByPriority[priority] ?? rules.task.coinsByPriority["Média"] ?? 0;
   const due = task.dueDate ? task.dueDate.slice(0, 10) : null;
   if (due === today) xp += rules.task.dailyMissionXp;
   else if (due && due > today) xp += rules.task.beforeDeadlineXp;
@@ -26,10 +30,13 @@ export function previewTaskReward(
 /** Rótulo e tom de cada origem de XP (para gráficos e listas). */
 export const XP_SOURCES: Array<{ id: string; label: string; tone: "purple" | "green" | "cyan" | "gold" | "pink" }> = [
   { id: "task", label: "Missões", tone: "purple" },
-  { id: "habit_entry", label: "Contratos", tone: "green" },
+  { id: "habit_entry", label: "Hábitos", tone: "green" },
   { id: "focus", label: "Foco", tone: "cyan" },
   { id: "project", label: "Campanhas", tone: "gold" },
   { id: "journal", label: "Diário", tone: "pink" },
+  { id: "contract", label: "Contratos", tone: "gold" },
+  { id: "experiment", label: "Laboratório", tone: "cyan" },
+  { id: "achievement", label: "Conquistas", tone: "gold" },
 ];
 
 export function xpSourceLabel(sourceType: string): string {

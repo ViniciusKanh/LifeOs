@@ -5,7 +5,9 @@ import { Button, Field } from "@/components/ui/primitives";
 import { useProjects } from "@/hooks/useProjects";
 import { useGoals } from "@/hooks/useGoals";
 import { WEEKDAY_CODES, WEEKDAY_LABELS, buildRecurrenceRule, parseRecurrenceRule, type RecurrenceFreq } from "@/utils/recurrence";
-import type { Task, TaskPriority } from "@/types";
+import type { Difficulty, Task, TaskPriority } from "@/types";
+import { useContracts } from "@/hooks/useContracts";
+import { DIFFICULTIES } from "@/services/gamificationService";
 import type { TaskInput } from "@/services/taskService";
 import { TaskAttachments, uploadQueuedFiles } from "./TaskAttachments";
 
@@ -75,6 +77,10 @@ export function TaskModal({
   const [dueDate, setDueDate] = useState(toDateInput(task?.due_date ?? null));
   const [projectId, setProjectId] = useState<string>(task?.project_id ?? defaultProjectId ?? "");
   const [goalId, setGoalId] = useState<string>(task?.goal_id ?? "");
+  const [difficulty, setDifficulty] = useState<Difficulty | "">(task?.difficulty ?? "");
+  const [contractId, setContractId] = useState<string>(task?.contract_id ?? "");
+  const { contracts } = useContracts();
+  const linkableContracts = contracts.filter((c) => c.status === "ativo" || c.id === contractId);
   const [impact, setImpact] = useState(task?.impact ?? 0);
   const [urgency, setUrgency] = useState(task?.urgency ?? 0);
   const [effort, setEffort] = useState(task?.effort ?? 0);
@@ -112,6 +118,8 @@ export function TaskModal({
         dueDate: dueDate || null,
         projectId: projectId || null,
         goalId: goalId || null,
+        difficulty: difficulty || null,
+        contractId: contractId || null,
         impact: isProfessional && impact > 0 ? impact : null,
         urgency: isProfessional && urgency > 0 ? urgency : null,
         effort: isProfessional && effort > 0 ? effort : null,
@@ -176,7 +184,7 @@ export function TaskModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-slate">Status</label>
               <select
@@ -201,7 +209,22 @@ export function TaskModal({
                 <option value="Alta">Alta</option>
               </select>
             </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-xs text-slate" htmlFor="task-difficulty">Dificuldade</label>
+              <select
+                id="task-difficulty"
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value as Difficulty | "")}
+                className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+              >
+                <option value="">Pela prioridade</option>
+                {DIFFICULTIES.map((d) => (
+                  <option key={d.id} value={d.id}>{d.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          <p className="-mt-2 text-[11px] text-slate">A dificuldade define o XP e as moedas pelos valores da sua Balança de recompensas (Meu Perfil).</p>
 
           <div>
             <label className="text-xs text-slate">Projeto (opcional)</label>
@@ -240,6 +263,24 @@ export function TaskModal({
               Vincular a uma meta do tipo "Etapas" faz o progresso dela avançar sozinho conforme você conclui as tarefas vinculadas.
             </p>
           </div>
+
+          {linkableContracts.length > 0 && (
+            <div>
+              <label className="text-xs text-slate" htmlFor="task-contract">Contrato (opcional)</label>
+              <select
+                id="task-contract"
+                value={contractId}
+                onChange={(e) => setContractId(e.target.value)}
+                className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+              >
+                <option value="">Sem contrato</option>
+                {linkableContracts.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate mt-1">Quando todas as tarefas de um contrato são concluídas, ele paga um bônus único de XP e moedas.</p>
+            </div>
+          )}
 
           {isProfessional && (
             <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">

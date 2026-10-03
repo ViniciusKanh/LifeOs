@@ -32,7 +32,7 @@ const ICONS: Record<string, typeof Trophy> = { ListChecks, Rocket, Flame, BookOp
 
 const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   missoes: "Missões",
-  contratos: "Contratos",
+  habitos: "Hábitos",
   leitura: "Leitura",
   saude: "Saúde",
   foco: "Foco",

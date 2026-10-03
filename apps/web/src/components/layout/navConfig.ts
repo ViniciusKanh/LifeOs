@@ -18,6 +18,7 @@ import {
   FolderLock,
   Radar,
   Repeat,
+  ScrollText,
   Settings,
   Share2,
   Sun,
@@ -62,13 +63,15 @@ export interface NavGroup {
 /*
  * Menu enxuto (de 28 para 21 itens): telas relacionadas viram abas de um
  * hub — ex.: Signals, Goal Forecast e Data Health moram dentro de Analytics;
- * Capacity Planner e Deadline Radar dentro de Tarefas. "Hoje" é o cockpit.
+ * Capacity Planner e Deadline Radar dentro de Tarefas. O Dashboard é a tela principal.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: "planejar",
     label: "Planejar",
     items: [
+      // Tela principal: o painel do personagem (HUD) com nível, XP e ritmo.
+      { to: "/dashboard", label: "Dashboard", rpgLabel: "Painel do Herói", icon: LayoutGrid, quote: "Disciplina de hoje, liberdade de amanhã." },
       {
         to: "/hoje",
         label: "Hoje",
@@ -119,6 +122,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/deadline-radar", label: "Prazos" },
         ],
       },
+      { to: "/contratos", label: "Contratos", icon: ScrollText, quote: "Um pacto cumprido vale mais que mil promessas." },
       { to: "/projetos", label: "Projetos", icon: GanttChartSquare, quote: "Projetos claros avançam mais rápido." },
       { to: "/profissional", label: "Profissional", icon: Briefcase, quote: "Foco no que move os ponteiros." },
     ],
@@ -129,7 +133,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/diario", label: "Diário", icon: NotebookPen, quote: "Escrever é enxergar o próprio caminho." },
       { to: "/notas", label: "Notas", icon: NotebookText, quote: "Ideias conectadas viram conhecimento." },
-      { to: "/habitos", label: "Hábitos", rpgLabel: "Contratos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
+      { to: "/habitos", label: "Hábitos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
       { to: "/educacao", label: "Educação", icon: GraduationCap, quote: "Estudo hoje, liberdade amanhã." },
@@ -140,7 +144,6 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "medir",
     label: "Medir",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: LayoutGrid, quote: "Disciplina de hoje, liberdade de amanhã." },
       {
         to: "/analytics",
         label: "Analytics",
@@ -196,7 +199,7 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 /** Atalhos fixos da barra inferior no celular. */
-export const MOBILE_PRIMARY: string[] = ["/hoje", "/tarefas", "/notas", "/dashboard"];
+export const MOBILE_PRIMARY: string[] = ["/dashboard", "/hoje", "/tarefas", "/notas"];
 
 export const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 

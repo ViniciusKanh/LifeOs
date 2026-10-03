@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { experimentService } from "@/services/experimentService";
+import { notifyGamification } from "@/services/gamificationService";
 import type { ExperimentCheckinStatus, ExperimentPerceivedResult, ExperimentPerception, ExperimentWorthContinuing, UpdateExperimentInput } from "@/types";
 
 /** Detalhe completo de um experimento: comparação, check-ins, observações e interpretação. */
@@ -8,6 +9,8 @@ export function useExperiment(id: string | undefined) {
   const key = ["experiments", "detail", id];
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: key });
+    // Laboratório rende XP (iniciar, check-in, concluir): o HUD confere o que é novo.
+    notifyGamification();
     queryClient.invalidateQueries({ queryKey: ["experiments"] });
   };
 

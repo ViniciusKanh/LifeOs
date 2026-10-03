@@ -1,18 +1,23 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import type { RpgBanner } from "@/components/rpg/rpgAssets";
+import { authService } from "@/services/authService";
+import { DEFAULT_RPG_AVATAR, RPG_AVATARS, RPG_BANNERS, type RpgAvatarId, type RpgBanner } from "@/components/rpg/rpgAssets";
+import type { CurrentUser } from "@/types";
 
 /**
- * Preferências cosméticas e de exibição do modo RPG, por usuário e por
- * aparelho (mesmo padrão do personagem escolhido). Nada aqui é dado de
- * negócio: XP, nível, moedas e conquistas continuam no backend — desligar
- * a gamificação só esconde elementos visuais, nunca apaga progresso.
+ * Preferências cosméticas e de exibição do modo RPG. Ficam no backend
+ * (users.rpg_prefs_json) — só o próprio usuário altera, e valem em
+ * qualquer aparelho. Nada aqui é dado de negócio: XP, nível, moedas e
+ * conquistas continuam calculados no servidor; desligar a gamificação só
+ * esconde elementos visuais, nunca apaga progresso.
  */
-export type AvatarMode = "rpg" | "photo" | "initials";
+export type AvatarMode = "rpg" | "photo" | "initials" | "custom";
 export type AnimationLevel = "full" | "reduced" | "off";
 export type FrameId = "bronze" | "silver" | "gold" | "rare";
 
 export interface RpgPreferences {
+  avatarId: RpgAvatarId;
   gamification: boolean;
   showXp: boolean;
   showCoins: boolean;
@@ -24,6 +29,7 @@ export interface RpgPreferences {
 }
 
 export const DEFAULT_RPG_PREFERENCES: RpgPreferences = {
+  avatarId: DEFAULT_RPG_AVATAR,
   gamification: true,
   showXp: true,
   showCoins: true,
@@ -34,52 +40,40 @@ export const DEFAULT_RPG_PREFERENCES: RpgPreferences = {
   title: null,
 };
 
-const listeners = new Set<() => void>();
-const keyFor = (userId: string) => `lifeos.rpg.prefs.${userId}`;
-const cache = new Map<string, { raw: string | null; value: RpgPreferences }>();
-
-function read(userId: string | undefined): RpgPreferences {
-  if (!userId) return DEFAULT_RPG_PREFERENCES;
-  let raw: string | null = null;
+/** Valores que existiam só no navegador (versão anterior) — usados até o primeiro salvamento. */
+function legacyLocal(userId: string): Partial<RpgPreferences> {
   try {
-    raw = localStorage.getItem(keyFor(userId));
+    const prefs = JSON.parse(localStorage.getItem(`lifeos.rpg.prefs.${userId}`) ?? "{}") as Partial<RpgPreferences>;
+    const avatar = localStorage.getItem(`lifeos.rpg.avatar.${userId}`);
+    return { ...prefs, ...(avatar && RPG_AVATARS.some((a) => a.id === avatar) ? { avatarId: avatar as RpgAvatarId } : {}) };
   } catch {
-    raw = null;
+    return {};
   }
-  // Mesmo objeto enquanto o texto salvo não muda (exigência do useSyncExternalStore).
-  const hit = cache.get(userId);
-  if (hit && hit.raw === raw) return hit.value;
-  let value = DEFAULT_RPG_PREFERENCES;
-  try {
-    value = raw ? { ...DEFAULT_RPG_PREFERENCES, ...(JSON.parse(raw) as Partial<RpgPreferences>) } : DEFAULT_RPG_PREFERENCES;
-  } catch {
-    value = DEFAULT_RPG_PREFERENCES;
-  }
-  cache.set(userId, { raw, value });
-  return value;
 }
 
-function subscribe(l: () => void) {
-  listeners.add(l);
-  return () => listeners.delete(l);
+function resolve(user: CurrentUser | null): RpgPreferences {
+  if (!user) return DEFAULT_RPG_PREFERENCES;
+  const merged = { ...DEFAULT_RPG_PREFERENCES, ...legacyLocal(user.id), ...(user.rpg_prefs ?? {}) } as RpgPreferences;
+  // Nunca confia cegamente no salvo: banner/personagem desconhecidos voltam ao padrão.
+  if (!(merged.banner in RPG_BANNERS)) merged.banner = DEFAULT_RPG_PREFERENCES.banner;
+  if (!RPG_AVATARS.some((a) => a.id === merged.avatarId)) merged.avatarId = DEFAULT_RPG_AVATAR;
+  if (merged.avatarMode === "custom" && !user.rpg_avatar_image) merged.avatarMode = "rpg";
+  return merged;
 }
 
 export function useRpgPreferences() {
   const { user } = useAuth();
-  const userId = user?.id;
-  const prefs = useSyncExternalStore(subscribe, () => read(userId), () => DEFAULT_RPG_PREFERENCES);
+  const qc = useQueryClient();
+  const prefs = useMemo(() => resolve(user), [user]);
 
   const update = useCallback(
     (patch: Partial<RpgPreferences>) => {
-      if (!userId) return;
-      try {
-        localStorage.setItem(keyFor(userId), JSON.stringify({ ...read(userId), ...patch }));
-      } catch {
-        // Storage bloqueado: a preferência vale só até recarregar.
-      }
-      listeners.forEach((l) => l());
+      if (!user) return;
+      // Otimista: a interface muda na hora; se o servidor recusar, recarrega o "me".
+      qc.setQueryData<CurrentUser | null>(["auth", "me"], (old) => (old ? { ...old, rpg_prefs: { ...(old.rpg_prefs ?? {}), ...patch } } : old));
+      authService.updateProfile({ rpgPrefs: patch }).catch(() => void qc.invalidateQueries({ queryKey: ["auth", "me"] }));
     },
-    [userId],
+    [user, qc],
   );
 
   return { prefs, update };
