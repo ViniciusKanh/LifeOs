@@ -11,6 +11,7 @@ import {
   serializeProjectRow,
 } from "../services/projectDetailsService.js";
 import { getProjectWorkload, resolveClientToday } from "../services/workloadService.js";
+import { awardProjectCompleted } from "../services/gamificationService.js";
 
 
 /** goal_id só é aceito se a meta for do próprio usuário. */
@@ -150,6 +151,7 @@ projectsRouter.patch("/:id", async (req, res) => {
   args.push(req.params.id, ownerId);
 
   await db.execute({ sql: `UPDATE projects SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
+  if (parsed.data.status === "completed") await awardProjectCompleted(db, ownerId, req.params.id);
   return res.json(await getOwnedProject(db, ownerId, req.params.id));
 });
 

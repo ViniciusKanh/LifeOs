@@ -35,6 +35,7 @@ import {
   getJournalLocations,
   getJournalDaysByLocation,
 } from "../services/journalService.js";
+import { awardJournalEntry } from "../services/gamificationService.js";
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
@@ -635,6 +636,9 @@ journalRouter.put("/:date", async (req, res) => {
   if (data.journalIds !== undefined) {
     await syncEntryJournals(db, ownerId, entryId, data.journalIds);
   }
+  // Texto puro (sem tags HTML do editor) decide se a crônica "conta".
+  const plainText = (values.thoughts ?? "").replace(/<[^>]*>/g, "").trim();
+  await awardJournalEntry(db, ownerId, date, plainText.length > 0);
 
   return res.json(await buildJournalResponse(db, ownerId, date));
 });

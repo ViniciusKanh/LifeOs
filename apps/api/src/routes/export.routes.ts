@@ -51,6 +51,10 @@ const EXPORTABLE_TABLES = [
   "journals",
   "journal_entries",
   "journal_entry_media",
+  "xp_events",
+  "coin_ledger",
+  "rewards",
+  "reward_redemptions",
 ] as const;
 
 /**

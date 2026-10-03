@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { getGeminiConfig, generateWithTools, type GeminiFunctionDeclaration } from "./geminiService.js";
+import { awardHabitCheckIn, awardTaskCompletion } from "./gamificationService.js";
 
 /**
  * Copilot com ações reais — o próximo passo depois do Copilot que só
@@ -320,6 +321,7 @@ export async function confirmAction(ownerId: string, action: string, args: Recor
         sql: "UPDATE tasks SET status = 'Concluído', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
         args: [taskId, ownerId],
       });
+      await awardTaskCompletion(db, ownerId, taskId);
       return { ok: true, message: `Tarefa "${row.title}" concluída.` };
     }
     case "mover_tarefa": {
@@ -347,6 +349,7 @@ export async function confirmAction(ownerId: string, action: string, args: Recor
               ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = excluded.count`,
         args: [nanoid(), habitId, ownerId, date],
       });
+      await awardHabitCheckIn(db, ownerId, habitId, date);
       return { ok: true, message: `Hábito "${row.name}" marcado em ${date}.` };
     }
     case "criar_evento": {

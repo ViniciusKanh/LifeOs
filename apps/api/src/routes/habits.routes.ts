@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { awardHabitCheckIn } from "../services/gamificationService.js";
 
 export const habitsRouter = Router();
 habitsRouter.use(requireAuth);
@@ -279,6 +280,7 @@ habitsRouter.post("/:id/check-in", async (req, res) => {
           ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = excluded.count`,
     args: [nanoid(), req.params.id, req.user!.id, parsed.data.entryDate, parsed.data.count],
   });
+  await awardHabitCheckIn(db, req.user!.id, req.params.id, parsed.data.entryDate);
 
   return res.status(204).send();
 });

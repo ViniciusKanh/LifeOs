@@ -22,7 +22,9 @@ process.env.CREDENTIALS_ENCRYPTION_KEY =
 process.env.NODE_ENV = "test";
 // Suites com vários usuários fazem mais de 10 logins no mesmo processo; o
 // rate limit real (10 por 15 min) derrubava o 11º com 429. Só vale nos testes.
-process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? "1000";
+// Atribuição incondicional: o .env local (carregado via dotenv no import do
+// client) pode já trazer AUTH_RATE_LIMIT_MAX=10.
+process.env.AUTH_RATE_LIMIT_MAX = "1000";
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@teste.lifeos";
 
 beforeAll(() => {

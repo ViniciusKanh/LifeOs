@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
+import { awardFocusSession, awardHabitCheckIn, awardTaskCompletion } from "../services/gamificationService.js";
 import { computeNextOccurrence, parseRecurrenceRule } from "../services/recurrenceService.js";
 import { taskAttachmentCreateSchema, taskAttachmentUpdateSchema } from "../validators/attachment.schema.js";
 import {
@@ -144,6 +145,7 @@ async function maybeCheckInLinkedHabit(db: ReturnType<typeof getDb>, taskId: str
           ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = MAX(habit_entries.count, excluded.count)`,
     args: [nanoid(), task.habit_id, ownerId, entryDate, targetCount],
   });
+  await awardHabitCheckIn(db, ownerId, task.habit_id, entryDate);
 }
 
 /** GET /api/tasks?status=&projectId= */
@@ -352,6 +354,7 @@ tasksRouter.patch("/:id", async (req, res) => {
   if (dataForUpdate.status === "Concluído") {
     await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
     await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
+    await awardTaskCompletion(db, req.user!.id, req.params.id);
   }
 
   const updated = await db.execute({
@@ -386,6 +389,7 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   if (parsed.data.status === "Concluído") {
     await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
     await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
+    await awardTaskCompletion(db, req.user!.id, req.params.id);
   }
   return res.status(204).send();
 });
@@ -449,6 +453,7 @@ tasksRouter.patch("/:id/time/stop", async (req, res) => {
     sql: "UPDATE tasks SET time_spent_minutes = time_spent_minutes + ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
     args: [minutes, req.params.id, req.user!.id],
   });
+  await awardFocusSession(db, req.user!.id, String(entry.id), minutes, entry.project_id == null ? null : String(entry.project_id));
   const task = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
   return res.json(task.rows[0]);
 });
