@@ -851,7 +851,7 @@ export interface JournalCollection {
 export interface TimelineEvent {
   type:
     | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
-    | "life_admin" | "review" | "focus" | "project" | "contract" | "achievement" | "reward" | "level_up";
+    | "life_admin" | "review" | "focus" | "project" | "contract" | "campaign" | "achievement" | "reward" | "level_up";
   icon: string;
   id: string;
   label: string;
@@ -1543,7 +1543,7 @@ export interface CapacityPlanningSuggestion {
 
 export type DeadlineStatus = "atrasado" | "vence_hoje" | "vence_7d" | "vence_30d" | "no_prazo" | "concluido";
 export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Outros";
-export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment";
+export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment" | "campaign" | "campaign_milestone";
 export type DeadlineRisk = "low" | "medium" | "high" | "critical";
 export type DeadlinePeriodFilter = "today" | "7d" | "30d" | "all";
 
@@ -2120,6 +2120,8 @@ export interface DirectionGoal {
   openTasks: number;
   doneTasks: number;
   projects: Array<{ id: string; name: string; doneCount: number; taskCount: number }>;
+  /** Campanhas da Forja ligadas a esta meta. */
+  campaigns?: Array<{ id: string; title: string; status: string }>;
 }
 
 export interface DirectionOverview {

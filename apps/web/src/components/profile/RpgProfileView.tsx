@@ -116,7 +116,7 @@ export function RpgProfileView({
   const stats = [
     { icon: <ListChecks size={18} />, tone: "blue" as const, v: overview ? String(overview.tasksCompleted) : "—", l: "Missões concluídas", c: `últimos ${statsDays} dias` },
     { icon: <Repeat size={18} />, tone: "red" as const, v: `${contractsDone} / ${habits.length}`, l: "Hábitos cumpridos hoje" },
-    { icon: <Swords size={18} />, tone: "gold" as const, v: String(projects.filter((x) => x.status === "completed").length), l: "Campanhas concluídas" },
+    { icon: <Swords size={18} />, tone: "gold" as const, v: String(projects.filter((x) => x.status === "completed").length), l: "Projetos concluídos" },
     { icon: <FlaskConical size={18} />, tone: "purple" as const, v: String(experiments.length), l: "Experimentos" },
     { icon: <ReceiptText size={18} />, tone: "pink" as const, v: String(adminItems.filter((i) => i.status === "active").length), l: "Itens administrados" },
     { icon: <BookOpen size={18} />, tone: "pink" as const, v: overview ? String(overview.pagesRead) : "—", l: "Páginas lidas", c: `últimos ${statsDays} dias` },
@@ -436,7 +436,7 @@ function FixedRules() {
   const rows: Array<[string, { xp: number; coins: number }]> = [
     ["Hábito cumprido no dia", r.habit],
     [`Foco (${r.focus.blockMinutes} min)`, { xp: r.focus.xpPerBlock, coins: r.focus.coinsPerBlock }],
-    ["Campanha (projeto) concluída", r.project],
+    ["Projeto concluído", r.project],
     ["Primeira crônica do dia", r.journal],
     ["Revisão semanal", r.review.weekly],
     ["Experimento iniciado", r.experiment.started],

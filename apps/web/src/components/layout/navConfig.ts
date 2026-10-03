@@ -5,6 +5,7 @@ import {
   CalendarRange,
   ClipboardList,
   Compass,
+  Hammer,
   FlaskConical,
   GanttChartSquare,
   GraduationCap,
@@ -104,6 +105,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/metas", label: "Metas" },
         ],
       },
+      { to: "/forja-campanhas", label: "Forja de Campanhas", icon: Hammer, quote: "Grandes conquistas nascem de muitas pequenas vitórias." },
     ],
   },
   {

@@ -1,4 +1,4 @@
-import { RpgActiveContracts, RpgLevelSpotlight, RpgXpSources } from "@/components/dashboard/RpgHeroSpotlight";
+import { RpgActiveContracts, RpgCampaignFocus, RpgLevelSpotlight, RpgXpSources } from "@/components/dashboard/RpgHeroSpotlight";
 import { useMemo, useState } from "react";
 import { useAppScrollRef } from "@/components/layout/AppScrollContext";
 import { motion, useScroll, useSpring } from "motion/react";
@@ -481,7 +481,10 @@ export function DashboardPage() {
           <Reveal>
             <DimensionScroller items={dimensions} />
           </Reveal>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Reveal>
+              <RpgCampaignFocus />
+            </Reveal>
             <Reveal>
               <RpgActiveContracts />
             </Reveal>
@@ -499,9 +502,9 @@ export function DashboardPage() {
           </div>
           <Reveal>
             <RPGPanel
-              title="Carga das campanhas"
+              title="Carga dos projetos"
               icon={<FolderKanban size={16} />}
-              actions={<Link to="/projetos" className="text-xs text-rpg-gold-light hover:underline">Campanhas</Link>}
+              actions={<Link to="/projetos" className="text-xs text-rpg-gold-light hover:underline">Projetos</Link>}
             >
               <p className="-mt-1 mb-3 text-xs text-rpg-muted">Carga por projeto</p>
               <ProjectLoadBoard workload={workload} isLoading={workloadLoading} limit={6} showTotals={false} />

@@ -7,6 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGamificationProfile, useXpHistory } from "@/hooks/useGamification";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useContracts } from "@/hooks/useContracts";
+import { useCampaigns } from "@/hooks/useCampaigns";
+import { pickFeatured, forgeKpis } from "@/utils/campaignDisplay";
+import { Hammer } from "lucide-react";
 import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { resolveTitle } from "@/utils/cosmetics";
 import { XP_SOURCES } from "@/utils/gamification";
@@ -185,6 +188,41 @@ export function RpgActiveContracts() {
           </li>
         ))}
       </ul>
+    </RPGPanel>
+  );
+}
+
+/** Campanha em foco (Forja): progresso médio, próximo marco e XP já ganho — dados reais. */
+export function RpgCampaignFocus() {
+  const { campaigns, isLoading } = useCampaigns();
+  const featured = pickFeatured(campaigns);
+  const k = forgeKpis(campaigns);
+  const next = featured?.milestones.find((m) => m.state === "current") ?? null;
+  return (
+    <RPGPanel
+      title="Campanha em foco"
+      icon={<Hammer size={16} />}
+      className="h-full"
+      actions={<Link to="/forja-campanhas" className="text-xs text-rpg-gold-light hover:underline">Forja de Campanhas</Link>}
+    >
+      {isLoading && <div className="h-28 rpg-bar animate-pulse" aria-label="Carregando campanhas" />}
+      {!isLoading && !featured && (
+        <div className="py-6 text-center">
+          <p className="text-sm text-rpg-muted">Nenhuma campanha forjada ainda.</p>
+          <Link to="/forja-campanhas" className={rpgButtonClass("gold", "mt-2")}>⚒️ Forjar campanha</Link>
+        </div>
+      )}
+      {featured && (
+        <>
+          <Link to={`/forja-campanhas/${featured.id}`} className="font-rpg font-bold text-rpg-text hover:text-rpg-gold-light">{featured.title}</Link>
+          <RPGProgressBar className="mt-2" tone="purple" label={`Progresso de ${featured.title}`} value={featured.progress.pct} valueLabel={`${featured.progress.pct}%`} />
+          <ul className="mt-2 space-y-1 text-xs text-rpg-muted">
+            <li>Próximo marco: <span className="text-rpg-text">{next?.title ?? "—"}</span></li>
+            <li>Missões abertas: <span className="text-rpg-text">{featured.counts.missions - featured.counts.missionsDone}</span> · XP ganho: <span className="font-pixel text-rpg-purple">{featured.earned.xp}</span></li>
+            <li>{k.active} campanha(s) ativa(s){k.avgProgress != null && ` · progresso médio ${k.avgProgress}%`}</li>
+          </ul>
+        </>
+      )}
     </RPGPanel>
   );
 }

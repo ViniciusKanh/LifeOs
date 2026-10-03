@@ -38,7 +38,7 @@ function GoalRow({ goal, childrenGoals, depth = 0 }: { goal: DirectionGoal; chil
   const kids = childrenGoals(goal.id);
   const area = goal.lifeArea ? LIFE_AREA_BY_KEY[goal.lifeArea] : null;
   const color = area?.color ?? "#9550FF";
-  const noWork = goal.openTasks + goal.doneTasks === 0 && goal.projects.length === 0 && goal.progressSource !== "value";
+  const noWork = goal.openTasks + goal.doneTasks === 0 && goal.projects.length === 0 && (goal.campaigns ?? []).length === 0 && goal.progressSource !== "value";
   return (
     <li className={depth > 0 ? "ml-4 sm:ml-6 border-l border-paper-border dark:border-ink-border pl-3" : ""}>
       <div className="rounded-xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 my-1.5">
@@ -68,6 +68,12 @@ function GoalRow({ goal, childrenGoals, depth = 0 }: { goal: DirectionGoal; chil
               <span className="text-[11px] font-semibold tabular-nums w-10 text-right">{goal.progressPct != null ? `${goal.progressPct}%` : "—"}</span>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate">
+              {/* Meta → Campanha(s) da Forja: o "porquê" das jornadas. */}
+              {(goal.campaigns ?? []).map((c) => (
+                <Link key={c.id} to={`/forja-campanhas/${c.id}`} className="inline-flex items-center gap-1 rounded-md bg-cat-purple/10 text-cat-purple rpg:text-rpg-gold-light px-1.5 py-0.5 hover:underline">
+                  ⚒️ {c.title}
+                </Link>
+              ))}
               {goal.projects.map((p) => (
                 <Link key={p.id} to={`/projetos/${p.id}`} className="inline-flex items-center gap-1 rounded-md bg-cat-blue/10 text-cat-blue px-1.5 py-0.5 hover:underline">
                   <FolderKanban size={10} /> {p.name} · {p.doneCount}/{p.taskCount}

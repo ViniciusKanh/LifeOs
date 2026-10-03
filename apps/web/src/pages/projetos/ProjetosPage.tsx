@@ -175,12 +175,12 @@ export function ProjetosPage() {
         <RPGPageHeader
           banner="tarefas"
           size="md"
-          eyebrow="Campanhas"
+          eyebrow="Jornadas"
           title="Projetos"
-          subtitle="Cada projeto é uma campanha: missões vinculadas, progresso real e XP conquistado."
+          subtitle="Cada projeto é uma jornada com missões, progresso real e XP — e pode integrar uma campanha da Forja."
           actions={
             <RPGButton variant="gold" onClick={() => setFormOpen(true)}>
-              <Plus size={15} aria-hidden /> Nova campanha
+              <Plus size={15} aria-hidden /> Novo projeto
             </RPGButton>
           }
           className="mb-5"
@@ -209,12 +209,12 @@ export function ProjetosPage() {
         <>
           {isRpg ? (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-              <RPGStatCard icon={<FolderKanban size={18} />} label="Campanhas ativas" value={String(stats.active)} tone="purple" />
+              <RPGStatCard icon={<FolderKanban size={18} />} label="Projetos ativos" value={String(stats.active)} tone="purple" />
               <RPGStatCard icon={<CheckCircle2 size={18} />} label="Concluídas" value={String(stats.completed)} tone="green" />
               <RPGStatCard icon={<GanttChartSquare size={18} />} label="Missões em aberto" value={String(stats.openTasks)} tone="blue" />
               <RPGStatCard icon={<CalendarClock size={18} />} label="Prazos vencidos" value={String(stats.overdue)} tone={stats.overdue > 0 ? "red" : "muted"} />
               <div className="col-span-2 lg:col-span-1">
-                <RPGStatCard icon={<Sparkles size={18} />} label="XP em campanhas" value={totalEarnedXp.toLocaleString("pt-BR")} tone="gold" caption="conquistado em missões e foco" />
+                <RPGStatCard icon={<Sparkles size={18} />} label="XP em projetos" value={totalEarnedXp.toLocaleString("pt-BR")} tone="gold" caption="conquistado em missões e foco" />
               </div>
             </div>
           ) : (

@@ -31,7 +31,7 @@ export function useProjects(includeArchived = false) {
     mutationFn: ({ id, patch }: { id: string; patch: ProjectUpdateInput }) => projectsService.update(id, patch),
     onSuccess: (_data, vars) => {
       invalidate();
-      // Campanha concluída rende XP/moedas uma única vez no backend.
+      // Projeto concluído rende XP/moedas uma única vez no backend.
       if (vars.patch.status === "completed") notifyGamification();
     },
   });

@@ -18,8 +18,9 @@ export const TABS: Array<{ value: EventType | "todos"; label: string }> = [
   { value: "journal", label: "Diário" },
   // Marcos da jornada: aparecem como filtro só quando há registro no período.
   { value: "focus", label: "Foco" },
-  { value: "project", label: "Campanhas" },
+  { value: "project", label: "Projetos" },
   { value: "contract", label: "Contratos" },
+  { value: "campaign", label: "Campanhas" },
   { value: "achievement", label: "Conquistas" },
   { value: "reward", label: "Recompensas" },
   { value: "level_up", label: "Nível" },
@@ -28,7 +29,7 @@ export const TABS: Array<{ value: EventType | "todos"; label: string }> = [
 ];
 
 /** Filtros que só aparecem quando existe ao menos um evento daquele tipo. */
-export const OPTIONAL_TABS = new Set<string>(["focus", "project", "contract", "achievement", "reward", "level_up", "review", "life_admin"]);
+export const OPTIONAL_TABS = new Set<string>(["focus", "project", "contract", "campaign", "achievement", "reward", "level_up", "review", "life_admin"]);
 export const DAYS_PAGE = 10;
 
 export const RANGE_OPTIONS = [
@@ -80,9 +81,11 @@ export function eventContent(e: TimelineEvent): { title: string; detail: string 
     case "focus":
       return { title: "Sessão de foco", detail: `${formatMinutes(Number(e.duration_minutes ?? 0))} · ${e.label}` };
     case "project":
-      return { title: "Campanha concluída", detail: e.label };
+      return { title: "Projeto concluído", detail: e.label };
     case "achievement":
       return { title: "Conquista desbloqueada", detail: e.label };
+    case "campaign":
+      return { title: e.label, detail: null };
     case "contract":
       return { title: "Contrato cumprido", detail: e.label.replace(/^Contrato cumprido: /, "") };
     case "reward":

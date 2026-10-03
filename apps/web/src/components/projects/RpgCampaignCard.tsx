@@ -99,7 +99,7 @@ export function RpgCampaignCard({
             Missão atual: <span className="text-rpg-text">{currentMission.title}</span>
           </>
         ) : project.status === "completed" ? (
-          "Campanha concluída."
+          "Projeto concluído."
         ) : (
           "Nenhuma missão em aberto."
         )}
@@ -107,7 +107,7 @@ export function RpgCampaignCard({
       {load && load.overdue > 0 && <p className="-mt-2 text-[11px] text-rpg-red">{load.overdue} missão(ões) atrasada(s)</p>}
 
       <Link to={`/projetos/${project.id}`} className={rpgButtonClass(project.status === "completed" ? "secondary" : "primary", "mt-auto justify-center")}>
-        Entrar na campanha
+        Entrar no projeto
       </Link>
     </article>
   );

@@ -133,6 +133,8 @@ export interface DirectionGoal {
   openTasks: number;
   doneTasks: number;
   projects: Array<{ id: string; name: string; doneCount: number; taskCount: number }>;
+  /** Campanhas da Forja ligadas a esta meta (Meta → Campanha → Projetos). */
+  campaigns: Array<{ id: string; title: string; status: string }>;
 }
 
 interface GoalTaskStats {
@@ -153,7 +155,7 @@ function goalTaskStats(goalId: string, tasks: Row[], projectIdsOfGoal: Set<strin
 }
 
 export async function loadDirectionGoals(db: Db, ownerId: string): Promise<DirectionGoal[]> {
-  const [goalsRes, projectsRes, tasksRes] = await Promise.all([
+  const [goalsRes, projectsRes, tasksRes, campaignsRes] = await Promise.all([
     db.execute({
       sql: "SELECT id, title, status, life_area, cycle, parent_goal_id, due_date, kind, current_value, target_value FROM goals WHERE owner_id = ?",
       args: [ownerId],
@@ -166,7 +168,9 @@ export async function loadDirectionGoals(db: Db, ownerId: string): Promise<Direc
       args: [DONE_STATUS, ownerId],
     }),
     db.execute({ sql: "SELECT id, status, goal_id, project_id FROM tasks WHERE owner_id = ? AND (goal_id IS NOT NULL OR project_id IS NOT NULL)", args: [ownerId] }),
+    db.execute({ sql: "SELECT id, title, status, goal_id FROM campaigns WHERE owner_id = ? AND goal_id IS NOT NULL AND status != 'archived'", args: [ownerId] }),
   ]);
+  const campaigns = campaignsRes.rows as unknown as Row[];
   const projects = projectsRes.rows as unknown as Row[];
   const tasks = tasksRes.rows as unknown as Row[];
 
@@ -201,6 +205,7 @@ export async function loadDirectionGoals(db: Db, ownerId: string): Promise<Direc
       openTasks: stats.open,
       doneTasks: stats.done,
       projects: own.map((p) => ({ id: String(p.id), name: String(p.name), doneCount: Number(p.done_count ?? 0), taskCount: Number(p.task_count ?? 0) })),
+      campaigns: campaigns.filter((c) => c.goal_id === gid).map((c) => ({ id: String(c.id), title: String(c.title), status: String(c.status) })),
     };
   });
 }

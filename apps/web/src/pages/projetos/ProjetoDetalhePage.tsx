@@ -479,7 +479,7 @@ export function ProjetoDetalhePage() {
         <RPGPanel variant="gold" className="mb-5">
           <div className="flex flex-col lg:flex-row lg:items-start gap-4">
             <div className="min-w-0 flex-1">
-              <p className="font-pixel text-[11px] uppercase tracking-wider text-rpg-gold">Campanha</p>
+              <p className="font-pixel text-[11px] uppercase tracking-wider text-rpg-gold">Jornada</p>
               <h1 className="rpg-title text-2xl sm:text-3xl font-bold leading-tight break-words">{project.name}</h1>
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 <label className="sr-only" htmlFor="project-status-inline-rpg">Status do projeto</label>
@@ -521,7 +521,7 @@ export function ProjetoDetalhePage() {
               </RPGButton>
               {project.status !== "completed" && (
                 <RPGButton variant="success" onClick={() => updateProject({ id: project.id, patch: { status: "completed" } })}>
-                  Concluir campanha
+                  Concluir projeto
                 </RPGButton>
               )}
               <RPGButton variant="gold" onClick={() => setTaskModal({ open: true, task: null })}>

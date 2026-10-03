@@ -22,7 +22,9 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
   const main = events.find((e) => e.eventType === "completed" || e.eventType === "fulfilled" || e.eventType === "session" || e.eventType === "first_entry") ?? events[0];
   if (main.sourceType === "task") return { title: "MISSÃO CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Missão concluída: /, "") ?? null };
   if (main.sourceType === "habit_entry") return { title: "HÁBITO CUMPRIDO", stamp: "contract", detail: main.label?.replace(/^Hábito cumprido: /, "") ?? null };
-  if (main.sourceType === "project") return { title: "CAMPANHA CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Campanha concluída: /, "") ?? null };
+  if (main.sourceType === "project") return { title: "PROJETO CONCLUÍDO", stamp: "mission", detail: main.label?.replace(/^(Campanha|Projeto) concluíd[oa]: /, "") ?? null };
+  if (main.sourceType === "campaign")
+    return { title: main.eventType === "completed" ? "CAMPANHA CONCLUÍDA" : "MARCO CONQUISTADO", stamp: "mission", detail: main.label?.replace(/^(Campanha concluída|Marco da campanha): /, "") ?? null };
   if (main.sourceType === "contract") return { title: "CONTRATO SELADO", stamp: "mission", detail: main.label?.replace(/^Contrato cumprido: /, "") ?? null };
   if (main.sourceType === "experiment")
     return {

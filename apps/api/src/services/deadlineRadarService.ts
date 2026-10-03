@@ -11,7 +11,7 @@ type Db = ReturnType<typeof getDb>;
 
 export type DeadlineStatus = "atrasado" | "vence_hoje" | "vence_7d" | "vence_30d" | "no_prazo" | "concluido";
 export type DeadlineArea = "Educação" | "Projetos" | "Profissional" | "Pessoal" | "Outros";
-export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment";
+export type DeadlineEntityType = "task" | "goal" | "academic_deadline" | "academic_project" | "experiment" | "campaign" | "campaign_milestone";
 
 export interface DeadlineItem {
   id: string;
@@ -226,16 +226,68 @@ async function getExperimentMilestones(db: Db, ownerId: string, today: string): 
   });
 }
 
+/** Forja de Campanhas: prazo final da campanha e prazos dos marcos pendentes. */
+async function getCampaignDeadlines(db: Db, ownerId: string, today: string): Promise<DeadlineItem[]> {
+  const [camps, ms] = await Promise.all([
+    db.execute({
+      sql: "SELECT id, title, end_date, priority FROM campaigns WHERE owner_id = ? AND status IN ('planned', 'active', 'paused') AND end_date IS NOT NULL",
+      args: [ownerId],
+    }),
+    db.execute({
+      sql: `SELECT m.id, m.title, m.due_date, m.is_major, c.id AS campaign_id, c.title AS campaign_title FROM campaign_milestones m
+            JOIN campaigns c ON c.id = m.campaign_id AND c.owner_id = m.owner_id
+            WHERE m.owner_id = ? AND m.status = 'pending' AND m.due_date IS NOT NULL AND c.status IN ('planned', 'active', 'paused')`,
+      args: [ownerId],
+    }),
+  ]);
+  const base = { progress: null, area: "Pessoal" as DeadlineArea, projectId: null, done: false };
+  return [
+    ...(camps.rows as unknown as Array<{ id: string; title: string; end_date: string; priority: "Baixa" | "Média" | "Alta" }>).map((r) => {
+      const dueDate = r.end_date.slice(0, 10);
+      return {
+        ...base,
+        id: `campaign:${r.id}`,
+        entityType: "campaign" as const,
+        entityId: r.id,
+        title: `Campanha: ${r.title}`,
+        dueDate,
+        status: classifyStatus(dueDate, today, false),
+        priority: r.priority,
+        projectName: null,
+        sourceModule: `/forja-campanhas/${r.id}`,
+        daysRemaining: daysBetween(today, dueDate),
+      };
+    }),
+    ...(ms.rows as unknown as Array<{ id: string; title: string; due_date: string; is_major: number; campaign_id: string; campaign_title: string }>).map((r) => {
+      const dueDate = r.due_date.slice(0, 10);
+      return {
+        ...base,
+        id: `campaign_milestone:${r.id}`,
+        entityType: "campaign_milestone" as const,
+        entityId: r.id,
+        title: `${Number(r.is_major) === 1 ? "Marco principal" : "Marco"}: ${r.title}`,
+        dueDate,
+        status: classifyStatus(dueDate, today, false),
+        priority: Number(r.is_major) === 1 ? ("Alta" as const) : null,
+        projectName: r.campaign_title,
+        sourceModule: `/forja-campanhas/${r.campaign_id}`,
+        daysRemaining: daysBetween(today, dueDate),
+      };
+    }),
+  ];
+}
+
 export async function getAllDeadlineItems(db: Db, ownerId: string, todayParam?: string): Promise<DeadlineItem[]> {
   const today = resolveToday(todayParam);
-  const [tasks, goals, academicDeadlines, academicProjects, experiments] = await Promise.all([
+  const [tasks, goals, academicDeadlines, academicProjects, experiments, campaigns] = await Promise.all([
     getTaskDeadlines(db, ownerId, today),
     getGoalDeadlines(db, ownerId, today),
     getAcademicDeadlines(db, ownerId, today),
     getAcademicProjectDeadlines(db, ownerId, today),
     getExperimentMilestones(db, ownerId, today),
+    getCampaignDeadlines(db, ownerId, today),
   ]);
-  return [...tasks, ...goals, ...academicDeadlines, ...academicProjects, ...experiments];
+  return [...tasks, ...goals, ...academicDeadlines, ...academicProjects, ...experiments, ...campaigns];
 }
 
 export type DeadlinePeriodFilter = "today" | "7d" | "30d" | "all";

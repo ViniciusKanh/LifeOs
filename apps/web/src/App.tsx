@@ -28,6 +28,8 @@ const VerifyEmailPage = lazy(() =>
 const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const HojePage = lazy(() => import("@/pages/hoje/HojePage").then((m) => ({ default: m.HojePage })));
 const TarefasPage = lazy(() => import("@/pages/tarefas/TarefasPage").then((m) => ({ default: m.TarefasPage })));
+const ForjaCampanhasPage = lazy(() => import("@/pages/campanhas/ForjaCampanhasPage").then((m) => ({ default: m.ForjaCampanhasPage })));
+const CampanhaDetalhePage = lazy(() => import("@/pages/campanhas/CampanhaDetalhePage").then((m) => ({ default: m.CampanhaDetalhePage })));
 const ContratosPage = lazy(() => import("@/pages/contratos/ContratosPage").then((m) => ({ default: m.ContratosPage })));
 const ProjetosPage = lazy(() => import("@/pages/projetos/ProjetosPage").then((m) => ({ default: m.ProjetosPage })));
 const ProjetoDetalhePage = lazy(() =>
@@ -142,6 +144,8 @@ export default function App() {
           <Route path="/hoje" element={<HojePage />} />
           <Route path="/tarefas" element={<TarefasPage />} />
           <Route path="/contratos" element={<ContratosPage />} />
+          <Route path="/forja-campanhas" element={<ForjaCampanhasPage />} />
+          <Route path="/forja-campanhas/:id" element={<CampanhaDetalhePage />} />
           <Route path="/projetos" element={<ProjetosPage />} />
           <Route path="/projetos/:id" element={<ProjetoDetalhePage />} />
           <Route path="/inbox" element={<InboxPage />} />

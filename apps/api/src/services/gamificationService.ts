@@ -14,7 +14,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign";
 
 export interface XpGrant {
   sourceType: XpSourceType;
@@ -24,6 +24,9 @@ export interface XpGrant {
   coins: number;
   label: string;
   projectId?: string | null;
+  /** Quando há bônus (ex.: sequência da campanha): XP antes do bônus e o multiplicador aplicado. */
+  baseXp?: number | null;
+  multiplier?: number | null;
 }
 
 export interface LevelInfo {
@@ -97,10 +100,22 @@ export async function award(db: Client, ownerId: string, grant: XpGrant, dayKey:
   if (grant.xp <= 0 && grant.coins <= 0) return false;
   const statements = [
     {
-      sql: `INSERT INTO xp_events (id, owner_id, source_type, source_id, event_type, xp, project_id, label, day_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO xp_events (id, owner_id, source_type, source_id, event_type, xp, project_id, label, day_key, base_xp, multiplier)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (owner_id, source_type, source_id, event_type) DO NOTHING`,
-      args: [nanoid(), ownerId, grant.sourceType, grant.sourceId, grant.eventType, Math.max(0, grant.xp), grant.projectId ?? null, grant.label, dayKey],
+      args: [
+        nanoid(),
+        ownerId,
+        grant.sourceType,
+        grant.sourceId,
+        grant.eventType,
+        Math.max(0, grant.xp),
+        grant.projectId ?? null,
+        grant.label,
+        dayKey,
+        grant.baseXp ?? null,
+        grant.multiplier ?? null,
+      ],
     },
   ];
   if (grant.coins > 0) {
@@ -561,7 +576,7 @@ export async function awardFocusSession(db: Client, ownerId: string, entryId: st
   });
 }
 
-/** Projeto ("campanha") concluído → recompensa grande, uma única vez. */
+/** Projeto concluído → recompensa grande, uma única vez. */
 export async function awardProjectCompleted(db: Client, ownerId: string, projectId: string): Promise<void> {
   await safely("projeto", async () => {
     const r = await db.execute({ sql: "SELECT name, status FROM projects WHERE id = ? AND owner_id = ?", args: [projectId, ownerId] });
@@ -577,7 +592,7 @@ export async function awardProjectCompleted(db: Client, ownerId: string, project
         eventType: "completed",
         xp: GAMIFICATION_RULES.project.xp,
         coins: GAMIFICATION_RULES.project.coins,
-        label: `Campanha concluída: ${project.name}`,
+        label: `Projeto concluído: ${project.name}`,
         projectId,
       },
       dayKey,
@@ -831,7 +846,7 @@ export async function getXpHistory(db: Client, ownerId: string, days: number) {
   return out;
 }
 
-/** XP já conquistado e XP base ainda disponível por projeto ("campanha"). */
+/** XP já conquistado e XP base ainda disponível por projeto. */
 export async function getProjectsXp(db: Client, ownerId: string) {
   const [earned, open] = await Promise.all([
     db.execute({

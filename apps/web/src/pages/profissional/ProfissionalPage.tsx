@@ -194,7 +194,7 @@ export function ProfissionalPage() {
             <Section
               className="xl:col-span-2"
               icon={<Hourglass size={16} className="text-brand-600" />}
-              title={isRpg ? "Carga das campanhas profissionais" : "Carga dos projetos profissionais"}
+              title={isRpg ? "Carga das jornadas profissionais" : "Carga dos projetos profissionais"}
               action={<Link to="/projetos" className="text-xs font-medium text-brand-600 dark:text-brand-100 hover:underline shrink-0">Projetos</Link>}
             >
               <ProjectLoadBoard

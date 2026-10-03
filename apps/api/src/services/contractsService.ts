@@ -228,7 +228,7 @@ export interface ContractProposal {
 
 const PRIORITIES: Priority[] = ["Baixa", "Média", "Alta"];
 
-function sanitizeTasks(raw: unknown, fallbackDifficulty: DifficultyKey, max: number): ContractProposal["tasks"] {
+export function sanitizeTasks(raw: unknown, fallbackDifficulty: DifficultyKey, max: number): ContractProposal["tasks"] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((t) => {
@@ -250,7 +250,7 @@ function sanitizeTasks(raw: unknown, fallbackDifficulty: DifficultyKey, max: num
     .slice(0, max);
 }
 
-const DIFFICULTY_GUIDE = `Dificuldades válidas: "facil" (tarefas curtas, < 30 min), "medio" (1 a 2 h), "dificil" (meio dia, exige foco), "epico" (vários dias de esforço).`;
+export const DIFFICULTY_GUIDE = `Dificuldades válidas: "facil" (tarefas curtas, < 30 min), "medio" (1 a 2 h), "dificil" (meio dia, exige foco), "epico" (vários dias de esforço).`;
 
 async function userContextLine(db: Client, ownerId: string): Promise<string> {
   const [open, contracts] = await Promise.all([

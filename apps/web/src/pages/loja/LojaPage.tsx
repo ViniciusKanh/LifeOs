@@ -299,7 +299,7 @@ export function LojaPage() {
                   </span>
                 </li>
                 <li className="flex items-center justify-between gap-2">
-                  <span className="text-rpg-text">Campanha concluída</span>
+                  <span className="text-rpg-text">Projeto concluído</span>
                   <span className="font-pixel text-xs text-rpg-muted">
                     +{rules.data.project.xp} XP · +{rules.data.project.coins} 🪙
                   </span>
