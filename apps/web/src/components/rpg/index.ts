@@ -12,3 +12,7 @@ export { RPGQuestCard } from "./RPGQuestCard";
 export { RPGPageHeader } from "./RPGPageHeader";
 export * from "./rpgAssets";
 export { RPGIconSlot } from "./RPGIconSlot";
+export { RPGWallet } from "./RPGWallet";
+export { RPGPlayerHUD } from "./RPGPlayerHUD";
+export { RPGRewardCard } from "./RPGRewardCard";
+export { RewardRedeemModal } from "./RewardRedeemModal";

@@ -5,6 +5,8 @@ import { useProfessionalTasks, useTasks } from "@/hooks/useTasks";
 import { useWorkNotes } from "@/hooks/useWorkNotes";
 import { useProfessionalOverview } from "@/hooks/useProfessional";
 import { Button, Card, EmptyState, Field, PageHeader, StatTile } from "@/components/ui/primitives";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPG_SECTION_TITLE } from "@/components/rpg";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { ComparisonGrid, DayMatrix, WeekdayBars } from "@/components/professional/ProfessionalInsights";
@@ -24,7 +26,7 @@ function Section({ icon, title, subtitle, action, children, className }: { icon:
     <Card className={`p-4 sm:p-5 ${className ?? ""}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 font-display font-semibold text-[15px]">{icon} {title}</p>
+          <p className={`flex items-center gap-2 font-display font-semibold text-[15px] ${RPG_SECTION_TITLE}`}>{icon} {title}</p>
           {subtitle && <p className="text-xs text-slate mt-0.5">{subtitle}</p>}
         </div>
         {action}
@@ -53,6 +55,7 @@ export function ProfissionalPage() {
   const { tasks: professionalTasks, isLoading: tasksLoading } = useProfessionalTasks();
   const { updateTask, removeTask } = useTasks();
   const { overview, isLoading: overviewLoading } = useProfessionalOverview();
+  const { isRpg } = useTheme();
   const { notes, isLoading: notesLoading, createNote, isCreating, removeNote } = useWorkNotes();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -79,12 +82,43 @@ export function ProfissionalPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full">
+      {isRpg ? (
+        <RPGPageHeader
+          banner="tarefas"
+          size="md"
+          eyebrow="Guilda · Carreira"
+          title="Profissional"
+          subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões, Diário e metas de carreira."
+          className="mb-5"
+        />
+      ) : (
       <PageHeader
         icon={<Briefcase size={20} />}
         title="Profissional"
         subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões, Diário e metas de carreira."
       />
+      )}
 
+      {isRpg ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <RPGStatCard
+            icon={<Briefcase size={18} />}
+            label="Missões em aberto"
+            value={overviewLoading ? "…" : String(k?.open ?? 0)}
+            tone="purple"
+            caption={k ? (k.overdue > 0 ? `${k.overdue} atrasadas · ${k.dueThisWeek} vencem em 7 dias` : `${k.dueThisWeek} vencem em 7 dias`) : undefined}
+          />
+          <RPGStatCard icon={<CheckCircle2 size={18} />} label="Concluídas (7 dias)" value={overviewLoading ? "…" : String(k?.done7 ?? 0)} tone="green" caption={k ? deltaCaption(k.done7, k.donePrev7, (v) => String(v)) : undefined} />
+          <RPGStatCard icon={<Clock size={18} />} label="Horas registradas (7 dias)" value={overviewLoading ? "…" : formatMinutes(k?.logged7 ?? 0)} tone="blue" caption={k ? deltaCaption(k.logged7, k.loggedPrev7, formatMinutes) : undefined} />
+          <RPGStatCard
+            icon={<Hourglass size={18} />}
+            label="Restante estimado"
+            value={overviewLoading ? "…" : formatMinutes(k?.remainingMinutes ?? 0)}
+            tone="orange"
+            caption={k ? (k.unestimatedOpen > 0 ? `${k.unestimatedOpen} tarefas sem estimativa` : `${k.meetings30} reuniões/anotações em 30 dias`) : undefined}
+          />
+        </div>
+      ) : (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatTile
           icon={<Briefcase size={16} />}
@@ -115,6 +149,7 @@ export function ProfissionalPage() {
           caption={k ? (k.unestimatedOpen > 0 ? `${k.unestimatedOpen} tarefas sem estimativa` : `${k.meetings30} reuniões/anotações em 30 dias`) : undefined}
         />
       </div>
+      )}
 
       {overview && (
         <>
@@ -130,17 +165,36 @@ export function ProfissionalPage() {
           <Section
             className="mb-4"
             icon={<Sparkles size={16} className="text-cat-purple" />}
-            title="O que acompanha seus melhores dias de trabalho"
-            subtitle="Média de tarefas profissionais concluídas por dia, comparando dias com e sem cada condição."
+            title={isRpg ? "Desempenho da jornada profissional" : "O que acompanha seus melhores dias de trabalho"}
+            subtitle={
+              isRpg
+                ? "Média de missões profissionais concluídas por dia, com e sem cada condição. Associação observada nos seus registros — não prova causa."
+                : "Média de tarefas profissionais concluídas por dia, comparando dias com e sem cada condição."
+            }
           >
             <ComparisonGrid comparisons={overview.comparisons} windowDays={overview.windowDays} />
           </Section>
+
+          {isRpg && careerGoals.length > 0 && (
+            <RPGPanel title="Trilha de carreira" icon={<Target size={16} />} className="mb-4" actions={<Link to="/metas" className="text-xs text-rpg-gold-light hover:underline">Metas</Link>}>
+              <ol className="relative grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {careerGoals.map((g, i) => (
+                  <li key={g.id} className={`rpg-panel p-3 ${g.pct >= 100 ? "rpg-panel-success" : ""}`}>
+                    <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold">Etapa {i + 1}</p>
+                    <p className="mt-0.5 font-rpg font-semibold text-rpg-text break-words">{g.title}</p>
+                    <RPGProgressBar className="mt-2" tone={g.pct >= 100 ? "green" : "purple"} label="Progresso real da meta" value={g.pct} valueLabel={`${g.pct}%`} />
+                    {g.dueDate && <p className="mt-1 text-[11px] text-rpg-muted">Prazo {formatDate(g.dueDate)}</p>}
+                  </li>
+                ))}
+              </ol>
+            </RPGPanel>
+          )}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
             <Section
               className="xl:col-span-2"
               icon={<Hourglass size={16} className="text-brand-600" />}
-              title="Carga dos projetos profissionais"
+              title={isRpg ? "Carga das campanhas profissionais" : "Carga dos projetos profissionais"}
               action={<Link to="/projetos" className="text-xs font-medium text-brand-600 dark:text-brand-100 hover:underline shrink-0">Projetos</Link>}
             >
               <ProjectLoadBoard

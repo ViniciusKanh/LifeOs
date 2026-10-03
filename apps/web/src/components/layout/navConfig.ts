@@ -169,7 +169,16 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { to: "/experimentos", label: "Experimentos", icon: FlaskConical, quote: "Teste pequeno, aprenda grande." },
       { to: "/life-map", label: "Life Map", icon: Share2, quote: "Clareza nasce quando você enxerga as conexões." },
-      { to: "/conquistas", label: "Conquistas", icon: Trophy, quote: "Cada conquista começou com um hábito repetido." },
+      {
+        to: "/conquistas",
+        label: "Conquistas",
+        icon: Trophy,
+        quote: "Cada conquista começou com um hábito repetido.",
+        tabs: [
+          { to: "/conquistas", label: "Conquistas" },
+          { to: "/loja", label: "Loja de recompensas" },
+        ],
+      },
     ],
   },
   {

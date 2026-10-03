@@ -1,13 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ChevronDown, Clock, FolderKanban, GanttChartSquare, Hourglass, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ChevronDown, Clock, FolderKanban, GanttChartSquare, Hourglass, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { useProjects, useProjectForecast, useProjectWorkload } from "@/hooks/useProjects";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { Button, Card, EmptyState, IconBadge, PageHeader, StatTile } from "@/components/ui/primitives";
 import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
 import { KIND_META, PRIORITY_META, STATUS_META, formatMinutes, formatProjectDate } from "@/components/projects/projectMeta";
 import type { Project, ProjectKind, ProjectLoad, ProjectStatus } from "@/types";
+import { useTheme } from "@/hooks/useTheme";
+import { useTasks } from "@/hooks/useTasks";
+import { useProjectsXp } from "@/hooks/useGamification";
+import { RPGButton, RPGPageHeader, RPGStatCard } from "@/components/rpg";
+import { RpgCampaignCard, currentMissionFor } from "@/components/projects/RpgCampaignCard";
 
 /**
  * Projetos — visão de portfólio. Cada cartão leva ao detalhe completo
@@ -140,6 +145,10 @@ export function ProjetosPage() {
   const [search, setSearch] = useState("");
   const { workload, isLoading: workloadLoading } = useProjectWorkload({ days: 30, kind: kindFilter === "all" ? undefined : kindFilter });
   const [loadOpen, setLoadOpen] = useState(true);
+  const { isRpg } = useTheme();
+  const { tasks } = useTasks();
+  const { data: projectsXp } = useProjectsXp(isRpg);
+  const totalEarnedXp = useMemo(() => Object.values(projectsXp ?? {}).reduce((a, x) => a + x.earnedXp, 0), [projectsXp]);
   const loadById = useMemo(() => new Map((workload?.projects ?? []).filter((p) => p.id).map((p) => [p.id as string, p])), [workload]);
 
   const filtered = useMemo(() => {
@@ -162,6 +171,21 @@ export function ProjetosPage() {
 
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
+      {isRpg ? (
+        <RPGPageHeader
+          banner="tarefas"
+          size="md"
+          eyebrow="Campanhas"
+          title="Projetos"
+          subtitle="Cada projeto é uma campanha: missões vinculadas, progresso real e XP conquistado."
+          actions={
+            <RPGButton variant="gold" onClick={() => setFormOpen(true)}>
+              <Plus size={15} aria-hidden /> Nova campanha
+            </RPGButton>
+          }
+          className="mb-5"
+        />
+      ) : (
       <PageHeader
         icon={<GanttChartSquare size={20} />}
         title="Projetos"
@@ -172,6 +196,7 @@ export function ProjetosPage() {
           </Button>
         }
       />
+      )}
 
       {!isLoading && projects.length === 0 && !showArchived ? (
         <EmptyState
@@ -182,12 +207,24 @@ export function ProjetosPage() {
         />
       ) : (
         <>
+          {isRpg ? (
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+              <RPGStatCard icon={<FolderKanban size={18} />} label="Campanhas ativas" value={String(stats.active)} tone="purple" />
+              <RPGStatCard icon={<CheckCircle2 size={18} />} label="Concluídas" value={String(stats.completed)} tone="green" />
+              <RPGStatCard icon={<GanttChartSquare size={18} />} label="Missões em aberto" value={String(stats.openTasks)} tone="blue" />
+              <RPGStatCard icon={<CalendarClock size={18} />} label="Prazos vencidos" value={String(stats.overdue)} tone={stats.overdue > 0 ? "red" : "muted"} />
+              <div className="col-span-2 lg:col-span-1">
+                <RPGStatCard icon={<Sparkles size={18} />} label="XP em campanhas" value={totalEarnedXp.toLocaleString("pt-BR")} tone="gold" caption="conquistado em missões e foco" />
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <StatTile icon={<FolderKanban size={16} />} label="Projetos ativos" value={String(stats.active)} tone="purple" />
             <StatTile icon={<CheckCircle2 size={16} />} label="Concluídos" value={String(stats.completed)} tone="green" />
             <StatTile icon={<GanttChartSquare size={16} />} label="Tarefas em aberto" value={String(stats.openTasks)} tone="blue" />
             <StatTile icon={<CalendarClock size={16} />} label="Prazos vencidos" value={String(stats.overdue)} tone="amber" />
           </div>
+          )}
 
           <Card className="p-4 sm:p-5 mb-5">
             <button
@@ -281,9 +318,23 @@ export function ProjetosPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               <AnimatePresence mode="popLayout">
-                {filtered.map((p) => (
-                  <ProjectCard key={p.id} project={p} load={loadById.get(p.id)} onEdit={() => setProjectToEdit(p)} onDelete={() => setProjectToDelete(p)} />
-                ))}
+                {filtered.map((p) =>
+                  isRpg ? (
+                    <motion.div key={p.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} className="flex">
+                    <RpgCampaignCard
+                      project={p}
+                      load={loadById.get(p.id)}
+                      xp={projectsXp?.[p.id]}
+                      currentMission={currentMissionFor(tasks, p.id)}
+                      today={todayIso()}
+                      onEdit={() => setProjectToEdit(p)}
+                      onDelete={() => setProjectToDelete(p)}
+                    />
+                    </motion.div>
+                  ) : (
+                    <ProjectCard key={p.id} project={p} load={loadById.get(p.id)} onEdit={() => setProjectToEdit(p)} onDelete={() => setProjectToDelete(p)} />
+                  )
+                )}
               </AnimatePresence>
             </div>
           )}

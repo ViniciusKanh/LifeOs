@@ -74,6 +74,7 @@ import { DashboardInsights, type StreakHighlight } from "@/components/dashboard/
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { RPGButton } from "@/components/rpg/RPGButton";
 import { useTheme } from "@/hooks/useTheme";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
 import { API_URL } from "@/services/api";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
@@ -656,6 +657,9 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   const { overview } = useAnalyticsOverview(14);
   const { insights: lifeInsights } = useInsights(30);
   const { insights } = useJournalInsights();
+  const { isRpg } = useTheme();
+  // No RPG, "Insights da semana" só aparece com dado suficiente (sem textos de "registre mais").
+  const hasWeekInsights = !!lifeInsights?.bestWeekday || (lifeInsights?.sleepVsNextDayProductivity.pairs ?? 0) >= 7;
   const { collections } = useJournalCollections();
   const streakCount = useCountUp(insights?.currentStreak ?? 0);
   const longestCount = useCountUp(insights?.longestStreak ?? 0);
@@ -866,7 +870,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
             </button>
           </div>
           <div className="text-center min-w-0">
-            <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none rpg:font-rpg rpg:text-rpg-pink">Diário</p>
+            {isRpg && <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold mb-1">Diário</p>}
+            <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none rpg:font-rpg rpg:text-rpg-pink">{isRpg ? "Crônica da Jornada" : "Diário"}</p>
             <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
           </div>
           <button
@@ -988,6 +993,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
         {auto && (
           <>
+            {isRpg && <p className={`mb-2 text-xs ${RPG_SECTION_TITLE}`}>Estado do dia</p>}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               <StatChip icon={<ListChecks size={14} />} label="Tarefas" value={`${auto.tasksToday.done}/${auto.tasksToday.total}`} tone="text-cat-blue" />
               <StatChip icon={<Repeat size={14} />} label="Hábitos" value={`${auto.habitsToday.done}/${auto.habitsToday.total}`} tone="text-cat-green" />
@@ -1006,7 +1012,16 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
         <p className="text-sm text-slate">Carregando…</p>
       ) : (
         <div className="space-y-4">
-          <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
+          {isRpg ? (
+            hasWeekInsights && (
+              <section aria-label="Insights da semana">
+                <p className={`mb-2 text-xs ${RPG_SECTION_TITLE}`}>Insights da semana</p>
+                <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
+              </section>
+            )
+          ) : (
+            <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
+          )}
 
           <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
 

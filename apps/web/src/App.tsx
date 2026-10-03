@@ -80,6 +80,7 @@ const WeeklyReviewPage = lazy(() =>
 const LifeMapPage = lazy(() => import("@/pages/lifemap/LifeMapPage").then((m) => ({ default: m.LifeMapPage })));
 const DataHealthPage = lazy(() => import("@/pages/data-health/DataHealthPage").then((m) => ({ default: m.DataHealthPage })));
 const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
+const LojaPage = lazy(() => import("@/pages/loja/LojaPage").then((m) => ({ default: m.LojaPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
 const DirecaoPage = lazy(() => import("@/pages/direcao/DirecaoPage").then((m) => ({ default: m.DirecaoPage })));
@@ -157,6 +158,7 @@ export default function App() {
           <Route path="/signals" element={<SignalsPage />} />
           <Route path="/contexto-do-dia" element={<ContextoDoDiaPage />} />
           <Route path="/conquistas" element={<ConquistasPage />} />
+          <Route path="/loja" element={<LojaPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/capacity-planner" element={<CapacityPlannerPage />} />
           <Route path="/deadline-radar" element={<DeadlineRadarPage />} />

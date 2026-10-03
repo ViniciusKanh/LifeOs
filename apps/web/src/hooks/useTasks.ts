@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { taskService, type TaskInput } from "@/services/taskService";
 import { triggerAchievementsCheck } from "@/services/achievementsService";
 import type { Task } from "@/types";
+import { notifyGamification } from "@/services/gamificationService";
 
 const TASKS_KEY = ["tasks"];
 
@@ -192,6 +193,8 @@ export function useTaskTimer(taskId: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks", "time-active", taskId] });
       queryClient.invalidateQueries({ queryKey: TASKS_KEY });
+      // Blocos completos de foco rendem XP no backend.
+      notifyGamification();
     },
   });
 

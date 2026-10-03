@@ -37,6 +37,12 @@ import { MediaLightbox, type CarouselItem } from "@/components/media/MediaCarous
 import { TASK_STATUSES, DONE_STATUS } from "@/utils/taskStatus";
 import { formatBytes } from "@/utils/files";
 import type { GanttTask, Project, ProjectDocument, ProjectOverview, ProjectStatus, Task } from "@/types";
+import { useTheme } from "@/hooks/useTheme";
+import { useProjectsXp } from "@/hooks/useGamification";
+import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
+import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { COLUMN_ACCENT_RPG, COLUMN_ICON_RPG } from "@/components/kanban/rpgColumns";
+import { TaskCard } from "@/components/tasks/TaskCard";
 
 /**
  * Detalhe do projeto — tudo o que existe sobre um projeto num só lugar:
@@ -417,7 +423,9 @@ export function ProjetoDetalhePage() {
   const navigate = useNavigate();
   const { project, isLoading, error, overview, tasks, isTasksLoading, documents, isDocumentsLoading } = useProjectDetail(id);
   const { updateProject } = useProjects();
-  const { createTask, updateTask, removeTask } = useTasks();
+  const { createTask, updateTask, removeTask, moveTask } = useTasks();
+  const { isRpg } = useTheme();
+  const { data: projectsXp } = useProjectsXp(isRpg);
   const [tab, setTab] = useState<TabKey>("overview");
   const [editing, setEditing] = useState(false);
   const [taskModal, setTaskModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
@@ -430,11 +438,11 @@ export function ProjetoDetalhePage() {
   const tabs = useMemo(
     () => [
       { key: "overview" as const, label: "Visão geral" },
-      { key: "tasks" as const, label: "Tarefas", count: tasks.length },
+      { key: "tasks" as const, label: isRpg ? "Missões" : "Tarefas", count: tasks.length },
       { key: "documents" as const, label: "Documentos", count: documents.length },
-      { key: "timeline" as const, label: "Cronograma" },
+      { key: "timeline" as const, label: isRpg ? "Roadmap / Gantt" : "Cronograma" },
     ],
-    [tasks.length, documents.length]
+    [tasks.length, documents.length, isRpg]
   );
 
   if (isLoading) {
@@ -467,6 +475,62 @@ export function ProjetoDetalhePage() {
         <ArrowLeft size={14} /> Projetos
       </Link>
 
+      {isRpg ? (
+        <RPGPanel variant="gold" className="mb-5">
+          <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="font-pixel text-[11px] uppercase tracking-wider text-rpg-gold">Campanha</p>
+              <h1 className="rpg-title text-2xl sm:text-3xl font-bold leading-tight break-words">{project.name}</h1>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <label className="sr-only" htmlFor="project-status-inline-rpg">Status do projeto</label>
+                <select
+                  id="project-status-inline-rpg"
+                  value={project.status}
+                  onChange={(e) => updateProject({ id: project.id, patch: { status: e.target.value as ProjectStatus } })}
+                  className="px-2 py-1 text-[11px] font-semibold bg-rpg-bg-2 text-rpg-text border border-rpg-border outline-none focus:border-rpg-gold cursor-pointer"
+                  style={{ borderRadius: 3 }}
+                >
+                  {Object.entries(STATUS_META).map(([v, m]) => (
+                    <option key={v} value={v}>{m.label}</option>
+                  ))}
+                </select>
+                {project.priority && <RPGBadge tone={project.priority === "Alta" || project.priority === "Crítica" ? "red" : project.priority === "Média" ? "orange" : "green"}>{project.priority}</RPGBadge>}
+                <DeadlineBadge days={overview?.daysToDeadline ?? null} status={project.status} />
+                {project.archived_at && <RPGBadge tone="muted">Arquivado</RPGBadge>}
+              </div>
+              {project.objective && <p className="mt-3 text-sm text-rpg-text/90 max-w-2xl">{project.objective}</p>}
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end max-w-2xl">
+                <RPGProgressBar
+                  tone="green"
+                  label={`${overview?.totals.done ?? project.done_count}/${overview?.totals.tasks ?? project.task_count} missões concluídas`}
+                  value={overview?.totals.progressPct ?? 0}
+                  valueLabel={`${overview?.totals.progressPct ?? 0}%`}
+                />
+                <p className="font-pixel text-xs text-rpg-muted whitespace-nowrap">
+                  <span className="text-rpg-purple">{projectsXp?.[project.id]?.earnedXp ?? 0} XP</span> conquistado ·{" "}
+                  <span className="text-rpg-gold-light">{projectsXp?.[project.id]?.availableXp ?? 0} XP</span> disponível
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <RPGButton variant="secondary" onClick={() => updateProject({ id: project.id, patch: { archived: !project.archived_at } })}>
+                <Archive size={14} aria-hidden /> {project.archived_at ? "Desarquivar" : "Arquivar"}
+              </RPGButton>
+              <RPGButton variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil size={14} aria-hidden /> Editar
+              </RPGButton>
+              {project.status !== "completed" && (
+                <RPGButton variant="success" onClick={() => updateProject({ id: project.id, patch: { status: "completed" } })}>
+                  Concluir campanha
+                </RPGButton>
+              )}
+              <RPGButton variant="gold" onClick={() => setTaskModal({ open: true, task: null })}>
+                <Plus size={14} aria-hidden /> Missão
+              </RPGButton>
+            </div>
+          </div>
+        </RPGPanel>
+      ) : (
       <Card className="relative overflow-hidden p-5 sm:p-6 mb-5">
         <span className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: project.color ?? "#7C4DFF" }} aria-hidden />
         <div className="pointer-events-none absolute inset-0 bg-ink-wash opacity-60" aria-hidden />
@@ -507,6 +571,7 @@ export function ProjetoDetalhePage() {
           </div>
         </div>
       </Card>
+      )}
 
       <div className="flex gap-1 overflow-x-auto border-b border-paper-border dark:border-ink-border mb-5 -mx-4 px-4 md:mx-0 md:px-0" role="tablist" aria-label="Seções do projeto">
         {tabs.map((t) => (
@@ -527,7 +592,33 @@ export function ProjetoDetalhePage() {
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
           {tab === "overview" && <OverviewTab project={project} overview={overview} onOpenTask={openTaskById} />}
-          {tab === "tasks" && <TasksTab tasks={tasks} isLoading={isTasksLoading} onOpen={(t) => setTaskModal({ open: true, task: t })} onNew={() => setTaskModal({ open: true, task: null })} />}
+          {tab === "tasks" &&
+            (isRpg ? (
+              <KanbanBoard
+                columns={TASK_STATUSES}
+                items={tasks}
+                getId={(t) => t.id}
+                getStatus={(t) => t.status}
+                onMove={(taskId, status) => moveTask({ id: taskId, status })}
+                columnAccent={COLUMN_ACCENT_RPG}
+                columnIcon={COLUMN_ICON_RPG}
+                tintHeaders
+                storageKey="lifeos.project.collapsedColumns"
+                emptyHint="Solte uma missão aqui"
+                renderCard={(task, dragProps) => (
+                  <TaskCard
+                    task={task}
+                    onClick={() => setTaskModal({ open: true, task })}
+                    dragProps={dragProps}
+                    onToggleDone={() => moveTask({ id: task.id, status: task.status === DONE_STATUS ? "A Fazer" : DONE_STATUS })}
+                    onMove={(status) => moveTask({ id: task.id, status })}
+                    statuses={TASK_STATUSES}
+                  />
+                )}
+              />
+            ) : (
+              <TasksTab tasks={tasks} isLoading={isTasksLoading} onOpen={(t) => setTaskModal({ open: true, task: t })} onNew={() => setTaskModal({ open: true, task: null })} />
+            ))}
           {tab === "documents" && <DocumentsTab documents={documents} isLoading={isDocumentsLoading} onOpenTask={openTaskById} />}
           {tab === "timeline" && <TimelineTab projectId={project.id} />}
         </motion.div>

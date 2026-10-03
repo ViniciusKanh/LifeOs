@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
-import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Target, Timer, Trash2, Trophy, X } from "lucide-react";
+import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Store, Target, Timer, Trash2, Trophy, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAchievements } from "@/hooks/useAchievements";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGPanel, RPGPlayerHUD, rpgButtonClass } from "@/components/rpg";
 import { useCustomAchievements } from "@/hooks/useCustomAchievements";
 import { Button, Card, EmptyState, Field } from "@/components/ui/primitives";
 import { TIER_BORDER_TONE, TIER_EMOJI, TIER_GLOW, TIER_LABEL, TIER_MEDAL_GRADIENT, TIER_ORDER, TIER_TEXT_TONE } from "@/components/achievements/tierDisplay";
@@ -213,6 +216,7 @@ export function ConquistasPage() {
   const { achievements, unlocked, isLoading } = useAchievements();
   const { trophies, unlockedCount, metrics, isLoading: trophiesLoading, create, remove } = useCustomAchievements();
   const [modalOpen, setModalOpen] = useState(false);
+  const { isRpg } = useTheme();
 
   // Vitrine agrupada por raridade (platina → bronze), como uma sala de troféus.
   const byTier = useMemo(() => {
@@ -230,6 +234,18 @@ export function ConquistasPage() {
           {unlocked.length} de {achievements.length} destravadas — sempre calculadas a partir dos seus dados reais, nunca marcadas à mão.
         </p>
       </div>
+
+      {isRpg && (
+        <RPGPanel variant="gold">
+          <RPGPlayerHUD
+            actions={
+              <Link to="/loja" className={rpgButtonClass("gold")}>
+                <Store size={14} aria-hidden /> Loja de recompensas
+              </Link>
+            }
+          />
+        </RPGPanel>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-slate">Carregando…</p>

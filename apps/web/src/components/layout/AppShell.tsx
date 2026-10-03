@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { NotificationsBell } from "./NotificationsBell";
 import { ProfileMenu } from "./ProfileMenu";
 import { AchievementToast } from "./AchievementToast";
+import { GamificationFeedback } from "./GamificationFeedback";
+import { RPGPlayerHUD } from "@/components/rpg/RPGPlayerHUD";
 import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
@@ -85,7 +87,7 @@ function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () =
 }
 
 export function AppShell() {
-  const { mode, cycle } = useTheme();
+  const { mode, cycle, isRpg } = useTheme();
   const { isAdmin } = useAuth();
   const location = useLocation();
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
@@ -150,6 +152,7 @@ export function AppShell() {
             >
               <ThemeCycleIcon mode={mode} size={16} />
             </button>
+            {isRpg && <RPGPlayerHUD compact />}
             <AchievementHeaderPulse />
             <NotificationsBell />
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
@@ -187,6 +190,7 @@ export function AppShell() {
 
         <TermsGate />
         <AchievementToast />
+        <GamificationFeedback />
         <OnboardingFlow />
         <CopilotAssistant />
         <QuickCaptureButton />

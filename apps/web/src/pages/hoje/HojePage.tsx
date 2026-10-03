@@ -34,8 +34,11 @@ import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { TodayCockpit } from "@/components/today/TodayCockpit";
-import { RpgNextAction, RpgTodayHero, RpgTodaySignals } from "@/components/today/RpgTodaySections";
+import { RpgNextAction, RpgTodayHero, RpgTodayMissions, RpgTodaySignals } from "@/components/today/RpgTodaySections";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
+import { useQueryClient } from "@tanstack/react-query";
+import { useProjects } from "@/hooks/useProjects";
+import { taskService } from "@/services/taskService";
 import { RpgCopilotPanel } from "@/components/dashboard/RpgDashboardSections";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useTheme } from "@/hooks/useTheme";
@@ -111,6 +114,16 @@ export function HojePage() {
   const copilot = useDailyInsight();
   const { isRpg } = useTheme();
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { projects } = useProjects();
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+
+  // "Iniciar Focus": abre o cronômetro real da tarefa e a coloca em andamento.
+  const startFocus = async (id: string) => {
+    await taskService.startTime(id);
+    queryClient.invalidateQueries({ queryKey: ["tasks", "time-active", id] });
+    await moveTask({ id, status: "Em Andamento" });
+  };
 
   const priorities = useMemo(() => {
     const priorityWeight: Record<Task["priority"], number> = { Alta: 0, Média: 1, Baixa: 2 };
@@ -218,6 +231,17 @@ export function HojePage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4">
         {/* Coluna esquerda */}
         <div className="space-y-4">
+          {isRpg ? (
+            <RpgTodayMissions
+              tasks={priorities}
+              mainTaskId={focusTasks[0]?.id ?? null}
+              projectNames={projectNames}
+              today={today}
+              onComplete={(id) => void moveTask({ id, status: "Concluído" })}
+              onAdd={() => setTaskModalOpen(true)}
+              onStartFocus={(id) => void startFocus(id)}
+            />
+          ) : (
           <Card className="p-5">
             {/* Cabeçalho com quebra em telas estreitas: título/legenda encolhem e o botão desce de linha se faltar espaço */}
             <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
@@ -261,6 +285,7 @@ export function HojePage() {
               </div>
             )}
           </Card>
+          )}
 
           <Card className="p-5">
             <div className="flex items-center gap-2.5 mb-1">

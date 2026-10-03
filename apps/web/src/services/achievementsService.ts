@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { notifyGamification } from "./gamificationService";
 import type { Achievement, CustomAchievement, CustomAchievementMetricOption } from "@/types";
 
 export interface CustomAchievementInput {
@@ -36,6 +37,8 @@ export const ACHIEVEMENT_CREATED_EVENT = "lifeos:achievement-created";
  * a ação que destravou aconteceu.
  */
 export function triggerAchievementsCheck() {
+  // Mesmos gatilhos de conquista também podem render XP/moedas.
+  notifyGamification();
   achievementsService
     .check()
     .then(({ newlyUnlocked }) => {

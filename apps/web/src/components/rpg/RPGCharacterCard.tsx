@@ -6,11 +6,6 @@ import { RPGAvatar } from "./RPGAvatar";
 import { RPGAvatarPicker } from "./RPGAvatarPicker";
 import { RPGProgressBar } from "./RPGProgressBar";
 
-/**
- * Personagem do usuário: retrato, nome e classe cosmética (vem do retrato).
- * Nível e XP só aparecem quando existirem de verdade no backend — hoje
- * não existem, então as props ficam vazias e nada é exibido.
- */
 /** Retrato clicável que abre "Escolha seu personagem". */
 export function RPGAvatarButton({ size = "xl", mobileSize = "lg" }: { size?: "md" | "lg" | "xl"; mobileSize?: "sm" | "md" | "lg" }) {
   const { avatarId } = useRpgAvatar();
@@ -30,6 +25,11 @@ export function RPGAvatarButton({ size = "xl", mobileSize = "lg" }: { size?: "md
   );
 }
 
+/**
+ * Personagem do usuário: retrato, nome e classe cosmética (vem do retrato).
+ * Nível e XP vêm do motor de gamificação (RPGPlayerHUD passa os valores
+ * reais); sem eles, nada de progressão é exibido.
+ */
 export function RPGCharacterCard({
   name,
   level,

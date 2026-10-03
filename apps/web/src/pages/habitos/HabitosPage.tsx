@@ -28,6 +28,7 @@ import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/compon
 import type { Habit, HabitTaskGenerationInput } from "@/types";
 import { HabitTaskGeneratorModal } from "@/components/habits/HabitTaskGeneratorModal";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
+import { RpgContractsPanel } from "@/components/habits/RpgContractsPanel";
 
 /* ------------------------------------------------------------------ */
 /* Categorias predefinidas de hábito — mesmo padrão visual (ícone +    */
@@ -100,6 +101,18 @@ export function HabitosPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
+
+  async function fulfillContract(habit: Habit) {
+    setFulfillingId(habit.id);
+    try {
+      await checkIn({ id: habit.id, entryDate: today, count: Math.max(1, habit.target_count) });
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Não foi possível registrar o contrato.");
+    } finally {
+      setFulfillingId(null);
+    }
+  }
 
   async function handleGenerateTasks(input: HabitTaskGenerationInput) {
     const result = await generateTasks(input);
@@ -330,6 +343,8 @@ export function HabitosPage() {
               </div>
             </Card>
           </div>
+
+          {isRpg && <RpgContractsPanel items={habitsWithStatus} today={today} onFulfill={fulfillContract} pendingId={fulfillingId} />}
 
           <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
             {/* Coluna principal: tabela de hábitos + categorias + horários */}

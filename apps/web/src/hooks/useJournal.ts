@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { journalService, journalCollectionsService, type JournalUpsertInput, type JournalCollectionInput, type JournalWordPeriod } from "@/services/journalService";
+import { notifyGamification } from "@/services/gamificationService";
 
 /** Estatísticas reais do hábito de escrever no diário (streak, recorde, entradas, palavras) — usado pelo painel "Insights" do Diário. */
 export function useJournalInsights() {
@@ -39,6 +40,8 @@ export function useJournal(date: string) {
       queryClient.setQueryData(key, data);
       queryClient.invalidateQueries({ queryKey: ["analytics", "timeline"] });
       queryClient.invalidateQueries({ queryKey: ["journal", "insights"] });
+      // A primeira crônica do dia pode render XP (backend é idempotente).
+      notifyGamification();
     },
   });
 

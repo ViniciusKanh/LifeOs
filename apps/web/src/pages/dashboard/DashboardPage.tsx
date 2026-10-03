@@ -21,6 +21,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLifeScore, useLifeScoreHistory, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useProjectWorkload } from "@/hooks/useProjects";
+import { Link } from "react-router-dom";
+import { RpgJourneyPlayer, RpgJourneyRhythm, RpgMissionWaffle, RpgXpHistory } from "@/components/dashboard/RpgProgressionSection";
+import { RPGPanel } from "@/components/rpg";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealth, useHealthSummary } from "@/hooks/useHealth";
@@ -442,6 +445,7 @@ export function DashboardPage() {
             history={recentHistory.map((h) => h.overall)}
           />
           <RpgKpiStrip items={kpis} />
+          <RpgJourneyPlayer lifeScore={scoreLoading ? null : overall} />
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
             <RpgMainQuest task={nextTask} estimateMinutes={nextTaskEstimate} onComplete={completeNext} isCompleting={completing} />
             <RpgDayAttributes health={health} pagesRead14d={overview?.pagesRead ?? null} agendaCount={agendaToday.length} />
@@ -475,11 +479,27 @@ export function DashboardPage() {
           <Reveal>
             <DimensionScroller items={dimensions} />
           </Reveal>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Reveal>{workloadCard}</Reveal>
-            <Reveal delay={0.08}>{compositionCard}</Reveal>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Reveal>
+              <RpgXpHistory />
+            </Reveal>
+            <Reveal delay={0.06}>
+              <RpgMissionWaffle tasks={tasks} today={today} />
+            </Reveal>
           </div>
-          <Reveal>{rhythmCard}</Reveal>
+          <Reveal>
+            <RPGPanel
+              title="Carga das campanhas"
+              icon={<FolderKanban size={16} />}
+              actions={<Link to="/projetos" className="text-xs text-rpg-gold-light hover:underline">Campanhas</Link>}
+            >
+              <p className="-mt-1 mb-3 text-xs text-rpg-muted">Carga por projeto</p>
+              <ProjectLoadBoard workload={workload} isLoading={workloadLoading} limit={6} showTotals={false} />
+            </RPGPanel>
+          </Reveal>
+          <Reveal>
+            <RpgJourneyRhythm series={series} />
+          </Reveal>
           <Reveal>
             <ContinueReading book={books[0] ?? null} />
           </Reveal>

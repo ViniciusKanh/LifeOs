@@ -46,6 +46,7 @@ import {
   type QuickFilter,
 } from "@/utils/taskInsights";
 import type { Task } from "@/types";
+import { COLUMN_ACCENT_RPG, COLUMN_ICON_RPG } from "@/components/kanban/rpgColumns";
 
 const COLUMNS = TASK_STATUSES;
 const DONE_LIMIT = 6;
@@ -59,24 +60,6 @@ const COLUMN_ACCENT: Record<string, string> = {
   "Em Andamento": "#9550FF",
   "Em Revisão": "#F59E0B",
   Concluído: "#12B76A",
-};
-
-// Tema RPG: mesma semântica de cores, lida dos tokens (bronze, azul, roxo, laranja, verde).
-const COLUMN_ACCENT_RPG: Record<string, string> = {
-  Backlog: "rgb(var(--rpg-bronze))",
-  "A Fazer": "rgb(var(--rpg-blue))",
-  "Em Andamento": "rgb(var(--rpg-purple))",
-  "Em Revisão": "rgb(var(--rpg-orange))",
-  Concluído: "rgb(var(--rpg-green))",
-};
-
-// Ícone de cada coluna no tema RPG (lucide — sem emoji).
-const COLUMN_ICON_RPG: Record<string, JSX.Element> = {
-  Backlog: <Archive size={16} />,
-  "A Fazer": <Swords size={16} />,
-  "Em Andamento": <Hourglass size={16} />,
-  "Em Revisão": <ScrollText size={16} />,
-  Concluído: <CheckCircle2 size={16} />,
 };
 
 const PRIORITIES: Array<Task["priority"]> = ["Alta", "Média", "Baixa"];

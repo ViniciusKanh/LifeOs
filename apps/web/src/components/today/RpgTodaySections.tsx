@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
-import { CalendarDays, Play } from "lucide-react";
-import type { FocusTask } from "@/types";
+import { CalendarDays, Check, Play, Plus, Square, Swords, Timer } from "lucide-react";
+import type { FocusTask, Task } from "@/types";
+import { useGamificationRules } from "@/hooks/useGamification";
+import { useTaskTimer } from "@/hooks/useTasks";
+import { previewTaskReward } from "@/utils/gamification";
 import { useAuth } from "@/hooks/useAuth";
 import { useSignals } from "@/hooks/useSignals";
 import { SignalsNow } from "@/components/dashboard/DashboardSections";
@@ -87,6 +90,107 @@ export function RpgNextAction({
             </RPGButton>
           )}
         </div>
+      )}
+    </RPGPanel>
+  );
+}
+
+const DIFFICULTY: Record<string, string> = { Baixa: "Fácil", Média: "Média", Alta: "Difícil" };
+
+/**
+ * "Missões de hoje": as prioridades reais do dia com dificuldade (prioridade),
+ * projeto, prazo, duração estimada e a recompensa prevista pelas regras do
+ * backend. A missão principal (1ª do Priority Score) ganha "Iniciar Focus",
+ * que abre o cronômetro da tarefa — encerrar o foco registra os blocos de 25 min.
+ */
+export function RpgTodayMissions({
+  tasks,
+  mainTaskId,
+  projectNames,
+  today,
+  onComplete,
+  onAdd,
+  onStartFocus,
+}: {
+  tasks: Task[];
+  mainTaskId: string | null;
+  projectNames: Map<string, string>;
+  today: string;
+  onComplete: (id: string) => void;
+  onAdd: () => void;
+  onStartFocus: (id: string) => void;
+}) {
+  const { data: rules } = useGamificationRules();
+  const timer = useTaskTimer(mainTaskId);
+  const fmtDate = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+  return (
+    <RPGPanel
+      title="Missões de hoje"
+      icon={<Swords size={15} />}
+      actions={
+        <RPGButton variant="gold" onClick={onAdd} className="!py-1.5">
+          <Plus size={13} aria-hidden /> Missão
+        </RPGButton>
+      }
+    >
+      {tasks.length === 0 ? (
+        <p className="text-sm text-rpg-muted py-4">Nenhuma missão pendente — bom trabalho! Adicione uma tarefa para planejar o próximo passo.</p>
+      ) : (
+        <ul className="space-y-2">
+          {tasks.map((t) => {
+            const isMain = t.id === mainTaskId;
+            const reward = previewTaskReward(rules, { priority: t.priority, dueDate: t.due_date }, today);
+            return (
+              <li key={t.id} className={`border-2 px-3 py-2.5 ${isMain ? "border-rpg-gold bg-rpg-gold/5" : "border-rpg-border bg-rpg-bg/40"}`} style={{ borderRadius: 4 }}>
+                <div className="flex items-start gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onComplete(t.id)}
+                    aria-label={`Concluir missão ${t.title}`}
+                    className="mt-0.5 w-6 h-6 shrink-0 flex items-center justify-center border-2 border-rpg-border hover:border-rpg-green text-rpg-green"
+                    style={{ borderRadius: 3 }}
+                  >
+                    <Check size={14} className="opacity-0 hover:opacity-100" aria-hidden />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isMain && <RPGBadge tone="gold">Missão principal</RPGBadge>}
+                      <Link to={`/tarefas?task=${t.id}`} className="text-sm font-semibold text-rpg-text hover:underline break-words">
+                        {t.title}
+                      </Link>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-rpg-muted">
+                      <RPGBadge tone={PRIORITY_TONE[t.priority] ?? "muted"}>{DIFFICULTY[t.priority] ?? t.priority}</RPGBadge>
+                      {t.project_id && projectNames.get(t.project_id) && <span className="truncate max-w-[10rem]">⚑ {projectNames.get(t.project_id)}</span>}
+                      {t.due_date && <span>Prazo {fmtDate(t.due_date)}</span>}
+                      {t.estimate_minutes ? <span>~ {t.estimate_minutes} min</span> : null}
+                      {reward && (
+                        <span className="inline-flex items-center gap-2 font-pixel">
+                          <span className="text-rpg-purple">+{reward.xp} XP</span>
+                          <span className="text-rpg-gold-light">+{reward.coins} 🪙</span>
+                        </span>
+                      )}
+                    </div>
+                    {isMain && (
+                      <div className="mt-2">
+                        {timer.activeEntry ? (
+                          <RPGButton variant="secondary" className="!py-1.5" onClick={() => void timer.stop()}>
+                            <Square size={12} aria-hidden /> Encerrar Focus
+                          </RPGButton>
+                        ) : (
+                          <RPGButton variant="blue" className="!py-1.5" onClick={() => onStartFocus(t.id)}>
+                            <Timer size={13} aria-hidden /> Iniciar Focus
+                          </RPGButton>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </RPGPanel>
   );

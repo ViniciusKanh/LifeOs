@@ -8,6 +8,7 @@ import {
 
 import { localIsoDate } from "@/utils/dashboardMetrics";
 import type { ProjectKind } from "@/types";
+import { notifyGamification } from "@/services/gamificationService";
 
 const PROJECTS_KEY = ["projects"];
 
@@ -28,7 +29,11 @@ export function useProjects(includeArchived = false) {
   const createProject = useMutation({ mutationFn: (input: ProjectCreateInput) => projectsService.create(input), onSuccess: invalidate });
   const updateProject = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: ProjectUpdateInput }) => projectsService.update(id, patch),
-    onSuccess: invalidate,
+    onSuccess: (_data, vars) => {
+      invalidate();
+      // Campanha concluída rende XP/moedas uma única vez no backend.
+      if (vars.patch.status === "completed") notifyGamification();
+    },
   });
   const removeProject = useMutation({ mutationFn: (id: string) => projectsService.remove(id), onSuccess: invalidate });
 
