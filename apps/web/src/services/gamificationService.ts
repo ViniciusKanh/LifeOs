@@ -46,6 +46,7 @@ export interface GamificationRules {
   focus: { blockMinutes: number; xpPerBlock: number; coinsPerBlock: number; maxBlocksPerSession: number };
   project: { xp: number; coins: number };
   journal: { xp: number; coins: number };
+  review: Record<"weekly" | "monthly" | "quarterly" | "annual", { xp: number; coins: number }>;
 }
 
 export const REWARD_CATEGORIES = [
@@ -106,6 +107,7 @@ export const gamificationService = {
   removeReward: (id: string) => api.delete<void>(`/gamification/rewards/${id}`),
   redeem: (id: string) => api.post<{ ok: true; redemptionId: string; balance: number; reward: Reward }>(`/gamification/rewards/${id}/redeem`),
   redemptions: () => api.get<Redemption[]>("/gamification/redemptions"),
+  levels: () => api.get<{ levels: Array<{ level: number; reachedAt: string; dayKey: string; totalXp: number }> }>("/gamification/levels"),
 };
 
 /**

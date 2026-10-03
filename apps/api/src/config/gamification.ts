@@ -47,6 +47,17 @@ export const GAMIFICATION_RULES = {
     xp: 100,
     coins: 20,
   },
+  /**
+   * Fechamento de ciclo (revisão salva com ao menos uma reflexão escrita).
+   * Uma vez por período; só o período atual ou o imediatamente anterior
+   * rendem XP (evita farm preenchendo revisões antigas).
+   */
+  review: {
+    weekly: { xp: 20, coins: 4 },
+    monthly: { xp: 50, coins: 10 },
+    quarterly: { xp: 80, coins: 15 },
+    annual: { xp: 150, coins: 30 },
+  } as Record<"weekly" | "monthly" | "quarterly" | "annual", { xp: number; coins: number }>,
   journal: {
     /** Primeira entrada do Diário no dia (com texto), só no próprio dia. */
     xp: 10,

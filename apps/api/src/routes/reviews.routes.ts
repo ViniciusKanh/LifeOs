@@ -8,6 +8,7 @@ import { changePct, computeLifeScore, computeRangeMetrics } from "../services/me
 import { generateWeeklyReviewDraft } from "../services/copilotService.js";
 import { mondayOf, sendWeeklySummaryForUser } from "../services/weeklyEmailService.js";
 import { updateNotificationTrigger } from "../services/notificationTriggersService.js";
+import { awardReviewClosed, reviewRewardStatus, todayKeyFor } from "../services/gamificationService.js";
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -179,11 +180,25 @@ reviewsRouter.put("/weekly", async (req, res) => {
     ],
   });
 
+  // Fechamento da semana: XP uma vez por semana, só para a semana atual ou
+  // a anterior e só com alguma reflexão escrita (editar não paga de novo).
+  const today = await todayKeyFor(db, req.user!.id);
+  const ageDays = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${d.weekStartDate}T00:00:00Z`)) / 86_400_000);
+  const hasReflection = [d.whatWorked, d.whatDidntWork, d.whatToImprove, d.nextPriorities].some((v) => typeof v === "string" && v.trim().length > 0);
+  await awardReviewClosed(db, req.user!.id, "weekly", d.weekStartDate, { eligible: ageDays >= 0 && ageDays < 14, hasReflection });
+
   const saved = await db.execute({
     sql: "SELECT * FROM weekly_reviews WHERE owner_id = ? AND week_start_date = ?",
     args: [req.user!.id, d.weekStartDate],
   });
   return res.json(saved.rows[0]);
+});
+
+/** GET /api/reviews/weekly/reward?weekStartDate= — regra de XP do fechamento semanal e se já foi concedido */
+reviewsRouter.get("/weekly/reward", async (req, res) => {
+  const weekStartDate = (req.query.weekStartDate as string) || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStartDate)) return res.status(400).json({ error: "Data inválida." });
+  return res.json(await reviewRewardStatus(getDb(), req.user!.id, "weekly", weekStartDate));
 });
 
 /* ---------------------- Resumo semanal por e-mail ---------------------- */

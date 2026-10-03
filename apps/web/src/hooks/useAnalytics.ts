@@ -31,5 +31,5 @@ export function useTimeline(params?: { from?: string; to?: string }) {
     queryKey: ["analytics", "timeline", params?.from ?? "default", params?.to ?? "default"],
     queryFn: () => analyticsService.timeline(params),
   });
-  return { events: query.data?.events ?? [], isLoading: query.isLoading };
+  return { events: query.data?.events ?? [], xpByDay: query.data?.xpByDay ?? {}, isLoading: query.isLoading };
 }

@@ -14,7 +14,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "focus" | "project" | "journal";
+export type XpSourceType = "task" | "day" | "habit_entry" | "focus" | "project" | "journal" | "review";
 
 export interface XpGrant {
   sourceType: XpSourceType;
@@ -349,6 +349,90 @@ export async function awardJournalEntry(db: Client, ownerId: string, entryDate: 
   });
 }
 
+export type ReviewKind = "weekly" | "monthly" | "quarterly" | "annual";
+
+const REVIEW_LABEL: Record<ReviewKind, string> = { weekly: "semanal", monthly: "mensal", quarterly: "trimestral", annual: "anual" };
+
+/**
+ * Revisão (fechamento de ciclo) → XP uma única vez por período. `eligible`
+ * é decidido pela rota (período atual ou o anterior) e `hasReflection`
+ * exige ao menos um campo escrito — salvar vazio não "fecha" o ciclo.
+ */
+export async function awardReviewClosed(
+  db: Client,
+  ownerId: string,
+  kind: ReviewKind,
+  periodKey: string,
+  opts: { eligible: boolean; hasReflection: boolean },
+): Promise<void> {
+  if (!opts.eligible || !opts.hasReflection) return;
+  await safely("revisão", async () => {
+    const rule = GAMIFICATION_RULES.review[kind];
+    const dayKey = await todayKeyFor(db, ownerId);
+    await award(
+      db,
+      ownerId,
+      { sourceType: "review", sourceId: `${kind}:${periodKey}`, eventType: "closed", xp: rule.xp, coins: rule.coins, label: `Ciclo fechado: revisão ${REVIEW_LABEL[kind]} ${periodKey}` },
+      dayKey,
+    );
+  });
+}
+
+/** Recompensa (regra + se já foi concedida) de uma revisão, para a UI mostrar o selo real. */
+export async function reviewRewardStatus(db: Client, ownerId: string, kind: ReviewKind, periodKey: string) {
+  const r = await db.execute({
+    sql: "SELECT xp, created_at FROM xp_events WHERE owner_id = ? AND source_type = 'review' AND source_id = ? AND event_type = 'closed'",
+    args: [ownerId, `${kind}:${periodKey}`],
+  });
+  const rule = GAMIFICATION_RULES.review[kind];
+  return { xp: rule.xp, coins: rule.coins, awarded: r.rows.length > 0, awardedAt: r.rows[0] ? String(r.rows[0].created_at) : null };
+}
+
+/**
+ * Histórico real de subidas de nível: percorre o ledger de XP em ordem e
+ * registra o momento em que o acumulado cruzou cada limiar da curva.
+ */
+export async function getLevelHistory(db: Client, ownerId: string) {
+  const r = await db.execute({
+    sql: "SELECT xp, created_at, day_key FROM xp_events WHERE owner_id = ? ORDER BY created_at ASC, rowid ASC",
+    args: [ownerId],
+  });
+  const ups: Array<{ level: number; reachedAt: string; dayKey: string; totalXp: number }> = [];
+  let total = 0;
+  let level = 1;
+  for (const row of r.rows) {
+    total += Number(row.xp);
+    while (xpToReachLevel(level + 1) <= total) {
+      level++;
+      ups.push({ level, reachedAt: String(row.created_at), dayKey: String(row.day_key), totalXp: total });
+    }
+  }
+  return ups;
+}
+
+/** XP e moedas por origem (source_type:source_id) e por dia num intervalo — usado pela Timeline. */
+export async function getXpIndex(db: Client, ownerId: string, fromDay: string, toDay: string) {
+  const r = await db.execute({
+    sql: `SELECT x.source_type, x.source_id, x.day_key, x.xp, COALESCE(c.amount, 0) AS coins
+          FROM xp_events x
+          LEFT JOIN coin_ledger c ON c.owner_id = x.owner_id AND c.source_type = x.source_type
+                                 AND c.source_id = x.source_id AND c.event_type = x.event_type
+          WHERE x.owner_id = ? AND x.day_key >= ? AND x.day_key <= ?`,
+    args: [ownerId, fromDay, toDay],
+  });
+  const bySource: Record<string, { xp: number; coins: number }> = {};
+  const byDay: Record<string, number> = {};
+  for (const row of r.rows) {
+    const key = `${row.source_type}:${row.source_id}`;
+    const cur = bySource[key] ?? { xp: 0, coins: 0 };
+    cur.xp += Number(row.xp);
+    cur.coins += Number(row.coins);
+    bySource[key] = cur;
+    byDay[String(row.day_key)] = (byDay[String(row.day_key)] ?? 0) + Number(row.xp);
+  }
+  return { bySource, byDay };
+}
+
 // ---------------------------------------------------------------------
 // Leitura (perfil do jogador, histórico, carteira)
 // ---------------------------------------------------------------------
@@ -504,5 +588,6 @@ export function publicRules() {
     focus: GAMIFICATION_RULES.focus,
     project: GAMIFICATION_RULES.project,
     journal: GAMIFICATION_RULES.journal,
+    review: GAMIFICATION_RULES.review,
   };
 }

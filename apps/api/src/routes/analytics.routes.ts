@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { changePct, computeInsights, computeLifeScore, computeRangeMetrics, saveLifeScoreSnapshot } from "../services/metricsService.js";
+import { getLevelHistory, getXpIndex } from "../services/gamificationService.js";
 
 export const analyticsRouter = Router();
 analyticsRouter.use(requireAuth);
@@ -227,7 +228,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT he.id, h.name AS label, he.count, he.created_at AS at FROM habit_entries he JOIN habits h ON h.id = he.habit_id
+      sql: `SELECT he.id, he.habit_id, he.entry_date, h.name AS label, he.count, he.created_at AS at FROM habit_entries he JOIN habits h ON h.id = he.habit_id
             WHERE he.owner_id = ? AND he.entry_date >= ? AND he.entry_date <= ? AND he.count >= h.target_count`,
       args: [ownerId, from, to],
     }),
@@ -289,6 +290,36 @@ analyticsRouter.get("/timeline", async (req, res) => {
     }),
   ]);
 
+  // Crônica da jornada: marcos do motor de gamificação e sessões de foco,
+  // todos lidos de registros reais (nunca derivados de suposição).
+  const [focusEntries, projectsDone, achievementsUnlocked, customUnlocked, redemptions, levelUps, xpIndex] = await Promise.all([
+    db.execute({
+      sql: `SELECT te.id, te.ended_at AS at, te.duration_minutes, t.title AS label FROM time_entries te LEFT JOIN tasks t ON t.id = te.task_id
+            WHERE te.owner_id = ? AND te.ended_at IS NOT NULL AND COALESCE(te.duration_minutes, 0) > 0
+              AND date(te.ended_at) >= date(?) AND date(te.ended_at) <= date(?)`,
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, name AS label, completed_at AS at FROM projects WHERE owner_id = ? AND status = 'completed' AND completed_at IS NOT NULL AND date(completed_at) >= date(?) AND date(completed_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: `SELECT ua.id, a.title AS label, a.description, ua.unlocked_at AS at FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id
+            WHERE ua.owner_id = ? AND date(ua.unlocked_at) >= date(?) AND date(ua.unlocked_at) <= date(?)`,
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, title AS label, description, icon AS emoji, unlocked_at AS at FROM custom_achievements WHERE owner_id = ? AND unlocked_at IS NOT NULL AND date(unlocked_at) >= date(?) AND date(unlocked_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, reward_name AS label, cost, redeemed_at AS at FROM reward_redemptions WHERE owner_id = ? AND date(redeemed_at) >= date(?) AND date(redeemed_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    getLevelHistory(db, ownerId),
+    getXpIndex(db, ownerId, from, to),
+  ]);
+
   type TimelineRow = Record<string, unknown> & { at: string };
   const asRows = (rows: unknown[]) => rows as unknown as TimelineRow[];
 
@@ -322,9 +353,34 @@ analyticsRouter.get("/timeline", async (req, res) => {
       ...r,
       label: `Revisão ${r.kind === "monthly" ? "mensal" : r.kind === "quarterly" ? "trimestral" : "anual"} (${r.period_key})`,
     })),
-  ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    ...asRows(focusEntries.rows).map((r) => ({ type: "focus", icon: "⏱️", ...r, label: r.label ? String(r.label) : "Sessão de foco" })),
+    ...asRows(projectsDone.rows).map((r) => ({ type: "project", icon: "🏰", ...r })),
+    ...asRows(achievementsUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r })),
+    ...asRows(customUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r, id: `custom-${r.id}` })),
+    ...asRows(redemptions.rows).map((r) => ({ type: "reward", icon: "🎁", ...r })),
+    ...levelUps
+      .filter((l) => l.dayKey >= from && l.dayKey <= to)
+      .map((l) => ({ type: "level_up", icon: "👑", id: `level-${l.level}`, label: `Nível ${l.level}`, level: l.level, at: l.reachedAt })),
+  ]
+    .map((e) => ({ ...e, ...xpFor(e as unknown as TimelineRow & { type: string; id: unknown }) }))
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
-  return res.json({ from, to, events });
+  // XP/moedas reais de cada evento: casa a origem do evento com a chave do ledger.
+  function xpFor(e: TimelineRow & { type: string; id: unknown }): { xp?: number; coins?: number } {
+    const key =
+      e.type === "task" ? `task:${e.id}`
+      : e.type === "habit" ? `habit_entry:${e.habit_id}:${e.entry_date}`
+      : e.type === "focus" ? `focus:${e.id}`
+      : e.type === "project" ? `project:${e.id}`
+      : e.type === "journal" ? `journal:${String(e.at).slice(0, 10)}`
+      : e.type === "review" ? `review:${e.kind}:${e.period_key}`
+      : null;
+    const hit = key ? xpIndex.bySource[key] : undefined;
+    return hit && hit.xp > 0 ? { xp: hit.xp, coins: hit.coins } : {};
+  }
+
+  // XP por dia inclui os bônus do dia (primeira missão, dia completo).
+  return res.json({ from, to, events, xpByDay: xpIndex.byDay });
 });
 
 /**

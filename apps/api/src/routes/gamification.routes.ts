@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getPlayerProfile, getProjectsXp, getXpHistory, publicRules } from "../services/gamificationService.js";
+import { getLevelHistory, getPlayerProfile, getProjectsXp, getXpHistory, publicRules } from "../services/gamificationService.js";
 import {
   createReward,
   deleteReward,
@@ -29,6 +29,11 @@ gamificationRouter.get("/history", async (req, res) => {
   const parsed = historyQuerySchema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: "Período inválido." });
   return res.json({ days: await getXpHistory(getDb(), req.user!.id, parsed.data.days) });
+});
+
+/** GET /api/gamification/levels — datas reais de cada subida de nível (derivadas do ledger) */
+gamificationRouter.get("/levels", async (req, res) => {
+  return res.json({ levels: await getLevelHistory(getDb(), req.user!.id) });
 });
 
 /** GET /api/gamification/projects — XP conquistado/disponível por projeto */

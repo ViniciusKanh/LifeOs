@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { useWeeklyReview, mondayOf } from "@/hooks/useReviews";
 import { Button, Card, IconBadge } from "@/components/ui/primitives";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGBadge, RPGPageHeader, RPG_SECTION_TITLE } from "@/components/rpg";
+import { RpgCycleSeal } from "@/components/reviews/RpgReviewParts";
 
 const MAX_CHARS = 500;
 
@@ -70,12 +73,12 @@ function MetricTile({
   trend: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-paper-border dark:border-ink-border p-3.5">
+    <div className="rounded-xl border border-paper-border dark:border-ink-border p-3.5 rpg:rounded-[4px] rpg:border-rpg-border/80 rpg:bg-rpg-bg/50">
       <div className="flex items-center gap-2.5">
         <IconBadge icon={icon} tone={tone} size={32} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-base font-semibold leading-tight">{value}</p>
+            <p className="text-base font-semibold leading-tight rpg:font-pixel">{value}</p>
             {trend}
           </div>
           <p className="text-[11px] text-slate leading-tight mt-0.5 truncate">{label}</p>
@@ -121,7 +124,7 @@ function ReflectionField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={4}
-        className="w-full rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500 transition-colors resize-none placeholder:text-slate/70"
+        className="w-full rounded-xl px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-brand-500 transition-colors resize-none placeholder:text-slate/70 rpg:rounded-[3px] rpg:bg-rpg-bg-2 rpg:border-rpg-border rpg:focus:border-rpg-gold"
       />
       {suggestion && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[11px]">
@@ -154,7 +157,10 @@ function ReflectionView({ label, value }: { label: string; value: string }) {
 
 export function WeeklyReviewPage() {
   const [weekStartDate, setWeekStartDate] = useState(mondayOf());
-  const { saved, computed, history, save, generateDraft, isGeneratingDraft, draftError } = useWeeklyReview(weekStartDate);
+  const { saved, computed, history, save, generateDraft, isGeneratingDraft, draftError, reward } = useWeeklyReview(weekStartDate);
+  const { isRpg } = useTheme();
+  // Selo da semana: só quando ESTE salvamento fez o backend conceder o XP do fechamento.
+  const [sealPending, setSealPending] = useState(false);
   const currentMonday = mondayOf();
   const isCurrentWeek = weekStartDate === currentMonday;
 
@@ -207,12 +213,14 @@ export function WeeklyReviewPage() {
     d.setDate(d.getDate() + delta * 7);
     setWeekStartDate(d.toISOString().slice(0, 10));
     setSavedFeedback(false);
+    setSealPending(false);
     setPendingSuggestions({});
   };
 
   const goToWeek = (monday: string) => {
     setWeekStartDate(monday);
     setSavedFeedback(false);
+    setSealPending(false);
     setPendingSuggestions({});
   };
 
@@ -239,6 +247,7 @@ export function WeeklyReviewPage() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSealPending(!(reward?.awarded ?? false));
     try {
       await save({
         weekStartDate,
@@ -291,36 +300,51 @@ export function WeeklyReviewPage() {
   const strongest = dimensionSignals[0];
   const weakest = dimensionSignals[dimensionSignals.length - 1];
 
+  const weekNav = (
+    <div className="flex items-center gap-1 rounded-xl border border-paper-border dark:border-ink-border p-1 rpg:rounded-[4px] rpg:border-rpg-border">
+      <button
+        onClick={() => changeWeek(-1)}
+        className="p-1.5 rounded-lg text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors"
+        aria-label="Semana anterior"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <span className="text-sm font-semibold px-2 tabular-nums">{weekLabel(weekStartDate)}</span>
+      {isCurrentWeek && (
+        <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-100 bg-brand-50 dark:bg-brand-700/20 rounded-full px-2 py-0.5">
+          Semana atual
+        </span>
+      )}
+      <button
+        onClick={() => changeWeek(1)}
+        className="p-1.5 rounded-lg text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors"
+        aria-label="Próxima semana"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
+      {isRpg ? (
+        <RPGPageHeader
+          banner="revisoes"
+          size="md"
+          eyebrow="Relatório da jornada"
+          title="Revisão semanal"
+          subtitle="Pare, olhe para trás e planeje a próxima semana com clareza."
+          aside={<div className="m-1.5 bg-rpg-bg/85">{weekNav}</div>}
+        />
+      ) : (
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="font-display font-semibold text-2xl">Weekly Review</p>
           <p className="text-sm text-slate mt-1">Pare, olhe para trás e planeje a próxima semana com clareza.</p>
         </div>
-        <div className="flex items-center gap-1 rounded-xl border border-paper-border dark:border-ink-border p-1">
-          <button
-            onClick={() => changeWeek(-1)}
-            className="p-1.5 rounded-lg text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors"
-            aria-label="Semana anterior"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-sm font-semibold px-2 tabular-nums">{weekLabel(weekStartDate)}</span>
-          {isCurrentWeek && (
-            <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-100 bg-brand-50 dark:bg-brand-700/20 rounded-full px-2 py-0.5">
-              Semana atual
-            </span>
-          )}
-          <button
-            onClick={() => changeWeek(1)}
-            className="p-1.5 rounded-lg text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors"
-            aria-label="Próxima semana"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
+        {weekNav}
       </div>
+      )}
 
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         {recentWeeks.map((monday) => {
@@ -332,8 +356,8 @@ export function WeeklyReviewPage() {
               onClick={() => goToWeek(monday)}
               className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium border transition-colors ${
                 active
-                  ? "border-brand-500 bg-brand-50 dark:bg-brand-700/20 text-brand-700 dark:text-brand-100"
-                  : "border-paper-border dark:border-ink-border text-slate hover:border-brand-500/40"
+                  ? "border-brand-500 bg-brand-50 dark:bg-brand-700/20 text-brand-700 dark:text-brand-100 rpg:border-rpg-gold rpg:bg-rpg-gold/10 rpg:text-rpg-gold-light"
+                  : "border-paper-border dark:border-ink-border text-slate hover:border-brand-500/40 rpg:border-rpg-border"
               }`}
             >
               {has ? (
@@ -355,8 +379,8 @@ export function WeeklyReviewPage() {
       )}
 
       {score && <section className="grid gap-4 border-y border-paper-border py-5 dark:border-ink-border lg:grid-cols-2">
-        <div><p className="text-xs font-semibold text-brand-600">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold">{score.tasksCompleted} tarefas concluídas · {score.pagesRead} páginas lidas</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para comparar as dimensões."} {strongest && strongest.value > 0 && weakest && weakest.label !== strongest.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
-        <div className="space-y-2">{dimensionSignals.map((signal) => <div key={signal.label} className="grid grid-cols-[90px_1fr_34px] items-center gap-2 text-xs"><span className="text-slate">{signal.label}</span><div className="h-2 rounded-full bg-paper-border dark:bg-ink-border"><div className="h-full rounded-full bg-brand-500" style={{ width: `${signal.value}%` }} /></div><span className="text-right font-semibold">{signal.value}%</span></div>)}</div>
+        <div><p className="text-xs font-semibold text-brand-600 rpg:font-pixel rpg:uppercase rpg:text-rpg-gold-light">Leitura da semana</p><h2 className="mt-1 font-display text-lg font-bold rpg:font-rpg">{score.tasksCompleted} tarefas concluídas · {score.pagesRead} páginas lidas</h2><p className="mt-2 text-sm text-slate">{strongest && strongest.value > 0 ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).` : "Ainda faltam registros para comparar as dimensões."} {strongest && strongest.value > 0 && weakest && weakest.label !== strongest.label ? `${weakest.label} pede mais atenção (${weakest.value}%).` : ""}</p></div>
+        <div className="space-y-2">{dimensionSignals.map((signal) => <div key={signal.label} className="grid grid-cols-[90px_1fr_34px] items-center gap-2 text-xs"><span className="text-slate">{signal.label}</span><div className="h-2 rounded-full bg-paper-border dark:bg-ink-border"><div className="h-full rounded-full bg-brand-500 rpg:rounded-none rpg:bg-rpg-purple" style={{ width: `${signal.value}%` }} /></div><span className="text-right font-semibold">{signal.value}%</span></div>)}</div>
       </section>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -364,7 +388,7 @@ export function WeeklyReviewPage() {
           {score && (
             <Card className="p-4 sm:p-5 md:p-6">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-semibold">Resumo da semana</p>
+                <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Resumo da semana</p>
                 <span className="inline-flex items-center gap-1 text-[11px] text-slate rounded-full border border-paper-border dark:border-ink-border px-2.5 py-1">
                   Últimos 7 dias
                   <ChevronDown size={12} />
@@ -434,7 +458,12 @@ export function WeeklyReviewPage() {
           <Card className="p-4 sm:p-5 md:p-6 space-y-4">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <p className="text-sm font-semibold">Sua reflexão semanal</p>
+                <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Sua reflexão semanal</p>
+                {isRpg && reward && (reward.awarded || isCurrentWeek) && (
+                  <RPGBadge tone={reward.awarded ? "green" : "purple"} className="mt-1">
+                    {reward.awarded ? `Selo da semana · +${reward.xp} XP` : `+${reward.xp} XP ao fechar a semana`}
+                  </RPGBadge>
+                )}
                 <p className="text-xs text-slate mt-0.5">
                   {mode === "view" ? "O que você registrou para esta semana." : "Reserve um momento para revisar honestamente como foi a semana."}
                 </p>
@@ -534,6 +563,7 @@ export function WeeklyReviewPage() {
                 </div>
               </>
             )}
+            {isRpg && sealPending && reward?.awarded && <RpgCycleSeal label={`Semana ${weekLabel(weekStartDate)}`} xp={reward.xp} coins={reward.coins} />}
           </Card>
         </div>
 

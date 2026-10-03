@@ -9,6 +9,6 @@ export const analyticsService = {
   insights: (days = 90) => api.get<LifeInsights>(`/analytics/insights?days=${days}`),
   timeline: (params?: { from?: string; to?: string }) => {
     const qs = new URLSearchParams(params as Record<string, string>).toString();
-    return api.get<{ from: string; to: string; events: TimelineEvent[] }>(`/analytics/timeline${qs ? `?${qs}` : ""}`);
+    return api.get<{ from: string; to: string; events: TimelineEvent[]; xpByDay?: Record<string, number> }>(`/analytics/timeline${qs ? `?${qs}` : ""}`);
   },
 };

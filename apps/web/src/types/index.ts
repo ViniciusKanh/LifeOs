@@ -824,11 +824,16 @@ export interface JournalCollection {
 }
 
 export interface TimelineEvent {
-  type: "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal";
+  type:
+    | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
+    | "life_admin" | "review" | "focus" | "project" | "achievement" | "reward" | "level_up";
   icon: string;
   id: string;
   label: string;
   at: string;
+  /** XP/moedas realmente concedidos por este evento (ausente quando não rende XP). */
+  xp?: number;
+  coins?: number;
   [key: string]: unknown;
 }
 
@@ -2136,6 +2141,19 @@ export interface PeriodicReview {
   energyScore: number | null;
   savedAt: string | null;
   metrics: PeriodMetrics;
+  /** Retrato do período anterior (base real das variações). */
+  previousMetrics: PeriodMetrics | null;
+  /** Recompensa de fechamento de ciclo: regra do backend e se já foi concedida. */
+  reward: { xp: number; coins: number; awarded: boolean; awardedAt: string | null; eligible: boolean };
+}
+
+/** Resposta do Copilot da revisão (rotulada por proveniência na UI). */
+export interface PeriodicReviewAnalysis {
+  achievements: string[];
+  patterns: string[];
+  attention: string[];
+  suggestions: string[];
+  basedOn: { label: string; from: string; to: string };
 }
 
 /* -------------------------- Notas e conhecimento -------------------------- */

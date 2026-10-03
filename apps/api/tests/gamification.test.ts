@@ -201,3 +201,46 @@ describe("Isolamento multiusuário", () => {
     expect(Number(rows.rows[0].n)).toBe(0);
   });
 });
+
+describe("Revisões (fechamento de ciclo)", () => {
+  it("concede XP uma vez por período, só com reflexão e só no período atual/anterior", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const month = today().slice(0, 7);
+    // Salvar sem reflexão não fecha o ciclo.
+    await agent.put(`/api/direction/reviews/monthly/${month}`).send({ wins: "", energyScore: 6 });
+    expect((await profile(agent)).totalXp).toBe(0);
+
+    const first = await agent.put(`/api/direction/reviews/monthly/${month}`).send({ wins: "Mantive os treinos." });
+    expect(first.status).toBe(200);
+    expect(first.body.reward.awarded).toBe(true);
+    await agent.put(`/api/direction/reviews/monthly/${month}`).send({ wins: "Mantive os treinos (editado)." });
+    expect((await profile(agent)).totalXp).toBe(R.review.monthly.xp);
+    expect((await profile(agent)).coins).toBe(R.review.monthly.coins);
+
+    // Período antigo: salva normalmente, mas não rende XP.
+    const old = await agent.put("/api/direction/reviews/monthly/2020-01").send({ wins: "Antigo" });
+    expect(old.status).toBe(200);
+    expect(old.body.reward.eligible).toBe(false);
+    expect((await profile(agent)).totalXp).toBe(R.review.monthly.xp);
+    expect(old.body.previousMetrics).toBeTruthy();
+  });
+});
+
+describe("Timeline e histórico de nível", () => {
+  it("anexa o XP real do evento e registra a subida de nível", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    for (let i = 0; i < 3; i++) {
+      const t = await agent.post("/api/tasks").send({ title: `Alta ${i}`, priority: "Alta" });
+      await agent.patch(`/api/tasks/${t.body.id}`).send({ status: "Concluído" });
+    }
+    const d = today();
+    const tl = await agent.get(`/api/analytics/timeline?from=${daysAgo(1)}&to=${d}`);
+    const tasks = tl.body.events.filter((e: { type: string }) => e.type === "task");
+    expect(tasks.length).toBe(3);
+    expect(tasks.every((e: { xp?: number }) => e.xp === R.task.xpByPriority.Alta)).toBe(true);
+    const levels = await agent.get("/api/gamification/levels");
+    // 3 × 35 + 5 = 110 XP ≥ 100 → nível 2.
+    expect(levels.body.levels.map((l: { level: number }) => l.level)).toEqual([2]);
+    expect(tl.body.events.some((e: { type: string }) => e.type === "level_up")).toBe(true);
+  });
+});

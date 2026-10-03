@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lifeAdminService, type LifeAdminInput } from "@/services/lifeAdminService";
 import { directionService } from "@/services/directionService";
+import { notifyGamification } from "@/services/gamificationService";
 import { notesService, type NoteInput } from "@/services/notesService";
 import type { NoteKind, NoteLinkType, PeriodicKind } from "@/types";
 
@@ -81,9 +82,23 @@ export function usePeriodicReview(kind: PeriodicKind, key: string) {
       qc.setQueryData([...DIRECTION_KEY, "review", kind, key], data);
       qc.invalidateQueries({ queryKey: [...DIRECTION_KEY, "reviews"] });
       qc.invalidateQueries({ queryKey: ["analytics", "timeline"] });
+      // Fechar o ciclo pode render XP (uma vez por período, decidido no backend).
+      notifyGamification();
     },
   });
-  return { review: q.data ?? null, isLoading: q.isLoading, history: history.data ?? [], save: save.mutateAsync, isSaving: save.isPending };
+  const analyze = useMutation({ mutationFn: () => directionService.analyzeReview(kind, key) });
+  return {
+    review: q.data ?? null,
+    isLoading: q.isLoading,
+    history: history.data ?? [],
+    save: save.mutateAsync,
+    isSaving: save.isPending,
+    analyze: analyze.mutateAsync,
+    analysis: analyze.data ?? null,
+    isAnalyzing: analyze.isPending,
+    analyzeError: analyze.error as Error | null,
+    resetAnalysis: analyze.reset,
+  };
 }
 
 const NOTES_KEY = ["notes"];

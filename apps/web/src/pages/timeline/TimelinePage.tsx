@@ -25,24 +25,19 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTimeline } from "@/hooks/useAnalytics";
 import { Card, EmptyState, IconBadge } from "@/components/ui/primitives";
+import { useTheme } from "@/hooks/useTheme";
+import { TIMELINE_META } from "@/components/timeline/timelineMeta";
+import { RpgTimelineView } from "@/components/timeline/RpgTimelineView";
+import { DAYS_PAGE, OPTIONAL_TABS, RANGE_OPTIONS, TABS, dayHeaderLabel, eventContent, formatTime, relativeDayLabel, todayIso, type EventType } from "@/components/timeline/timelineFormat";
+import { categoryCounts, groupByDay, timelineHighlights } from "@/utils/timelineMetrics";
 import type { TimelineEvent } from "@/types";
 
-type EventType = TimelineEvent["type"] | "mood" | "water";
 type Tone = "blue" | "purple" | "green" | "pink" | "teal" | "amber";
 
-const TYPE_CONFIG: Record<EventType, { tab: string; tag: string; tone: Tone; icon: typeof CheckCircle2 }> = {
-  task: { tab: "Tarefas", tag: "Tarefas", tone: "blue", icon: CheckCircle2 },
-  habit: { tab: "Hábitos", tag: "Hábitos", tone: "pink", icon: Repeat },
-  workout: { tab: "Saúde", tag: "Saúde", tone: "green", icon: Dumbbell },
-  reading: { tab: "Leitura", tag: "Leitura", tone: "teal", icon: BookOpen },
-  education: { tab: "Estudo", tag: "Estudo", tone: "amber", icon: GraduationCap },
-  sleep: { tab: "Sono", tag: "Sono", tone: "purple", icon: Moon },
-  mood: { tab: "Humor", tag: "Humor", tone: "amber", icon: Smile },
-  water: { tab: "Água", tag: "Água", tone: "blue", icon: Droplets },
-  work_note: { tab: "Profissional", tag: "Profissional", tone: "purple", icon: Briefcase },
-  experiment: { tab: "Experimentos", tag: "Experimentos", tone: "purple", icon: FlaskConical },
-  journal: { tab: "Diário", tag: "Diário", tone: "pink", icon: NotebookPen },
-};
+// Rótulos/ícones/cores vêm da fonte única (cobre todos os tipos do backend).
+const TYPE_CONFIG = Object.fromEntries(
+  Object.entries(TIMELINE_META).map(([k, v]) => [k, { tab: v.tag, tag: v.tag, tone: v.tone, icon: v.icon }])
+) as Record<EventType, { tab: string; tag: string; tone: Tone; icon: typeof CheckCircle2 }>;
 
 const TAG_PILL: Record<Tone, string> = {
   blue: "bg-cat-blue/10 text-cat-blue dark:bg-cat-blue/15 dark:text-cat-blue-dark",
@@ -62,101 +57,6 @@ const TONE_HEX: Record<Tone, string> = {
   amber: "#D9860F",
 };
 
-const TABS: Array<{ value: EventType | "todos"; label: string }> = [
-  { value: "todos", label: "Todos" },
-  { value: "task", label: "Tarefas" },
-  { value: "habit", label: "Hábitos" },
-  { value: "education", label: "Estudo" },
-  { value: "work_note", label: "Profissional" },
-  { value: "workout", label: "Saúde" },
-  { value: "reading", label: "Leitura" },
-  { value: "sleep", label: "Sono" },
-  { value: "mood", label: "Humor" },
-  { value: "water", label: "Água" },
-  { value: "experiment", label: "Experimentos" },
-  { value: "journal", label: "Diário" },
-];
-
-const RANGE_OPTIONS = [
-  { days: 7, label: "Últimos 7 dias" },
-  { days: 14, label: "Últimos 14 dias" },
-  { days: 30, label: "Últimos 30 dias" },
-  { days: 90, label: "Últimos 90 dias" },
-];
-
-function formatMinutes(min: number) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (h <= 0) return `${m}min`;
-  return m > 0 ? `${h}h${m}min` : `${h}h`;
-}
-
-/** Título de ação + detalhe real do evento — nunca um texto genérico sem dado por trás. */
-function eventContent(e: TimelineEvent): { title: string; detail: string | null } {
-  switch (e.type) {
-    case "task":
-      return { title: "Tarefa concluída", detail: e.project_name ? `${e.label} · ${e.project_name}` : (e.label as string) };
-    case "mood":
-      return {
-        title: "Humor e energia",
-        detail: `humor ${e.mood}/5 · energia ${e.energy}/5${e.stress ? ` · estresse ${e.stress}/5` : ""}`,
-      };
-    case "water":
-      return { title: "Água", detail: `${e.amount_ml}ml` };
-    case "habit":
-      return { title: e.label, detail: Number(e.count ?? 1) > 1 ? `${e.count}x hoje` : "Hábito concluído" };
-    case "workout": {
-      const parts: string[] = [];
-      if (e.duration_minutes) parts.push(formatMinutes(Number(e.duration_minutes)));
-      if (e.distance_km) parts.push(`${e.distance_km} km`);
-      return { title: e.label, detail: parts.length > 0 ? parts.join(" · ") : null };
-    }
-    case "reading":
-      return { title: "Leitura", detail: `${e.pages_read ?? 0} páginas · ${e.label}` };
-    case "education":
-      return { title: "Disciplina concluída", detail: e.label };
-    case "work_note":
-      return { title: "Reunião/anotação profissional", detail: e.label };
-    case "sleep":
-      return { title: "Dormir", detail: e.duration_minutes ? `${formatMinutes(Number(e.duration_minutes))} de sono` : "Boa noite!" };
-    case "experiment":
-      return { title: "Experimento pessoal", detail: e.label as string };
-    case "journal":
-      return { title: "Entrada do diário", detail: "Registrado no Diário do dia" };
-    default:
-      return { title: e.label, detail: null };
-  }
-}
-
-function formatTime(at: string) {
-  const iso = at.includes("T") ? at : at.replace(" ", "T");
-  const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : `${iso}Z`);
-  if (Number.isNaN(d.getTime())) return "--:--";
-  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-function yesterdayIso() {
-  return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-}
-
-function dayHeaderLabel(day: string) {
-  const formatted = new Date(`${day}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-  if (day === todayIso()) return `Hoje · ${formatted}`;
-  if (day === yesterdayIso()) return `Ontem · ${formatted}`;
-  return formatted;
-}
-
-/** Rótulo curto usado nos "Destaques" (sem a data completa) — "hoje", "ontem" ou "há N dias". */
-function relativeDayLabel(day: string) {
-  if (day === todayIso()) return "hoje";
-  if (day === yesterdayIso()) return "ontem";
-  const diffDays = Math.round((Date.parse(todayIso()) - Date.parse(day)) / 86_400_000);
-  return `há ${diffDays} dias`;
-}
-
 export function TimelinePage() {
   const [filter, setFilter] = useState<EventType | "todos">("todos");
   const [rangeDays, setRangeDays] = useState(7);
@@ -167,82 +67,55 @@ export function TimelinePage() {
 
   const to = useMemo(() => todayIso(), []);
   const from = useMemo(() => new Date(Date.now() - (rangeDays - 1) * 86_400_000).toISOString().slice(0, 10), [rangeDays]);
-  const { events, isLoading } = useTimeline({ from, to });
+  const { events, xpByDay, isLoading } = useTimeline({ from, to });
+
+  const { isRpg } = useTheme();
+  const [visibleDays, setVisibleDays] = useState(DAYS_PAGE);
 
   const filtered = filter === "todos" ? events : events.filter((e) => e.type === filter);
-
-  const byDay = new Map<string, TimelineEvent[]>();
-  for (const e of filtered) {
-    const day = String(e.at).slice(0, 10);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day)!.push(e);
-  }
-  const days = [...byDay.keys()].sort((a, b) => (sortAsc ? a.localeCompare(b) : b.localeCompare(a)));
+  const { byDay, days: allDays } = groupByDay(filtered, sortAsc);
+  // Paginação por dias: períodos longos não renderizam centenas de itens de uma vez.
+  const days = allDays.slice(0, visibleDays);
 
   // Cartões de resumo do topo — sempre a partir dos eventos já carregados.
   const categoriesPresent = new Set(events.map((e) => e.type)).size;
   const daysWithRecords = new Set(events.map((e) => String(e.at).slice(0, 10))).size;
 
   // "Resumo da atividade" — contagem real por categoria, no período selecionado.
-  const categoryBreakdown = useMemo(() => {
-    const counts = new Map<EventType, number>();
-    for (const e of events) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
-    return [...counts.entries()]
-      .map(([type, count]) => ({ type, count, tag: TYPE_CONFIG[type].tag, tone: TYPE_CONFIG[type].tone }))
-      .sort((a, b) => b.count - a.count);
-  }, [events]);
+  const categoryBreakdown = useMemo(
+    () => categoryCounts(events).map((c) => ({ ...c, tag: TYPE_CONFIG[c.type].tag, tone: TYPE_CONFIG[c.type].tone })),
+    [events]
+  );
+  const highlights = useMemo(() => timelineHighlights(events), [events]);
 
-  // "Destaques" — dia mais ativo, horário mais frequente, maior sequência de
-  // hábito e último registro de estudo, tudo derivado dos eventos reais do
-  // período; nunca um valor fixo quando não há dado por trás.
-  const highlights = useMemo(() => {
-    if (events.length === 0) return null;
-
-    const perDay = new Map<string, number>();
-    const perHour = new Map<number, number>();
-    for (const e of events) {
-      const day = String(e.at).slice(0, 10);
-      perDay.set(day, (perDay.get(day) ?? 0) + 1);
-      const iso = String(e.at).includes("T") ? String(e.at) : String(e.at).replace(" ", "T");
-      const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : `${iso}Z`);
-      if (!Number.isNaN(d.getTime())) perHour.set(d.getUTCHours(), (perHour.get(d.getUTCHours()) ?? 0) + 1);
-    }
-    let mostActiveDay: string | null = null;
-    for (const [day, count] of perDay.entries()) {
-      if (!mostActiveDay || count > perDay.get(mostActiveDay)!) mostActiveDay = day;
-    }
-    let bestHour: number | null = null;
-    for (const [hour, count] of perHour.entries()) {
-      if (bestHour === null || count > perHour.get(bestHour)!) bestHour = hour;
-    }
-
-    // Maior sequência: entre os hábitos com check-in no período, a maior
-    // sequência de dias consecutivos registrados na própria timeline.
-    const habitDates = new Map<string, Set<string>>();
-    for (const e of events) {
-      if (e.type !== "habit") continue;
-      const set = habitDates.get(e.label) ?? new Set<string>();
-      set.add(String(e.at).slice(0, 10));
-      habitDates.set(e.label, set);
-    }
-    let bestStreakHabit: { name: string; streak: number } | null = null;
-    for (const [name, dateSet] of habitDates.entries()) {
-      const sorted = [...dateSet].sort();
-      let running = 1;
-      let best = 1;
-      for (let i = 1; i < sorted.length; i++) {
-        const gap = Math.round((Date.parse(sorted[i]) - Date.parse(sorted[i - 1])) / 86_400_000);
-        running = gap === 1 ? running + 1 : 1;
-        best = Math.max(best, running);
-      }
-      if (!bestStreakHabit || best > bestStreakHabit.streak) bestStreakHabit = { name, streak: best };
-    }
-
-    const studyEvents = events.filter((e) => e.type === "education").sort((a, b) => String(b.at).localeCompare(String(a.at)));
-    const lastStudyDay = studyEvents[0] ? String(studyEvents[0].at).slice(0, 10) : null;
-
-    return { mostActiveDay, bestHour, bestStreakHabit, lastStudyDay };
-  }, [events]);
+  if (isRpg) {
+    return (
+      <RpgTimelineView
+        events={events}
+        isLoading={isLoading}
+        xpByDay={xpByDay}
+        filter={filter}
+        onFilter={(f) => {
+          setFilter(f);
+          setVisibleDays(DAYS_PAGE);
+        }}
+        rangeDays={rangeDays}
+        onRange={(d) => {
+          setRangeDays(d);
+          setVisibleDays(DAYS_PAGE);
+        }}
+        sortAsc={sortAsc}
+        onSort={setSortAsc}
+        days={days}
+        byDay={byDay}
+        hasMoreDays={allDays.length > days.length}
+        onMoreDays={() => setVisibleDays((v) => v + DAYS_PAGE)}
+        highlights={highlights}
+        categoriesPresent={categoriesPresent}
+        daysWithRecords={daysWithRecords}
+      />
+    );
+  }
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
@@ -282,6 +155,7 @@ export function TimelinePage() {
           {TABS.map((t) => {
             const count = t.value === "todos" ? events.length : events.filter((e) => e.type === t.value).length;
             const active = filter === t.value;
+            if (OPTIONAL_TABS.has(t.value) && count === 0 && !active) return null;
             return (
               <button
                 key={t.value}
@@ -421,6 +295,11 @@ export function TimelinePage() {
               </Card>
             );
           })}
+          {allDays.length > days.length && (
+            <button onClick={() => setVisibleDays((v) => v + DAYS_PAGE)} className="w-full rounded-xl border border-paper-border dark:border-ink-border py-2 text-xs font-medium text-slate">
+              Carregar mais dias ({allDays.length - days.length})
+            </button>
+          )}
         </div>
 
         <div className="space-y-4">

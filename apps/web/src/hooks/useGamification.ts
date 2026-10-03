@@ -36,6 +36,11 @@ export function useRewards(includeInactive = false) {
   return { ...query, rewards: query.data ?? [], create, update, remove, redeem };
 }
 
+/** Datas reais de cada subida de nível (derivadas do ledger no backend). */
+export function useLevelHistory(enabled = true) {
+  return useQuery({ queryKey: [...KEY, "levels"], queryFn: gamificationService.levels, enabled, staleTime: 60_000 });
+}
+
 export function useRedemptions() {
   return useQuery({ queryKey: [...KEY, "redemptions"], queryFn: gamificationService.redemptions });
 }

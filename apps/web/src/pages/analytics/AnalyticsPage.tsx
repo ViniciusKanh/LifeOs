@@ -45,6 +45,21 @@ import { useAnalyticsOverview, useInsights, useLifeScore } from "@/hooks/useAnal
 import { useAnalyticsInsight } from "@/hooks/useCopilot";
 import { Card, IconBadge } from "@/components/ui/primitives";
 import type { DailySeriesPoint } from "@/types";
+import { useTheme } from "@/hooks/useTheme";
+import { RPGPageHeader, RPGTabs } from "@/components/rpg";
+import { RpgAnalyticsSidebar, RpgProgressionPanels } from "@/components/analytics/RpgAnalyticsPanels";
+
+// Paletas dos gráficos: clássica (marca) e RPG (tokens CSS — sem hex solto no tema RPG).
+const CLASSIC_PAL = { primary: "#5B6EF5", pink: "#D6488F", amber: "#C9821E", purple: "#8B5CF6", teal: "#2FB6C4" };
+const RPG_PAL = {
+  primary: "rgb(var(--rpg-purple))",
+  pink: "rgb(var(--rpg-pink))",
+  amber: "rgb(var(--rpg-orange))",
+  purple: "rgb(var(--rpg-purple))",
+  teal: "rgb(var(--rpg-cyan))",
+};
+// Títulos de seção no RPG (pixel dourado), somados ao estilo clássico.
+const SECTION = "rpg:font-pixel rpg:uppercase rpg:tracking-[0.06em] rpg:text-[13px] rpg:text-rpg-gold-light";
 
 // Metas de referência fixas (documentadas), usadas só como denominador de
 // exibição — nunca como um número inventado no lugar de um dado real.
@@ -124,7 +139,7 @@ function MetricCard({
           <IconBadge icon={icon} tone={tone} size={36} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-lg font-semibold leading-tight">{value}</p>
+              <p className="text-lg font-semibold leading-tight rpg:font-pixel">{value}</p>
               <Trend pct={changePct} />
             </div>
             <p className="text-xs text-slate leading-tight mt-0.5">{label}</p>
@@ -148,6 +163,8 @@ export function AnalyticsPage() {
   const { insights } = useInsights(Math.max(days, 30));
   const { lifeScore } = useLifeScore();
   const analyticsInsight = useAnalyticsInsight();
+  const { isRpg } = useTheme();
+  const PAL = isRpg ? RPG_PAL : CLASSIC_PAL;
 
   const chartData = (overview?.tasksCompletedByDay ?? []).map((d) => ({
     day: d.day.slice(5),
@@ -167,10 +184,10 @@ export function AnalyticsPage() {
     if (!overview) return [];
     const t = overview.timeDistribution;
     return [
-      { name: "Leitura", value: t.leitura, color: "#D6488F" },
-      { name: "Exercício", value: t.exercicio, color: "#C9821E" },
+      { name: "Leitura", value: t.leitura, color: PAL.pink },
+      { name: "Exercício", value: t.exercicio, color: PAL.amber },
     ].filter((d) => d.value > 0);
-  }, [overview]);
+  }, [overview, PAL]);
   const timeDistributionTotal = timeDistributionData.reduce((s, d) => s + d.value, 0);
 
   const weekdayChartData = useMemo(
@@ -223,6 +240,15 @@ export function AnalyticsPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
+      {isRpg ? (
+        <RPGPageHeader
+          banner="analytics"
+          eyebrow="Status da jornada"
+          title="Analytics"
+          subtitle="Acompanhe seu progresso e veja como pequenas ações geram grandes resultados na sua jornada."
+          actions={<RPGTabs label="Período" tabs={RANGES.map((r) => ({ value: String(r.days), label: r.label }))} value={String(days)} onChange={(v) => setDays(Number(v))} />}
+        />
+      ) : (
       <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
         <div>
           <p className="font-display font-semibold text-2xl">Analytics</p>
@@ -242,7 +268,15 @@ export function AnalyticsPage() {
           ))}
         </div>
       </div>
+      )}
 
+      <div className={isRpg ? "grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] items-start" : "contents"}>
+      {isRpg && (
+        <div className="xl:order-2 min-w-0">
+          <RpgAnalyticsSidebar />
+        </div>
+      )}
+      <div className="min-w-0 space-y-5 xl:order-1">
       {isLoading || !overview ? (
         <p className="text-sm text-slate">Carregando métricas...</p>
       ) : (
@@ -259,7 +293,7 @@ export function AnalyticsPage() {
               progressPct={overview.tasksPlanned > 0 ? (overview.tasksCompleted / overview.tasksPlanned) * 100 : null}
               barTone="bg-cat-blue"
               sparkData={overview.dailySeries.tasks}
-              sparkColor="#5B6EF5"
+              sparkColor={PAL.primary}
             />
             <MetricCard
               icon={<BookOpen size={18} />}
@@ -271,7 +305,7 @@ export function AnalyticsPage() {
               progressPct={null}
               barTone="bg-cat-pink"
               sparkData={overview.dailySeries.pages}
-              sparkColor="#D6488F"
+              sparkColor={PAL.pink}
             />
             <MetricCard
               icon={<Dumbbell size={18} />}
@@ -283,7 +317,7 @@ export function AnalyticsPage() {
               progressPct={null}
               barTone="bg-signal"
               sparkData={overview.dailySeries.workouts}
-              sparkColor="#C9821E"
+              sparkColor={PAL.amber}
             />
             <MetricCard
               icon={<Heart size={18} />}
@@ -295,7 +329,7 @@ export function AnalyticsPage() {
               progressPct={overview.habitsCompletionPct}
               barTone="bg-cat-pink"
               sparkData={overview.dailySeries.habits}
-              sparkColor="#D6488F"
+              sparkColor={PAL.pink}
             />
             <MetricCard
               icon={<Moon size={18} />}
@@ -307,7 +341,7 @@ export function AnalyticsPage() {
               progressPct={overview.avgSleepMinutes > 0 ? (overview.avgSleepMinutes / SLEEP_GOAL_MINUTES) * 100 : null}
               barTone="bg-cat-purple"
               sparkData={overview.dailySeries.sleep}
-              sparkColor="#8B5CF6"
+              sparkColor={PAL.purple}
             />
             <MetricCard
               icon={<Droplet size={18} />}
@@ -319,13 +353,13 @@ export function AnalyticsPage() {
               progressPct={overview.avgWaterMl > 0 ? (overview.avgWaterMl / WATER_GOAL_ML) * 100 : null}
               barTone="bg-cat-teal"
               sparkData={overview.dailySeries.water}
-              sparkColor="#2FB6C4"
+              sparkColor={PAL.teal}
             />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
             <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
-              <p className="text-sm font-semibold mb-1">Evolução da produtividade</p>
+              <p className={`text-sm font-semibold mb-1 ${SECTION}`}>Evolução da produtividade</p>
               <p className="text-xs text-slate mb-3">Tarefas concluídas ao longo dos últimos {days} dias.</p>
               {productivityEvolution.every((d) => d["Tarefas concluídas"] === 0) ? (
                 <p className="text-xs text-slate py-10 text-center">Sem atividade registrada nesse período ainda.</p>
@@ -336,7 +370,7 @@ export function AnalyticsPage() {
                       <XAxis dataKey="day" tick={{ fontSize: 9 }} stroke="currentColor" className="text-slate" />
                       <YAxis tick={{ fontSize: 9 }} stroke="currentColor" className="text-slate" allowDecimals={false} />
                       <Tooltip contentStyle={{ fontSize: 11 }} />
-                      <Area type="monotone" dataKey="Tarefas concluídas" stroke="#5B6EF5" fill="#5B6EF5" fillOpacity={0.18} strokeWidth={2} />
+                      <Area type="monotone" dataKey="Tarefas concluídas" stroke={PAL.primary} fill={PAL.primary} fillOpacity={0.18} strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -344,7 +378,7 @@ export function AnalyticsPage() {
             </Card>
 
             <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
-              <p className="text-sm font-semibold mb-1">Distribuição do tempo</p>
+              <p className={`text-sm font-semibold mb-1 ${SECTION}`}>Distribuição do tempo</p>
               <p className="text-xs text-slate mb-3">Tempo ativo (média/dia) entre leitura e exercício.</p>
               {timeDistributionData.length === 0 ? (
                 <p className="text-xs text-slate py-10 text-center">Registre atividades para ver a distribuição aqui.</p>
@@ -380,7 +414,7 @@ export function AnalyticsPage() {
             </Card>
 
             <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
-              <p className="text-sm font-semibold mb-3">Equilíbrio da rotina (Life Score)</p>
+              <p className={`text-sm font-semibold mb-3 ${SECTION}`}>Equilíbrio da rotina (Life Score)</p>
               {!lifeScore || radarData.every((d) => d.value === 0) ? (
                 <p className="text-xs text-slate py-10 text-center">Registre atividades nos módulos para ver seu equilíbrio aqui.</p>
               ) : (
@@ -390,7 +424,7 @@ export function AnalyticsPage() {
                       <PolarGrid stroke="currentColor" className="text-paper-border dark:text-ink-border" />
                       <PolarAngleAxis dataKey="dim" tick={{ fontSize: 9 }} stroke="currentColor" className="text-slate" />
                       <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                      <Radar dataKey="value" stroke="#5B6EF5" fill="#5B6EF5" fillOpacity={0.35} />
+                      <Radar dataKey="value" stroke={PAL.primary} fill={PAL.primary} fillOpacity={0.35} />
                       <Tooltip contentStyle={{ fontSize: 11 }} />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -399,7 +433,7 @@ export function AnalyticsPage() {
             </Card>
 
             <Card className="p-3 sm:p-4 md:p-5 xl:col-span-1">
-              <p className="text-sm font-semibold mb-1">Conclusões por dia da semana</p>
+              <p className={`text-sm font-semibold mb-1 ${SECTION}`}>Conclusões por dia da semana</p>
               <p className="text-xs text-slate mb-3">Média de tarefas concluídas por dia.</p>
               {weekdayChartData.length === 0 ? (
                 <p className="text-xs text-slate py-10 text-center">Conclua tarefas em mais dias para ver este padrão.</p>
@@ -410,7 +444,7 @@ export function AnalyticsPage() {
                       <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="currentColor" className="text-slate" />
                       <YAxis allowDecimals={false} tick={{ fontSize: 9 }} stroke="currentColor" className="text-slate" />
                       <Tooltip contentStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="avg" fill="#5B6EF5" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="avg" fill={PAL.primary} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -421,7 +455,7 @@ export function AnalyticsPage() {
           <Card className="p-4 sm:p-5 md:p-6">
             <div className="flex items-center gap-2 mb-1">
               <Trophy size={15} className="text-signal-deep" />
-              <p className="text-sm font-semibold">Insights do período</p>
+              <p className={`text-sm font-semibold ${SECTION}`}>Insights do período</p>
             </div>
             <p className="text-xs text-slate mb-4">Baseado nos seus dados dos últimos {days} dias.</p>
             {periodInsights.length === 0 ? (
@@ -440,7 +474,7 @@ export function AnalyticsPage() {
 
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
             <Card className="p-4 sm:p-5 md:p-6 xl:col-span-2">
-              <p className="text-sm font-semibold mb-1">Correlações</p>
+              <p className={`text-sm font-semibold mb-1 ${SECTION}`}>Correlações</p>
               <p className="text-xs text-slate mb-4">
                 Calculadas a partir dos seus próprios registros — nunca um diagnóstico, apenas um padrão pessoal.
               </p>
@@ -527,6 +561,9 @@ export function AnalyticsPage() {
           </div>
         </>
       )}
+      {isRpg && <RpgProgressionPanels days={days} />}
+      </div>
+      </div>
     </div>
   );
 }

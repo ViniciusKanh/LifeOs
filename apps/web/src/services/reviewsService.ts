@@ -9,6 +9,9 @@ export const reviewsService = {
   getWeekly: (weekStartDate: string) => api.get<WeeklyReview | null>(`/reviews/weekly?weekStartDate=${weekStartDate}`),
   computeWeekly: (weekStartDate: string) =>
     api.get<WeeklyComputedMetrics>(`/reviews/weekly/compute?weekStartDate=${weekStartDate}`),
+  /** Regra de XP do fechamento semanal e se já foi concedido (backend). */
+  weeklyReward: (weekStartDate: string) =>
+    api.get<{ xp: number; coins: number; awarded: boolean; awardedAt: string | null }>(`/reviews/weekly/reward?weekStartDate=${weekStartDate}`),
   historyWeekly: (limit = 12) => api.get<WeeklyReview[]>(`/reviews/weekly/history?limit=${limit}`),
   saveWeekly: (input: {
     weekStartDate: string;

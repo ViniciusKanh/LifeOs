@@ -16,3 +16,4 @@ export { RPGWallet } from "./RPGWallet";
 export { RPGPlayerHUD } from "./RPGPlayerHUD";
 export { RPGRewardCard } from "./RPGRewardCard";
 export { RewardRedeemModal } from "./RewardRedeemModal";
+export { RPGTabs } from "./RPGTabs";

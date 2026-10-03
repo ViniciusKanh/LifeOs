@@ -3,7 +3,10 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { PERIODIC_KINDS, PERIOD_KEY_REGEX, periodicReviewSchema, visionSchema, wheelSchema } from "../validators/direction.schema.js";
 import { getDirectionOverview, getVision, getWheel, getWhyChain, saveVision, saveWheel } from "../services/directionService.js";
-import { getPeriodicReview, listPeriodicReviews, savePeriodicReview, type PeriodicKind } from "../services/periodicReviewService.js";
+import { getPeriodicReview, isReviewRewardEligible, listPeriodicReviews, savePeriodicReview, type PeriodicKind } from "../services/periodicReviewService.js";
+import { awardReviewClosed } from "../services/gamificationService.js";
+import { analyzePeriodicReview } from "../services/periodicReviewAIService.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 
 /** Direção: visão, valores, roda da vida, metas por ciclo, "por quê" e revisões periódicas. */
 export const directionRouter = Router();
@@ -61,5 +64,20 @@ directionRouter.put("/reviews/:kind/:key", async (req, res) => {
   if (!p) return res.status(400).json({ error: "Período inválido." });
   const parsed = periodicReviewSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json(bad(parsed.error.issues));
-  return res.json(await savePeriodicReview(getDb(), req.user!.id, p.kind, p.key, parsed.data));
+  const db = getDb();
+  await savePeriodicReview(db, req.user!.id, p.kind, p.key, parsed.data);
+  // Fechamento de ciclo: XP uma única vez por período (editar depois não paga de novo).
+  const d = parsed.data;
+  const hasReflection = [d.wins, d.lessons, d.focusNext].some((v) => typeof v === "string" && v.trim().length > 0);
+  await awardReviewClosed(db, req.user!.id, p.kind, p.key, { eligible: await isReviewRewardEligible(db, req.user!.id, p.kind, p.key), hasReflection });
+  return res.json(await getPeriodicReview(db, req.user!.id, p.kind, p.key));
+});
+
+/** POST /api/direction/reviews/:kind/:key/analyze — Copilot da revisão (só sobre o retrato real do período). */
+directionRouter.post("/reviews/:kind/:key/analyze", rateLimit({ windowMs: 10 * 60 * 1000, max: 8 }), async (req, res) => {
+  const p = parsePeriod(req.params.kind, req.params.key);
+  if (!p) return res.status(400).json({ error: "Período inválido." });
+  const result = await analyzePeriodicReview(getDb(), req.user!.id, p.kind, p.key);
+  if (!result.ok) return res.status(400).json({ error: result.message });
+  return res.json(result.analysis);
 });

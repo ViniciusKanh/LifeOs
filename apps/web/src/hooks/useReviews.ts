@@ -54,12 +54,14 @@ export function useWeeklyReview(weekStartDate: string) {
     queryFn: () => reviewsService.computeWeekly(weekStartDate),
   });
   const historyQuery = useQuery({ queryKey: ["reviews", "weekly-history"], queryFn: () => reviewsService.historyWeekly() });
+  const rewardQuery = useQuery({ queryKey: ["reviews", "weekly-reward", weekStartDate], queryFn: () => reviewsService.weeklyReward(weekStartDate) });
 
   const save = useMutation({
     mutationFn: reviewsService.saveWeekly,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reviews", "weekly", weekStartDate] });
       queryClient.invalidateQueries({ queryKey: ["reviews", "weekly-history"] });
+      queryClient.invalidateQueries({ queryKey: ["reviews", "weekly-reward", weekStartDate] });
       // Fechar a Weekly Review é gatilho de conquista (ex.: "Revisor consistente") — antes nunca era checado.
       triggerAchievementsCheck();
     },
@@ -72,6 +74,7 @@ export function useWeeklyReview(weekStartDate: string) {
   });
 
   return {
+    reward: rewardQuery.data ?? null,
     saved: savedQuery.data ?? null,
     computed: computedQuery.data ?? null,
     history: historyQuery.data ?? [],

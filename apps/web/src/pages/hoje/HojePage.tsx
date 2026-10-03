@@ -43,6 +43,7 @@ import { RpgCopilotPanel } from "@/components/dashboard/RpgDashboardSections";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useTheme } from "@/hooks/useTheme";
 import type { Task, TimelineEvent } from "@/types";
+import { TIMELINE_META } from "@/components/timeline/timelineMeta";
 
 // Metas de referência usadas só para calcular "% da meta" nos
 // indicadores — ainda não são configuráveis por usuário no backend
@@ -63,19 +64,8 @@ function formatHM(totalMinutes: number) {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
-const TIMELINE_ICON: Record<TimelineEvent["type"], typeof CheckSquare> = {
-  task: CheckSquare,
-  habit: Repeat,
-  workout: Dumbbell,
-  reading: BookOpen,
-  education: GraduationCap,
-  sleep: Moon,
-  mood: Smile,
-  water: Droplets,
-  work_note: Briefcase,
-  experiment: FlaskConical,
-  journal: NotebookPen,
-};
+// Ícones vêm da fonte única da Timeline (cobre todos os tipos do backend).
+const TIMELINE_ICON = Object.fromEntries(Object.entries(TIMELINE_META).map(([k, v]) => [k, v.icon])) as Record<TimelineEvent["type"], typeof CheckSquare>;
 
 function timelineLabel(e: TimelineEvent): string {
   switch (e.type) {

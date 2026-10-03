@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
 import { DONE_STATUS } from "./workloadService.js";
 import { loadDirectionGoals, type DirectionGoal } from "./directionService.js";
+import { reviewRewardStatus, todayKeyFor } from "./gamificationService.js";
 
 /**
  * Revisões mensal, trimestral e anual (a semanal continua em weekly_reviews).
@@ -24,6 +25,31 @@ export function periodRange(kind: PeriodicKind, key: string): { from: string; to
   const month = Number(key.slice(5, 7));
   const label = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
   return { from: iso(year, month - 1, 1), to: iso(year, month, 0), label };
+}
+
+/** Anda N períodos na chave (2026-10 / 2026-Q4 / 2026) — espelho do helper do front. */
+export function shiftPeriodKey(kind: PeriodicKind, key: string, delta: number): string {
+  const y = Number(key.slice(0, 4));
+  if (kind === "annual") return String(y + delta);
+  if (kind === "quarterly") {
+    const idx = y * 4 + (Number(key.slice(-1)) - 1) + delta;
+    return `${Math.floor(idx / 4)}-Q${(idx % 4) + 1}`;
+  }
+  const idx = y * 12 + (Number(key.slice(5, 7)) - 1) + delta;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`;
+}
+
+/** Chave do período corrente a partir de um dia YYYY-MM-DD. */
+export function periodKeyForDay(kind: PeriodicKind, day: string): string {
+  if (kind === "annual") return day.slice(0, 4);
+  if (kind === "quarterly") return `${day.slice(0, 4)}-Q${Math.ceil(Number(day.slice(5, 7)) / 3)}`;
+  return day.slice(0, 7);
+}
+
+/** XP só para o período atual ou o imediatamente anterior (fechamento recém-terminado). */
+export async function isReviewRewardEligible(db: Db, ownerId: string, kind: PeriodicKind, key: string): Promise<boolean> {
+  const current = periodKeyForDay(kind, await todayKeyFor(db, ownerId));
+  return key === current || key === shiftPeriodKey(kind, current, -1);
 }
 
 /** Ciclos de meta que "pertencem" ao período (o trimestre inclui seus meses; o ano inclui tudo). */
@@ -123,12 +149,19 @@ export interface PeriodicReview {
   energyScore: number | null;
   savedAt: string | null;
   metrics: PeriodMetrics;
+  /** Mesmo retrato do período anterior — base real para as variações (null só se der erro). */
+  previousMetrics: PeriodMetrics | null;
+  /** Recompensa real do fechamento: regra configurada e se já foi concedida. */
+  reward: { xp: number; coins: number; awarded: boolean; awardedAt: string | null; eligible: boolean };
 }
 
 export async function getPeriodicReview(db: Db, ownerId: string, kind: PeriodicKind, key: string): Promise<PeriodicReview> {
-  const [row, metrics] = await Promise.all([
+  const [row, metrics, previousMetrics, reward, eligible] = await Promise.all([
     db.execute({ sql: "SELECT * FROM periodic_reviews WHERE owner_id = ? AND kind = ? AND period_key = ?", args: [ownerId, kind, key] }),
     computePeriodMetrics(db, ownerId, kind, key),
+    computePeriodMetrics(db, ownerId, kind, shiftPeriodKey(kind, key, -1)),
+    reviewRewardStatus(db, ownerId, kind, key),
+    isReviewRewardEligible(db, ownerId, kind, key),
   ]);
   const r = row.rows[0] as unknown as Record<string, unknown> | undefined;
   return {
@@ -141,6 +174,8 @@ export async function getPeriodicReview(db: Db, ownerId: string, kind: PeriodicK
     energyScore: r?.energy_score == null ? null : Number(r.energy_score),
     savedAt: (r?.updated_at as string | null) ?? null,
     metrics,
+    previousMetrics,
+    reward: { ...reward, eligible },
   };
 }
 
