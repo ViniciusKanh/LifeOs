@@ -1,7 +1,7 @@
 /**
  * Gera docs/PRIVACY.md e docs/TERMS.md a partir de apps/web/src/content/legal.ts
  * (fonte única do texto jurídico). Rode depois de alterar o conteúdo:
- *   node --experimental-strip-types scripts/generate-legal-docs.mjs
+ *   node --experimental-strip-types scripts/generate-legal-docs.mjs 
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
