@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { BookOpen, CalendarCheck, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Dumbbell, Feather, Loader2, Moon, ReceiptText, RefreshCw, Smile, Target, Trophy } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
@@ -53,6 +53,7 @@ export function RevisoesPage() {
   const [key, setKey] = useState(periodOk ? (periodParam as string) : defaultKey(initialKind));
   const { review, isLoading, history, save, isSaving, analyze, analysis, isAnalyzing, analyzeError, resetAnalysis } = usePeriodicReview(kind, key);
   const { isRpg } = useTheme();
+  const navigate = useNavigate();
   // Selo "Ciclo concluído": só quando ESTE salvamento fez o backend conceder o XP.
   const [sealJustEarned, setSealJustEarned] = useState(false);
   useEffect(() => {
@@ -120,7 +121,12 @@ export function RevisoesPage() {
     ];
     return (
       <div className="w-full px-4 py-6 md:px-8 md:py-8 space-y-4">
-        <RPGTabs label="Tipo de revisão" size="sm" tabs={KINDS.map((k) => ({ value: k.key, label: k.label }))} value={kind} onChange={changeKind} />
+        <RPGTabs
+          label="Tipo de revisão"
+          tabs={[{ value: "weekly", label: "Semanal" }, ...KINDS.map((k) => ({ value: k.key as string, label: k.label }))]}
+          value={kind}
+          onChange={(v) => (v === "weekly" ? navigate("/weekly-review") : changeKind(v as PeriodicKind))}
+        />
         <RPGPageHeader
           banner="revisoes"
           size="md"

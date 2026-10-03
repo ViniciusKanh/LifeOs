@@ -22,7 +22,11 @@ export function useLifeAdmin(includeArchived = false) {
   const remove = useMutation({ mutationFn: lifeAdminService.remove, onSuccess: invalidate });
   const markDone = useMutation({
     mutationFn: ({ id, ...input }: { id: string; doneAt?: string; amount?: number | null; note?: string | null; nextDueDate?: string | null }) => lifeAdminService.markDone(id, input),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      // Resolver um vencimento próximo/atrasado rende XP leve (decidido no backend).
+      notifyGamification();
+    },
   });
   const removeHistory = useMutation({ mutationFn: ({ id, historyId }: { id: string; historyId: string }) => lifeAdminService.removeHistory(id, historyId), onSuccess: invalidate });
   return {

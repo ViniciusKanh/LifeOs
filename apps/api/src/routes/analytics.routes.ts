@@ -280,7 +280,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT h.id, i.title AS label, i.kind, h.done_at AS at FROM life_admin_history h JOIN life_admin_items i ON i.id = h.item_id
+      sql: `SELECT h.id, h.item_id, h.due_date, i.title AS label, i.kind, h.done_at AS at FROM life_admin_history h JOIN life_admin_items i ON i.id = h.item_id
             WHERE h.owner_id = ? AND h.done_at >= ? AND h.done_at <= ?`,
       args: [ownerId, from, to],
     }),
@@ -374,6 +374,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       : e.type === "project" ? `project:${e.id}`
       : e.type === "journal" ? `journal:${String(e.at).slice(0, 10)}`
       : e.type === "review" ? `review:${e.kind}:${e.period_key}`
+      : e.type === "life_admin" ? `life_admin:${e.item_id}:${e.due_date}`
       : null;
     const hit = key ? xpIndex.bySource[key] : undefined;
     return hit && hit.xp > 0 ? { xp: hit.xp, coins: hit.coins } : {};

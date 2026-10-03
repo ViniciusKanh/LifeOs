@@ -26,6 +26,8 @@ export interface KanbanBoardProps<T> {
   columnIcon?: Record<string, ReactNode>;
   /** Cabeçalho tingido com a cor da coluna (tema RPG). */
   tintHeaders?: boolean;
+  /** Linha curta sob o título da coluna (ex.: "Missões em execução."). */
+  columnHint?: Record<string, string>;
 }
 
 const DEFAULT_ACCENT = "#7C4DFF";
@@ -64,6 +66,7 @@ export function KanbanBoard<T>({
   storageKey,
   columnIcon,
   tintHeaders = false,
+  columnHint,
 }: KanbanBoardProps<T>) {
   const reduce = useReducedMotion();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -245,6 +248,7 @@ export function KanbanBoard<T>({
                     <ChevronsRightLeft size={14} />
                   </button>
                 </header>
+                {columnHint?.[col] && <p className="-mt-1 mb-2 px-3 text-center text-[11px] text-slate rpg:text-rpg-muted">{columnHint[col]}</p>}
                 {/* Cada coluna rola por dentro: todas as colunas cabem na tela ao mesmo tempo. */}
                 <div className="px-2.5 pb-2.5 max-h-[min(70dvh,680px)] overflow-y-auto overscroll-contain [scrollbar-width:thin]">
                   {cardList(col)}

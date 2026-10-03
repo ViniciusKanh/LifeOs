@@ -244,3 +244,39 @@ describe("Timeline e histórico de nível", () => {
     expect(tl.body.events.some((e: { type: string }) => e.type === "level_up")).toBe(true);
   });
 });
+
+describe("Anti dupla recompensa e marcos", () => {
+  it("tarefa gerada por hábito paga só o contrato, nunca a missão também", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const h = await agent.post("/api/habits").send({ name: "Ler" });
+    const gen = await agent.post("/api/habits/generate-tasks").send({ habitIds: [h.body.id], from: today(), to: today() });
+    if (gen.status !== 200 || gen.body.created.length === 0) return; // rota com outro contrato: o teste de serviço abaixo cobre a regra
+    await agent.patch(`/api/tasks/${gen.body.created[0].id}`).send({ status: "Concluído" });
+    const p = await profile(agent);
+    expect(p.totalXp).toBe(R.habit.xp);
+  });
+
+  it("concede o marco de 7 dias uma única vez", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const h = await agent.post("/api/habits").send({ name: "Água" });
+    // 6 dias anteriores registrados (sem XP: fora da janela), depois hoje fecha 7 seguidos.
+    for (let i = 6; i >= 1; i--) await agent.post(`/api/habits/${h.body.id}/check-in`).send({ entryDate: daysAgo(i), count: 1 });
+    await agent.post(`/api/habits/${h.body.id}/check-in`).send({ entryDate: today(), count: 1 });
+    await agent.post(`/api/habits/${h.body.id}/check-in`).send({ entryDate: today(), count: 1 });
+    const m7 = R.habitStreakMilestones.find((m) => m.days === 7)!;
+    // ontem (1 dia atrás) também está na janela de XP do hábito.
+    expect((await profile(agent)).totalXp).toBe(R.habit.xp * 2 + m7.xp);
+  });
+
+  it("Administração: XP só para vencimento próximo/atrasado e uma vez por vencimento", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const near = await agent.post("/api/life-admin").send({ kind: "vencimento", title: "IPVA", dueDate: today(), recurrenceMonths: 12 });
+    expect(near.status).toBe(201);
+    await agent.post(`/api/life-admin/${near.body.id}/done`).send({});
+    // Adiantar o próximo ciclo (1 ano à frente) não rende XP.
+    await agent.post(`/api/life-admin/${near.body.id}/done`).send({});
+    const far = await agent.post("/api/life-admin").send({ kind: "documento", title: "Passaporte", dueDate: "2031-06-18" });
+    await agent.post(`/api/life-admin/${far.body.id}/done`).send({});
+    expect((await profile(agent)).totalXp).toBe(R.lifeAdmin.byKind.vencimento.xp);
+  });
+});

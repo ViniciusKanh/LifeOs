@@ -14,7 +14,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "focus" | "project" | "journal" | "review";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin";
 
 export interface XpGrant {
   sourceType: XpSourceType;
@@ -193,13 +193,16 @@ async function taskXpToday(db: Client, ownerId: string, dayKey: string): Promise
 export async function awardTaskCompletion(db: Client, ownerId: string, taskId: string): Promise<void> {
   await safely("tarefa", async () => {
     const r = await db.execute({
-      sql: "SELECT id, title, priority, due_date, project_id, status FROM tasks WHERE id = ? AND owner_id = ?",
+      sql: "SELECT id, title, priority, due_date, project_id, status, habit_id FROM tasks WHERE id = ? AND owner_id = ?",
       args: [taskId, ownerId],
     });
     const task = r.rows[0] as unknown as
-      | { id: string; title: string; priority: string; due_date: string | null; project_id: string | null; status: string }
+      | { id: string; title: string; priority: string; due_date: string | null; project_id: string | null; status: string; habit_id: string | null }
       | undefined;
     if (!task || task.status !== "Concluído") return;
+    // Anti dupla recompensa: tarefa gerada por um contrato (hábito) é só a
+    // representação do check-in — quem paga é o hábito (awardHabitCheckIn).
+    if (task.habit_id) return;
 
     const dayKey = await todayKeyFor(db, ownerId);
     const journal = await db.execute({
@@ -251,12 +254,12 @@ export async function awardTaskCompletion(db: Client, ownerId: string, taskId: s
 export async function awardHabitCheckIn(db: Client, ownerId: string, habitId: string, entryDate: string): Promise<void> {
   await safely("hábito", async () => {
     const r = await db.execute({
-      sql: `SELECT h.name, h.target_count, e.count FROM habits h
+      sql: `SELECT h.name, h.target_count, h.frequency, e.count FROM habits h
             JOIN habit_entries e ON e.habit_id = h.id AND e.owner_id = h.owner_id
             WHERE h.id = ? AND h.owner_id = ? AND e.entry_date = ?`,
       args: [habitId, ownerId, entryDate],
     });
-    const row = r.rows[0] as unknown as { name: string; target_count: number; count: number } | undefined;
+    const row = r.rows[0] as unknown as { name: string; target_count: number; frequency: string; count: number } | undefined;
     if (!row || Number(row.count) < Math.max(1, Number(row.target_count))) return;
 
     const dayKey = await todayKeyFor(db, ownerId);
@@ -274,6 +277,59 @@ export async function awardHabitCheckIn(db: Client, ownerId: string, habitId: st
         coins: GAMIFICATION_RULES.habit.coins,
         label: `Contrato cumprido: ${row.name}`,
       },
+      dayKey,
+    );
+
+    // Marcos de sequência (só contratos diários): um bônus por marco, para sempre.
+    if (row.frequency !== "daily") return;
+    const streak = await habitStreakEndingAt(db, ownerId, habitId, entryDate, Number(row.target_count));
+    for (const m of GAMIFICATION_RULES.habitStreakMilestones) {
+      if (streak < m.days) continue;
+      await award(
+        db,
+        ownerId,
+        { sourceType: "habit_streak", sourceId: `${habitId}:${m.days}`, eventType: "milestone", xp: m.xp, coins: m.coins, label: `Sequência de ${m.days} dias: ${row.name}` },
+        dayKey,
+      );
+    }
+  });
+}
+
+/** Dias consecutivos (terminando em `endDate`) em que o contrato bateu a meta. */
+export async function habitStreakEndingAt(db: Client, ownerId: string, habitId: string, endDate: string, target: number): Promise<number> {
+  const r = await db.execute({
+    sql: "SELECT entry_date FROM habit_entries WHERE habit_id = ? AND owner_id = ? AND entry_date <= ? AND count >= ? ORDER BY entry_date DESC LIMIT 400",
+    args: [habitId, ownerId, endDate, Math.max(1, target)],
+  });
+  let streak = 0;
+  let cursor = endDate;
+  for (const row of r.rows) {
+    if (String(row.entry_date) !== cursor) break;
+    streak++;
+    cursor = new Date(Date.parse(`${cursor}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  }
+  return streak;
+}
+
+/**
+ * Administração da Vida resolvida → XP leve, uma vez por vencimento coberto.
+ * Sem prazo, ou com prazo distante (adiantar ciclos), não rende nada.
+ */
+export async function awardLifeAdminResolved(
+  db: Client,
+  ownerId: string,
+  item: { id: string; kind: string; title: string; coveredDueDate: string | null },
+): Promise<void> {
+  if (!item.coveredDueDate) return;
+  await safely("administração", async () => {
+    const dayKey = await todayKeyFor(db, ownerId);
+    const L = GAMIFICATION_RULES.lifeAdmin;
+    if (daysBetweenKeys(dayKey, item.coveredDueDate!) > L.maxDaysAhead) return;
+    const rule = L.byKind[item.kind] ?? L.byKind.vencimento;
+    await award(
+      db,
+      ownerId,
+      { sourceType: "life_admin", sourceId: `${item.id}:${item.coveredDueDate}`, eventType: "resolved", xp: rule.xp, coins: rule.coins, label: `Resolvido: ${item.title}` },
       dayKey,
     );
   });
@@ -589,5 +645,7 @@ export function publicRules() {
     project: GAMIFICATION_RULES.project,
     journal: GAMIFICATION_RULES.journal,
     review: GAMIFICATION_RULES.review,
+    habitStreakMilestones: GAMIFICATION_RULES.habitStreakMilestones,
+    lifeAdmin: GAMIFICATION_RULES.lifeAdmin.byKind,
   };
 }

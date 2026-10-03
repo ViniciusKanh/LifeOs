@@ -30,7 +30,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
 import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { useTheme } from "@/hooks/useTheme";
-import { RPGButton, RPGPageHeader, RPGPanel, RPGQuestCard } from "@/components/rpg";
+import { RPGButton, RPGIconSlot, RPGPageHeader, RPGPanel, RPGQuestCard } from "@/components/rpg";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
@@ -46,7 +46,9 @@ import {
   type QuickFilter,
 } from "@/utils/taskInsights";
 import type { Task } from "@/types";
-import { COLUMN_ACCENT_RPG, COLUMN_ICON_RPG } from "@/components/kanban/rpgColumns";
+import { COLUMN_ACCENT_RPG, COLUMN_HINT_RPG, COLUMN_ICON_RPG } from "@/components/kanban/rpgColumns";
+import { useGamificationRules } from "@/hooks/useGamification";
+import { localToday, previewTaskReward } from "@/utils/gamification";
 
 const COLUMNS = TASK_STATUSES;
 const DONE_LIMIT = 6;
@@ -186,6 +188,8 @@ export function TarefasPage() {
   }, [tasks]);
   const focusTask = useMemo(() => [...open].sort((a, b) => taskFocusScore(b) - taskFocusScore(a))[0] ?? null, [open]);
   const inProgress = tasks.filter((t) => t.status === "Em Andamento").length;
+  const { data: rules } = useGamificationRules(isRpg);
+  const focusReward = focusTask ? previewTaskReward(rules, { priority: focusTask.priority, dueDate: focusTask.due_date, habitId: focusTask.habit_id }, localToday()) : null;
 
   // Concluídas: mostra as mais recentes primeiro, com limite na coluna.
   const boardItems = useMemo(() => {
@@ -218,22 +222,20 @@ export function TarefasPage() {
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
       {isRpg ? (
         <RPGPageHeader
-          banner="tarefas"
+          banner="missoes"
+          size="md"
+          leading={<RPGIconSlot icon={<ScrollText size={26} />} />}
           eyebrow="Quadro de missões"
-          title="Tarefas"
-          aside={
-            <p className="rpg-parchment hidden md:block mx-1.5 my-1.5 max-w-[280px] px-4 py-3 text-center text-sm italic">
-              &ldquo;{findNavItem("/tarefas")?.item.quote ?? DEFAULT_QUOTE}&rdquo;
-            </p>
-          }
-          subtitle="Planeje, execute e conclua — o progresso vem do que foi finalizado de verdade."
+          title="Missões"
+          subtitle="Organize suas missões e avance na sua jornada. Grandes conquistas começam com pequenas missões."
+          footnote={<span className="italic">&ldquo;{findNavItem("/tarefas")?.item.quote ?? DEFAULT_QUOTE}&rdquo;</span>}
           actions={
             <>
               <RPGButton variant="secondary" onClick={() => setImportOpen(true)} title="Importar do Todoist, Notion ou Google Tasks">
                 <Upload size={15} /> Importar
               </RPGButton>
-              <RPGButton variant="gold" onClick={() => openNew()} title="Nova tarefa (N)">
-                <Plus size={15} /> Nova tarefa
+              <RPGButton variant="primary" onClick={() => openNew()} title="Nova tarefa (N)">
+                <Plus size={15} /> Nova missão
               </RPGButton>
             </>
           }
@@ -260,9 +262,17 @@ export function TarefasPage() {
       {/* Resumo: foco + filtros rápidos clicáveis */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-3 mb-4">
         {isRpg ? (
-          <RPGPanel title="Foque nisso agora" icon={<Sparkles size={14} />} variant="quest" className="h-full">
+          <RPGPanel title="Missão em destaque" icon={<Sparkles size={14} />} variant="quest" className="h-full" actions={<span className="font-pixel text-[11px] uppercase tracking-wider text-rpg-gold">Foque nisso agora</span>}>
             <RPGQuestCard
-              label="Missão em destaque"
+              label={focusTask?.status ?? "Missão em destaque"}
+              badges={
+                focusReward ? (
+                  <>
+                    <span className="font-pixel text-[11px] px-1.5 py-0.5 border border-rpg-purple/60 bg-rpg-purple text-rpg-text" style={{ borderRadius: 2 }}>+{focusReward.xp} XP</span>
+                    <span className="font-pixel text-[11px] px-1.5 py-0.5 border border-rpg-bronze bg-rpg-ink/10 text-rpg-ink" style={{ borderRadius: 2 }}>+{focusReward.coins} 🪙</span>
+                  </>
+                ) : undefined
+              }
               title={focusTask?.title ?? null}
               onTitleClick={focusTask ? () => openEdit(focusTask) : undefined}
               priority={focusTask?.priority}
@@ -276,14 +286,14 @@ export function TarefasPage() {
                   ? [
                       { icon: <CalendarClock size={15} />, label: "Prazo", value: dueInfo(focusTask)?.label ?? "Sem prazo" },
                       { icon: <Clock size={15} />, label: "Tempo estimado", value: focusTask.estimate_minutes ? `${focusTask.estimate_minutes} min` : "Não estimado" },
-                      { icon: <Flame size={15} />, label: "Prioridade", value: focusTask.priority },
+                      { icon: <Flame size={15} />, label: "Dificuldade", value: focusTask.priority },
                     ]
                   : []
               }
               emptyText="Nada pendente. Bom momento para planejar a próxima entrega."
               actions={
                 focusTask ? (
-                  <RPGButton variant="success" onClick={() => toggleDone(focusTask)} className="flex-1">
+                  <RPGButton variant="primary" onClick={() => toggleDone(focusTask)} className="flex-1">
                     <Check size={15} /> Concluir missão
                   </RPGButton>
                 ) : undefined
@@ -339,7 +349,7 @@ export function TarefasPage() {
 
         <div className="space-y-3 min-w-0">
         {isRpg && (
-          <RPGPanel title="Progresso das tarefas" icon={<ListChecks size={14} />}>
+          <RPGPanel title="Progresso das missões" icon={<ListChecks size={14} />}>
             <dl className="grid grid-cols-3 gap-2">
               {[
                 { v: open.length, l: "abertas", tone: "text-rpg-blue" },
@@ -413,7 +423,7 @@ export function TarefasPage() {
               ref={searchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar tarefas…  ( / )"
+              placeholder={isRpg ? "Buscar missões…  ( / )" : "Buscar tarefas…  ( / )"}
               aria-label="Buscar tarefas"
               className="w-full rounded-xl pl-8 pr-3 py-2 text-xs bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500"
             />
@@ -502,6 +512,7 @@ export function TarefasPage() {
           onMove={(id, status) => moveTask({ id, status })}
           columnAccent={isRpg ? COLUMN_ACCENT_RPG : COLUMN_ACCENT}
           columnIcon={isRpg ? COLUMN_ICON_RPG : undefined}
+          columnHint={isRpg ? COLUMN_HINT_RPG : undefined}
           tintHeaders={isRpg}
           storageKey="lifeos.tasks.collapsedColumns"
           emptyHint={activeFilters > 0 ? "Nada com esses filtros" : "Solte uma tarefa aqui"}

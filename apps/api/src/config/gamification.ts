@@ -36,6 +36,27 @@ export const GAMIFICATION_RULES = {
     /** Só check-ins de hoje ou ontem rendem XP (evita farm retroativo). */
     maxDaysBack: 1,
   },
+  /**
+   * Marcos de sequência de um contrato (hábito diário): bônus único por
+   * hábito e por marco. Sequência não é XP — quebrar a sequência não tira nada.
+   */
+  habitStreakMilestones: [
+    { days: 7, xp: 15, coins: 3 },
+    { days: 14, xp: 20, coins: 4 },
+    { days: 30, xp: 40, coins: 8 },
+    { days: 60, xp: 60, coins: 12 },
+    { days: 100, xp: 100, coins: 20 },
+    { days: 365, xp: 250, coins: 50 },
+  ],
+  /**
+   * Administração da Vida: recompensa leve ao resolver um item. Só conta
+   * quando o vencimento coberto estava atrasado ou dentro da janela de
+   * lembrete (evita "adiantar" ciclos recorrentes só para ganhar XP).
+   */
+  lifeAdmin: {
+    byKind: { vencimento: { xp: 10, coins: 2 }, documento: { xp: 10, coins: 2 }, conta: { xp: 10, coins: 2 }, manutencao: { xp: 15, coins: 3 } } as Record<string, { xp: number; coins: number }>,
+    maxDaysAhead: 60,
+  },
   focus: {
     /** Cada bloco completo de 25 min de foco rende XP. */
     blockMinutes: 25,

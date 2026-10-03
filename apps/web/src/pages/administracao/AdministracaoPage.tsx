@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTheme } from "@/hooks/useTheme";
-import { RPGStatCard } from "@/components/rpg/RPGStatCard";
+import { RPGButton, RPGIconSlot, RPGPageHeader, RPGPanel, RPGStatCard, RPGTabs, RPG_BANNERS } from "@/components/rpg";
 import { motion } from "motion/react";
-import { AlertTriangle, Archive, CalendarClock, CheckCircle2, FileText, FolderLock, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, CalendarClock, CheckCircle2, Crown, FileText, FolderLock, Gem, Plus, Search, Shield, X } from "lucide-react";
 import { Button, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { useLifeAdmin } from "@/hooks/useLifeOs";
 import { LifeAdminCard } from "@/components/lifeAdmin/LifeAdminCard";
@@ -91,6 +91,17 @@ export function AdministracaoPage() {
 
   const usedCategories = useMemo(() => [...new Set(items.map((i) => i.category))], [items]);
 
+  const openNew = () => {
+    setEditing(null);
+    setPreset(null);
+    setFormOpen(true);
+  };
+  const openPreset = (t: (typeof LIFE_ADMIN_TEMPLATES)[number]) => {
+    setEditing(null);
+    setPreset(t);
+    setFormOpen(true);
+  };
+
   const quickDone = async (item: LifeAdminItem) => {
     try {
       const res = await markDone({ id: item.id });
@@ -102,6 +113,22 @@ export function AdministracaoPage() {
 
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
+      {isRpg ? (
+        <RPGPageHeader
+          banner="reino"
+          size="md"
+          leading={<RPGIconSlot icon={<FolderLock size={26} />} />}
+          eyebrow="Controle do reino"
+          title="Administração da vida"
+          subtitle="Vencimentos, manutenções, documentos e contas — lembre-se antes que virem problema e mantenha seu reino funcionando."
+          actions={
+            <RPGButton variant="primary" onClick={openNew}>
+              <Plus size={15} aria-hidden /> Novo item
+            </RPGButton>
+          }
+          className="mb-4"
+        />
+      ) : (
       <PageHeader
         banner="administracao"
         tone="orange"
@@ -120,17 +147,18 @@ export function AdministracaoPage() {
           </Button>
         }
       />
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {[
-          { label: "Atrasados", value: counts.overdue, icon: <AlertTriangle size={16} />, tone: "text-drop bg-drop/10", rpgTone: "red" as const },
-          { label: "Vencem em breve", value: counts.soon, icon: <CalendarClock size={16} />, tone: "text-cat-purple bg-cat-purple/10", rpgTone: "orange" as const },
-          { label: "Em dia", value: counts.ok, icon: <CheckCircle2 size={16} />, tone: "text-growth bg-growth/10", rpgTone: "green" as const },
-          { label: "Com arquivo guardado", value: counts.files, icon: <FileText size={16} />, tone: "text-cat-blue bg-cat-blue/10", rpgTone: "blue" as const },
+          { label: "Atrasados", caption: "Itens que precisam de atenção", value: counts.overdue, icon: <AlertTriangle size={16} />, tone: "text-drop bg-drop/10", rpgTone: "red" as const },
+          { label: "Vencem em breve", caption: "Próximos dos vencimentos", value: counts.soon, icon: <CalendarClock size={16} />, tone: "text-cat-purple bg-cat-purple/10", rpgTone: "orange" as const },
+          { label: "Em dia", caption: "Tudo sob controle", value: counts.ok, icon: <CheckCircle2 size={16} />, tone: "text-growth bg-growth/10", rpgTone: "green" as const },
+          { label: "Com arquivo guardado", caption: "Itens com documento salvo", value: counts.files, icon: <FileText size={16} />, tone: "text-cat-blue bg-cat-blue/10", rpgTone: "blue" as const },
         ].map((s, i) => (
           <motion.div key={s.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
             {isRpg ? (
-              <RPGStatCard icon={s.icon} label={s.label} value={String(s.value)} tone={s.rpgTone} />
+              <RPGStatCard icon={s.icon} label={s.label} value={String(s.value)} tone={s.rpgTone} caption={s.caption} />
             ) : (
             <Card className="p-3.5 flex items-center gap-3">
               <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.tone}`}>{s.icon}</span>
@@ -146,6 +174,15 @@ export function AdministracaoPage() {
 
       <div className="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-3 bg-paper/85 dark:bg-ink/85 backdrop-blur rpg:bg-rpg-bg/90 rpg:backdrop-blur-none">
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-2 shadow-card rpg:rpg-panel">
+          {isRpg ? (
+            <RPGTabs
+              label="Tipo"
+              size="sm"
+              tabs={(["todos", ...Object.keys(LIFE_ADMIN_KIND)] as KindFilter[]).map((k) => ({ value: k, label: k === "todos" ? "Todos" : `${LIFE_ADMIN_KIND[k].emoji} ${LIFE_ADMIN_KIND[k].label}` }))}
+              value={kind}
+              onChange={setKind}
+            />
+          ) : (
           <div role="tablist" aria-label="Tipo" className="flex gap-1 overflow-x-auto max-w-full">
             {(["todos", ...Object.keys(LIFE_ADMIN_KIND)] as KindFilter[]).map((k) => (
               <button
@@ -161,6 +198,7 @@ export function AdministracaoPage() {
               </button>
             ))}
           </div>
+          )}
           <div className="relative flex-1 min-w-[160px] sm:max-w-xs">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate" />
             <input
@@ -168,7 +206,7 @@ export function AdministracaoPage() {
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar por nome, referência, local…"
               aria-label="Buscar"
-              className="w-full rounded-xl pl-8 pr-3 py-2 text-xs bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500"
+              className="w-full rounded-xl pl-8 pr-3 py-2 text-xs bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 rpg:rounded-[3px] rpg:bg-rpg-bg-2 rpg:border-rpg-border rpg:focus:border-rpg-gold"
             />
           </div>
           <button
@@ -212,6 +250,55 @@ export function AdministracaoPage() {
         </div>
       ) : isError ? (
         <Card className="p-5 text-sm text-drop">Não foi possível carregar seus itens agora.</Card>
+      ) : items.length === 0 && !showArchived && isRpg ? (
+        <div className="space-y-4">
+          <RPGPanel variant="gold" className="relative overflow-hidden" bodyClassName="relative p-6 sm:p-10">
+            <img src={RPG_BANNERS.reino} alt="" aria-hidden decoding="async" loading="lazy" className="pixelated absolute inset-0 w-full h-full object-cover opacity-25" />
+            <div className="absolute inset-0 bg-gradient-to-b from-rpg-bg/60 via-rpg-bg/80 to-rpg-bg/95" aria-hidden />
+            <div className="relative flex flex-col items-center text-center gap-3 max-w-2xl mx-auto">
+              <Crown size={22} className="text-rpg-gold" aria-hidden />
+              <p className="font-pixel text-[11px] uppercase tracking-[0.2em] text-rpg-gold">Nada cadastrado ainda</p>
+              <h2 className="rpg-title text-xl sm:text-2xl font-bold uppercase tracking-wide">Seu reino ainda não tem itens registrados</h2>
+              <p className="text-sm text-rpg-text/90">
+                Comece pelos vencimentos que mais dão dor de cabeça quando passam: CNH, IPVA, seguro, revisão do carro. Mantenha tudo em dia e evite surpresas.
+              </p>
+              <ul className="mt-2 grid gap-3 sm:grid-cols-3 w-full text-left">
+                {[
+                  { icon: <Shield size={18} />, t: "Prevenção ativa", d: "Evite multas e problemas" },
+                  { icon: <BarChart3 size={18} />, t: "Mais organização", d: "Tudo em um só lugar" },
+                  { icon: <Gem size={18} />, t: "Tranquilidade", d: "Mais tempo para o que importa" },
+                ].map((b) => (
+                  <li key={b.t} className="flex items-center gap-2.5">
+                    <span className="w-10 h-10 shrink-0 flex items-center justify-center border-2 border-rpg-bronze bg-rpg-bg-2 text-rpg-gold-light" style={{ borderRadius: 999 }} aria-hidden>{b.icon}</span>
+                    <span>
+                      <span className="block font-pixel text-[11px] uppercase tracking-wide text-rpg-gold-light">{b.t}</span>
+                      <span className="block text-xs text-rpg-muted">{b.d}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <RPGButton variant="primary" className="mt-3" onClick={openNew}>
+                <Plus size={15} aria-hidden /> Cadastrar o primeiro item
+              </RPGButton>
+            </div>
+          </RPGPanel>
+          <section aria-label="Itens comuns para começar">
+            <p className="mb-2 flex items-center gap-2 font-pixel text-[12px] uppercase tracking-[0.14em] text-rpg-gold">◆ Itens comuns para começar</p>
+            <div className="flex flex-wrap gap-2">
+              {LIFE_ADMIN_TEMPLATES.slice(0, 8).map((t) => (
+                <button
+                  key={t.title}
+                  onClick={() => openPreset(t)}
+                  className="border-2 border-rpg-border bg-rpg-panel px-3 py-1.5 text-xs text-rpg-text hover:border-rpg-gold/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold"
+                  style={{ borderRadius: 999 }}
+                >
+                  {LIFE_ADMIN_CATEGORY[t.category].emoji} {t.title}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-rpg-muted">Os atalhos só preenchem o formulário — nada é criado sem você salvar.</p>
+          </section>
+        </div>
       ) : items.length === 0 && !showArchived ? (
         <div className="space-y-4">
           <EmptyState
@@ -246,13 +333,15 @@ export function AdministracaoPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          {isRpg && <p className="font-pixel text-[12px] uppercase tracking-[0.14em] text-rpg-gold-light">Registros do reino</p>}
           {GROUPS.map((g) => {
             const list = filtered.filter(g.test);
             if (list.length === 0) return null;
             return (
               <section key={g.key}>
                 <h2 className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wide mb-2 rpg:font-pixel rpg:text-[12px] ${g.key === "attention" ? "text-drop rpg:text-rpg-red" : "text-slate rpg:text-rpg-gold"}`}>
-                  {g.label}
+                  {isRpg && <span aria-hidden>◆</span>}
+                  {isRpg && g.key === "attention" ? "Ação necessária" : g.label}
                   <span className="rounded-full px-1.5 py-0.5 text-[10px] bg-black/[0.05] dark:bg-white/[0.08]">{list.length}</span>
                 </h2>
                 <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-2">
@@ -307,7 +396,7 @@ export function AdministracaoPage() {
       />
 
       {toast && (
-        <div role="status" className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-[#1E2537] text-white text-xs px-4 py-2.5 shadow-lg">
+        <div role="status" className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-[#1E2537] text-white text-xs px-4 py-2.5 shadow-lg rpg:rounded-[4px] rpg:bg-rpg-panel rpg:border-2 rpg:border-rpg-gold rpg:text-rpg-text">
           {toast}
         </div>
       )}

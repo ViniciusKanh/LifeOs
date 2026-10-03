@@ -18,7 +18,7 @@ import { Sidebar, NavGroups, useSidebarCollapsed } from "./Sidebar";
 import { AppFooter } from "./AppFooter";
 import { MobileMagicNav } from "./MobileMagicNav";
 import { TermsGate } from "@/components/legal/TermsGate";
-import { DEFAULT_QUOTE, findNavItem, visibleGroups } from "./navConfig";
+import { DEFAULT_QUOTE, findNavItem, navLabel, visibleGroups } from "./navConfig";
 import { AppScrollContext } from "./AppScrollContext";
 import { OfflineStatus } from "./OfflineStatus";
 import { HubTabs } from "./HubTabs";
@@ -135,7 +135,7 @@ export function AppShell() {
               )}
             </nav>
             <p className="font-display font-semibold text-[15px] md:text-base leading-tight truncate mt-0.5 rpg:rpg-title rpg:text-lg">
-              {current ? (isSubPage ? "Detalhes" : current.tab && current.tab.to !== current.item.to ? current.tab.label : current.item.label) : "LifeOS"}
+              {current ? (isSubPage ? "Detalhes" : current.tab && current.tab.to !== current.item.to ? current.tab.label : navLabel(current.item, isRpg)) : "LifeOS"}
             </p>
           </div>
 

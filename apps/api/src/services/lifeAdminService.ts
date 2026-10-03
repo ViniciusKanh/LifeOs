@@ -3,6 +3,7 @@ import type { getDb } from "../db/client.js";
 import { mimeFromDataUri } from "../validators/attachment.schema.js";
 import type { CreateLifeAdminInput, MarkLifeAdminDoneInput, UpdateLifeAdminInput } from "../validators/lifeAdmin.schema.js";
 import { sendPushToUser } from "./pushService.js";
+import { awardLifeAdminResolved } from "./gamificationService.js";
 
 /**
  * Administração da vida: vencimentos, manutenções, documentos e contas.
@@ -225,10 +226,10 @@ export async function deleteLifeAdminItem(db: Db, ownerId: string, id: string): 
  */
 export async function markLifeAdminDone(db: Db, ownerId: string, id: string, d: MarkLifeAdminDoneInput) {
   const res = await db.execute({
-    sql: "SELECT kind, due_date, recurrence_months, amount FROM life_admin_items WHERE id = ? AND owner_id = ?",
+    sql: "SELECT kind, title, due_date, recurrence_months, amount FROM life_admin_items WHERE id = ? AND owner_id = ?",
     args: [id, ownerId],
   });
-  const row = res.rows[0] as unknown as { kind: string; due_date: string | null; recurrence_months: number | null; amount: number | null } | undefined;
+  const row = res.rows[0] as unknown as { kind: string; title: string; due_date: string | null; recurrence_months: number | null; amount: number | null } | undefined;
   if (!row) return null;
 
   const doneAt = d.doneAt ?? todayKey();
@@ -259,6 +260,8 @@ export async function markLifeAdminDone(db: Db, ownerId: string, id: string, d: 
     ],
     "write"
   );
+  // Recompensa leve e idempotente pelo vencimento coberto (depois de persistir).
+  await awardLifeAdminResolved(db, ownerId, { id, kind: row.kind, title: row.title, coveredDueDate: row.due_date });
   return getLifeAdminItem(db, ownerId, id);
 }
 

@@ -21,7 +21,10 @@ import {
 import { useWeeklyReview, mondayOf } from "@/hooks/useReviews";
 import { Button, Card, IconBadge } from "@/components/ui/primitives";
 import { useTheme } from "@/hooks/useTheme";
-import { RPGBadge, RPGPageHeader, RPG_SECTION_TITLE } from "@/components/rpg";
+import { useNavigate } from "react-router-dom";
+import { Feather } from "lucide-react";
+import { RPGAvatar, RPGBadge, RPGButton, RPGPanel, RPGPageHeader, RPGTabs, RPG_SECTION_TITLE } from "@/components/rpg";
+import { useProjects } from "@/hooks/useProjects";
 import { RpgCycleSeal } from "@/components/reviews/RpgReviewParts";
 
 const MAX_CHARS = 500;
@@ -159,6 +162,9 @@ export function WeeklyReviewPage() {
   const [weekStartDate, setWeekStartDate] = useState(mondayOf());
   const { saved, computed, history, save, generateDraft, isGeneratingDraft, draftError, reward } = useWeeklyReview(weekStartDate);
   const { isRpg } = useTheme();
+  const navigate = useNavigate();
+  const { projects } = useProjects();
+  const activeProjects = projects.filter((p) => !p.archived_at && (p.status === "active" || p.status === "planning")).length;
   // Selo da semana: só quando ESTE salvamento fez o backend conceder o XP do fechamento.
   const [sealPending, setSealPending] = useState(false);
   const currentMonday = mondayOf();
@@ -324,6 +330,183 @@ export function WeeklyReviewPage() {
       </button>
     </div>
   );
+
+  // Tema RPG: "Relatório da jornada" semanal (mesmo estado/handlers da tela clássica).
+  if (isRpg) {
+    const reflections = [
+      { key: "whatWorked" as const, label: "O que funcionou bem?", ph: "Liste o que te ajudou nesta semana…", value: whatWorked, set: setWhatWorked },
+      { key: "whatDidntWork" as const, label: "O que não funcionou?", ph: "Descreva os principais obstáculos…", value: whatDidntWork, set: setWhatDidntWork },
+      { key: "whatToImprove" as const, label: "O que quero melhorar?", ph: "Defina 1–3 focos de melhoria…", value: whatToImprove, set: setWhatToImprove },
+      { key: "nextPriorities" as const, label: "Prioridades da próxima semana", ph: "Uma prioridade por linha…", value: nextPriorities, set: setNextPriorities },
+    ];
+    const trendPts = (v: number | undefined) =>
+      v == null ? <span className="text-rpg-muted">—</span> : <span className={v >= 0 ? "text-rpg-green" : "text-rpg-red"}>{v >= 0 ? "↗ +" : "↘ "}{v}pts</span>;
+    const trendPct = (v: number | null | undefined) =>
+      v == null ? <span className="text-rpg-muted">sem base</span> : <span className={v >= 0 ? "text-rpg-green" : "text-rpg-red"}>{v >= 0 ? "↗ +" : "↘ "}{v}%</span>;
+    return (
+      <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
+        <RPGPageHeader
+          banner="revisoes"
+          size="md"
+          eyebrow="Relatório da jornada"
+          title="Revisões"
+          subtitle="Feche o ciclo, aprenda com a jornada e planeje o próximo desafio."
+          aside={<div className="m-1.5 bg-rpg-bg/85">{weekNav}</div>}
+        />
+        <RPGTabs
+          label="Tipo de revisão"
+          tabs={[
+            { value: "weekly", label: "Semanal" },
+            { value: "monthly", label: "Mensal" },
+            { value: "quarterly", label: "Trimestral" },
+            { value: "annual", label: "Anual" },
+          ]}
+          value="weekly"
+          onChange={(v) => v !== "weekly" && navigate(`/revisoes?tipo=${v}`)}
+        />
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {recentWeeks.map((monday) => (
+            <button
+              key={monday}
+              onClick={() => goToWeek(monday)}
+              aria-pressed={monday === weekStartDate}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] border ${monday === weekStartDate ? "border-rpg-gold bg-rpg-gold/10 text-rpg-gold-light" : "border-rpg-border text-rpg-muted"}`}
+              style={{ borderRadius: 3 }}
+            >
+              {savedWeeks.has(monday) ? <CheckCircle2 size={12} className="text-rpg-green" aria-label="Revisão salva" /> : <span className="w-3 h-3 border border-current opacity-40" style={{ borderRadius: 999 }} aria-hidden />}
+              {weekLabel(monday)}
+            </button>
+          ))}
+        </div>
+
+        {/* Faixa do personagem: números reais da semana + leitura derivada deles */}
+        <RPGPanel variant="gold" bodyClassName="p-3 sm:p-4">
+          <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,300px)] items-center">
+            <div className="hidden sm:block justify-self-center"><RPGAvatar size="lg" /></div>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                { icon: <ListChecks size={20} />, tone: "text-rpg-blue", v: score ? String(score.tasksCompleted) : "—", l: "Tarefas concluídas", t: trendPct(changePct?.tasksCompleted) },
+                { icon: <Repeat size={20} />, tone: "text-rpg-green", v: score ? `${score.habits}%` : "—", l: "Hábitos (consistência)", t: trendPts(changePct?.habits) },
+                { icon: <Target size={20} />, tone: "text-rpg-purple", v: String(activeProjects), l: "Projetos ativos", t: <span className="text-rpg-muted">agora</span> },
+                { icon: <BookOpen size={20} />, tone: "text-rpg-cyan", v: score ? String(score.pagesRead) : "—", l: "Páginas lidas", t: trendPct(changePct?.pagesRead) },
+              ].map((k) => (
+                <div key={k.l} className="flex flex-col items-center text-center border-2 border-rpg-border bg-rpg-bg/60 px-2 py-2.5" style={{ borderRadius: 4 }}>
+                  <span className={k.tone} aria-hidden>{k.icon}</span>
+                  <dd className="font-pixel text-2xl text-rpg-text leading-none mt-1 tabular-nums">{k.v}</dd>
+                  <dt className="text-[11px] text-rpg-muted mt-1 leading-tight">{k.l}</dt>
+                  <span className="text-[10px] mt-0.5">{k.t}</span>
+                </div>
+              ))}
+            </dl>
+            <div className="rpg-parchment px-4 py-3">
+              <p className="font-rpg font-bold text-rpg-ink">Leitura da semana</p>
+              <p className="mt-1 text-xs text-rpg-ink/85">
+                {strongest && strongest.value > 0
+                  ? `${strongest.label} foi sua dimensão mais forte (${strongest.value}%).${weakest && weakest.label !== strongest.label ? ` ${weakest.label} pede mais atenção (${weakest.value}%).` : ""}`
+                  : "Ainda faltam registros nesta semana para comparar as dimensões."}
+              </p>
+              {saved && <p className="mt-1.5 text-[11px] text-rpg-ink/70">Revisão salva — retrato fixo do momento do salvamento.</p>}
+            </div>
+          </div>
+        </RPGPanel>
+
+        {/* Reflexões em pergaminho (os campos continuam inputs comuns e legíveis) */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Sua reflexão semanal</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {reward && (reward.awarded || isCurrentWeek) && (
+              <RPGBadge tone={reward.awarded ? "green" : "purple"}>{reward.awarded ? `Selo da semana · +${reward.xp} XP` : `+${reward.xp} XP ao fechar a semana`}</RPGBadge>
+            )}
+            {mode === "edit" ? (
+              <RPGButton variant="secondary" onClick={handleGenerateDraft} disabled={isGeneratingDraft}>
+                <Wand2 size={14} aria-hidden /> {isGeneratingDraft ? "Gerando…" : "Rascunho com IA"}
+              </RPGButton>
+            ) : (
+              <RPGButton variant="secondary" onClick={() => setMode("edit")}>
+                <Pencil size={13} aria-hidden /> Editar
+              </RPGButton>
+            )}
+          </div>
+        </div>
+        {draftError && <p role="alert" className="text-xs text-rpg-red">{draftError.message}</p>}
+        <div className="grid gap-3 md:grid-cols-2">
+          {reflections.map((f) => {
+            const suggestion = (pendingSuggestions as Record<string, string | undefined>)[f.key];
+            return (
+              <section key={f.key} className="rpg-parchment px-4 py-3 mx-0">
+                <label htmlFor={`wr-${f.key}`} className="flex items-center justify-between gap-2 font-rpg font-bold text-rpg-ink">
+                  {f.label}
+                  <Feather size={16} className="text-rpg-ink/60" aria-hidden />
+                </label>
+                {mode === "view" ? (
+                  <p className="mt-2 min-h-[4.5rem] whitespace-pre-wrap text-sm text-rpg-ink/90">{f.value || <span className="italic text-rpg-ink/55">Não preenchido nesta semana.</span>}</p>
+                ) : (
+                  <>
+                    <textarea
+                      id={`wr-${f.key}`}
+                      value={f.value}
+                      maxLength={MAX_CHARS}
+                      onChange={(e) => f.set(e.target.value)}
+                      placeholder={f.ph}
+                      rows={3}
+                      className="mt-2 w-full resize-none border border-rpg-bronze/50 bg-white/55 px-3 py-2 text-sm text-rpg-ink placeholder:text-rpg-ink/45 outline-none focus:border-rpg-bronze focus:bg-white/75"
+                      style={{ borderRadius: 3 }}
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-rpg-ink/60">
+                      {suggestion ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span>Sugestão da IA disponível.</span>
+                          <button type="button" className="underline font-semibold" onClick={() => { f.set(suggestion); setPendingSuggestions((p) => ({ ...p, [f.key]: undefined })); }}>Substituir</button>
+                          <button type="button" className="underline" onClick={() => setPendingSuggestions((p) => ({ ...p, [f.key]: undefined }))}>Ignorar</button>
+                        </span>
+                      ) : <span />}
+                      <span className="tabular-nums">{f.value.length}/{MAX_CHARS}</span>
+                    </div>
+                  </>
+                )}
+              </section>
+            );
+          })}
+        </div>
+        {mode === "edit" && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {sealPending && reward?.awarded && <RpgCycleSeal label={`Semana ${weekLabel(weekStartDate)}`} xp={reward.xp} coins={reward.coins} />}
+            {saved && <RPGButton variant="ghost" onClick={() => setMode("view")}>Cancelar</RPGButton>}
+            <RPGButton variant="gold" onClick={handleSave} disabled={saving}>
+              {saving ? "Salvando…" : savedFeedback ? "Revisão salva ✓" : "Salvar revisão semanal"}
+            </RPGButton>
+          </div>
+        )}
+        {mode === "view" && sealPending && reward?.awarded && <RpgCycleSeal label={`Semana ${weekLabel(weekStartDate)}`} xp={reward.xp} coins={reward.coins} />}
+
+        <RPGPanel title="Métricas da semana" icon={<Sparkles size={16} />}>
+          {!score ? (
+            <p className="text-sm text-rpg-muted">Carregando métricas…</p>
+          ) : (
+            <div className="grid gap-2 grid-cols-2 lg:grid-cols-5">
+              {[
+                { l: "Produtividade", v: score.productivity, d: changePct?.productivity, tone: "bg-rpg-blue", icon: <ListChecks size={16} /> },
+                { l: "Saúde", v: score.health, d: changePct?.health, tone: "bg-rpg-green", icon: <Heart size={16} /> },
+                { l: "Educação", v: score.education, d: changePct?.education, tone: "bg-rpg-purple", icon: <GraduationCap size={16} /> },
+                { l: "Leitura", v: score.reading, d: changePct?.reading, tone: "bg-rpg-cyan", icon: <BookOpen size={16} /> },
+                { l: "Hábitos", v: score.habits, d: changePct?.habits, tone: "bg-rpg-pink", icon: <Repeat size={16} /> },
+              ].map((m) => (
+                <div key={m.l} className="border-2 border-rpg-border bg-rpg-bg/50 p-3" style={{ borderRadius: 4 }}>
+                  <p className="flex items-center gap-1.5 text-xs text-rpg-muted"><span className="text-rpg-gold-light" aria-hidden>{m.icon}</span>{m.l}</p>
+                  <p className="mt-1 flex items-baseline gap-2"><span className="font-pixel text-xl text-rpg-text">{m.v}%</span><span className="text-[10px]">{trendPts(m.d)}</span></p>
+                  <div className="rpg-bar mt-2" role="progressbar" aria-label={m.l} aria-valuemin={0} aria-valuemax={100} aria-valuenow={m.v}>
+                    <span className={m.tone} style={{ width: `${m.v}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!saved && score && <p className="mt-3 text-[11px] text-rpg-muted">Calculado em tempo real dos seus registros — vira retrato fixo ao salvar a revisão.</p>}
+        </RPGPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">

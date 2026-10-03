@@ -22,6 +22,9 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
   if (main.sourceType === "task") return { title: "MISSÃO CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Missão concluída: /, "") ?? null };
   if (main.sourceType === "habit_entry") return { title: "CONTRATO CUMPRIDO", stamp: "contract", detail: main.label?.replace(/^Contrato cumprido: /, "") ?? null };
   if (main.sourceType === "project") return { title: "CAMPANHA CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Campanha concluída: /, "") ?? null };
+  if (main.sourceType === "life_admin") return { title: "ITEM RESOLVIDO", stamp: "contract", detail: main.label?.replace(/^Resolvido: /, "") ?? null };
+  if (main.sourceType === "habit_streak") return { title: "MARCO DE SEQUÊNCIA", stamp: "contract", detail: main.label };
+  if (main.sourceType === "review") return { title: "CICLO CONCLUÍDO", stamp: "mission", detail: main.label };
   if (main.sourceType === "focus") return { title: "FOCO REGISTRADO", stamp: null, detail: main.label };
   if (main.sourceType === "journal") return { title: "CRÔNICA REGISTRADA", stamp: null, detail: null };
   return { title: "BÔNUS", stamp: null, detail: main.label };
@@ -115,7 +118,7 @@ export function GamificationFeedback() {
                   style={{ borderRadius: 3 }}
                   aria-hidden
                 >
-                  {burst.stamp === "contract" ? "CUMPRIDO" : "FEITO"}
+                  {burst.title === "ITEM RESOLVIDO" ? "RESOLVIDO" : burst.stamp === "contract" ? "CUMPRIDO" : "FEITO"}
                 </motion.span>
               )}
               <div className="min-w-0 flex-1">

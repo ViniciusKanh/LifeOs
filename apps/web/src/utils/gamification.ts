@@ -6,11 +6,13 @@ import type { GamificationRules } from "@/services/gamificationService";
  */
 export function previewTaskReward(
   rules: GamificationRules | undefined,
-  task: { priority?: string | null; dueDate?: string | null },
+  task: { priority?: string | null; dueDate?: string | null; habitId?: string | null },
   today: string,
   isMainMission = false,
-): { xp: number; coins: number } | null {
+): { xp: number; coins: number; fromContract?: boolean } | null {
   if (!rules) return null;
+  // Tarefa gerada por contrato: quem paga é o check-in do hábito (sem dupla recompensa).
+  if (task.habitId) return { xp: rules.habit.xp, coins: rules.habit.coins, fromContract: true };
   const priority = task.priority ?? "Média";
   let xp = rules.task.xpByPriority[priority] ?? rules.task.xpByPriority["Média"] ?? 0;
   const coins = rules.task.coinsByPriority[priority] ?? rules.task.coinsByPriority["Média"] ?? 0;

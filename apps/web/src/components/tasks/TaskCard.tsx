@@ -4,6 +4,9 @@ import { describeRecurrenceRule } from "@/utils/recurrence";
 import { dueInfo } from "@/utils/taskInsights";
 import { DONE_STATUS } from "@/utils/taskStatus";
 import type { KanbanDragProps } from "@/components/kanban/KanbanBoard";
+import { useTheme } from "@/hooks/useTheme";
+import { useGamificationRules } from "@/hooks/useGamification";
+import { localToday, previewTaskReward } from "@/utils/gamification";
 
 const PRIORITY_BAR: Record<Task["priority"], string> = {
   Alta: "bg-drop",
@@ -49,6 +52,12 @@ export function TaskCard({
   const due = dueInfo(task);
   const isDone = task.status === DONE_STATUS;
   const recurrenceLabel = describeRecurrenceRule(task.recurrence_rule);
+  const { isRpg } = useTheme();
+  // Recompensa prevista pelas regras do backend (o valor real é concedido lá, ao concluir).
+  const { data: rules } = useGamificationRules(isRpg);
+  const today = localToday();
+  const reward = isRpg ? previewTaskReward(rules, { priority: task.priority, dueDate: task.due_date, habitId: task.habit_id }, today) : null;
+  const isDaily = !isDone && task.due_date?.slice(0, 10) === today;
 
   return (
     <div
@@ -115,11 +124,30 @@ export function TaskCard({
               </span>
             )}
             {task.habit_id && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-cat-green" title="Gerada a partir de um hábito">
-                <Sparkles size={10} /> Hábito
+              <span className="inline-flex items-center gap-1 text-[10px] text-cat-green rpg:text-rpg-green" title="Gerada a partir de um hábito — a recompensa vem do contrato">
+                <Sparkles size={10} /> {isRpg ? "Origem: contrato" : "Hábito"}
               </span>
             )}
           </span>
+          {isRpg && (reward || isDaily) && (
+            <span className="flex items-center flex-wrap gap-1.5 mt-1.5">
+              {isDaily && (
+                <span className="font-pixel text-[9px] uppercase tracking-wide px-1.5 py-0.5 border border-rpg-orange/60 bg-rpg-orange/10 text-rpg-orange" style={{ borderRadius: 2 }}>
+                  Missão diária
+                </span>
+              )}
+              {reward && (
+                <>
+                  <span className={`font-pixel text-[10px] px-1.5 py-0.5 border border-rpg-purple/50 bg-rpg-purple/15 text-rpg-purple ${isDone ? "opacity-60" : ""}`} style={{ borderRadius: 2 }}>
+                    +{reward.xp} XP
+                  </span>
+                  <span className={`font-pixel text-[10px] px-1.5 py-0.5 border border-rpg-gold/50 bg-rpg-gold/10 text-rpg-gold-light ${isDone ? "opacity-60" : ""}`} style={{ borderRadius: 2 }}>
+                    +{reward.coins} 🪙
+                  </span>
+                </>
+              )}
+            </span>
+          )}
         </button>
 
         {onMove && statuses && (

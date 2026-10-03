@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   Activity,
+  History,
+  ScrollText,
   BookOpen,
   CheckCircle2,
   Circle,
@@ -28,6 +30,7 @@ import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/compon
 import type { Habit, HabitTaskGenerationInput } from "@/types";
 import { HabitTaskGeneratorModal } from "@/components/habits/HabitTaskGeneratorModal";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
+import { RPGButton, RPGIconSlot, RPGPageHeader, RPGStatCard } from "@/components/rpg";
 import { RpgContractsPanel } from "@/components/habits/RpgContractsPanel";
 
 /* ------------------------------------------------------------------ */
@@ -249,13 +252,30 @@ export function HabitosPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       {isRpg ? (
-        <PageHeader
-          banner="habitos"
-          tone="green"
-          icon={<Flame size={24} />}
-          title="Hábitos"
-          subtitle="Pequenas ações, grandes resultados. Construa a vida que você deseja, um dia de cada vez."
-          actions={habitActions}
+        <RPGPageHeader
+          banner="contratos"
+          size="md"
+          leading={<RPGIconSlot icon={<ScrollText size={26} />} />}
+          eyebrow="Jornada"
+          title="Contratos da Jornada"
+          subtitle="Ações repetidas se tornam contratos. Honre seus compromissos e construa a vida que você deseja."
+          actions={
+            <>
+              {habits.length > 0 && (
+                <RPGButton variant="secondary" onClick={() => document.getElementById("historico-contratos")?.scrollIntoView({ behavior: "smooth" })}>
+                  <History size={14} aria-hidden /> Ver história
+                </RPGButton>
+              )}
+              {habits.length > 0 && (
+                <RPGButton variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Gera tarefas (missões) a partir dos hábitos — a recompensa continua vindo do contrato">
+                  {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ListChecks size={14} aria-hidden />} Gerar missões
+                </RPGButton>
+              )}
+              <RPGButton variant="primary" onClick={() => setModalOpen(true)}>
+                <Plus size={14} aria-hidden /> Novo contrato
+              </RPGButton>
+            </>
+          }
         />
       ) : (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -276,6 +296,31 @@ export function HabitosPage() {
         />
       ) : (
         <>
+          {/* Cartões de estatística (no RPG, mesma informação como atributos do personagem) */}
+          {isRpg ? (
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <RPGStatCard icon={<Flame size={18} />} label="Sequência atual" value={diasLabel(stats?.currentStreakMax ?? 0)} tone="red" />
+              <RPGStatCard
+                icon={<Target size={18} />}
+                label="Contratos cumpridos hoje"
+                value={`${completedToday} / ${totalHabits}`}
+                tone="blue"
+                pct={totalHabits ? Math.round((completedToday / totalHabits) * 100) : 0}
+              />
+              <RPGStatCard icon={<Activity size={18} />} label="Contratos ativos" value={String(totalHabits)} tone="purple" />
+              <RPGStatCard
+                icon={<TrendingUp size={18} />}
+                label="Consistência (30 dias)"
+                value={`${consistency?.ratePct ?? 0}%`}
+                tone="green"
+                caption={consistency?.changePct != null && consistency.changePct !== 0 ? `${consistency.changePct > 0 ? "↑" : "↓"} ${Math.abs(consistency.changePct)}% vs. período anterior` : undefined}
+              />
+              <div className="col-span-2 lg:col-span-1">
+                <RPGStatCard icon={<Sparkles size={18} />} label="Melhor sequência" value={diasLabel(stats?.bestStreakMax ?? 0)} tone="pink" />
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Cartões de estatística */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
             <Card className="p-3 sm:p-4">
@@ -344,9 +389,12 @@ export function HabitosPage() {
             </Card>
           </div>
 
-          {isRpg && <RpgContractsPanel items={habitsWithStatus} today={today} onFulfill={fulfillContract} pendingId={fulfillingId} />}
+          </>
+          )}
 
-          <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
+          {isRpg && <RpgContractsPanel items={habitsWithStatus} today={today} onFulfill={fulfillContract} onEdit={(h) => setEditingHabit(h)} pendingId={fulfillingId} />}
+
+          <div id="historico-contratos" className="grid lg:grid-cols-[1fr_320px] gap-4 items-start scroll-mt-4">
             {/* Coluna principal: tabela de hábitos + categorias + horários */}
             <div className="space-y-4 min-w-0">
               <Card className="p-5">

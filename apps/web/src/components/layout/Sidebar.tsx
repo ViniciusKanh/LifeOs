@@ -5,7 +5,7 @@ import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
-import { findNavItem, type NavGroup } from "./navConfig";
+import { navLabel, findNavItem, type NavGroup } from "./navConfig";
 
 /**
  * Sidebar do LifeOS: grupos recolhíveis seguindo o ciclo do produto, item
@@ -75,6 +75,7 @@ export function NavGroups({
 }) {
   const location = useLocation();
   const currentNav = findNavItem(location.pathname);
+  const { isRpg } = useTheme();
   const activeGroupId = currentNav?.group.id;
   // Hubs: /signals ativa "Analytics", /capacity-planner ativa "Tarefas" etc.
   const activeTo = currentNav?.item.to;
@@ -140,7 +141,9 @@ export function NavGroups({
                   transition={{ duration: 0.2, ease: "easeOut" }}
                   className="overflow-hidden flex flex-col gap-0.5"
                 >
-                  {group.items.map(({ to, label, icon: Icon }) => (
+                  {group.items.map(({ to, label: baseLabel, rpgLabel, icon: Icon }) => {
+                    const label = navLabel({ label: baseLabel, rpgLabel }, isRpg);
+                    return (
                     <li key={to} className="relative">
                       <NavLink
                         to={to}
@@ -184,7 +187,8 @@ export function NavGroups({
                         }}
                       </NavLink>
                     </li>
-                  ))}
+                    );
+                  })}
                 </motion.ul>
               )}
             </AnimatePresence>

@@ -17,6 +17,7 @@ export function RPGQuestCard({
   reasons,
   actions,
   emptyText,
+  badges,
 }: {
   label?: string;
   title: string | null;
@@ -26,6 +27,8 @@ export function RPGQuestCard({
   reasons?: string | null;
   actions?: ReactNode;
   emptyText: string;
+  /** Selos à direita do rótulo (ex.: recompensa prevista +XP / +moedas). */
+  badges?: ReactNode;
 }) {
   return (
     <article className="rpg-parchment px-4 sm:px-5 py-4 mx-1.5 my-1.5">
@@ -38,6 +41,7 @@ export function RPGQuestCard({
             Prioridade {priority}
           </RPGBadge>
         )}
+        {title && badges && <span className="ml-auto flex items-center gap-1.5">{badges}</span>}
       </div>
       {title ? (
         <>

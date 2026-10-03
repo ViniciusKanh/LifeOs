@@ -43,6 +43,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Frase curta do cabeçalho (decoração, sem dado nenhum). */
   quote?: string;
+  /** Nome exibido só no tema RPG (camada de UX; a rota e o domínio continuam os mesmos). */
+  rpgLabel?: string;
   /**
    * Abas do "hub": telas irmãs que deixaram de ocupar uma linha própria no
    * menu. As rotas antigas continuam valendo; o AppShell desenha as abas.
@@ -108,6 +110,7 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         to: "/tarefas",
         label: "Tarefas",
+        rpgLabel: "Missões",
         icon: ListChecks,
         quote: "Disciplina de hoje, liberdade de amanhã.",
         tabs: [
@@ -126,7 +129,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/diario", label: "Diário", icon: NotebookPen, quote: "Escrever é enxergar o próprio caminho." },
       { to: "/notas", label: "Notas", icon: NotebookText, quote: "Ideias conectadas viram conhecimento." },
-      { to: "/habitos", label: "Hábitos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
+      { to: "/habitos", label: "Hábitos", rpgLabel: "Contratos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
       { to: "/educacao", label: "Educação", icon: GraduationCap, quote: "Estudo hoje, liberdade amanhã." },
@@ -202,6 +205,11 @@ export function visibleGroups(isAdmin: boolean): NavGroup[] {
 }
 
 /** Item de navegação correspondente à rota atual (considera sub-rotas como /projetos/:id e as abas de cada hub). */
+/** Rótulo do item conforme o tema (no RPG, Tarefas → Missões, Hábitos → Contratos). */
+export function navLabel(item: Pick<NavItem, "label" | "rpgLabel">, isRpg: boolean): string {
+  return isRpg && item.rpgLabel ? item.rpgLabel : item.label;
+}
+
 export function findNavItem(pathname: string): { item: NavItem; group: NavGroup; tab: NavTab | null } | null {
   let best: { item: NavItem; group: NavGroup; tab: NavTab | null; len: number } | null = null;
   const matches = (to: string) => pathname === to || pathname.startsWith(`${to}/`);

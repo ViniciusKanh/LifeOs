@@ -1,4 +1,4 @@
-import { Archive, CheckCircle2, Hourglass, ScrollText, Swords } from "lucide-react";
+import { Flag, PackageOpen, ScrollText, Search, Swords } from "lucide-react";
 
 /**
  * Colunas do Kanban de missões no tema RPG — compartilhadas entre Tarefas
@@ -13,10 +13,19 @@ export const COLUMN_ACCENT_RPG: Record<string, string> = {
   Concluído: "rgb(var(--rpg-green))",
 };
 
+// Baú (backlog), pergaminho (a fazer), espadas (andamento), lupa (revisão), bandeira (concluído).
 export const COLUMN_ICON_RPG: Record<string, JSX.Element> = {
-  Backlog: <Archive size={16} />,
-  "A Fazer": <Swords size={16} />,
-  "Em Andamento": <Hourglass size={16} />,
-  "Em Revisão": <ScrollText size={16} />,
-  Concluído: <CheckCircle2 size={16} />,
+  Backlog: <PackageOpen size={16} />,
+  "A Fazer": <ScrollText size={16} />,
+  "Em Andamento": <Swords size={16} />,
+  "Em Revisão": <Search size={16} />,
+  Concluído: <Flag size={16} />,
+};
+
+export const COLUMN_HINT_RPG: Record<string, string> = {
+  Backlog: "Missões futuras e ideias.",
+  "A Fazer": "Próximas missões da jornada.",
+  "Em Andamento": "Missões em execução.",
+  "Em Revisão": "Aguardando verificação.",
+  Concluído: "Missões completadas.",
 };

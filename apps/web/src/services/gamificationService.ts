@@ -47,6 +47,8 @@ export interface GamificationRules {
   project: { xp: number; coins: number };
   journal: { xp: number; coins: number };
   review: Record<"weekly" | "monthly" | "quarterly" | "annual", { xp: number; coins: number }>;
+  habitStreakMilestones: Array<{ days: number; xp: number; coins: number }>;
+  lifeAdmin: Record<string, { xp: number; coins: number }>;
 }
 
 export const REWARD_CATEGORIES = [
