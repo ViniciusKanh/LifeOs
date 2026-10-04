@@ -71,10 +71,10 @@ export function RpgAnalyticsSidebar() {
         )}
       </RPGPanel>
 
-      <RPGPanel title="Loja de recompensas" icon={<Gift size={16} />} actions={<Link to="/loja" className="text-xs text-rpg-gold-light hover:underline">Ver loja →</Link>}>
+      <RPGPanel title="Tesouro & Recompensas" icon={<Gift size={16} />} actions={<Link to="/tesouro" className="text-xs text-rpg-gold-light hover:underline">Ver tesouro →</Link>}>
         <p className="-mt-1 mb-3 text-xs text-rpg-muted">Troque moedas por recompensas. XP nunca é gasto.</p>
         {shop.length === 0 ? (
-          <p className="text-sm text-rpg-muted">Nenhuma recompensa criada. <Link to="/loja" className="text-rpg-gold-light hover:underline">Criar na loja →</Link></p>
+          <p className="text-sm text-rpg-muted">Nenhuma recompensa criada. <Link to="/tesouro" className="text-rpg-gold-light hover:underline">Criar no Tesouro →</Link></p>
         ) : (
           <ul className="space-y-2">
             {shop.map((r) => {

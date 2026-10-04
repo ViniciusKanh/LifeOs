@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Activity, Gem, LayoutGrid, Sparkles, Store, Trophy, UserRound } from "lucide-react";
+import { Activity, Coins, Gem, LayoutGrid, Sparkles, Store, Trophy, UserRound } from "lucide-react";
 import { RPGPanel, RPGPlayerHUD, rpgButtonClass } from "@/components/rpg";
 import { AnimatedLineChart } from "@/components/charts/motion/AnimatedLineChart";
 import { useXpHistory } from "@/hooks/useGamification";
@@ -19,7 +19,7 @@ const MISSION_STATE: Record<MissionState, { label: string; color: string }> = {
   overdue: { label: "Atrasada", color: tok("red") },
 };
 
-/** Painel do jogador: HUD real + Life Score + atalhos (Loja, Conquistas, Perfil). */
+/** Painel do jogador: HUD real + Life Score + atalhos (Tesouro, Conquistas, Perfil). */
 export function RpgJourneyPlayer({ lifeScore }: { lifeScore: number | null }) {
   return (
     <RPGPanel variant="gold" title="Progressão da jornada" icon={<Sparkles size={16} />}>
@@ -32,8 +32,8 @@ export function RpgJourneyPlayer({ lifeScore }: { lifeScore: number | null }) {
                 <span className="font-pixel text-sm">Life Score {lifeScore}</span>
               </Link>
             )}
-            <Link to="/loja" className={rpgButtonClass("gold")}>
-              <Store size={14} aria-hidden /> Loja
+            <Link to="/tesouro" className={rpgButtonClass("gold")}>
+              <Coins size={14} aria-hidden /> Tesouro
             </Link>
             <Link to="/conquistas" className={rpgButtonClass("secondary")}>
               <Trophy size={14} aria-hidden /> Conquistas

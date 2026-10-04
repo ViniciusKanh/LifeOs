@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { gamificationService, type RewardInput, type XpSettings } from "@/services/gamificationService";
+import { gamificationService, type RedemptionStatus, type RewardInput, type XpSettings } from "@/services/gamificationService";
 
 const KEY = ["gamification"] as const;
 
@@ -31,9 +31,21 @@ export function useRewards(includeInactive = false) {
     onSuccess: invalidate,
   });
   const remove = useMutation({ mutationFn: (id: string) => gamificationService.removeReward(id), onSuccess: invalidate });
-  const redeem = useMutation({ mutationFn: (id: string) => gamificationService.redeem(id), onSuccess: invalidate });
+  // Sem atualização otimista: a UI só muda depois que o backend confirma o débito.
+  const redeem = useMutation({ mutationFn: ({ id, requestId }: { id: string; requestId?: string }) => gamificationService.redeem(id, requestId), onSuccess: invalidate });
+  const createBatch = useMutation({ mutationFn: (items: RewardInput[]) => gamificationService.createRewardsBatch(items), onSuccess: invalidate });
 
-  return { ...query, rewards: query.data ?? [], create, update, remove, redeem };
+  return { ...query, rewards: query.data ?? [], create, update, remove, redeem, createBatch };
+}
+
+/** Tela Tesouro & Recompensas: KPIs, recompensas, inventário, histórico e metas raras. */
+export function useTreasure() {
+  const qc = useQueryClient();
+  const query = useQuery({ queryKey: [...KEY, "treasure"], queryFn: gamificationService.treasure, staleTime: 15_000 });
+  const invalidate = () => qc.invalidateQueries({ queryKey: KEY });
+  const consume = useMutation({ mutationFn: (redemptionId: string) => gamificationService.useRedemption(redemptionId), onSuccess: invalidate });
+  const cancelItem = useMutation({ mutationFn: (redemptionId: string) => gamificationService.cancelRedemption(redemptionId), onSuccess: invalidate });
+  return { ...query, consume, cancelItem };
 }
 
 /** Datas reais de cada subida de nível (derivadas do ledger no backend). */
@@ -46,8 +58,8 @@ export function useWallet(enabled = true) {
   return useQuery({ queryKey: [...KEY, "wallet"], queryFn: gamificationService.wallet, enabled, staleTime: 30_000 });
 }
 
-export function useRedemptions() {
-  return useQuery({ queryKey: [...KEY, "redemptions"], queryFn: gamificationService.redemptions });
+export function useRedemptions(status?: RedemptionStatus, limit = 30, enabled = true) {
+  return useQuery({ queryKey: [...KEY, "redemptions", status ?? "all", limit], queryFn: () => gamificationService.redemptions(status, limit), enabled });
 }
 
 /** XP/moedas por dificuldade e por prioridade do próprio usuário (Perfil e Missões). */

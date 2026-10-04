@@ -16,6 +16,7 @@ export function RPGStatCard({
   action,
   layout = "stack",
   trend,
+  dense = false,
 }: {
   icon: ReactNode;
   label: string;
@@ -29,23 +30,26 @@ export function RPGStatCard({
   layout?: "stack" | "wide";
   /** Variação real (ex.: "+12%"), exibida ao lado do valor no layout "wide". */
   trend?: { text: string; up: boolean } | null;
+  /** Versão compacta do "wide" para faixas com muitos KPIs (ex.: Tesouro). */
+  dense?: boolean;
 }) {
   if (layout === "wide") {
     return (
-      <div className="rpg-panel rpg-panel-gold flex items-center gap-3 p-3 sm:p-4 min-w-0 h-full">
+      <div className={clsx("rpg-panel rpg-panel-gold flex items-center min-w-0 h-full", dense ? "gap-2.5 p-2.5" : "gap-3 p-3 sm:p-4")}>
         <span
-          className={clsx("inline-flex w-12 h-12 sm:w-14 sm:h-14 shrink-0 items-center justify-center border-2 border-rpg-gold/70 bg-rpg-bg", RPG_TONE_TEXT[tone])}
+          className={clsx("inline-flex shrink-0 items-center justify-center border-2 border-rpg-gold/70 bg-rpg-bg", dense ? "w-10 h-10" : "w-12 h-12 sm:w-14 sm:h-14", RPG_TONE_TEXT[tone])}
           style={{ borderRadius: 3 }}
           aria-hidden
         >
           {icon}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="flex items-baseline gap-2 font-rpg text-2xl sm:text-3xl font-bold leading-none text-rpg-text tabular-nums">
+          <p className={clsx("flex items-baseline gap-2 font-rpg font-bold leading-none text-rpg-text tabular-nums", dense ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl")}>
             {value}
             {trend && <span className={clsx("font-pixel text-xs", trend.up ? "text-rpg-green" : "text-rpg-red")}>{trend.up ? "↑" : "↓"} {trend.text}</span>}
           </p>
-          <p className="mt-1 text-sm text-rpg-text/90 truncate">{label}</p>
+          <p className={clsx("mt-1 text-rpg-text/90", dense ? "text-xs leading-tight" : "text-sm truncate")}>{label}</p>
+          {pct !== undefined && <RPGProgressBar className="mt-1.5" tone={tone} label={label} value={pct} showLabel={false} />}
           {caption && <p className="text-[11px] text-rpg-muted truncate">{caption}</p>}
         </div>
         {action && <div className="shrink-0">{action}</div>}

@@ -2,19 +2,23 @@ import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getDifficultyRewards, getLevelHistory, getPlayerProfile, getPriorityRewards, getProjectsXp, getWalletSummary, getXpHistory, publicRules, saveDifficultyRewards, savePriorityRewards } from "../services/gamificationService.js";
-import { addStarterRewards, suggestRewards } from "../services/rewardsAIService.js";
+import { addStarterRewards, createRewardsBatch, suggestInputSchema, suggestRewards } from "../services/rewardsAIService.js";
+import { getRareGoals, getTreasureSummary, syncGems } from "../services/treasureService.js";
+import { TREASURE_CONFIG } from "../config/treasure.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { difficultySettingsSchema, prioritySettingsSchema } from "../validators/contracts.schema.js";
-import { z } from "zod";
 import {
+  cancelRedemption,
   createReward,
   deleteReward,
+  getInventory,
   listRedemptions,
-  listRewards,
+  listRewardsWithAvailability,
   redeemReward,
   updateReward,
+  useRedemption,
 } from "../services/rewardsService.js";
-import { createRewardSchema, historyQuerySchema, updateRewardSchema } from "../validators/gamification.schema.js";
+import { batchRewardsSchema, createRewardSchema, historyQuerySchema, redeemSchema, redemptionsQuerySchema, updateRewardSchema } from "../validators/gamification.schema.js";
 
 /**
  * Rotas do motor de gamificação. Nenhuma rota permite conceder XP ou
@@ -91,27 +95,53 @@ gamificationRouter.post("/rewards/starter", async (req, res) => {
   return res.status(201).json(await addStarterRewards(getDb(), req.user!.id));
 });
 
-const aiLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 20 });
-const suggestSchema = z.object({ wish: z.string().trim().max(600).optional() });
+// Limite por usuário (config central): gerar com IA tem custo e não precisa ser frequente.
+const aiLimit = rateLimit({ ...TREASURE_CONFIG.ai.rateLimit, key: (req) => `user:${req.user?.id ?? req.ip}` });
 
 /** POST /api/gamification/rewards/ai/suggest — o Gemini propõe recompensas (nada é salvo) */
 gamificationRouter.post("/rewards/ai/suggest", aiLimit, async (req, res) => {
-  const parsed = suggestSchema.safeParse(req.body ?? {});
-  if (!parsed.success) return res.status(400).json({ error: "Dados inválidos." });
-  const result = await suggestRewards(getDb(), req.user!.id, parsed.data.wish);
-  if (!result.ok) return res.status(422).json({ error: result.message });
+  const parsed = suggestInputSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "Dados inválidos. Revise os campos (máx. 400 caracteres)." });
+  const result = await suggestRewards(getDb(), req.user!.id, parsed.data);
+  if (!result.ok) return res.status(result.status).json({ error: result.message, code: result.code });
   return res.json(result.data);
 });
 
-/** GET /api/gamification/rewards?all=1 */
+/** POST /api/gamification/rewards/batch — cria as recompensas confirmadas pelo usuário (IA/pacote) */
+gamificationRouter.post("/rewards/batch", async (req, res) => {
+  const parsed = batchRewardsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  return res.status(201).json(await createRewardsBatch(getDb(), req.user!.id, parsed.data.rewards));
+});
+
+/** GET /api/gamification/treasure — tudo da tela Tesouro & Recompensas em uma chamada */
+gamificationRouter.get("/treasure", async (req, res) => {
+  const db = getDb();
+  const ownerId = req.user!.id;
+  await syncGems(db, ownerId);
+  const rewards = await listRewardsWithAvailability(db, ownerId, true);
+  const active = rewards.filter((r) => r.isActive);
+  const [summary, inventory, history, goals] = await Promise.all([
+    getTreasureSummary(db, ownerId, active),
+    getInventory(db, ownerId),
+    listRedemptions(db, ownerId, { limit: 4 }),
+    getRareGoals(db, ownerId, active),
+  ]);
+  return res.json({ summary, rewards, inventory, history, goals, config: { cost: TREASURE_CONFIG.cost, priceBands: TREASURE_CONFIG.priceBands } });
+});
+
+/** GET /api/gamification/rewards?all=1 — com disponibilidade calculada no servidor */
 gamificationRouter.get("/rewards", async (req, res) => {
-  return res.json(await listRewards(getDb(), req.user!.id, req.query.all === "1"));
+  return res.json(await listRewardsWithAvailability(getDb(), req.user!.id, req.query.all === "1"));
 });
 
 /** POST /api/gamification/rewards */
 gamificationRouter.post("/rewards", async (req, res) => {
   const parsed = createRewardSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  if (parsed.data.currency === "gem" && parsed.data.cost > TREASURE_CONFIG.cost.gem.max) {
+    return res.status(400).json({ error: `Recompensas em gemas custam no máximo ${TREASURE_CONFIG.cost.gem.max}.` });
+  }
   return res.status(201).json(await createReward(getDb(), req.user!.id, parsed.data));
 });
 
@@ -133,15 +163,39 @@ gamificationRouter.delete("/rewards/:id", async (req, res) => {
 
 /** POST /api/gamification/rewards/:id/redeem — debita moedas e registra o resgate */
 gamificationRouter.post("/rewards/:id/redeem", async (req, res) => {
-  const result = await redeemReward(getDb(), req.user!.id, req.params.id);
+  const parsed = redeemSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "Requisição inválida." });
+  await syncGems(getDb(), req.user!.id);
+  const result = await redeemReward(getDb(), req.user!.id, req.params.id, parsed.data.requestId);
   if (!result.ok) {
     const status = result.code === "not_found" ? 404 : 409;
     return res.status(status).json({ error: result.message, code: result.code, balance: result.balance, availableAt: result.availableAt });
   }
-  return res.status(201).json(result);
+  return res.status(result.replayed ? 200 : 201).json(result);
 });
 
-/** GET /api/gamification/redemptions */
+/** GET /api/gamification/redemptions?status=&limit= — histórico de resgates */
 gamificationRouter.get("/redemptions", async (req, res) => {
-  return res.json(await listRedemptions(getDb(), req.user!.id));
+  const parsed = redemptionsQuerySchema.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "Filtro inválido." });
+  return res.json(await listRedemptions(getDb(), req.user!.id, parsed.data));
+});
+
+/** GET /api/gamification/inventory — itens resgatados ainda não usados */
+gamificationRouter.get("/inventory", async (req, res) => {
+  return res.json(await getInventory(getDb(), req.user!.id));
+});
+
+/** POST /api/gamification/redemptions/:id/use — consome 1 unidade (não dá XP) */
+gamificationRouter.post("/redemptions/:id/use", async (req, res) => {
+  const ok = await useRedemption(getDb(), req.user!.id, req.params.id);
+  if (!ok) return res.status(409).json({ error: "Este item não está mais disponível no inventário." });
+  return res.json({ ok: true });
+});
+
+/** POST /api/gamification/redemptions/:id/cancel — devolve um item não usado e estorna o valor */
+gamificationRouter.post("/redemptions/:id/cancel", async (req, res) => {
+  const result = await cancelRedemption(getDb(), req.user!.id, req.params.id);
+  if (!result.ok) return res.status(409).json({ error: "Só itens ainda não usados podem ser cancelados." });
+  return res.json(result);
 });

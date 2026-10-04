@@ -25,7 +25,7 @@ export function RPGPlayerHUD({ compact = false, actions, className }: { compact?
     if (!p || !prefs.gamification) return null;
     return (
       <Link
-        to="/loja"
+        to="/tesouro"
         className={clsx("hidden lg:flex items-center gap-2.5 px-2 py-1 border border-rpg-border hover:border-rpg-gold/70 bg-rpg-panel/70 transition-colors", className)}
         style={{ borderRadius: 3 }}
         aria-label={`Nível ${p.level}, ${p.xpIntoLevel} de ${p.xpForNextLevel} XP, ${p.coins} moedas. Abrir loja`}

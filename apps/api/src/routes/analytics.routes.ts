@@ -336,6 +336,21 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
   ]);
+  // Tesouro: recompensa criada, recompensa usada e gemas obtidas (sugestões recusadas da IA nunca entram).
+  const [rewardsCreated, rewardsUsed, gemsEarned] = await Promise.all([
+    db.execute({
+      sql: "SELECT id, name AS label, created_at AS at FROM rewards WHERE owner_id = ? AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, reward_name AS label, used_at AS at FROM reward_redemptions WHERE owner_id = ? AND status = 'used' AND used_at IS NOT NULL AND date(used_at) >= date(?) AND date(used_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, label, amount, created_at AS at FROM gem_ledger WHERE owner_id = ? AND amount > 0 AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+  ]);
   const codexName = (kind: string, id: string) =>
     (kind === "relic" ? RELICS.find((r) => r.id === id)?.name : kind === "title" ? TITLES.find((t) => t.id === id)?.name : KNOWLEDGE.find((k) => k.id === id)?.title) ?? id;
   const CODEX_KIND: Record<string, string> = { relic: "Relíquia descoberta", title: "Novo título", knowledge: "Conhecimento desbloqueado" };
@@ -377,7 +392,10 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(projectsDone.rows).map((r) => ({ type: "project", icon: "🏰", ...r })),
     ...asRows(achievementsUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r })),
     ...asRows(customUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r, id: `custom-${r.id}` })),
-    ...asRows(redemptions.rows).map((r) => ({ type: "reward", icon: "🎁", ...r })),
+    ...asRows(redemptions.rows).map((r) => ({ type: "reward", icon: "🎁", ...r, label: `Recompensa resgatada: ${String(r.label)}` })),
+    ...asRows(rewardsCreated.rows).map((r) => ({ type: "reward", icon: "🪙", ...r, id: `reward-new-${String(r.id)}`, label: `Recompensa criada: ${String(r.label)}` })),
+    ...asRows(rewardsUsed.rows).map((r) => ({ type: "reward", icon: "✨", ...r, id: `reward-used-${String(r.id)}`, label: `Recompensa utilizada: ${String(r.label)}` })),
+    ...asRows(gemsEarned.rows).map((r) => ({ type: "reward", icon: "💎", ...r, id: `gem-${String(r.id)}`, label: `+${String(r.amount)} gema${Number(r.amount) > 1 ? "s" : ""}: ${String(r.label ?? "marco especial")}` })),
     ...asRows(campaignEvents.rows).map((r) => ({ type: "campaign", icon: "⚒️", ...r })),
     ...asRows(codexUnlocks.rows).map((r) => ({
       type: "codex",

@@ -82,7 +82,7 @@ function daysBetweenKeys(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
 
-async function userTimezone(db: Client, ownerId: string): Promise<string> {
+export async function userTimezone(db: Client, ownerId: string): Promise<string> {
   const r = await db.execute({ sql: "SELECT timezone FROM users WHERE id = ?", args: [ownerId] });
   const tz = r.rows[0]?.timezone;
   return typeof tz === "string" && tz ? tz : GAMIFICATION_RULES.defaultTimezone;
@@ -952,10 +952,11 @@ export function publicRules() {
 export async function getWalletSummary(db: Client, ownerId: string) {
   const r = await db.execute({
     sql: `SELECT
-            COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) AS earned,
-            COALESCE(-SUM(CASE WHEN amount < 0 THEN amount END), 0) AS spent,
-            COALESCE(SUM(CASE WHEN amount > 0 AND created_at >= datetime('now', '-30 days') THEN amount END), 0) AS earned30,
-            COALESCE(-SUM(CASE WHEN amount < 0 AND created_at >= datetime('now', '-30 days') THEN amount END), 0) AS spent30
+            -- Estorno de resgate (event_type 'refund') abate o gasto em vez de contar como ganho.
+            COALESCE(SUM(CASE WHEN amount > 0 AND event_type != 'refund' THEN amount END), 0) AS earned,
+            COALESCE(-SUM(CASE WHEN amount < 0 OR event_type = 'refund' THEN amount END), 0) AS spent,
+            COALESCE(SUM(CASE WHEN amount > 0 AND event_type != 'refund' AND created_at >= datetime('now', '-30 days') THEN amount END), 0) AS earned30,
+            COALESCE(-SUM(CASE WHEN (amount < 0 OR event_type = 'refund') AND created_at >= datetime('now', '-30 days') THEN amount END), 0) AS spent30
           FROM coin_ledger WHERE owner_id = ?`,
     args: [ownerId],
   });

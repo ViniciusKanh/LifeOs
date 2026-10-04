@@ -9,14 +9,15 @@ import type { Request, Response, NextFunction } from "express";
 type Bucket = { count: number; resetAt: number };
 const buckets = new Map<string, Bucket>();
 
-export function rateLimit(options?: { windowMs?: number; max?: number }) {
+export function rateLimit(options?: { windowMs?: number; max?: number; key?: (req: Request) => string }) {
   const windowMs = options?.windowMs
     ?? Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000);
   const max = options?.max
     ?? Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10);
 
   return (req: Request, res: Response, next: NextFunction) => {
-    const key = `${req.ip}:${req.path}`;
+    // Por padrão IP + rota; rotas autenticadas podem limitar por usuário.
+    const key = options?.key ? `${options.key(req)}:${req.path}` : `${req.ip}:${req.path}`;
     const now = Date.now();
     const bucket = buckets.get(key);
 

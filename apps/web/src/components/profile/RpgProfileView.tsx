@@ -180,7 +180,7 @@ export function RpgProfileView({
         <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           <RPGStatCard icon={<Crown size={18} />} label="Nível atual" value={`Nv. ${level}`} tone="purple" />
           <RPGStatCard icon={<Sparkles size={18} />} label="Experiência total" value={p ? `${p.totalXp.toLocaleString("pt-BR")} XP` : "—"} tone="cyan" />
-          <RPGStatCard icon={<Coins size={18} />} label="Moedas" value={p ? String(p.coins) : "—"} tone="gold" to="/loja" caption="Ver loja →" />
+          <RPGStatCard icon={<Coins size={18} />} label="Moedas" value={p ? String(p.coins) : "—"} tone="gold" to="/tesouro" caption="Ver tesouro →" />
           <RPGStatCard icon={<Trophy size={18} />} label="Conquistas" value={`${unlocked.length} / ${achievements.length}`} tone="red" to="/conquistas" caption="Ver conquistas →" />
         </div>
       </RPGPanel>

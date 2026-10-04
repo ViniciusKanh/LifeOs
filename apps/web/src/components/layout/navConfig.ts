@@ -21,6 +21,7 @@ import {
   Repeat,
   ScrollText,
   BookMarked,
+  Coins,
   Settings,
   Share2,
   Sun,
@@ -184,11 +185,8 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Conquistas",
         icon: Trophy,
         quote: "Cada conquista começou com um hábito repetido.",
-        tabs: [
-          { to: "/conquistas", label: "Conquistas" },
-          { to: "/loja", label: "Loja de recompensas" },
-        ],
       },
+      { to: "/tesouro", label: "Tesouro & Recompensas", icon: Coins, quote: "Pequenas recompensas sustentam grandes jornadas." },
     ],
   },
   {

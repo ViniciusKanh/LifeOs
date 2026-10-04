@@ -58,38 +58,68 @@ export async function getGeminiConfig(): Promise<GeminiConfig | null> {
 
 export type GeminiCallResult = { ok: true; text: string } | { ok: false; message: string };
 
+export interface GenerateOptions {
+  /** Saída estruturada: JSON validado pelo próprio Gemini contra este schema (subset OpenAPI). */
+  responseSchema?: Record<string, unknown>;
+  /** Tempo máximo por tentativa (ms). */
+  timeoutMs?: number;
+  /** Novas tentativas só para falhas transitórias (429, 5xx, timeout, rede). */
+  retries?: number;
+}
+
+const TRANSIENT = (status: number) => status === 429 || status >= 500;
+
 /**
  * Chamada genérica à API do Gemini — usada tanto pelo teste de
  * conexão quanto pelo LifeOS Copilot (geração de insights). Nunca
  * mascara o erro real da Google: se a chave, o modelo ou a cota
  * estiverem com problema, a mensagem devolvida é a da própria API.
  */
-export async function generateText(prompt: string, config: GeminiConfig): Promise<GeminiCallResult> {
+export async function generateText(prompt: string, config: GeminiConfig, opts: GenerateOptions = {}): Promise<GeminiCallResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    });
+  const body: Record<string, unknown> = { contents: [{ parts: [{ text: prompt }] }] };
+  if (opts.responseSchema) body.generationConfig = { responseMimeType: "application/json", responseSchema: opts.responseSchema };
+  const attempts = 1 + Math.max(0, Math.min(2, opts.retries ?? 0));
+  let last: GeminiCallResult = { ok: false, message: "Falha ao chamar a API do Gemini." };
 
-    const data = (await res.json().catch(() => null)) as
-      | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; error?: { message?: string } }
-      | null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const controller = opts.timeoutMs ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), opts.timeoutMs) : null;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller?.signal,
+      });
 
-    if (!res.ok) {
-      const apiMessage = data?.error?.message ?? `HTTP ${res.status}`;
-      return { ok: false, message: `Gemini recusou a chamada (modelo "${config.model}"): ${apiMessage}` };
+      const data = (await res.json().catch(() => null)) as
+        | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; error?: { message?: string } }
+        | null;
+
+      if (!res.ok) {
+        const apiMessage = data?.error?.message ?? `HTTP ${res.status}`;
+        last = { ok: false, message: `Gemini recusou a chamada (modelo "${config.model}"): ${apiMessage}` };
+        if (TRANSIENT(res.status)) continue;
+        return last;
+      }
+
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!text) {
+        return { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.` };
+      }
+      return { ok: true, text };
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === "AbortError";
+      last = {
+        ok: false,
+        message: aborted ? "O Gemini demorou demais para responder." : err instanceof Error ? `Falha ao chamar a API do Gemini: ${err.message}` : "Falha ao chamar a API do Gemini.",
+      };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!text) {
-      return { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.` };
-    }
-    return { ok: true, text };
-  } catch (err) {
-    return { ok: false, message: err instanceof Error ? `Falha ao chamar a API do Gemini: ${err.message}` : "Falha ao chamar a API do Gemini." };
   }
+  return last;
 }
 
 /**

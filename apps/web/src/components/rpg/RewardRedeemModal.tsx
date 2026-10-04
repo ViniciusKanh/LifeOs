@@ -1,46 +1,64 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Coins, Gift } from "lucide-react";
+import { Coins, Gem } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import type { Reward } from "@/services/gamificationService";
+import type { RedeemResponse, Reward } from "@/services/gamificationService";
+import { RARITY, limitText, requirementText, rewardArtUrl } from "@/utils/treasureDisplay";
+import { RPGBadge } from "./RPGBadge";
 import { RPGButton } from "./RPGButton";
 
+/** Chave de idempotência por abertura do modal (clique duplo/refresh não gasta duas vezes). */
+function newRequestId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /**
- * Confirmação de resgate. A animação de "RECOMPENSA DESBLOQUEADA" só
- * aparece depois que o backend confirmou o débito (onConfirm resolvido).
+ * Confirmação de resgate. A animação "RECOMPENSA ADQUIRIDA" só aparece
+ * depois que o backend confirmou o débito (onConfirm resolvido).
  */
 export function RewardRedeemModal({
   reward,
   balance,
+  gems = 0,
   onClose,
   onConfirm,
+  onViewInventory,
 }: {
   reward: Reward | null;
   balance: number;
+  gems?: number;
   onClose: () => void;
-  onConfirm: (reward: Reward) => Promise<{ balance: number }>;
+  onConfirm: (reward: Reward, requestId: string) => Promise<RedeemResponse>;
+  onViewInventory?: () => void;
 }) {
   const reduce = useReducedMotion();
   const [state, setState] = useState<"confirm" | "pending" | "done">("confirm");
   const [error, setError] = useState<string | null>(null);
-  const [newBalance, setNewBalance] = useState<number | null>(null);
+  const [requestId, setRequestId] = useState(newRequestId);
+  const [result, setResult] = useState<RedeemResponse | null>(null);
 
   useEffect(() => {
     if (reward) {
       setState("confirm");
       setError(null);
-      setNewBalance(null);
+      setResult(null);
+      setRequestId(newRequestId());
     }
   }, [reward]);
 
   if (!reward) return <Modal open={false} onClose={onClose} title="Resgatar recompensa">{null}</Modal>;
 
+  const isGem = reward.currency === "gem";
+  const current = isGem ? gems : balance;
+  const after = current - reward.cost;
+  const unit = isGem ? "gemas" : "moedas";
+  const Icon = isGem ? Gem : Coins;
+
   const confirm = async () => {
     setState("pending");
     setError(null);
     try {
-      const r = await onConfirm(reward);
-      setNewBalance(r.balance);
+      setResult(await onConfirm(reward, requestId));
       setState("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível resgatar agora.");
@@ -51,21 +69,28 @@ export function RewardRedeemModal({
   return (
     <Modal
       open
-      onClose={onClose}
-      title={state === "done" ? "Recompensa desbloqueada" : "Resgatar recompensa"}
+      onClose={state === "pending" ? () => undefined : onClose}
+      title={state === "done" ? "Recompensa resgatada" : "Resgatar recompensa"}
       size="sm"
       footer={
         state === "done" ? (
-          <RPGButton variant="gold" onClick={onClose}>
-            Fechar
-          </RPGButton>
+          <>
+            {onViewInventory && (
+              <RPGButton variant="secondary" onClick={onViewInventory}>
+                Ver inventário
+              </RPGButton>
+            )}
+            <RPGButton variant="gold" onClick={onClose}>
+              Fechar
+            </RPGButton>
+          </>
         ) : (
           <>
             <RPGButton variant="ghost" onClick={onClose} disabled={state === "pending"}>
               Cancelar
             </RPGButton>
-            <RPGButton variant="gold" onClick={confirm} disabled={state === "pending" || balance < reward.cost}>
-              {state === "pending" ? "Resgatando…" : `Gastar ${reward.cost} moedas`}
+            <RPGButton variant="gold" onClick={confirm} disabled={state === "pending" || !reward.availability.available}>
+              {state === "pending" ? "Resgatando…" : "Confirmar resgate"}
             </RPGButton>
           </>
         )
@@ -75,24 +100,31 @@ export function RewardRedeemModal({
         {state !== "done" ? (
           <motion.div key="confirm" exit={{ opacity: 0 }} className="space-y-3 text-sm">
             <div className="flex items-center gap-3">
-              <span className="w-14 h-14 flex items-center justify-center text-3xl border-2 border-rpg-bronze bg-rpg-bg-2" style={{ borderRadius: 3 }} aria-hidden>
-                {reward.icon || "🎁"}
-              </span>
+              <img src={rewardArtUrl(reward.art, reward.category)} alt="" aria-hidden className="pixelated w-24 h-[60px] object-cover border-2 border-rpg-bronze shrink-0" style={{ borderRadius: 3 }} />
               <div className="min-w-0">
-                <p className="font-rpg font-bold text-rpg-text">{reward.name}</p>
-                {reward.description && <p className="text-xs text-rpg-muted">{reward.description}</p>}
+                <RPGBadge tone={RARITY[reward.rarity]?.tone ?? "muted"}>{RARITY[reward.rarity]?.label ?? "Comum"}</RPGBadge>
+                <p className="mt-1 font-rpg font-bold text-rpg-text leading-tight">{reward.name}</p>
+                {reward.description && <p className="text-xs text-rpg-muted line-clamp-2">{reward.description}</p>}
               </div>
             </div>
-            <dl className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rpg-panel p-2">
-                <dt className="text-rpg-muted">Saldo atual</dt>
-                <dd className="font-pixel text-base text-rpg-gold-light tabular-nums">{balance}</dd>
-              </div>
-              <div className="rpg-panel p-2">
-                <dt className="text-rpg-muted">Saldo após</dt>
-                <dd className="font-pixel text-base text-rpg-text tabular-nums">{Math.max(0, balance - reward.cost)}</dd>
-              </div>
+            <dl className="grid grid-cols-3 gap-2 text-center">
+              {[
+                ["Custo", reward.cost],
+                ["Seu saldo", current],
+                ["Depois", Math.max(0, after)],
+              ].map(([label, v]) => (
+                <div key={label} className="border border-rpg-border bg-rpg-bg-2/70 p-2" style={{ borderRadius: 3 }}>
+                  <dt className="text-[10px] uppercase tracking-wide text-rpg-muted">{label}</dt>
+                  <dd className={`mt-1 inline-flex items-center gap-1 font-pixel tabular-nums ${label === "Depois" && after < 0 ? "text-rpg-red" : "text-rpg-gold-light"}`}>
+                    <Icon size={13} aria-hidden /> {v}
+                  </dd>
+                </div>
+              ))}
             </dl>
+            <p className="text-xs text-rpg-muted">
+              {limitText(reward)} · {requirementText(reward)}. O valor sai em {unit}; XP nunca é gasto.
+            </p>
+            {!reward.availability.available && reward.availability.reason && <p className="text-xs text-rpg-orange">{reward.availability.reason}</p>}
             {error && (
               <p role="alert" className="text-xs text-rpg-red">
                 {error}
@@ -102,40 +134,30 @@ export function RewardRedeemModal({
         ) : (
           <motion.div
             key="done"
-            initial={reduce ? false : { opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="relative flex flex-col items-center text-center py-4 gap-3"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.85 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+            transition={{ duration: 0.35 }}
+            className="flex flex-col items-center text-center gap-2 py-3"
             role="status"
           >
-            <motion.span
-              className="relative w-20 h-20 flex items-center justify-center border-2 border-rpg-gold bg-rpg-gold/15 text-rpg-gold-light"
-              style={{ borderRadius: 4 }}
-              initial={reduce ? false : { rotate: -8, y: 8 }}
-              animate={reduce ? undefined : { rotate: [-8, 6, -3, 0], y: 0 }}
-              transition={{ duration: 0.6 }}
+            <motion.img
+              src={rewardArtUrl(reward.art, reward.category)}
+              alt=""
               aria-hidden
-            >
-              <Gift size={38} />
-              {!reduce &&
-                [0, 1, 2, 3, 4, 5].map((i) => (
-                  <motion.span
-                    key={i}
-                    className="absolute w-1.5 h-1.5 bg-rpg-gold-light"
-                    initial={{ opacity: 1, x: 0, y: 0 }}
-                    animate={{ opacity: 0, x: Math.cos((i / 6) * Math.PI * 2) * 46, y: Math.sin((i / 6) * Math.PI * 2) * 46 }}
-                    transition={{ duration: 0.8, delay: 0.25 }}
-                  />
-                ))}
-            </motion.span>
-            <p className="font-pixel text-lg tracking-wider text-rpg-gold-light">RECOMPENSA DESBLOQUEADA</p>
-            <p className="text-sm text-rpg-text">
-              {reward.icon} {reward.name}
+              className="pixelated w-40 h-[100px] object-cover border-2 border-rpg-gold"
+              style={{ borderRadius: 3 }}
+              initial={reduce ? false : { rotate: -4, y: 8 }}
+              animate={reduce ? undefined : { rotate: 0, y: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 14 }}
+            />
+            <p className="font-pixel text-xs uppercase tracking-[0.2em] text-rpg-gold">Recompensa adquirida</p>
+            <p className="font-rpg text-lg font-bold text-rpg-text">{reward.name}</p>
+            <p className="inline-flex items-center gap-1 font-pixel text-rpg-orange">
+              -{reward.cost} <Icon size={14} aria-hidden /> {unit}
             </p>
-            {newBalance != null && (
-              <p className="inline-flex items-center gap-1 text-xs text-rpg-muted">
-                <Coins size={12} aria-hidden /> Saldo: {newBalance} moedas
-              </p>
-            )}
+            <p className="text-xs text-rpg-muted">
+              Disponível no seu inventário. Saldo: {isGem ? result?.gems : result?.balance} {unit}.
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

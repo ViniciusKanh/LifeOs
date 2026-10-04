@@ -86,7 +86,7 @@ export function RpgLevelSpotlight({ dimensions }: { dimensions: Array<{ key: str
           )}
           <div className="mt-3 flex flex-wrap justify-center lg:justify-start gap-2">
             <Link to="/contratos" className={rpgButtonClass("gold")}><ScrollText size={14} aria-hidden /> Contratos</Link>
-            <Link to="/loja" className={rpgButtonClass("secondary")}><Store size={14} aria-hidden /> Loja</Link>
+            <Link to="/tesouro" className={rpgButtonClass("secondary")}><Coins size={14} aria-hidden /> Tesouro</Link>
             <Link to="/perfil" className={rpgButtonClass("ghost")}><Crown size={14} aria-hidden /> Ficha</Link>
           </div>
         </div>
