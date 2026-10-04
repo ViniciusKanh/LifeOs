@@ -35,6 +35,7 @@ export interface RpgPrefsPayload {
   frame: "bronze" | "silver" | "gold" | "rare";
   banner: string;
   title: string | null;
+  classId: string | null;
   gamification: boolean;
   showXp: boolean;
   showCoins: boolean;
@@ -851,7 +852,7 @@ export interface JournalCollection {
 export interface TimelineEvent {
   type:
     | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
-    | "life_admin" | "review" | "focus" | "project" | "contract" | "campaign" | "achievement" | "reward" | "level_up";
+    | "life_admin" | "review" | "focus" | "project" | "contract" | "campaign" | "codex" | "achievement" | "reward" | "level_up";
   icon: string;
   id: string;
   label: string;

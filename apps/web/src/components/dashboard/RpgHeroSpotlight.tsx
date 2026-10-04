@@ -10,8 +10,7 @@ import { useContracts } from "@/hooks/useContracts";
 import { useCampaigns } from "@/hooks/useCampaigns";
 import { pickFeatured, forgeKpis } from "@/utils/campaignDisplay";
 import { Hammer } from "lucide-react";
-import { useRpgPreferences } from "@/hooks/useRpgPreferences";
-import { resolveTitle } from "@/utils/cosmetics";
+import { useEquippedTitle } from "@/hooks/useCodex";
 import { XP_SOURCES } from "@/utils/gamification";
 import { difficultyLabel } from "@/services/gamificationService";
 
@@ -37,7 +36,7 @@ function Chip({ icon, label, value, tone }: { icon: ReactNode; label: string; va
  */
 export function RpgLevelSpotlight({ dimensions }: { dimensions: Array<{ key: string; label: string; value: number }> }) {
   const { user } = useAuth();
-  const { prefs } = useRpgPreferences();
+  const title = useEquippedTitle();
   const { data: p, isLoading, isError } = useGamificationProfile();
   const { achievements } = useAchievements(false);
   const unlocked = achievements.filter((a) => a.unlockedAt).length;
@@ -60,7 +59,7 @@ export function RpgLevelSpotlight({ dimensions }: { dimensions: Array<{ key: str
         </div>
 
         <div className="min-w-0 pt-4 lg:pt-0 text-center lg:text-left">
-          <p className="font-pixel text-[11px] uppercase tracking-[0.18em] text-rpg-purple">{resolveTitle(prefs.title, level)}</p>
+          <p className="font-pixel text-[11px] uppercase tracking-[0.18em] text-rpg-purple">{title}</p>
           <h2 className="rpg-title text-3xl sm:text-4xl font-bold leading-tight">{user?.name?.split(" ")[0] ?? "Aventureiro"}</h2>
           {isLoading && <div className="mt-3 h-4 rpg-bar animate-pulse" aria-label="Carregando progressão" />}
           {isError && <p className="mt-2 text-sm text-rpg-red">Não foi possível carregar a progressão.</p>}

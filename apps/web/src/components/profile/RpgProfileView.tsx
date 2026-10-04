@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   BarChart3,
   BookOpen,
@@ -43,7 +43,8 @@ import { useProjects } from "@/hooks/useProjects";
 import { useLifeAdmin } from "@/hooks/useLifeOs";
 import { useExperiments } from "@/hooks/useExperiments";
 import { useRpgPreferences, type AnimationLevel } from "@/hooks/useRpgPreferences";
-import { FRAMES, PROFILE_BANNERS, TITLES, bannerSrc, isFrameUnlocked, resolveTitle, unlockedTiers } from "@/utils/cosmetics";
+import { FRAMES, PROFILE_BANNERS, bannerSrc, isFrameUnlocked, unlockedTiers } from "@/utils/cosmetics";
+import { useCodexTitles, useEquippedTitle } from "@/hooks/useCodex";
 import { XP_SOURCES } from "@/utils/gamification";
 import type { CurrentUser } from "@/types";
 
@@ -81,7 +82,9 @@ export function RpgProfileView({
   exportCard: ReactNode;
   helpCard: ReactNode;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [params] = useSearchParams();
+  const initialTab = params.get("aba");
+  const [tab, setTab] = useState<Tab>(initialTab && ["overview", "stats", "custom", "rewards", "security", "integrations", "prefs"].includes(initialTab) ? (initialTab as Tab) : "overview");
   const [editing, setEditing] = useState(false);
   const [statsDays, setStatsDays] = useState(30);
   const { mode } = useTheme();
@@ -98,7 +101,8 @@ export function RpgProfileView({
   const { experiments } = useExperiments();
 
   const level = p?.level ?? 1;
-  const title = resolveTitle(prefs.title, level);
+  const title = useEquippedTitle();
+  const { data: titleCatalog } = useCodexTitles();
   const tiers = unlockedTiers(achievements);
   const unlocked = achievements.filter((a) => a.unlockedAt);
   const lastAch = [...unlocked].sort((a, b) => (b.unlockedAt ?? "").localeCompare(a.unlockedAt ?? ""))[0] ?? null;
@@ -293,13 +297,13 @@ export function RpgProfileView({
 
             <RPGPanel title="Título" icon={<Sparkles size={16} />}>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {TITLES.map((t) => {
-                  const ok = t.level <= level;
-                  const active = title === t.label;
+                {(titleCatalog ?? []).map((t) => {
+                  const ok = t.unlocked;
+                  const active = title === t.name;
                   return (
-                    <button key={t.id} type="button" disabled={!ok} aria-pressed={active} onClick={() => update({ title: t.id })} className={`${radio(active)} disabled:opacity-50 disabled:cursor-not-allowed`} style={{ borderRadius: 3 }}>
-                      <span className="flex items-center gap-1.5 font-semibold">{!ok && <Lock size={12} aria-label="Bloqueado" />}{t.label}</span>
-                      <span className="block text-[10px] text-rpg-muted">{ok ? "Desbloqueado" : `Nível ${t.level}`}</span>
+                    <button key={t.id} type="button" disabled={!ok} aria-pressed={active} onClick={() => update({ title: t.id })} className={`${radio(active)} disabled:opacity-50 disabled:cursor-not-allowed`} style={{ borderRadius: 3 }} title={t.description}>
+                      <span className="flex items-center gap-1.5 font-semibold">{!ok && <Lock size={12} aria-label="Bloqueado" />}{t.name}</span>
+                      <span className="block text-[10px] text-rpg-muted">{ok ? "Desbloqueado" : "Bloqueado — veja no Códex"}</span>
                     </button>
                   );
                 })}

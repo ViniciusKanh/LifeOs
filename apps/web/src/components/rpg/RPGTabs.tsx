@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import clsx from "clsx";
 
 /**
@@ -12,7 +13,7 @@ export function RPGTabs<T extends string>({
   size = "md",
   className,
 }: {
-  tabs: Array<{ value: T; label: string }>;
+  tabs: Array<{ value: T; label: string; icon?: ReactNode }>;
   value: T;
   onChange: (v: T) => void;
   label: string;
@@ -37,7 +38,14 @@ export function RPGTabs<T extends string>({
             )}
             style={{ borderRadius: 3 }}
           >
-            {t.label}
+            {t.icon ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className={active ? "" : "opacity-80"}>{t.icon}</span>
+                {t.label}
+              </span>
+            ) : (
+              t.label
+            )}
           </button>
         );
       })}

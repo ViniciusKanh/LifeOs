@@ -26,6 +26,8 @@ export interface RpgPreferences {
   frame: FrameId;
   banner: RpgBanner;
   title: string | null;
+  /** Classe da rotina escolhida no Códex (cosmética). */
+  classId: string | null;
 }
 
 export const DEFAULT_RPG_PREFERENCES: RpgPreferences = {
@@ -38,6 +40,7 @@ export const DEFAULT_RPG_PREFERENCES: RpgPreferences = {
   frame: "bronze",
   banner: "perfil",
   title: null,
+  classId: null,
 };
 
 /** Valores que existiam só no navegador (versão anterior) — usados até o primeiro salvamento. */

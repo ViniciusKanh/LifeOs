@@ -30,6 +30,7 @@ const HojePage = lazy(() => import("@/pages/hoje/HojePage").then((m) => ({ defau
 const TarefasPage = lazy(() => import("@/pages/tarefas/TarefasPage").then((m) => ({ default: m.TarefasPage })));
 const ForjaCampanhasPage = lazy(() => import("@/pages/campanhas/ForjaCampanhasPage").then((m) => ({ default: m.ForjaCampanhasPage })));
 const CampanhaDetalhePage = lazy(() => import("@/pages/campanhas/CampanhaDetalhePage").then((m) => ({ default: m.CampanhaDetalhePage })));
+const CodexPage = lazy(() => import("@/pages/codex/CodexPage").then((m) => ({ default: m.CodexPage })));
 const ContratosPage = lazy(() => import("@/pages/contratos/ContratosPage").then((m) => ({ default: m.ContratosPage })));
 const ProjetosPage = lazy(() => import("@/pages/projetos/ProjetosPage").then((m) => ({ default: m.ProjetosPage })));
 const ProjetoDetalhePage = lazy(() =>
@@ -170,6 +171,7 @@ export default function App() {
           <Route path="/deadline-radar" element={<DeadlineRadarPage />} />
           <Route path="/goal-forecast" element={<GoalForecastPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
+          <Route path="/codex" element={<CodexPage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
           <Route path="/life-map" element={<LifeMapPage />} />
           <Route path="/data-health" element={<DataHealthPage />} />

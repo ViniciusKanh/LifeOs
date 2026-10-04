@@ -49,6 +49,7 @@ import { importRouter } from "./routes/import.routes.js";
 import { gamificationRouter } from "./routes/gamification.routes.js";
 import { contractsRouter } from "./routes/contracts.routes.js";
 import { campaignsRouter } from "./routes/campaigns.routes.js";
+import { codexRouter } from "./routes/codex.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -151,6 +152,7 @@ app.use("/api/journals", journalsRouter);
 app.use("/api/gamification", gamificationRouter);
 app.use("/api/contracts", contractsRouter);
 app.use("/api/campaigns", campaignsRouter);
+app.use("/api/codex", codexRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

@@ -4,7 +4,6 @@ export { RPGButton, rpgButtonClass, type RPGButtonVariant } from "./RPGButton";
 export { RPGBadge } from "./RPGBadge";
 export { RPGProgressBar } from "./RPGProgressBar";
 export { RPGAvatar } from "./RPGAvatar";
-export { RPGAvatarPicker } from "./RPGAvatarPicker";
 export { RPGCharacterCard, RPGAvatarButton } from "./RPGCharacterCard";
 export { RPGProgressRing } from "./RPGProgressRing";
 export { RPGStatCard } from "./RPGStatCard";

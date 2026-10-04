@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { isTitleUnlocked } from "../services/codexService.js";
+import { CLASSES } from "../config/codex.js";
 import { nanoid } from "nanoid";
 import crypto from "node:crypto";
 import { getDb } from "../db/client.js";
@@ -302,6 +304,13 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
     args.push(data.rpgAvatarImage ?? null);
   }
   if (data.rpgPrefs) {
+    // Cosméticos do Códex: só equipa título desbloqueado e classe do catálogo.
+    if (data.rpgPrefs.title && !(await isTitleUnlocked(db, req.user!.id, data.rpgPrefs.title))) {
+      return res.status(403).json({ error: "Este título ainda não foi desbloqueado." });
+    }
+    if (data.rpgPrefs.classId && !CLASSES.some((c) => c.id === data.rpgPrefs!.classId)) {
+      return res.status(400).json({ error: "Classe inválida." });
+    }
     // Mescla com o que já está salvo: cada tela envia só o que mudou.
     const current = await db.execute({ sql: "SELECT rpg_prefs_json FROM users WHERE id = ?", args: [req.user!.id] });
     sets.push("rpg_prefs_json = ?");

@@ -20,6 +20,7 @@ import {
   Radar,
   Repeat,
   ScrollText,
+  BookMarked,
   Settings,
   Share2,
   Sun,
@@ -159,6 +160,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { to: "/timeline", label: "Timeline", icon: History, quote: "Sua história, registrada automaticamente." },
+      { to: "/codex", label: "Códex da Jornada", icon: BookMarked, quote: "Toda grande história começa com um registro." },
     ],
   },
   {

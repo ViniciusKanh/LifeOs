@@ -21,6 +21,7 @@ export const TABS: Array<{ value: EventType | "todos"; label: string }> = [
   { value: "project", label: "Projetos" },
   { value: "contract", label: "Contratos" },
   { value: "campaign", label: "Campanhas" },
+  { value: "codex", label: "Códex" },
   { value: "achievement", label: "Conquistas" },
   { value: "reward", label: "Recompensas" },
   { value: "level_up", label: "Nível" },
@@ -29,7 +30,7 @@ export const TABS: Array<{ value: EventType | "todos"; label: string }> = [
 ];
 
 /** Filtros que só aparecem quando existe ao menos um evento daquele tipo. */
-export const OPTIONAL_TABS = new Set<string>(["focus", "project", "contract", "campaign", "achievement", "reward", "level_up", "review", "life_admin"]);
+export const OPTIONAL_TABS = new Set<string>(["focus", "project", "contract", "campaign", "codex", "achievement", "reward", "level_up", "review", "life_admin"]);
 export const DAYS_PAGE = 10;
 
 export const RANGE_OPTIONS = [
@@ -85,6 +86,7 @@ export function eventContent(e: TimelineEvent): { title: string; detail: string 
     case "achievement":
       return { title: "Conquista desbloqueada", detail: e.label };
     case "campaign":
+    case "codex":
       return { title: e.label, detail: null };
     case "contract":
       return { title: "Contrato cumprido", detail: e.label.replace(/^Contrato cumprido: /, "") };

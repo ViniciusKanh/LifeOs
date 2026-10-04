@@ -11,7 +11,7 @@ import { OPTIONAL_TABS, RANGE_OPTIONS, TABS, dayHeaderLabel, eventContent, forma
 import { categoryCounts, eventDay, type timelineHighlights } from "@/utils/timelineMetrics";
 
 const tok = (name: string) => `rgb(var(--rpg-${name}))`;
-const SPECIAL = new Set<EventType>(["achievement", "level_up", "reward", "project", "contract", "campaign"]);
+const SPECIAL = new Set<EventType>(["achievement", "level_up", "reward", "project", "contract", "campaign", "codex"]);
 
 /**
  * Timeline no tema RPG — "Crônica da Jornada". Só apresentação: recebe os
@@ -154,7 +154,7 @@ export function RpgTimelineView(props: {
                             <Icon size={17} />
                           </span>
                           <div className="min-w-0 flex-1">
-                            {special && <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold-light">{e.type === "level_up" ? "Level up" : e.type === "achievement" ? "Conquista desbloqueada" : e.type === "reward" ? "Recompensa resgatada" : e.type === "contract" ? "Contrato cumprido" : e.type === "campaign" ? "Forja de Campanhas" : "Projeto concluído"}</p>}
+                            {special && <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold-light">{e.type === "level_up" ? "Level up" : e.type === "achievement" ? "Conquista desbloqueada" : e.type === "reward" ? "Recompensa resgatada" : e.type === "contract" ? "Contrato cumprido" : e.type === "campaign" ? "Forja de Campanhas" : e.type === "codex" ? "Códex da Jornada" : "Projeto concluído"}</p>}
                             <p className={`text-sm font-semibold truncate ${special ? "text-rpg-gold-light" : "text-rpg-text"}`}>{special ? detail ?? title : title}</p>
                             {!special && detail && <p className="text-xs text-rpg-muted truncate">{detail}</p>}
                           </div>

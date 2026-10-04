@@ -13,14 +13,7 @@ export const FRAMES: Array<{ id: FrameId; label: string; requires: AchievementTi
   { id: "rare", label: "Arcana", requires: "platinum", hint: "Desbloqueie uma conquista de platina" },
 ];
 
-export const TITLES: Array<{ id: string; label: string; level: number }> = [
-  { id: "aprendiz", label: "Aprendiz da Jornada", level: 1 },
-  { id: "explorador", label: "Explorador", level: 3 },
-  { id: "estrategista", label: "Estrategista", level: 5 },
-  { id: "guardiao", label: "Guardião da Rotina", level: 8 },
-  { id: "mestre", label: "Mestre da Consistência", level: 12 },
-  { id: "lenda", label: "Lenda da Jornada", level: 20 },
-];
+// Títulos: catálogo central no backend (Códex da Jornada, /api/codex/titles).
 
 export const PROFILE_BANNERS: Array<{ id: RpgBanner; label: string }> = (
   [
@@ -47,11 +40,6 @@ export function isFrameUnlocked(frame: FrameId, tiers: Set<AchievementTier>): bo
 }
 
 /** Título equipado válido para o nível atual (ou o maior disponível). */
-export function resolveTitle(titleId: string | null, level: number): string {
-  const available = TITLES.filter((t) => t.level <= level);
-  const chosen = available.find((t) => t.id === titleId);
-  return (chosen ?? available[available.length - 1] ?? TITLES[0]).label;
-}
 
 export function bannerSrc(id: RpgBanner): string {
   return RPG_BANNERS[id] ?? RPG_BANNERS.dashboard;

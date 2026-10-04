@@ -47,14 +47,12 @@ export function RpgDashboardHero({
   history: number[];
 }) {
   const up = (delta?.delta ?? 0) >= 0;
-  const { avatarId } = useRpgAvatar();
+  // O personagem (retrato, nome e nível) já aparece no destaque acima; aqui fica só a saudação e o Life Score.
   return (
     <RPGPageHeader
       banner="dashboard"
-      leading={<RPGAvatarButton />}
       title={`Olá, ${firstName}!`}
       subtitle={subtitle}
-      footnote={<span className="inline-flex items-center gap-1.5"><Swords size={13} aria-hidden /> Personagem: {rpgAvatar(avatarId).label}</span>}
       aside={
         <Link to="/analytics" className="rpg-parchment block px-4 py-3 mx-1.5 my-1.5 w-full sm:w-[320px] hover:brightness-105 transition" aria-label={`Life Score ${overall}. Ver Analytics`}>
           <div className="flex items-center gap-3">

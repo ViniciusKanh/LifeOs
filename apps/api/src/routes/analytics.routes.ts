@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { KNOWLEDGE, RELICS, TITLES } from "../config/codex.js";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { changePct, computeInsights, computeLifeScore, computeRangeMetrics, saveLifeScoreSnapshot } from "../services/metricsService.js";
@@ -292,7 +293,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
 
   // Crônica da jornada: marcos do motor de gamificação e sessões de foco,
   // todos lidos de registros reais (nunca derivados de suposição).
-  const [focusEntries, projectsDone, achievementsUnlocked, customUnlocked, redemptions, levelUps, xpIndex, contractsDone, campaignEvents] = await Promise.all([
+  const [focusEntries, projectsDone, achievementsUnlocked, customUnlocked, redemptions, levelUps, xpIndex, contractsDone, campaignEvents, codexUnlocks, codexDiscoveries] = await Promise.all([
     db.execute({
       sql: `SELECT te.id, te.ended_at AS at, te.duration_minutes, t.title AS label FROM time_entries te LEFT JOIN tasks t ON t.id = te.task_id
             WHERE te.owner_id = ? AND te.ended_at IS NOT NULL AND COALESCE(te.duration_minutes, 0) > 0
@@ -326,7 +327,18 @@ analyticsRouter.get("/timeline", async (req, res) => {
       sql: "SELECT id, campaign_id, kind, ref_id, label, created_at AS at FROM campaign_events WHERE owner_id = ? AND kind != 'archived' AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
       args: [ownerId, from, to],
     }),
+    db.execute({
+      sql: "SELECT kind, item_id, unlocked_at AS at FROM codex_unlocks WHERE owner_id = ? AND date(unlocked_at) >= date(?) AND date(unlocked_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({
+      sql: "SELECT id, title, discovered_at AS at FROM codex_discoveries WHERE owner_id = ? AND status = 'active' AND date(discovered_at) >= date(?) AND date(discovered_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
   ]);
+  const codexName = (kind: string, id: string) =>
+    (kind === "relic" ? RELICS.find((r) => r.id === id)?.name : kind === "title" ? TITLES.find((t) => t.id === id)?.name : KNOWLEDGE.find((k) => k.id === id)?.title) ?? id;
+  const CODEX_KIND: Record<string, string> = { relic: "Relíquia descoberta", title: "Novo título", knowledge: "Conhecimento desbloqueado" };
 
   type TimelineRow = Record<string, unknown> & { at: string };
   const asRows = (rows: unknown[]) => rows as unknown as TimelineRow[];
@@ -367,6 +379,15 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(customUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r, id: `custom-${r.id}` })),
     ...asRows(redemptions.rows).map((r) => ({ type: "reward", icon: "🎁", ...r })),
     ...asRows(campaignEvents.rows).map((r) => ({ type: "campaign", icon: "⚒️", ...r })),
+    ...asRows(codexUnlocks.rows).map((r) => ({
+      type: "codex",
+      icon: "📜",
+      id: `codex-${String(r.kind)}-${String(r.item_id)}`,
+      kind: r.kind,
+      label: `${CODEX_KIND[String(r.kind)] ?? "Códex"}: ${codexName(String(r.kind), String(r.item_id))}`,
+      at: r.at,
+    })),
+    ...asRows(codexDiscoveries.rows).map((r) => ({ type: "codex", icon: "📜", id: `codex-disc-${String(r.id)}`, kind: "discovery", label: `Nova descoberta: ${String(r.title)}`, at: r.at })),
     ...asRows(contractsDone.rows).map((r) => ({ type: "contract", icon: "📜", ...r, label: `Contrato cumprido: ${String(r.label)}` })),
     ...levelUps
       .filter((l) => l.dayKey >= from && l.dayKey <= to)

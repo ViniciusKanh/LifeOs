@@ -62,6 +62,7 @@ export const rpgPrefsSchema = z
     frame: z.enum(["bronze", "silver", "gold", "rare"]),
     banner: z.string().regex(/^[a-z]{2,20}$/),
     title: z.string().trim().max(60).nullable(),
+    classId: z.string().regex(/^[a-z-]{2,30}$/).nullable(),
     gamification: z.boolean(),
     showXp: z.boolean(),
     showCoins: z.boolean(),
