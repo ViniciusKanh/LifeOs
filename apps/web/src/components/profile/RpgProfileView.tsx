@@ -32,6 +32,7 @@ import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 import { AppearanceCard } from "@/components/profile/AppearanceCard";
 import { RpgAvatarStudio } from "@/components/profile/RpgAvatarStudio";
 import { DifficultyRewardsPanel } from "@/components/profile/DifficultyRewardsPanel";
+import { PriorityRewardsPanel } from "@/components/profile/PriorityRewardsPanel";
 import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGPortrait, RPGProgressBar, RPGStatCard, RPGTabs, RPGWallet, rpgButtonClass } from "@/components/rpg";
 import { useTheme, THEME_LABEL } from "@/hooks/useTheme";
 import { useProfile } from "@/hooks/useProfile";
@@ -327,7 +328,7 @@ export function RpgProfileView({
 
       {tab === "rewards" && (
         <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr] items-start">
-          <div className="min-w-0"><DifficultyRewardsPanel /></div>
+          <div className="min-w-0 space-y-4"><PriorityRewardsPanel /><DifficultyRewardsPanel /></div>
           <RPGPanel title="Regras fixas da jornada" icon={<Settings2 size={16} />}>
             <p className="-mt-1 mb-2 text-xs text-rpg-muted">Estas recompensas são iguais para todos e vêm do servidor (hábitos, foco, revisões, conquistas, laboratório).</p>
             <FixedRules />

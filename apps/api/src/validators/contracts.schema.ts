@@ -56,3 +56,7 @@ export const difficultySettingsSchema = z.object({
   dificil: rewardLevel,
   epico: rewardLevel,
 });
+
+/** XP/moedas por prioridade (Missões). Limites finos aplicados no serviço. */
+const priorityLevel = z.object({ xp: z.number().int().min(0).max(1000), coins: z.number().int().min(0).max(1000) });
+export const prioritySettingsSchema = z.object({ Baixa: priorityLevel, "Média": priorityLevel, Alta: priorityLevel });

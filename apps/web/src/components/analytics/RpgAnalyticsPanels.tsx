@@ -5,7 +5,7 @@ import { CheckSquare, Coins, Crown, Flame, Gift, Map as MapIcon, PieChart as Pie
 import { RPGAvatar, RPGBadge, RPGPanel, RPGProgressBar, RPGWallet, rpgAvatar } from "@/components/rpg";
 import { useAuth } from "@/hooks/useAuth";
 import { useRpgAvatar } from "@/hooks/useRpgAvatar";
-import { useGamificationProfile, useGamificationRules, useLevelHistory, useRewards, useXpHistory } from "@/hooks/useGamification";
+import { useDifficultySettings, useGamificationProfile, useGamificationRules, useLevelHistory, useRewards, useXpHistory } from "@/hooks/useGamification";
 import { useTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useGoalForecast } from "@/hooks/useGoalForecast";
@@ -20,6 +20,7 @@ export function RpgAnalyticsSidebar() {
   const { data: p, isLoading } = useGamificationProfile();
   const { rewards } = useRewards();
   const { data: rules } = useGamificationRules();
+  const { rewards: scale, priority: priorityScale } = useDifficultySettings();
   const { tasks } = useTasks();
   const { habits, summaryByHabitId } = useHabits();
   const today = localToday();
@@ -34,12 +35,12 @@ export function RpgAnalyticsSidebar() {
   const daily = useMemo(() => {
     const t = tasks
       .filter((x) => x.due_date?.slice(0, 10) === today)
-      .map((x) => ({ id: `t-${x.id}`, title: x.title, done: x.status === "Concluído", xp: previewTaskReward(rules, { priority: x.priority, dueDate: x.due_date }, today)?.xp ?? null }));
+      .map((x) => ({ id: `t-${x.id}`, title: x.title, done: x.status === "Concluído", xp: previewTaskReward(rules, { priority: x.priority, dueDate: x.due_date, habitId: x.habit_id, difficulty: x.difficulty }, today, false, scale, priorityScale)?.xp ?? null }));
     const h = habits
       .filter((x) => x.frequency === "daily")
       .map((x) => ({ id: `h-${x.id}`, title: x.name, done: !!summaryByHabitId.get(x.id)?.checkedInToday, xp: rules?.habit.xp ?? null }));
     return [...t, ...h];
-  }, [tasks, habits, summaryByHabitId, rules, today]);
+  }, [tasks, habits, summaryByHabitId, rules, today, scale, priorityScale]);
   const doneCount = daily.filter((d) => d.done).length;
 
   return (

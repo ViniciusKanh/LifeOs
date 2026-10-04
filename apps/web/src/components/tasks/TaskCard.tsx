@@ -60,8 +60,8 @@ export function TaskCard({
   // Recompensa prevista pelas regras do backend (o valor real é concedido lá, ao concluir).
   const { data: rules } = useGamificationRules(isRpg);
   const today = localToday();
-  const { rewards: scale } = useDifficultySettings(isRpg);
-  const reward = isRpg ? previewTaskReward(rules, { priority: task.priority, dueDate: task.due_date, habitId: task.habit_id, difficulty: task.difficulty }, today, false, scale) : null;
+  const { rewards: scale, priority: priorityScale } = useDifficultySettings(isRpg);
+  const reward = isRpg ? previewTaskReward(rules, { priority: task.priority, dueDate: task.due_date, habitId: task.habit_id, difficulty: task.difficulty }, today, false, scale, priorityScale) : null;
   const diffLabel = difficultyLabel(task.difficulty);
   const isDaily = !isDone && task.due_date?.slice(0, 10) === today;
 

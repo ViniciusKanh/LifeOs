@@ -41,6 +41,7 @@ export interface GamificationRules {
     dailyMissionXp: number;
     mainMissionXp: number;
     beforeDeadlineXp: number;
+    priorityLimits?: { xp: number; coins: number };
   };
   habit: { xp: number; coins: number };
   focus: { blockMinutes: number; xpPerBlock: number; coinsPerBlock: number; maxBlocksPerSession: number };
@@ -71,6 +72,28 @@ export const DIFFICULTIES: Array<{ id: DifficultyKey; label: string; tone: "gree
   { id: "dificil", label: "Difícil", tone: "orange" },
   { id: "epico", label: "Épico", tone: "purple" },
 ];
+
+export type PriorityKey = "Baixa" | "Média" | "Alta";
+/** Valor de cada prioridade definido pelo próprio usuário (tarefas sem dificuldade). */
+export type PriorityRewards = Record<PriorityKey, { xp: number; coins: number }>;
+export const PRIORITIES: Array<{ id: PriorityKey; tone: "green" | "orange" | "red" }> = [
+  { id: "Baixa", tone: "green" },
+  { id: "Média", tone: "orange" },
+  { id: "Alta", tone: "red" },
+];
+
+export interface XpSettings {
+  difficulty: DifficultyRewards;
+  priority: PriorityRewards;
+}
+
+export interface WalletSummary {
+  balance: number;
+  earned: number;
+  spent: number;
+  earned30: number;
+  spent30: number;
+}
 
 export const difficultyLabel = (d: string | null | undefined) => DIFFICULTIES.find((x) => x.id === d)?.label ?? null;
 
@@ -142,8 +165,9 @@ export const gamificationService = {
   removeReward: (id: string) => api.delete<void>(`/gamification/rewards/${id}`),
   redeem: (id: string) => api.post<{ ok: true; redemptionId: string; balance: number; reward: Reward }>(`/gamification/rewards/${id}/redeem`),
   redemptions: () => api.get<Redemption[]>("/gamification/redemptions"),
-  settings: () => api.get<{ difficulty: DifficultyRewards }>("/gamification/settings"),
-  saveSettings: (difficulty: DifficultyRewards) => api.put<{ difficulty: DifficultyRewards }>("/gamification/settings", { difficulty }),
+  settings: () => api.get<XpSettings>("/gamification/settings"),
+  saveSettings: (input: Partial<XpSettings>) => api.put<XpSettings>("/gamification/settings", input),
+  wallet: () => api.get<WalletSummary>("/gamification/wallet"),
   starterRewards: () => api.post<{ created: number }>("/gamification/rewards/starter"),
   suggestRewards: (wish?: string) =>
     api.post<{ basedOn: { balance: number; coinsLast30Days: number; avgCoinsPerDay: number }; suggestions: RewardSuggestion[] }>("/gamification/rewards/ai/suggest", { wish }),

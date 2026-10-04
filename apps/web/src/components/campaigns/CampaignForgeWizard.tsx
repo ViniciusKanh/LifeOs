@@ -43,7 +43,7 @@ export function CampaignForgeWizard({ onClose, onCreated }: { onClose: () => voi
   const { habits } = useHabits();
   const { goals } = useGoals();
   const { data: rules } = useGamificationRules();
-  const { rewards: scale } = useDifficultySettings();
+  const { rewards: scale, priority: priorityScale } = useDifficultySettings();
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,18 +107,18 @@ export function CampaignForgeWizard({ onClose, onCreated }: { onClose: () => voi
     let xp = 0;
     let coins = 0;
     for (const t of linked) {
-      const r = previewTaskReward(rules, { priority: t.priority, difficulty: t.difficulty }, today, false, scale);
+      const r = previewTaskReward(rules, { priority: t.priority, difficulty: t.difficulty }, today, false, scale, priorityScale);
       xp += r?.xp ?? 0;
       coins += r?.coins ?? 0;
     }
     for (const t of [...newTasks, ...aiTasks.filter((a) => a.picked)]) {
-      const r = previewTaskReward(rules, { priority: t.priority ?? "Média", difficulty: t.difficulty }, today, false, scale);
+      const r = previewTaskReward(rules, { priority: t.priority ?? "Média", difficulty: t.difficulty }, today, false, scale, priorityScale);
       xp += r?.xp ?? 0;
       coins += r?.coins ?? 0;
     }
     const ms = milestones.reduce((s, m) => ({ xp: s.xp + (m.xpReward ?? 0), coins: s.coins + (m.coinReward ?? 0) }), { xp: 0, coins: 0 });
     return { missions: { xp, coins }, milestones: ms, completion: { xp: completionXp ?? 0, coins: completionCoins ?? 0 } };
-  }, [projectTasks, tasks, taskIds, newTasks, aiTasks, milestones, completionXp, completionCoins, rules, scale]);
+  }, [projectTasks, tasks, taskIds, newTasks, aiTasks, milestones, completionXp, completionCoins, rules, scale, priorityScale]);
 
   const askAI = async () => {
     setAiLoading(true);

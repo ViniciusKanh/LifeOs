@@ -1,4 +1,4 @@
-import type { DifficultyRewards, GamificationRules } from "@/services/gamificationService";
+import type { DifficultyRewards, GamificationRules, PriorityKey, PriorityRewards } from "@/services/gamificationService";
 
 /**
  * Prévia da recompensa de uma tarefa a partir das regras públicas do
@@ -11,6 +11,8 @@ export function previewTaskReward(
   isMainMission = false,
   /** Balança do usuário (Meu Perfil); sem ela, usa o padrão público. */
   difficultyRewards?: DifficultyRewards,
+  /** Valor por prioridade definido pelo usuário em Missões; sem ele, usa o padrão. */
+  priorityRewards?: PriorityRewards,
 ): { xp: number; coins: number; fromHabit?: boolean } | null {
   if (!rules) return null;
   // Tarefa gerada por hábito: quem paga é o check-in do hábito (sem dupla recompensa).
@@ -18,8 +20,10 @@ export function previewTaskReward(
   const priority = task.priority ?? "Média";
   const scale = difficultyRewards ?? rules.difficulty?.defaults;
   const byDifficulty = task.difficulty && scale ? scale[task.difficulty as keyof DifficultyRewards] : undefined;
-  let xp = byDifficulty?.taskXp ?? rules.task.xpByPriority[priority] ?? rules.task.xpByPriority["Média"] ?? 0;
-  const coins = byDifficulty?.taskCoins ?? rules.task.coinsByPriority[priority] ?? rules.task.coinsByPriority["Média"] ?? 0;
+  // Mesma precedência do backend: dificuldade → prioridade do usuário → padrão.
+  const byPriority = priorityRewards ? (priorityRewards[priority as PriorityKey] ?? priorityRewards["Média"]) : undefined;
+  let xp = byDifficulty?.taskXp ?? byPriority?.xp ?? rules.task.xpByPriority[priority] ?? rules.task.xpByPriority["Média"] ?? 0;
+  const coins = byDifficulty?.taskCoins ?? byPriority?.coins ?? rules.task.coinsByPriority[priority] ?? rules.task.coinsByPriority["Média"] ?? 0;
   const due = task.dueDate ? task.dueDate.slice(0, 10) : null;
   if (due === today) xp += rules.task.dailyMissionXp;
   else if (due && due > today) xp += rules.task.beforeDeadlineXp;

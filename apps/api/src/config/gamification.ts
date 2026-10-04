@@ -28,6 +28,8 @@ export const GAMIFICATION_RULES = {
      * tarefas só para farmar XP (cada tarefa nova tem id novo).
      */
     dailyXpCap: 400,
+    /** Limites dos valores por prioridade configuráveis pelo usuário (Missões). */
+    priorityLimits: { xp: 150, coins: 30 },
   },
   habit: {
     /** Hábito cumprido no dia: atingiu target_count. */

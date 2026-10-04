@@ -22,6 +22,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Scale,
   Upload,
   X,
 } from "lucide-react";
@@ -36,6 +37,9 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { TaskImportModal } from "@/components/tasks/TaskImportModal";
+import { Modal } from "@/components/ui/Modal";
+import { PriorityRewardsPanel } from "@/components/profile/PriorityRewardsPanel";
+import { DifficultyRewardsPanel } from "@/components/profile/DifficultyRewardsPanel";
 import {
   DUE_GROUPS,
   compareTasks,
@@ -47,7 +51,7 @@ import {
 } from "@/utils/taskInsights";
 import type { Task } from "@/types";
 import { COLUMN_ACCENT_RPG, COLUMN_HINT_RPG, COLUMN_ICON_RPG } from "@/components/kanban/rpgColumns";
-import { useGamificationRules } from "@/hooks/useGamification";
+import { useDifficultySettings, useGamificationRules } from "@/hooks/useGamification";
 import { localToday, previewTaskReward } from "@/utils/gamification";
 
 const COLUMNS = TASK_STATUSES;
@@ -98,6 +102,7 @@ export function TarefasPage() {
   const [modal, setModal] = useState<{ open: boolean; task: Task | null; initialStatus?: string }>({ open: false, task: null });
   const searchRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [valuesOpen, setValuesOpen] = useState(false);
   const { isRpg } = useTheme();
 
   useEffect(() => {
@@ -130,18 +135,21 @@ export function TarefasPage() {
     );
   }, [searchParams, tasks, setSearchParams]);
 
-  // Comandos vindos da paleta (Ctrl K) e atalhos do PWA: ?nova=1 e ?importar=1.
+  // Comandos vindos da paleta (Ctrl K), atalhos do PWA e da Loja: ?nova=1, ?importar=1 e ?valores=1.
   useEffect(() => {
     const nova = searchParams.get("nova");
     const importar = searchParams.get("importar");
-    if (!nova && !importar) return;
+    const valores = searchParams.get("valores");
+    if (!nova && !importar && !valores) return;
     if (nova) openNew();
     if (importar) setImportOpen(true);
+    if (valores) setValuesOpen(true);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete("nova");
         next.delete("importar");
+        next.delete("valores");
         return next;
       },
       { replace: true }
@@ -189,7 +197,8 @@ export function TarefasPage() {
   const focusTask = useMemo(() => [...open].sort((a, b) => taskFocusScore(b) - taskFocusScore(a))[0] ?? null, [open]);
   const inProgress = tasks.filter((t) => t.status === "Em Andamento").length;
   const { data: rules } = useGamificationRules(isRpg);
-  const focusReward = focusTask ? previewTaskReward(rules, { priority: focusTask.priority, dueDate: focusTask.due_date, habitId: focusTask.habit_id }, localToday()) : null;
+  const { rewards: scale, priority: priorityScale } = useDifficultySettings(isRpg);
+  const focusReward = focusTask ? previewTaskReward(rules, { priority: focusTask.priority, dueDate: focusTask.due_date, habitId: focusTask.habit_id, difficulty: focusTask.difficulty }, localToday(), false, scale, priorityScale) : null;
 
   // Concluídas: mostra as mais recentes primeiro, com limite na coluna.
   const boardItems = useMemo(() => {
@@ -231,6 +240,9 @@ export function TarefasPage() {
           footnote={<span className="italic">&ldquo;{findNavItem("/tarefas")?.item.quote ?? DEFAULT_QUOTE}&rdquo;</span>}
           actions={
             <>
+              <RPGButton variant="secondary" onClick={() => setValuesOpen(true)} title="Definir quanto XP e moedas cada missão vale">
+                <Scale size={15} /> Valor das missões
+              </RPGButton>
               <RPGButton variant="secondary" onClick={() => setImportOpen(true)} title="Importar do Todoist, Notion ou Google Tasks">
                 <Upload size={15} /> Importar
               </RPGButton>
@@ -553,6 +565,15 @@ export function TarefasPage() {
       )}
 
       <TaskImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      {/* Valores de XP/moedas editáveis direto do quadro de missões (só no tema RPG). */}
+      {isRpg && (
+        <Modal open={valuesOpen} onClose={() => setValuesOpen(false)} title="Valor das missões" size="lg">
+          <div className="space-y-4">
+            <PriorityRewardsPanel />
+            <DifficultyRewardsPanel />
+          </div>
+        </Modal>
+      )}
       {modal.open && <TaskModal task={modal.task} statusOptions={COLUMNS} onClose={close} onSave={handleSave} onDelete={removeTask} />}
     </div>
   );

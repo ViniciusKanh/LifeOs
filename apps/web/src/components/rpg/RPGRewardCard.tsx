@@ -1,21 +1,37 @@
 import clsx from "clsx";
 import { Clock, Coins, Pencil, Repeat } from "lucide-react";
-import type { Reward } from "@/services/gamificationService";
+import { REWARD_CATEGORIES, type Reward } from "@/services/gamificationService";
 import { RPGButton } from "./RPGButton";
 import { RPGBadge } from "./RPGBadge";
+import { RPGProgressBar } from "./RPGProgressBar";
 
 function formatUntil(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Item da loja: custo, limites e estado (disponível, recarga, esgotado, saldo curto). */
-export function RPGRewardCard({ reward, balance, onRedeem, onEdit }: { reward: Reward; balance: number; onRedeem: () => void; onEdit?: () => void }) {
+/**
+ * Item da loja: custo, limites e estado (disponível, recarga, esgotado, saldo curto).
+ * `coinsPerDay` (média real dos últimos 30 dias) permite estimar quando dá para resgatar.
+ */
+export function RPGRewardCard({ reward, balance, onRedeem, onEdit, coinsPerDay }: { reward: Reward; balance: number; onRedeem: () => void; onEdit?: () => void; coinsPerDay?: number }) {
   const soldOut = reward.redemptionLimit != null && reward.timesRedeemed >= reward.redemptionLimit;
   const cooling = !!reward.availableAt;
   const short = balance < reward.cost;
   const blocked = !reward.isActive || soldOut || cooling || short;
-  const reason = !reward.isActive ? "Desativada" : soldOut ? "Esgotada" : cooling ? `Recarga até ${formatUntil(reward.availableAt!)}` : short ? `Faltam ${reward.cost - balance} moedas` : null;
+  const missing = Math.max(0, reward.cost - balance);
+  // Estimativa (inferência) pelo ritmo real de ganho; só aparece com histórico.
+  const etaDays = short && coinsPerDay && coinsPerDay > 0 ? Math.ceil(missing / coinsPerDay) : null;
+  const reason = !reward.isActive
+    ? "Desativada"
+    : soldOut
+      ? "Esgotada"
+      : cooling
+        ? `Recarga até ${formatUntil(reward.availableAt!)}`
+        : short
+          ? `Faltam ${missing} moedas${etaDays ? ` · ~${etaDays} dia${etaDays > 1 ? "s" : ""} no seu ritmo` : ""}`
+          : null;
+  const categoryLabel = REWARD_CATEGORIES.find((c) => c.id === reward.category)?.label;
 
   return (
     <article className={clsx("rpg-panel flex flex-col p-4 gap-3 min-w-0", !blocked && "rpg-panel-gold", !reward.isActive && "opacity-60")}>
@@ -35,6 +51,7 @@ export function RPGRewardCard({ reward, balance, onRedeem, onEdit }: { reward: R
       </div>
 
       <div className="flex flex-wrap gap-1.5">
+        {categoryLabel && <RPGBadge tone="muted">{categoryLabel}</RPGBadge>}
         {reward.cooldownHours > 0 && (
           <RPGBadge tone="blue" icon={<Clock size={10} aria-hidden />}>
             {reward.cooldownHours}h de recarga
@@ -47,6 +64,10 @@ export function RPGRewardCard({ reward, balance, onRedeem, onEdit }: { reward: R
         )}
         {reward.redemptionLimit == null && reward.timesRedeemed > 0 && <RPGBadge tone="muted">{reward.timesRedeemed}× resgatada</RPGBadge>}
       </div>
+
+      {reward.isActive && !soldOut && short && (
+        <RPGProgressBar value={balance} max={reward.cost} tone="orange" label="Progresso até o resgate" valueLabel={`${balance}/${reward.cost}`} />
+      )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <span className="inline-flex items-center gap-1.5 font-pixel text-lg text-rpg-gold-light tabular-nums">

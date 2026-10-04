@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getDifficultyRewards, getLevelHistory, getPlayerProfile, getProjectsXp, getXpHistory, publicRules, saveDifficultyRewards } from "../services/gamificationService.js";
+import { getDifficultyRewards, getLevelHistory, getPlayerProfile, getPriorityRewards, getProjectsXp, getWalletSummary, getXpHistory, publicRules, saveDifficultyRewards, savePriorityRewards } from "../services/gamificationService.js";
 import { addStarterRewards, suggestRewards } from "../services/rewardsAIService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { difficultySettingsSchema } from "../validators/contracts.schema.js";
+import { difficultySettingsSchema, prioritySettingsSchema } from "../validators/contracts.schema.js";
 import { z } from "zod";
 import {
   createReward,
@@ -52,7 +52,9 @@ gamificationRouter.get("/rules", (_req, res) => {
 
 /** GET /api/gamification/settings — XP/moedas por dificuldade do próprio usuário */
 gamificationRouter.get("/settings", async (req, res) => {
-  return res.json({ difficulty: await getDifficultyRewards(getDb(), req.user!.id) });
+  const db = getDb();
+  const [difficulty, priority] = await Promise.all([getDifficultyRewards(db, req.user!.id), getPriorityRewards(db, req.user!.id)]);
+  return res.json({ difficulty, priority });
 });
 
 /**
@@ -61,9 +63,27 @@ gamificationRouter.get("/settings", async (req, res) => {
  * (XP já concedido nunca muda).
  */
 gamificationRouter.put("/settings", async (req, res) => {
-  const parsed = difficultySettingsSchema.safeParse(req.body?.difficulty);
-  if (!parsed.success) return res.status(400).json({ error: "Valores de recompensa inválidos." });
-  return res.json({ difficulty: await saveDifficultyRewards(getDb(), req.user!.id, parsed.data) });
+  // Aceita só as partes enviadas (dificuldade e/ou prioridade); limites finos no serviço.
+  const body = (req.body ?? {}) as { difficulty?: unknown; priority?: unknown };
+  const db = getDb();
+  if (body.difficulty === undefined && body.priority === undefined) return res.status(400).json({ error: "Nada para salvar." });
+  if (body.difficulty !== undefined) {
+    const parsed = difficultySettingsSchema.safeParse(body.difficulty);
+    if (!parsed.success) return res.status(400).json({ error: "Valores de recompensa inválidos." });
+    await saveDifficultyRewards(db, req.user!.id, parsed.data);
+  }
+  if (body.priority !== undefined) {
+    const parsed = prioritySettingsSchema.safeParse(body.priority);
+    if (!parsed.success) return res.status(400).json({ error: "Valores por prioridade inválidos." });
+    await savePriorityRewards(db, req.user!.id, parsed.data);
+  }
+  const [difficulty, priority] = await Promise.all([getDifficultyRewards(db, req.user!.id), getPriorityRewards(db, req.user!.id)]);
+  return res.json({ difficulty, priority });
+});
+
+/** GET /api/gamification/wallet — ganho e gasto reais (loja) */
+gamificationRouter.get("/wallet", async (req, res) => {
+  return res.json(await getWalletSummary(getDb(), req.user!.id));
 });
 
 /** POST /api/gamification/rewards/starter — adiciona o pacote inicial (sem duplicar por nome) */

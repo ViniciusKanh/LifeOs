@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { CalendarDays, Check, Play, Plus, Square, Swords, Timer } from "lucide-react";
 import type { FocusTask, Task } from "@/types";
-import { useGamificationRules } from "@/hooks/useGamification";
+import { useDifficultySettings, useGamificationRules } from "@/hooks/useGamification";
 import { useTaskTimer } from "@/hooks/useTasks";
 import { previewTaskReward } from "@/utils/gamification";
 import { useAuth } from "@/hooks/useAuth";
@@ -121,6 +121,7 @@ export function RpgTodayMissions({
   onStartFocus: (id: string) => void;
 }) {
   const { data: rules } = useGamificationRules();
+  const { rewards: scale, priority: priorityScale } = useDifficultySettings();
   const timer = useTaskTimer(mainTaskId);
   const fmtDate = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
@@ -140,7 +141,7 @@ export function RpgTodayMissions({
         <ul className="space-y-2">
           {tasks.map((t) => {
             const isMain = t.id === mainTaskId;
-            const reward = previewTaskReward(rules, { priority: t.priority, dueDate: t.due_date }, today);
+            const reward = previewTaskReward(rules, { priority: t.priority, dueDate: t.due_date, habitId: t.habit_id, difficulty: t.difficulty }, today, t.id === mainTaskId, scale, priorityScale);
             return (
               <li key={t.id} className={`border-2 px-3 py-2.5 ${isMain ? "border-rpg-gold bg-rpg-gold/5" : "border-rpg-border bg-rpg-bg/40"}`} style={{ borderRadius: 4 }}>
                 <div className="flex items-start gap-2.5">

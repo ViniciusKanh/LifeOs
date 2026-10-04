@@ -161,6 +161,8 @@ export function buildTaskGrants(input: {
   isMainMission: boolean;
   /** Recompensa pela dificuldade (configurada pelo usuário); substitui a de prioridade. */
   difficultyReward?: { xp: number; coins: number } | null;
+  /** Valores por prioridade configurados pelo usuário (sem eles, o padrão). */
+  priorityReward?: { xp: number; coins: number } | null;
 }): XpGrant[] {
   const R = GAMIFICATION_RULES.task;
   const base = { sourceType: "task" as const, sourceId: input.taskId, projectId: input.projectId };
@@ -168,8 +170,8 @@ export function buildTaskGrants(input: {
     {
       ...base,
       eventType: "completed",
-      xp: input.difficultyReward?.xp ?? R.xpByPriority[input.priority] ?? R.xpByPriority["Média"],
-      coins: input.difficultyReward?.coins ?? R.coinsByPriority[input.priority] ?? R.coinsByPriority["Média"],
+      xp: input.difficultyReward?.xp ?? input.priorityReward?.xp ?? R.xpByPriority[input.priority] ?? R.xpByPriority["Média"],
+      coins: input.difficultyReward?.coins ?? input.priorityReward?.coins ?? R.coinsByPriority[input.priority] ?? R.coinsByPriority["Média"],
       label: `Missão concluída: ${input.title}`,
     },
   ];
@@ -261,6 +263,47 @@ export async function saveDifficultyRewards(db: Client, ownerId: string, raw: un
   return clean;
 }
 
+/* --------------------------- Prioridade (configurável) --------------------------- */
+
+export type PriorityKey = "Baixa" | "Média" | "Alta";
+export type PriorityRewards = Record<PriorityKey, { xp: number; coins: number }>;
+const PRIORITY_KEYS: PriorityKey[] = ["Baixa", "Média", "Alta"];
+
+/** Mescla o salvo com o padrão (GAMIFICATION_RULES.task) e corta nos limites. */
+export function sanitizePriorityRewards(raw: unknown): PriorityRewards {
+  const T = GAMIFICATION_RULES.task;
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, Record<string, unknown> | undefined>;
+  const clamp = (v: unknown, fallback: number, max: number) => Math.min(max, Math.max(0, typeof v === "number" && Number.isFinite(v) ? Math.round(v) : fallback));
+  const out = {} as PriorityRewards;
+  for (const p of PRIORITY_KEYS) {
+    const v = src[p] ?? {};
+    out[p] = { xp: clamp(v.xp, T.xpByPriority[p], T.priorityLimits.xp), coins: clamp(v.coins, T.coinsByPriority[p], T.priorityLimits.coins) };
+  }
+  return out;
+}
+
+export async function getPriorityRewards(db: Client, ownerId: string): Promise<PriorityRewards> {
+  const r = await db.execute({ sql: "SELECT priority_json FROM gamification_settings WHERE owner_id = ?", args: [ownerId] });
+  let parsed: unknown = null;
+  try {
+    parsed = r.rows[0]?.priority_json ? JSON.parse(String(r.rows[0].priority_json)) : null;
+  } catch {
+    parsed = null;
+  }
+  return sanitizePriorityRewards(parsed);
+}
+
+export async function savePriorityRewards(db: Client, ownerId: string, raw: unknown): Promise<PriorityRewards> {
+  const clean = sanitizePriorityRewards(raw);
+  const difficulty = await getDifficultyRewards(db, ownerId);
+  await db.execute({
+    sql: `INSERT INTO gamification_settings (owner_id, difficulty_json, priority_json, updated_at) VALUES (?, ?, ?, datetime('now'))
+          ON CONFLICT (owner_id) DO UPDATE SET priority_json = excluded.priority_json, updated_at = datetime('now')`,
+    args: [ownerId, JSON.stringify(difficulty), JSON.stringify(clean)],
+  });
+  return clean;
+}
+
 /** Tarefa concluída → XP/moedas + bônus determinísticos do dia. */
 export async function awardTaskCompletion(db: Client, ownerId: string, taskId: string): Promise<void> {
   await safely("tarefa", () => awardTaskCompletionInner(db, ownerId, taskId));
@@ -306,6 +349,8 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
     // Dificuldade da própria tarefa ou, na falta, a do contrato a que pertence.
     const diff = isDifficulty(task.difficulty) ? task.difficulty : isDifficulty(task.contract_difficulty) ? task.contract_difficulty : null;
     const difficultyReward = diff ? (await getDifficultyRewards(db, ownerId))[diff] : null;
+    const priorityRewards = diff ? null : await getPriorityRewards(db, ownerId);
+    const priorityReward = priorityRewards ? priorityRewards[(PRIORITY_KEYS as string[]).includes(task.priority) ? (task.priority as PriorityKey) : "Média"] : null;
     const grants = buildTaskGrants({
       taskId,
       title: task.title,
@@ -315,6 +360,7 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
       dayKey,
       isMainMission,
       difficultyReward: difficultyReward ? { xp: difficultyReward.taskXp, coins: difficultyReward.taskCoins } : null,
+      priorityReward,
     });
     grants.push({ sourceType: "day", sourceId: dayKey, eventType: "first_mission", xp: R.firstOfDayXp, coins: 0, label: "Primeira missão do dia" });
 
@@ -865,7 +911,8 @@ export async function getProjectsXp(db: Client, ownerId: string) {
     const id = String(row.project_id);
     map[id] = { earnedXp: Number(row.xp), availableXp: map[id]?.availableXp ?? 0 };
   }
-  const R = GAMIFICATION_RULES.task.xpByPriority;
+  const pr = await getPriorityRewards(db, ownerId);
+  const R = Object.fromEntries(Object.entries(pr).map(([k, v]) => [k, v.xp])) as Record<string, number>;
   for (const row of open.rows) {
     const id = String(row.project_id);
     const entry = map[id] ?? { earnedXp: 0, availableXp: 0 };
@@ -895,7 +942,29 @@ export function publicRules() {
     lifeAdmin: GAMIFICATION_RULES.lifeAdmin.byKind,
     achievementByTier: GAMIFICATION_RULES.achievementByTier,
     difficulty: { defaults: GAMIFICATION_RULES.difficulty.defaults, limits: GAMIFICATION_RULES.difficulty.limits },
+    priorityLimits: GAMIFICATION_RULES.task.priorityLimits,
     contract: GAMIFICATION_RULES.contract,
     experiment: GAMIFICATION_RULES.experiment,
+  };
+}
+
+/** Resumo real da carteira (loja): ganho e gasto nos últimos 30 dias e no total. */
+export async function getWalletSummary(db: Client, ownerId: string) {
+  const r = await db.execute({
+    sql: `SELECT
+            COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) AS earned,
+            COALESCE(-SUM(CASE WHEN amount < 0 THEN amount END), 0) AS spent,
+            COALESCE(SUM(CASE WHEN amount > 0 AND created_at >= datetime('now', '-30 days') THEN amount END), 0) AS earned30,
+            COALESCE(-SUM(CASE WHEN amount < 0 AND created_at >= datetime('now', '-30 days') THEN amount END), 0) AS spent30
+          FROM coin_ledger WHERE owner_id = ?`,
+    args: [ownerId],
+  });
+  const row = r.rows[0] ?? {};
+  return {
+    balance: await coinBalance(db, ownerId),
+    earned: Number(row.earned ?? 0),
+    spent: Number(row.spent ?? 0),
+    earned30: Number(row.earned30 ?? 0),
+    spent30: Number(row.spent30 ?? 0),
   };
 }

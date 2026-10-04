@@ -40,7 +40,7 @@ export function DifficultyRewardsPanel() {
     if (!draft) return;
     setMsg(null);
     try {
-      await save.mutateAsync(draft);
+      await save.mutateAsync({ difficulty: draft });
       setMsg({ tone: "ok", text: "Balança salva. Os novos valores valem para as próximas recompensas." });
     } catch (err) {
       setMsg({ tone: "err", text: err instanceof Error ? err.message : "Não foi possível salvar." });

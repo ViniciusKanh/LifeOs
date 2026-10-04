@@ -30,7 +30,7 @@ export function rpgAvatar(id: RpgAvatarId | null | undefined) {
   return RPG_AVATARS.find((a) => a.id === id) ?? RPG_AVATARS[0];
 }
 
-export type RpgBanner = "dashboard" | "hoje" | "tarefas" | "saude" | "diario" | "notas" | "habitos" | "biblioteca" | "educacao" | "administracao" | "revisoes" | "analytics" | "missoes" | "contratos" | "reino" | "conquistas" | "perfil" | "laboratorio";
+export type RpgBanner = "dashboard" | "hoje" | "tarefas" | "saude" | "diario" | "notas" | "habitos" | "biblioteca" | "educacao" | "administracao" | "revisoes" | "analytics" | "missoes" | "contratos" | "reino" | "conquistas" | "perfil" | "laboratorio" | "loja";
 export const RPG_BANNERS: Record<RpgBanner, string> = {
   dashboard: `${BASE}/banners/dashboard.webp`,
   hoje: `${BASE}/banners/hoje.webp`,
@@ -50,6 +50,7 @@ export const RPG_BANNERS: Record<RpgBanner, string> = {
   conquistas: `${BASE}/banners/conquistas.webp`,
   perfil: `${BASE}/banners/perfil.webp`,
   laboratorio: `${BASE}/banners/laboratorio.webp`,
+  loja: `${BASE}/banners/loja.webp`,
 };
 
 /** Tons do design system RPG → classes Tailwind dos tokens (sem hex solto). */
