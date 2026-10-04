@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   BookOpen,
@@ -26,7 +26,7 @@ import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { useAuth } from "@/hooks/useAuth";
 import { inboxService } from "@/services/inboxService";
 import { api } from "@/services/api";
-import { allDestinations } from "./navConfig";
+import { allDestinations, findNavItem } from "./navConfig";
 import type { GlobalSearchResult } from "@/services/searchService";
 
 const TYPE_META: Record<GlobalSearchResult["type"], { icon: typeof Search; tone: string }> = {
@@ -227,7 +227,14 @@ function Toast({ text }: { text: string | null }) {
 }
 
 /** Busca do desktop: input inline no header + dropdown com resultados e comandos. */
+/** Placeholder contextual: a tela atual pode sugerir o que buscar (navConfig.searchPlaceholder). */
+function useSearchPlaceholder(): string {
+  const { pathname } = useLocation();
+  return findNavItem(pathname)?.item.searchPlaceholder ?? "Buscar ou digitar um comando…";
+}
+
 export function DesktopGlobalSearch() {
+  const placeholder = useSearchPlaceholder();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -271,7 +278,7 @@ export function DesktopGlobalSearch() {
           if (e.key === "Escape") return inputRef.current?.blur();
           kb.onKeyDown(e);
         }}
-        placeholder="Buscar ou digitar um comando…"
+        placeholder={placeholder}
         aria-label="Busca global e comandos"
         aria-expanded={open}
         role="combobox"
@@ -297,6 +304,7 @@ export function DesktopGlobalSearch() {
 
 /** Busca do mobile: ícone no header que abre uma sobreposição de tela cheia com resultados e comandos. */
 export function MobileGlobalSearch() {
+  const placeholder = useSearchPlaceholder();
   const [openSheet, setOpenSheet] = useState(false);
   const [query, setQuery] = useState("");
   const close = useMemo(
@@ -326,7 +334,7 @@ export function MobileGlobalSearch() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={kb.onKeyDown}
-                placeholder="Buscar ou digitar um comando…"
+                placeholder={placeholder}
                 aria-label="Busca global e comandos"
                 className="w-full rounded-full pl-9 pr-3 py-2.5 text-sm bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border outline-none focus:border-brand-500"
               />

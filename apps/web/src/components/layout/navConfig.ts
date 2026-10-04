@@ -1,4 +1,5 @@
 import {
+  Boxes,
   Dna,
   Scroll,
   BarChart3,
@@ -50,6 +51,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Frase curta do cabeçalho (decoração, sem dado nenhum). */
   quote?: string;
+  /** Texto da busca global quando esta tela está aberta (opcional). */
+  searchPlaceholder?: string;
   /** Nome exibido só no tema RPG (camada de UX; a rota e o domínio continuam os mesmos). */
   rpgLabel?: string;
   /**
@@ -193,6 +196,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/inventario", label: "Coleção / Inventário", icon: Backpack, quote: "Organize o que você conquistou — e use com propósito." },
       { to: "/build", label: "Build do Personagem", icon: Dna, quote: "Conheça seus atributos para escolher o próximo passo." },
       { to: "/protocolos", label: "Protocolos", icon: Scroll, quote: "Situações repetidas merecem respostas prontas." },
+      {
+        to: "/detector-gargalos",
+        label: "Detector de Gargalos",
+        icon: Boxes,
+        quote: "Destrave o essencial e o resto anda.",
+        searchPlaceholder: "Buscar projetos, missões, hábitos ou problemas…",
+      },
     ],
   },
   {

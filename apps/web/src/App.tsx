@@ -87,6 +87,7 @@ const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m)
 const InventarioPage = lazy(() => import("@/pages/inventario/InventarioPage").then((m) => ({ default: m.InventarioPage })));
 const BuildPage = lazy(() => import("@/pages/character-build/BuildPage").then((m) => ({ default: m.BuildPage })));
 const ProtocolosPage = lazy(() => import("@/pages/protocolos/ProtocolosPage").then((m) => ({ default: m.ProtocolosPage })));
+const DetectorGargalosPage = lazy(() => import("@/pages/detector-gargalos/DetectorGargalosPage").then((m) => ({ default: m.DetectorGargalosPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
@@ -172,6 +173,7 @@ export default function App() {
           <Route path="/inventario" element={<InventarioPage />} />
           <Route path="/build" element={<BuildPage />} />
           <Route path="/protocolos" element={<ProtocolosPage />} />
+          <Route path="/detector-gargalos" element={<DetectorGargalosPage />} />
           {/* A antiga Loja virou o Tesouro & Recompensas. */}
           <Route path="/loja" element={<Navigate to="/tesouro" replace />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
