@@ -1,3 +1,4 @@
+import { applyPct, claimTaskBoost, focusBoostAt, releaseTaskBoost } from "./itemEffectService.js";
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
@@ -362,14 +363,27 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
       difficultyReward: difficultyReward ? { xp: difficultyReward.taskXp, coins: difficultyReward.taskCoins } : null,
       priorityReward,
     });
+    // Pergaminho da Disciplina (Inventário): +% só no XP base desta missão,
+    // reservado de forma atômica e devolvido se a concessão não acontecer.
+    const boost = await claimTaskBoost(db, ownerId, `task:${taskId}`);
+    if (boost && grants[0]) {
+      const b = grants[0];
+      grants[0] = { ...b, baseXp: b.xp, multiplier: (100 + boost.pct) / 100, xp: applyPct(b.xp, boost.pct), label: `${b.label} (+${boost.pct}% Pergaminho)` };
+    }
     grants.push({ sourceType: "day", sourceId: dayKey, eventType: "first_mission", xp: R.firstOfDayXp, coins: 0, label: "Primeira missão do dia" });
 
     const capped = applyDailyCap(grants, await taskXpToday(db, ownerId, dayKey), R.dailyXpCap);
-    if (capped.length === 0) return;
+    if (capped.length === 0) {
+      if (boost) await releaseTaskBoost(db, ownerId, boost.id);
+      return;
+    }
     // A concessão base vem primeiro: se ela já existia (tarefa reaberta e
     // concluída de novo), nenhum bônus é concedido — anti desfazer/refazer.
     const [baseGrant, ...bonuses] = capped;
-    if (!(await award(db, ownerId, baseGrant, dayKey))) return;
+    if (!(await award(db, ownerId, baseGrant, dayKey))) {
+      if (boost) await releaseTaskBoost(db, ownerId, boost.id);
+      return;
+    }
     for (const g of bonuses) await award(db, ownerId, g, dayKey);
 
     // "Dia completo": todas as missões com prazo hoje concluídas.
@@ -605,6 +619,9 @@ export async function awardFocusSession(db: Client, ownerId: string, entryId: st
     const blocks = Math.min(F.maxBlocksPerSession, Math.floor(Math.max(0, minutes) / F.blockMinutes));
     if (blocks <= 0) return;
     const dayKey = await todayKeyFor(db, ownerId);
+    const baseXp = blocks * F.xpPerBlock;
+    // Poção de Foco ativa: +% só no XP (moedas nunca — evita ciclo item → moedas).
+    const boost = await focusBoostAt(db, ownerId, new Date());
     await award(
       db,
       ownerId,
@@ -612,10 +629,12 @@ export async function awardFocusSession(db: Client, ownerId: string, entryId: st
         sourceType: "focus",
         sourceId: entryId,
         eventType: "session",
-        xp: blocks * F.xpPerBlock,
+        xp: boost ? applyPct(baseXp, boost.pct) : baseXp,
         coins: blocks * F.coinsPerBlock,
-        label: `Foco: ${blocks * F.blockMinutes} min`,
+        label: `Foco: ${blocks * F.blockMinutes} min${boost ? ` (+${boost.pct}% Poção de Foco)` : ""}`,
         projectId,
+        baseXp: boost ? baseXp : null,
+        multiplier: boost ? (100 + boost.pct) / 100 : null,
       },
       dayKey,
     );

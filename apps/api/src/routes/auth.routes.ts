@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { isTitleUnlocked } from "../services/codexService.js";
+import { isEmblemUnlocked, isFrameUnlocked } from "../services/inventoryService.js";
 import { CLASSES } from "../config/codex.js";
 import { nanoid } from "nanoid";
 import crypto from "node:crypto";
@@ -310,6 +311,13 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
     }
     if (data.rpgPrefs.classId && !CLASSES.some((c) => c.id === data.rpgPrefs!.classId)) {
       return res.status(400).json({ error: "Classe inválida." });
+    }
+    // Moldura e emblema também só se conquistados (validação no servidor, não só na UI).
+    if (data.rpgPrefs.frame && !(await isFrameUnlocked(db, req.user!.id, data.rpgPrefs.frame))) {
+      return res.status(403).json({ error: "Esta moldura ainda não foi conquistada." });
+    }
+    if (data.rpgPrefs.emblem && !(await isEmblemUnlocked(db, req.user!.id, data.rpgPrefs.emblem))) {
+      return res.status(403).json({ error: "Este emblema ainda não foi conquistado." });
     }
     // Mescla com o que já está salvo: cada tela envia só o que mudou.
     const current = await db.execute({ sql: "SELECT rpg_prefs_json FROM users WHERE id = ?", args: [req.user!.id] });

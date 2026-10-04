@@ -385,6 +385,12 @@ async function syncDiscoveries(db: Client, ownerId: string, today: string) {
 
 /* ------------------------------ Visão completa ------------------------------ */
 
+/** Grava relíquias/títulos/conhecimentos já conquistados (idempotente) — usado também pelo Inventário. */
+export async function syncCodexUnlocks(db: Client, ownerId: string): Promise<void> {
+  const agg = await aggregateAttributes(db, ownerId);
+  await syncUnlocks(db, ownerId, await unlockFacts(db, ownerId, agg));
+}
+
 export async function getCodex(db: Client, ownerId: string) {
   const agg = await aggregateAttributes(db, ownerId);
   const facts = await unlockFacts(db, ownerId, agg);

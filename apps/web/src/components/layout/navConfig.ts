@@ -22,6 +22,7 @@ import {
   ScrollText,
   BookMarked,
   Coins,
+  Backpack,
   Settings,
   Share2,
   Sun,
@@ -187,6 +188,7 @@ export const NAV_GROUPS: NavGroup[] = [
         quote: "Cada conquista começou com um hábito repetido.",
       },
       { to: "/tesouro", label: "Tesouro & Recompensas", icon: Coins, quote: "Pequenas recompensas sustentam grandes jornadas." },
+      { to: "/inventario", label: "Coleção / Inventário", icon: Backpack, quote: "Organize o que você conquistou — e use com propósito." },
     ],
   },
   {

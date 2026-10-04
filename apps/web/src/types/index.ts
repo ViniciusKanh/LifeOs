@@ -33,6 +33,8 @@ export interface RpgPrefsPayload {
   avatarId: "aventureiro" | "mago" | "arqueiro" | "cavaleiro" | "inventor" | "alquimista";
   avatarMode: "rpg" | "photo" | "initials" | "custom";
   frame: "bronze" | "silver" | "gold" | "rare";
+  /** Emblema de conjunto completo (Coleção / Inventário). */
+  emblem?: string | null;
   banner: string;
   title: string | null;
   classId: string | null;

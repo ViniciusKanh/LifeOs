@@ -1,3 +1,4 @@
+import { itemDef } from "../config/items.js";
 import { Router } from "express";
 import { KNOWLEDGE, RELICS, TITLES } from "../config/codex.js";
 import { getDb } from "../db/client.js";
@@ -351,6 +352,16 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
   ]);
+  // Inventário: aquisições de itens próprios, usos, cosméticos equipados e conjuntos completos.
+  // Relíquias/títulos (Códex) e cupons (Tesouro) já aparecem pela fonte original.
+  const inventoryTx = await db.execute({
+    sql: `SELECT id, item_key, type, source_type, label, created_at AS at FROM inventory_transactions
+          WHERE owner_id = ? AND type IN ('acquire', 'use', 'equip')
+            AND item_key NOT LIKE 'relic:%' AND item_key NOT LIKE 'title:%' AND NOT (type = 'acquire' AND item_key LIKE 'voucher:%')
+            AND NOT (type = 'use' AND item_key LIKE 'voucher:%')
+            AND date(created_at) >= date(?) AND date(created_at) <= date(?)`,
+    args: [ownerId, from, to],
+  });
   const codexName = (kind: string, id: string) =>
     (kind === "relic" ? RELICS.find((r) => r.id === id)?.name : kind === "title" ? TITLES.find((t) => t.id === id)?.name : KNOWLEDGE.find((k) => k.id === id)?.title) ?? id;
   const CODEX_KIND: Record<string, string> = { relic: "Relíquia descoberta", title: "Novo título", knowledge: "Conhecimento desbloqueado" };
@@ -406,6 +417,13 @@ analyticsRouter.get("/timeline", async (req, res) => {
       at: r.at,
     })),
     ...asRows(codexDiscoveries.rows).map((r) => ({ type: "codex", icon: "📜", id: `codex-disc-${String(r.id)}`, kind: "discovery", label: `Nova descoberta: ${String(r.title)}`, at: r.at })),
+    ...asRows(inventoryTx.rows).map((r) => {
+      const key = String(r.item_key);
+      const name = itemDef(key)?.name ?? (String(r.label ?? "").split(": ").slice(1).join(": ") || key);
+      const label =
+        r.source_type === "set" ? String(r.label) : r.type === "use" ? `Item usado: ${name}` : r.type === "equip" ? `Cosmético equipado: ${key.startsWith("frame:") ? "moldura" : key.startsWith("title:") ? "título" : key.startsWith("emblem:") ? "emblema" : name}` : `Item adquirido: ${name}`;
+      return { type: "inventory", icon: r.source_type === "set" ? "🏅" : r.type === "use" ? "🧪" : r.type === "equip" ? "🎽" : "🎒", id: `inv-${String(r.id)}`, label, at: r.at };
+    }),
     ...asRows(contractsDone.rows).map((r) => ({ type: "contract", icon: "📜", ...r, label: `Contrato cumprido: ${String(r.label)}` })),
     ...levelUps
       .filter((l) => l.dayKey >= from && l.dayKey <= to)

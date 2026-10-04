@@ -4,13 +4,10 @@ import { Coins, Gem } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import type { RedeemResponse, Reward } from "@/services/gamificationService";
 import { RARITY, limitText, requirementText, rewardArtUrl } from "@/utils/treasureDisplay";
+import { newRequestId } from "@/utils/requestId";
 import { RPGBadge } from "./RPGBadge";
 import { RPGButton } from "./RPGButton";
 
-/** Chave de idempotência por abertura do modal (clique duplo/refresh não gasta duas vezes). */
-function newRequestId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-}
 
 /**
  * Confirmação de resgate. A animação "RECOMPENSA ADQUIRIDA" só aparece

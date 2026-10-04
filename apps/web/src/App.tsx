@@ -84,6 +84,7 @@ const WeeklyReviewPage = lazy(() =>
 const LifeMapPage = lazy(() => import("@/pages/lifemap/LifeMapPage").then((m) => ({ default: m.LifeMapPage })));
 const DataHealthPage = lazy(() => import("@/pages/data-health/DataHealthPage").then((m) => ({ default: m.DataHealthPage })));
 const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
+const InventarioPage = lazy(() => import("@/pages/inventario/InventarioPage").then((m) => ({ default: m.InventarioPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
@@ -166,6 +167,7 @@ export default function App() {
           <Route path="/contexto-do-dia" element={<ContextoDoDiaPage />} />
           <Route path="/conquistas" element={<ConquistasPage />} />
           <Route path="/tesouro" element={<TesouroPage />} />
+          <Route path="/inventario" element={<InventarioPage />} />
           {/* A antiga Loja virou o Tesouro & Recompensas. */}
           <Route path="/loja" element={<Navigate to="/tesouro" replace />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
