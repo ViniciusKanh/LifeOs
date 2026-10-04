@@ -36,6 +36,8 @@ import { TaskModal } from "@/components/tasks/TaskModal";
 import { TodayCockpit } from "@/components/today/TodayCockpit";
 import { RpgNextAction, RpgTodayHero, RpgTodayMissions, RpgTodaySignals } from "@/components/today/RpgTodaySections";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
+import { ProtocolSuggestionBanner } from "@/components/protocols/ProtocolSuggestionBanner";
+import { useProtocolSuggestions } from "@/hooks/useProtocols";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
 import { taskService } from "@/services/taskService";
@@ -103,6 +105,8 @@ export function HojePage() {
   const { items: calendarItems } = useEvents(today, today);
   const copilot = useDailyInsight();
   const { isRpg } = useTheme();
+  // Missão principal definida por um protocolo (daily_priorities) tem precedência sobre a sugestão automática.
+  const protocolDaily = useProtocolSuggestions(isRpg).data?.daily;
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const queryClient = useQueryClient();
   const { projects } = useProjects();
@@ -152,7 +156,9 @@ export function HojePage() {
           <RpgTodayHero prioritiesPct={prioritiesPct} quote={findNavItem("/hoje")?.item.quote ?? DEFAULT_QUOTE} />
           <RpgTodaySignals />
         </div>
-      ) : (
+      ) : null}
+      {isRpg && <ProtocolSuggestionBanner />}
+      {isRpg ? null : (
         <>
         <p className="font-display font-bold text-2xl">Hoje</p>
         <p className="text-sm text-slate mt-1 mb-5">
@@ -224,7 +230,7 @@ export function HojePage() {
           {isRpg ? (
             <RpgTodayMissions
               tasks={priorities}
-              mainTaskId={focusTasks[0]?.id ?? null}
+              mainTaskId={protocolDaily?.taskId ?? focusTasks[0]?.id ?? null}
               projectNames={projectNames}
               today={today}
               onComplete={(id) => void moveTask({ id, status: "Concluído" })}

@@ -1,4 +1,6 @@
 import {
+  Dna,
+  Scroll,
   BarChart3,
   BookOpen,
   Briefcase,
@@ -189,6 +191,8 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { to: "/tesouro", label: "Tesouro & Recompensas", icon: Coins, quote: "Pequenas recompensas sustentam grandes jornadas." },
       { to: "/inventario", label: "Coleção / Inventário", icon: Backpack, quote: "Organize o que você conquistou — e use com propósito." },
+      { to: "/build", label: "Build do Personagem", icon: Dna, quote: "Conheça seus atributos para escolher o próximo passo." },
+      { to: "/protocolos", label: "Protocolos", icon: Scroll, quote: "Situações repetidas merecem respostas prontas." },
     ],
   },
   {

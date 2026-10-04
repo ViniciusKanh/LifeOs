@@ -352,6 +352,14 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
   ]);
+  // Protocolos (execuções reais, nunca simples visualização) e dias de recuperação.
+  const [protocolRuns, recoveryDays] = await Promise.all([
+    db.execute({
+      sql: "SELECT id, protocol_name AS label, status, COALESCE(completed_at, started_at) AS at FROM protocol_runs WHERE owner_id = ? AND status != 'canceled' AND date(started_at) >= date(?) AND date(started_at) <= date(?)",
+      args: [ownerId, from, to],
+    }),
+    db.execute({ sql: "SELECT day_key, created_at AS at FROM recovery_days WHERE owner_id = ? AND day_key >= ? AND day_key <= ?", args: [ownerId, from, to] }),
+  ]);
   // Inventário: aquisições de itens próprios, usos, cosméticos equipados e conjuntos completos.
   // Relíquias/títulos (Códex) e cupons (Tesouro) já aparecem pela fonte original.
   const inventoryTx = await db.execute({
@@ -424,6 +432,14 @@ analyticsRouter.get("/timeline", async (req, res) => {
         r.source_type === "set" ? String(r.label) : r.type === "use" ? `Item usado: ${name}` : r.type === "equip" ? `Cosmético equipado: ${key.startsWith("frame:") ? "moldura" : key.startsWith("title:") ? "título" : key.startsWith("emblem:") ? "emblema" : name}` : `Item adquirido: ${name}`;
       return { type: "inventory", icon: r.source_type === "set" ? "🏅" : r.type === "use" ? "🧪" : r.type === "equip" ? "🎽" : "🎒", id: `inv-${String(r.id)}`, label, at: r.at };
     }),
+    ...asRows(protocolRuns.rows).map((r) => ({
+      type: "protocol",
+      icon: "📜",
+      id: `protocol-${String(r.id)}`,
+      label: `${r.status === "completed" ? "Protocolo concluído" : r.status === "partial" ? "Protocolo parcialmente executado" : "Protocolo iniciado"}: ${String(r.label)}`,
+      at: r.at,
+    })),
+    ...asRows(recoveryDays.rows).map((r) => ({ type: "recovery", icon: "🌙", id: `recovery-${String(r.day_key)}`, label: "Modo recuperação ativado", at: r.at })),
     ...asRows(contractsDone.rows).map((r) => ({ type: "contract", icon: "📜", ...r, label: `Contrato cumprido: ${String(r.label)}` })),
     ...levelUps
       .filter((l) => l.dayKey >= from && l.dayKey <= to)

@@ -16,6 +16,7 @@ import { ItemEquipModal } from "@/components/inventory/ItemEquipModal";
 import { ItemUseModal } from "@/components/inventory/ItemUseModal";
 import { NewItemOverlay } from "@/components/inventory/NewItemOverlay";
 import { useInventory } from "@/hooks/useInventory";
+import { useWide } from "@/hooks/useWide";
 import type { InventoryItem, InventoryRecent as Recent, ItemRarity, ItemType } from "@/services/inventoryService";
 import { matchesItemQuery, primaryAction, sortItems, type ItemSort } from "@/utils/inventoryDisplay";
 
@@ -34,19 +35,6 @@ const writeSeen = (v: string) => {
     // Sem armazenamento (aba privada): o aviso simplesmente não persiste.
   }
 };
-
-/** Desktop largo mostra o detalhe na lateral; abaixo disso o detalhe abre como folha/modal. */
-function useWide(): boolean {
-  const query = "(min-width: 1280px)";
-  const [wide, setWide] = useState(() => (typeof window !== "undefined" ? window.matchMedia(query).matches : true));
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setWide(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return wide;
-}
 
 /**
  * Coleção / Inventário: tudo que o personagem já possui. Os itens nascem

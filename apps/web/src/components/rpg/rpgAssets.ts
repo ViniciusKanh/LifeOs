@@ -97,3 +97,10 @@ export const PRIORITY_TONE: Record<string, RpgTone> = { Alta: "red", Média: "or
 
 /** Classes de título de seção no tema RPG (pixel, dourado, caixa alta) — somadas ao título clássico. */
 export const RPG_SECTION_TITLE = "rpg:font-pixel rpg:uppercase rpg:tracking-[0.08em] rpg:text-[13px] rpg:text-rpg-gold-light";
+
+/** Cor de token para SVG/gráficos (recharts aceita a string direto). */
+export const rpgColor = (tone: RpgTone | "text" | "muted-text" | "border" | "panel" | "bg") =>
+  tone === "muted-text" || tone === "muted" ? "rgb(var(--rpg-text-muted))" : `rgb(var(--rpg-${tone}))`;
+
+/** Campo de formulário/filtro do tema RPG (input, select, textarea). */
+export const rpgFieldClass = "w-full min-w-0 px-3 py-2 text-sm bg-rpg-bg-2 text-rpg-text border border-rpg-border focus:border-rpg-gold outline-none placeholder:text-rpg-muted/70";

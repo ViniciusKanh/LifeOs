@@ -3,10 +3,11 @@ import { LayoutGrid, List, Search } from "lucide-react";
 import type { ItemRarity, ItemType } from "@/services/inventoryService";
 import { ITEM_RARITY, ITEM_SORTS, ORIGIN_LABEL, RARITY_RANK, TYPE_TABS, type ItemSort } from "@/utils/inventoryDisplay";
 import { ITEM_TYPE_ICON } from "./itemIcons";
+import { rpgFieldClass } from "@/components/rpg/rpgAssets";
 
 export type ViewMode = "grid" | "list";
 
-const field = "w-full min-w-0 px-3 py-2 text-sm bg-rpg-bg-2 text-rpg-text border border-rpg-border focus:border-rpg-gold outline-none placeholder:text-rpg-muted/70";
+const field = rpgFieldClass;
 
 /** Abas por tipo (só as que têm itens) + busca, raridade, origem, ordenação e modo de exibição. */
 export function InventoryFilters({

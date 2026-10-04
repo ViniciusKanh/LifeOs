@@ -71,6 +71,8 @@ export interface AttributeAggregate {
   prev: Record<AttributeKey, number>;
   bySource: Record<AttributeKey, Record<string, number>>;
   daily: Record<AttributeKey, Record<string, number>>;
+  /** XP por atributo por dia em todo o histórico (base da evolução do Build do Personagem). */
+  dailyAll: Record<AttributeKey, Record<string, number>>;
   recent: Record<AttributeKey, Array<{ label: string | null; xp: number; dayKey: string }>>;
   totalXp: number;
   sourceCounts: Record<string, number>;
@@ -105,6 +107,7 @@ export async function aggregateAttributes(db: Client, ownerId: string): Promise<
     prev: zero(),
     bySource: Object.fromEntries(ATTRIBUTES.map((a) => [a, {}])) as AttributeAggregate["bySource"],
     daily: Object.fromEntries(ATTRIBUTES.map((a) => [a, {}])) as AttributeAggregate["daily"],
+    dailyAll: Object.fromEntries(ATTRIBUTES.map((a) => [a, {}])) as AttributeAggregate["dailyAll"],
     recent: Object.fromEntries(ATTRIBUTES.map((a) => [a, []])) as unknown as AttributeAggregate["recent"],
     totalXp: 0,
     sourceCounts: {},
@@ -134,6 +137,7 @@ export async function aggregateAttributes(db: Client, ownerId: string): Promise<
       if (!v) continue;
       agg.xp[k] += v;
       agg.bySource[k][sourceType] = (agg.bySource[k][sourceType] ?? 0) + v;
+      agg.dailyAll[k][day] = (agg.dailyAll[k][day] ?? 0) + v;
       if (day >= lastFrom) {
         agg.last[k] += v;
         agg.daily[k][day] = (agg.daily[k][day] ?? 0) + v;
