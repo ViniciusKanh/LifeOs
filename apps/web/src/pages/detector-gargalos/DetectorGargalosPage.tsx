@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Compass, RefreshCw, Search, Telescope } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Compass, RefreshCw, Search, Telescope } from "lucide-react";
 import { RPGButton, RPGTabs, RPGToast, rpgButtonClass } from "@/components/rpg";
 import { BottleneckHero } from "@/components/bottlenecks/BottleneckHero";
 import { PrimaryBottleneckCard } from "@/components/bottlenecks/PrimaryBottleneckCard";
@@ -103,14 +103,14 @@ export function DetectorGargalosPage() {
             <ul className="space-y-1 text-sm text-left">
               {(
                 [
-                  [a.checks.deadlines, "prazos sob controle"],
-                  [a.checks.capacity, "carga equilibrada"],
-                  [a.checks.blocks, "nenhum bloqueio crítico"],
+                  [a.checks.deadlines, "prazos sob controle", "há prazos vencidos"],
+                  [a.checks.capacity, "carga equilibrada", "carga acima da capacidade"],
+                  [a.checks.blocks, "nenhum bloqueio crítico", "há bloqueios a revisar"],
                 ] as const
-              ).map(([ok, label]) => (
-                <li key={label} className={ok ? "text-rpg-green" : "text-rpg-muted"}>
-                  <CheckCircle2 size={14} className="inline mr-1.5" aria-hidden />
-                  {ok ? label : `${label} — verifique`}
+              ).map(([ok, good, bad]) => (
+                <li key={good} className={ok ? "text-rpg-green" : "text-rpg-orange"}>
+                  {ok ? <CheckCircle2 size={14} className="inline mr-1.5" aria-hidden /> : <AlertTriangle size={14} className="inline mr-1.5" aria-hidden />}
+                  {ok ? good : bad}
                 </li>
               ))}
             </ul>
@@ -135,7 +135,7 @@ export function DetectorGargalosPage() {
     if (!desktop)
       // Celular/tablet: ordem pensada para decidir rápido.
       return (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-[repeat(2,minmax(0,1fr))] [&>*]:min-w-0">
           <div className="md:col-span-2">{primary}</div>
           <div className="md:col-span-2">{action}</div>
           {ranking}
@@ -151,11 +151,11 @@ export function DetectorGargalosPage() {
     return (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px] items-start">
         <div className="min-w-0 space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-stretch">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-stretch [&>*]:min-w-0">
             {primary}
             {ranking}
           </div>
-          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.15fr)_minmax(0,0.95fr)] items-stretch">
+          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.15fr)_minmax(0,0.95fr)] items-stretch [&>*]:min-w-0">
             {causes}
             <div className="lg:col-span-2 2xl:col-span-1 lg:order-last 2xl:order-none">{graph}</div>
             {action}

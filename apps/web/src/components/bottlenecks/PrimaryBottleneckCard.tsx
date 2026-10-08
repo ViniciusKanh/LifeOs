@@ -19,7 +19,7 @@ export function PrimaryBottleneckCard({ candidate: c, onDetail }: { candidate: C
   ];
   return (
     <RPGPanel title="Gargalo principal" icon={<AlertTriangle size={16} className="text-rpg-red" />} variant="gold" className="h-full">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,190px)_minmax(0,1fr)]">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,150px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,190px)_minmax(0,1fr)]">
         <button type="button" onClick={onDetail} className="relative block focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold" aria-label={`Ver detalhes de ${c.title}`}>
           <img src={bottleneckArt(c.type)} alt="" className="pixelated w-full aspect-[16/10] sm:aspect-[4/5] object-cover border-2 border-rpg-gold/70 bg-rpg-bg-2" style={{ borderRadius: 3 }} />
           <span className="absolute left-2 top-2">
@@ -49,7 +49,7 @@ export function PrimaryBottleneckCard({ candidate: c, onDetail }: { candidate: C
           )}
         </div>
       </div>
-      <ul className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
+      <ul className="mt-4 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4 gap-2">
         {kpis.map((k) => (
           <li key={k.label} className="flex items-center gap-2.5 border border-rpg-border/70 bg-rpg-bg-2/60 px-2.5 py-2 min-w-0" style={{ borderRadius: 3 }}>
             <k.icon size={22} className={clsx("shrink-0", RPG_TONE_TEXT[k.tone])} aria-hidden />

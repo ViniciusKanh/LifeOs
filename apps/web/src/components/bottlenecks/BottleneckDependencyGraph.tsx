@@ -43,7 +43,7 @@ export function GraphCanvas({ graph, large = false }: { graph: DependencyGraph; 
   const { placed, hidden } = layout(graph);
   return (
     <div className={clsx("overflow-x-auto", large ? "" : "-mx-1")}>
-      <svg viewBox={`0 0 ${W} ${H}`} className={clsx("w-full h-auto", large ? "min-w-[560px]" : "min-w-[360px]")} role="img" aria-label="Mapa de dependências do gargalo (lista equivalente disponível)">
+      <svg viewBox={`0 0 ${W} ${H}`} className={clsx("mx-auto block w-full h-auto", large ? "min-w-[560px] max-h-[460px]" : "min-w-[360px] max-h-[300px]")} role="img" aria-label="Mapa de dependências do gargalo (lista equivalente disponível)">
         <defs>
           <marker id="bn-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L8,4 L0,8 z" fill={rpgColor("orange")} />
