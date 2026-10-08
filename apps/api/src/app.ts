@@ -54,6 +54,7 @@ import { inventoryRouter } from "./routes/inventory.routes.js";
 import { buildRouter } from "./routes/build.routes.js";
 import { protocolsRouter } from "./routes/protocols.routes.js";
 import { bottlenecksRouter } from "./routes/bottlenecks.routes.js";
+import { intelligenceRouter } from "./routes/intelligence.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -161,6 +162,7 @@ app.use("/api/inventory", inventoryRouter);
 app.use("/api/build", buildRouter);
 app.use("/api/protocols", protocolsRouter);
 app.use("/api/bottlenecks", bottlenecksRouter);
+app.use("/api/intelligence", intelligenceRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

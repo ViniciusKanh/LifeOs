@@ -2,7 +2,22 @@ import clsx from "clsx";
 import { RPG_TONE_TEXT, type RpgTone } from "./rpgAssets";
 
 /** Anel de progresso segmentado (estilo medidor de RPG). Valor sempre real, 0–100. */
-export function RPGProgressRing({ value, size = 96, tone = "green", label, className }: { value: number; size?: number; tone?: RpgTone; label: string; className?: string }) {
+export function RPGProgressRing({
+  value,
+  size = 96,
+  tone = "green",
+  label,
+  className,
+  valueClassName = "text-2xl text-rpg-ink",
+}: {
+  value: number;
+  size?: number;
+  tone?: RpgTone;
+  label: string;
+  className?: string;
+  /** Cor/tamanho do número central (padrão: tinta, para pergaminho; em painel escuro use texto claro). */
+  valueClassName?: string;
+}) {
   const pct = Math.max(0, Math.min(100, value));
   const r = size / 2 - 8;
   const c = 2 * Math.PI * r;
@@ -24,7 +39,7 @@ export function RPGProgressRing({ value, size = 96, tone = "green", label, class
         {/* Marcações de 10% — dão o ar de medidor segmentado */}
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={9} strokeDasharray={`1.5 ${c / 20 - 1.5}`} className="stroke-rpg-ink/70" />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-pixel font-bold text-2xl text-rpg-ink tabular-nums">{Math.round(pct)}%</span>
+      <span className={clsx("absolute inset-0 flex items-center justify-center font-pixel font-bold tabular-nums", valueClassName)}>{Math.round(pct)}%</span>
     </div>
   );
 }

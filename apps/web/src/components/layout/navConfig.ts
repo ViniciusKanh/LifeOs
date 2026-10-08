@@ -1,5 +1,6 @@
 import {
   Boxes,
+  BrainCircuit,
   Dna,
   Scroll,
   BookOpen,
@@ -165,6 +166,7 @@ export const NAV_GROUPS: NavGroup[] = [
         quote: "Destrave o essencial e o resto anda.",
         searchPlaceholder: "Buscar projetos, missões, hábitos ou problemas…",
       },
+      { to: "/forja-inteligencia", label: "Forja da Inteligência", icon: BrainCircuit, quote: "Quem aprende com o próprio passado enxerga melhor o futuro." },
     ],
   },
   {
