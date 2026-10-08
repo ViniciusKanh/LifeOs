@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, Menu, X } from "lucide-react";
@@ -23,6 +23,10 @@ import { OfflineStatus } from "./OfflineStatus";
 import { HubTabs } from "./HubTabs";
 import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
+import { IS_DESKTOP } from "@/platform";
+
+// Aviso de nova versão do app nativo — só existe (e só é baixado) no LifeOS Desktop.
+const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop/DesktopUpdatePrompt")) : null;
 
 /**
  * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
@@ -159,6 +163,11 @@ export function AppShell() {
         </header>
 
         <OfflineStatus />
+        {DesktopUpdatePrompt && (
+          <Suspense fallback={null}>
+            <DesktopUpdatePrompt />
+          </Suspense>
+        )}
         {/* Única área rolável do app: limitada entre o cabeçalho e a borda da tela, sem "elástico" além dos limites. */}
         <div ref={scrollRef} id="app-scroll" className="app-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain">
         <AppScrollContext.Provider value={scrollRef}>

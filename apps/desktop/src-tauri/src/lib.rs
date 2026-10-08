@@ -3,7 +3,7 @@
 //! A janela abre uma tela local de abertura (`boot/`) que confere a conexão e
 //! então carrega o LifeOS publicado na Vercel. Assim, todo deploy da Web chega
 //! ao Desktop na hora; o instalador só muda quando a parte nativa muda (e aí o
-//! Tauri Updater cuida disso). Segurança:
+//! Tauri Updater cuida disso, com aviso na própria interface). Segurança:
 //! - o site remoto recebe apenas as permissões listadas em `remote_capability`,
 //!   e só no domínio publicado;
 //! - a navegação fica presa ao LifeOS: links externos abrem no navegador padrão;
@@ -31,11 +31,16 @@ fn is_allowed_navigation(url: &Url) -> bool {
 }
 
 /// Permissões nativas do LifeOS remoto — mínimo necessário, só no domínio publicado.
+/// O updater só instala pacotes assinados com a chave pública do tauri.conf.json,
+/// então a interface pode verificar/baixar/instalar sem risco de versão adulterada.
 fn remote_capability() -> CapabilityBuilder {
     CapabilityBuilder::new("lifeos-remote")
         .remote(format!("{}/*", REMOTE_URL.trim_end_matches('/')))
         .window("main")
         .permission("core:app:allow-version")
+        .permission("updater:allow-check")
+        .permission("updater:allow-download-and-install")
+        .permission("process:allow-restart")
 }
 
 pub fn run() {
@@ -49,6 +54,9 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        // Atualização da parte nativa (GitHub Releases, assinatura verificada).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // Lembra posição, tamanho e maximização da janela entre execuções.
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {

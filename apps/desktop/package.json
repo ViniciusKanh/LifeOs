@@ -1,7 +1,7 @@
 {
   "name": "@lifeos/desktop",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "LifeOS Desktop para Windows (Tauri 2): app nativo que abre o LifeOS publicado na Vercel.",
   "type": "module",
   "scripts": {

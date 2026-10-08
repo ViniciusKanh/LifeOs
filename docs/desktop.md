@@ -2,7 +2,7 @@
 
 O LifeOS Desktop é um **aplicativo nativo instalado**: tem instalador `.exe`, janela própria, ícone e instância única, e lembra a posição da janela. Ele exibe o LifeOS **publicado na Vercel**.
 
-Resultado: todo push na branch de produção → deploy da Vercel → a Web **e** o Desktop ficam atualizados juntos. O instalador só muda quando a parte nativa muda.
+Resultado: todo push na branch de produção → deploy da Vercel → a Web **e** o Desktop ficam atualizados juntos. O instalador só muda quando a parte nativa muda — e essa atualização também é automática, pelo Tauri Updater (com sua confirmação).
 
 ```
 GitHub (push) ──► Vercel (deploy Web + API) ──► LifeOS Web
@@ -61,13 +61,27 @@ Só é necessário quando muda algo em `apps/desktop`: janela, bandeja, atalhos,
 - **GitHub → Settings → Actions → General → Workflow permissions:** "Read and write".
 - **Vercel:** nada muda.
 
+## Atualização automática da parte nativa (Tauri Updater)
+
+O app verifica `https://github.com/ViniciusKanh/LifeOs/releases/latest/download/latest.json`:
+
+- 8 segundos depois de abrir e a cada 6 horas;
+- também em Perfil → LifeOS Desktop → "Verificar atualizações".
+
+Havendo versão nova, o aviso mostra a versão e as notas. A instalação só acontece com "Atualizar agora": baixa com barra de progresso, verifica a **assinatura**, instala (modo passivo no Windows) e reabre o app. "Mais tarde" não pergunta de novo por aquela versão.
+
+Pacotes sem assinatura válida são recusados, e nada é alterado no app. Isso foi testado com um pacote falso.
+
+Chaves:
+
+- A pública está em `tauri.conf.json` (`plugins.updater.pubkey`).
+- A privada e a senha ficam **somente** nos GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, e num backup seu fora do repositório.
+- Se a chave privada for perdida, as versões instaladas não aceitam mais atualizações: será preciso gerar outra chave e reinstalar manualmente uma vez.
+- Essa assinatura não é a assinatura de código do Windows (Authenticode). Sem Authenticode, o SmartScreen pode avisar na primeira instalação.
+
+O workflow falha antes de compilar se o secret da chave não existir. Uma release só fica "latest" (visível ao updater) depois de compilar, assinar e passar nos testes.
+
 ## Próximas etapas
 
-- **Etapa 3 — Tauri Updater (para a parte nativa):**
-  - gerar as chaves com `npx tauri signer generate -w ~/.tauri/lifeos.key`;
-  - guardar a chave privada e a senha apenas em GitHub Secrets;
-  - pôr a chave pública no `tauri.conf.json`.
-
-  Se o repositório for privado, os downloads precisarão de uma rota autenticada.
 - **Etapa 4:** bandeja, notificações nativas, atalhos globais e inicialização com o Windows. Os comandos novos entram em `remote_capability()` com o mínimo necessário.
 - **Etapa 5:** SQLite local e sincronização. O monitoramento de apps será opcional, desligado por padrão, sem teclas digitadas, conteúdo ou capturas de tela.

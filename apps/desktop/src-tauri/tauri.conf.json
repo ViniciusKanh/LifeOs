@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LifeOS",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "br.com.lifeos.desktop",
   "build": {
     "frontendDist": "../boot"
@@ -45,6 +45,18 @@
           "English"
         ],
         "displayLanguageSelector": false
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMzRDE0MTBFODhGRDkyOTgKUldTWWt2MklEa0hSTTZiL1dqVkordlVSUWNVYTVlZ3Qvd2JjWWpVaVI5N1RPeCt1YmJuaklCSkwK",
+      "endpoints": [
+        "https://github.com/ViniciusKanh/LifeOs/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

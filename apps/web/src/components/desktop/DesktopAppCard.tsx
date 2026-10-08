@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Monitor } from "lucide-react";
 import { RPGPanel } from "@/components/rpg";
 import { Card } from "@/components/ui/primitives";
 import { IS_DESKTOP, desktopVersion } from "@/platform";
+
+// Só carregado dentro do Desktop: a Web nunca baixa o código do updater.
+const DesktopUpdateStatus = lazy(() => import("./DesktopUpdateStatus"));
 
 /**
  * "Desktop / Integração Windows": só aparece dentro do app nativo.
@@ -23,13 +26,21 @@ export function DesktopAppCard({ rpg = false }: { rpg?: boolean }) {
       <dt className="opacity-70">Interface</dt>
       <dd>atualizada automaticamente a cada publicação do LifeOS</dd>
       <dt className="opacity-70">App nativo</dt>
-      <dd>atualizado pelo instalador quando houver nova versão</dd>
+      <dd>atualizado automaticamente, com sua confirmação</dd>
     </dl>
+  );
+  const updates = (
+    <Suspense fallback={null}>
+      <DesktopUpdateStatus />
+    </Suspense>
   );
   if (rpg) {
     return (
       <RPGPanel title="LifeOS Desktop" icon={<Monitor size={16} />}>
-        <div className="text-rpg-text">{body}</div>
+        <div className="text-rpg-text">
+          {body}
+          {updates}
+        </div>
       </RPGPanel>
     );
   }
@@ -39,6 +50,7 @@ export function DesktopAppCard({ rpg = false }: { rpg?: boolean }) {
         <Monitor size={17} className="text-brand-600" /> LifeOS Desktop
       </p>
       {body}
+      {updates}
     </Card>
   );
 }

@@ -62,10 +62,20 @@ jobs:
       - name: Dependências do Desktop
         run: npm ci --prefix apps/desktop
 
+      - name: Conferir chave de assinatura do Updater
+        shell: pwsh
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:KEY) { throw "Secret TAURI_SIGNING_PRIVATE_KEY ausente: sem ela o app instalado não aceitaria a atualização." }
+
       - name: Compilar instalador e anexar à release em rascunho
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Assina o pacote de atualização (latest.json + .sig). Só existe nos Secrets.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tagName: ${{ steps.version.outputs.tag }}
@@ -73,6 +83,8 @@ jobs:
           releaseBody: "Instalador do LifeOS para Windows 10/11 (x64). Baixe o arquivo .exe abaixo."
           releaseDraft: true
           prerelease: false
+          # Gera o latest.json que o app instalado consulta em releases/latest.
+          includeUpdaterJson: true
 
       - name: Testes do Rust
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml

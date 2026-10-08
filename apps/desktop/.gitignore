@@ -4,3 +4,6 @@ src-tauri/gen/schemas
 # Chaves do Tauri Updater NUNCA entram no repositório.
 *.key
 *.key.pub
+
+# Chaves e senha do Tauri Updater (guardar fora do repositório e no GitHub Secrets).
+.keys/
