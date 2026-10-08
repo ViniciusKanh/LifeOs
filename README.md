@@ -7,6 +7,7 @@
 Sistema operacional pessoal para produtividade, estudos, saúde, hábitos, leitura e Personal Analytics.
 
 [**Acessar o app**](https://lifeos-sigma-five.vercel.app) ·
+[**Download para Windows**](#download) ·
 [Política de Privacidade](docs/PRIVACY.md) ·
 [Termo de Uso](docs/TERMS.md) ·
 [Deploy](DEPLOY.md)
@@ -25,6 +26,8 @@ Sistema operacional pessoal para produtividade, estudos, saúde, hábitos, leitu
 
 ## Sumário
 
+- [Download](#download)
+- [Code signing policy](#code-signing-policy)
 - [O que é o LifeOS](#o-que-é-o-lifeos)
 - [Módulos](#módulos)
 - [Stack](#stack)
@@ -40,6 +43,53 @@ Sistema operacional pessoal para produtividade, estudos, saúde, hábitos, leitu
 - [Referência da API](#referência-da-api)
 - [Testes](#testes)
 - [Roteiro](#roteiro)
+- [Licença](#licença)
+
+---
+
+## Download
+
+**Windows (LifeOS Desktop):** baixe o instalador `LifeOS_x.y.z_x64-setup.exe` na
+[página de Releases](https://github.com/ViniciusKanh/LifeOs/releases/latest).
+O app atualiza sozinho a cada nova versão (atualizações assinadas e verificadas).
+
+**Web / celular:** use direto em [lifeos-sigma-five.vercel.app](https://lifeos-sigma-five.vercel.app)
+(pode ser instalado como PWA pelo navegador).
+
+> Code signing for Windows releases: free code signing provided by
+> [SignPath.io](https://about.signpath.io/), certificate by
+> [SignPath Foundation](https://signpath.org/). See the [code signing policy](#code-signing-policy).
+
+---
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/).
+
+**Team roles**
+
+- Committers and reviewers: [Vinicius Santos](https://github.com/ViniciusKanh)
+- Approvers: [Vinicius Santos](https://github.com/ViniciusKanh)
+
+**What is signed**
+
+Only the Windows installer and executable of LifeOS Desktop, built from this
+repository's source code by the GitHub Actions workflow
+[`desktop-release.yml`](.github/workflows/desktop-release.yml). Every signing
+request is manually approved by the approver. Third-party binaries are not
+signed with this certificate.
+
+**Privacy policy**
+
+This program will not transfer any information to other networked systems
+unless specifically requested by the user or the person installing or
+operating it. LifeOS Desktop opens the LifeOS web application
+(`lifeos-sigma-five.vercel.app`) and checks GitHub Releases for signed
+updates; the data you enter is sent only to your own LifeOS account. It does
+not collect keystrokes, documents or screenshots. Full policy (Portuguese):
+[Política de Privacidade](https://lifeos-sigma-five.vercel.app/privacidade) ·
+[Termo de Uso](https://lifeos-sigma-five.vercel.app/termos).
 
 ---
 
@@ -484,6 +534,12 @@ usuários e cálculos de métricas.
 - Empacotamento PWA para a **Microsoft Store** (PWABuilder).
 - Integrações externas: Google Calendar/Outlook, Google Fit, Strava, GitHub.
 - Notificações push mais ricas e modo offline.
+
+---
+
+## Licença
+
+Distribuído sob a licença [MIT](LICENSE). © 2026 Vinicius Santos.
 
 ---
 
