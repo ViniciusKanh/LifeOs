@@ -1,0 +1,6 @@
+node_modules
+src-tauri/target
+src-tauri/gen/schemas
+# Chaves do Tauri Updater NUNCA entram no repositório.
+*.key
+*.key.pub

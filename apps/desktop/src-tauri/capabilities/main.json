@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Permissões mínimas da janela principal do LifeOS (conteúdo local empacotado).",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "window-state:default",
+    "allow-session-token-get",
+    "allow-session-token-set",
+    "allow-session-token-clear"
+  ]
+}

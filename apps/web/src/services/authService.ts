@@ -1,3 +1,4 @@
+import { clearSessionOnLogout } from "@/platform/requestAuth";
 import { api, API_URL } from "./api";
 import type { CurrentUser, MfaChallenge, MfaSetup, MfaStatus, RpgPrefsPayload } from "@/types";
 
@@ -36,7 +37,7 @@ export const authService = {
   verifyEmail: (token: string) => api.post<CurrentUser>("/auth/verify-email", { token }),
   resendVerification: (email: string) =>
     api.post<{ message: string }>("/auth/resend-verification", { email }),
-  logout: () => api.post<void>("/auth/logout"),
+  logout: () => api.post<void>("/auth/logout").finally(() => clearSessionOnLogout()),
   forgotPassword: (email: string) =>
     api.post<{ message: string }>("/auth/forgot-password", { email }),
   resetPassword: (token: string, newPassword: string) =>

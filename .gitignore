@@ -18,3 +18,9 @@ _to_delete/
 
 # Arquivos temporários do Vite/Vitest
 *.timestamp-*.mjs
+
+# LifeOS Desktop (Tauri)
+apps/web/dist-desktop
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen/schemas
+*.key

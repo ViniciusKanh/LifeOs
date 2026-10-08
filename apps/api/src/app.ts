@@ -90,10 +90,16 @@ function ensureMigrations(): Promise<void> {
 // diferentes; o proxy documentado em DEPLOY.md faz as chamadas do
 // front caírem como same-origin, então o CORS abaixo é sobretudo
 // para desenvolvimento local e para quem optar por não usar o proxy.
+// Origens do LifeOS Desktop (Tauri 2 no Windows serve o app em http(s)://tauri.localhost).
+// Elas só autenticam por Bearer + X-LifeOS-Client: desktop (ver sessionService).
+const DESKTOP_ORIGINS = ["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"];
+const allowedOrigins = new Set([process.env.WEB_ORIGIN ?? "http://localhost:5173", ...DESKTOP_ORIGINS]);
 app.use(
   cors({
-    origin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
+    origin: (origin, cb) => cb(null, !origin || allowedOrigins.has(origin)),
     credentials: true, // necessário para o cookie httpOnly de sessão
+    allowedHeaders: ["Content-Type", "Authorization", "X-LifeOS-Client"],
+    exposedHeaders: ["X-LifeOS-Session"],
   })
 );
 app.use(express.json({ limit: "5mb" })); // fotos do Diário (Fase 4) chegam como data URI — teto um pouco acima do limite de 3MB por foto pra sobrar espaço pro JSON ao redor

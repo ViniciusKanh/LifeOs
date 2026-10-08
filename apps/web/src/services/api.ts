@@ -1,3 +1,5 @@
+import { authHeaders, captureSession } from "@/platform/requestAuth";
+
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333/api";
 
 export class ApiError extends Error {
@@ -19,12 +21,14 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     credentials: "include",
+    ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(await authHeaders()),
       ...options.headers,
     },
-    ...options,
   });
+  await captureSession(res);
 
   if (res.status === 204) {
     return undefined as T;

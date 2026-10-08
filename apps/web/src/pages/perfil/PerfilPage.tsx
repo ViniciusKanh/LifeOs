@@ -33,6 +33,7 @@ import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/prim
 import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
+import { platformFeatures } from "@/platform";
 import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
@@ -464,7 +465,7 @@ export function PerfilPage() {
         <div className="space-y-4">
           {passwordCard}
 
-          <GoogleAccountCard user={user} />
+          {platformFeatures.googleOAuthRedirect && <GoogleAccountCard user={user} />}
           <MfaSettingsCard user={user} />
 
           <PushNotificationsCard />

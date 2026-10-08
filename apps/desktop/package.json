@@ -1,0 +1,17 @@
+{
+  "name": "@lifeos/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LifeOS Desktop para Windows (Tauri 2). Reaproveita o frontend de apps/web.",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "dev:web": "npm run dev:desktop --prefix ../.. --workspace apps/web",
+    "build:web": "npm run build:desktop --prefix ../.. --workspace apps/web"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0"
+  }
+}

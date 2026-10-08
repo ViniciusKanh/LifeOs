@@ -1,0 +1,91 @@
+# LifeOS Desktop (Windows) — gera o instalador NSIS e publica no GitHub Releases.
+# Independente do deploy Web: a Vercel continua publicando a cada push na branch
+# de produção; este workflow só roda com uma tag desktop-vX.Y.Z (ou manualmente).
+name: Desktop (Windows) — release
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag já existente a publicar (ex.: desktop-v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Compilar e anexar à release (rascunho)
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    env:
+      # URL pública da API usada pelo app (não é segredo). Pode ser trocada em
+      # Settings → Variables → LIFEOS_DESKTOP_API_URL sem mexer no código.
+      LIFEOS_DESKTOP_API_URL: ${{ vars.LIFEOS_DESKTOP_API_URL || 'https://lifeos-sigma-five.vercel.app/api' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Conferir versão da tag × tauri.conf.json
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.tag }}" } else { "${{ github.ref_name }}" }
+          if ($tag -notmatch '^desktop-v\d+\.\d+\.\d+$') { throw "Tag inválida: $tag (use desktop-vX.Y.Z)" }
+          $version = $tag.Substring(9)
+          $conf = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if ($conf.version -ne $version) { throw "tauri.conf.json está na versão $($conf.version), mas a tag é $tag" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Dependências (Web + Desktop)
+        run: |
+          npm ci
+          npm ci --prefix apps/desktop
+
+      - name: Compilar instalador e anexar à release em rascunho
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ steps.version.outputs.tag }}
+          releaseName: "LifeOS Desktop v__VERSION__"
+          releaseBody: "Instalador do LifeOS para Windows 10/11 (x64). Baixe o arquivo .exe abaixo."
+          releaseDraft: true
+          prerelease: false
+
+      - name: Testes do Rust
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+  publish:
+    name: Publicar release estável
+    # Só roda se a compilação e os testes passaram; senão a release fica em rascunho.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tirar a release do rascunho
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.build.outputs.tag }}" --repo "${{ github.repository }}" --draft=false --latest

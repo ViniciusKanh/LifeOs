@@ -1,3 +1,4 @@
+import { platformFeatures } from "@/platform";
 import { useGoogleLoginAvailable } from "@/hooks/useAuth";
 import { GOOGLE_LOGIN_START_URL } from "@/services/authService";
 
@@ -31,7 +32,8 @@ function GoogleGlyph() {
  */
 export function GoogleLoginButton() {
   const available = useGoogleLoginAvailable();
-  if (!available) return null;
+  // No Desktop o OAuth por redirecionamento sairia da janela do app; login por e-mail/senha.
+  if (!available || !platformFeatures.googleOAuthRedirect) return null;
   return (
     <>
       <div className="flex items-center gap-3 text-[11px] text-slate">

@@ -27,6 +27,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { Switch } from "@/components/ui/Switch";
 import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
+import { platformFeatures } from "@/platform";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 import { AppearanceCard } from "@/components/profile/AppearanceCard";
@@ -254,7 +255,7 @@ export function RpgProfileView({
           </div>
           <div className="space-y-4 min-w-0">
             {passwordCard}
-            <GoogleAccountCard user={user} />
+            {platformFeatures.googleOAuthRedirect && <GoogleAccountCard user={user} />}
           </div>
         </div>
       )}
@@ -358,7 +359,7 @@ export function RpgProfileView({
       {tab === "integrations" && (
         <div className="grid gap-4 xl:grid-cols-2 items-start">
           <div className="space-y-4 min-w-0">
-            <GoogleAccountCard user={user} />
+            {platformFeatures.googleOAuthRedirect && <GoogleAccountCard user={user} />}
             {pushCard}
           </div>
           <div className="space-y-4 min-w-0">

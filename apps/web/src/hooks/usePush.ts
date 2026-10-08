@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { pushService } from "@/services/pushService";
 import { ApiError } from "@/services/api";
+import { platformFeatures } from "@/platform";
 
 /** Converte a chave pública VAPID (base64url) para o Uint8Array que PushManager.subscribe exige. */
 function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
@@ -56,7 +57,8 @@ export function usePush() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    // Desktop não registra Service Worker (notificações nativas virão pelo Tauri).
+    if (!platformFeatures.webPush || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setSupport("unsupported");
       return;
     }

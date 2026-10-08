@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LifeOS",
+  "version": "0.1.0",
+  "identifier": "br.com.lifeos.desktop",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../web/dist-desktop",
+    "beforeDevCommand": "npm run dev:web",
+    "beforeBuildCommand": "npm run build:web"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "LifeOS",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "connect-src": "'self' ipc: http://ipc.localhost https://lifeos-sigma-five.vercel.app http://localhost:3333",
+        "img-src": "'self' data: blob: https:",
+        "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src": "'self' data: https://fonts.gstatic.com",
+        "media-src": "'self' data: blob:",
+        "frame-src": "'none'",
+        "object-src": "'none'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Vinicius Santos",
+    "category": "Productivity",
+    "shortDescription": "LifeOS — Transforme sua rotina em progresso.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["PortugueseBR", "English"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

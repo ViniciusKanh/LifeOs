@@ -1,4 +1,5 @@
 import { API_URL } from "@/services/api";
+import { authHeaders } from "@/platform/requestAuth";
 
 /**
  * Fila offline de capturas. Quando não há conexão, POSTs de captura (Inbox,
@@ -81,7 +82,7 @@ export async function flushQueue(): Promise<{ sent: number; failed: number }> {
         const res = await fetch(`${API_URL}${next.path}`, {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify(next.body),
         });
         if (res.status === 401) break; // sessão expirou: mantém a fila até o login
