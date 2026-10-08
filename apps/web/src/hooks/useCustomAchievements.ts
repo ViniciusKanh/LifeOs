@@ -14,10 +14,11 @@ const METRICS_KEY = ["achievements", "custom-metrics"];
  * "concluir 5 tarefas no dia") e ele desbloqueia sozinho quando a
  * métrica real bate o limite — nunca marcado à mão.
  */
-export function useCustomAchievements() {
+export function useCustomAchievements(options: { withMetrics?: boolean } = {}) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: KEY, queryFn: achievementsService.listCustom });
-  const metricsQuery = useQuery({ queryKey: METRICS_KEY, queryFn: achievementsService.metrics, staleTime: Infinity });
+  const query = useQuery({ queryKey: KEY, queryFn: achievementsService.listCustom, staleTime: 10 * 60_000 });
+  // O catálogo de métricas só é necessário no formulário de criação.
+  const metricsQuery = useQuery({ queryKey: METRICS_KEY, queryFn: achievementsService.metrics, staleTime: Infinity, enabled: options.withMetrics ?? true });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: KEY });

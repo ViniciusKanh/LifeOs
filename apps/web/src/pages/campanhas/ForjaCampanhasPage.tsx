@@ -195,7 +195,6 @@ export function ForjaCampanhasPage() {
           <p className="text-xs text-rpg-muted">Combine projetos, missões e hábitos em uma campanha épica.</p>
         </div>
         <RPGButton variant="primary" onClick={() => setWizard(true)}>⚒️ Forjar campanha</RPGButton>
-        <Link to="/life-map" className="rpg-btn rpg-btn-secondary inline-flex items-center gap-2"><MapIcon size={14} aria-hidden /> Ver mapa do reino</Link>
       </section>
 
       {wizard && (

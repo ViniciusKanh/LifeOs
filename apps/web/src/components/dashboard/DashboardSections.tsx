@@ -16,14 +16,12 @@ import {
   Droplets,
   Dumbbell,
   Info,
-  Lightbulb,
   Moon,
   Smile,
   Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
-  Wand2,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -92,8 +90,8 @@ export function DashboardHero({
             {subtitle}
           </motion.p>
         </div>
-        <Link
-          to="/analytics"
+        <a
+          href="#life-score-dimensoes"
           className="flex items-center gap-4 rounded-2xl bg-paper-raised/80 dark:bg-ink-raised/80 backdrop-blur border border-paper-border dark:border-ink-border px-4 py-3 shadow-card hover:border-brand-500/40 transition-colors self-start lg:self-auto"
         >
           <IconBadge tone="green" size={44} icon={up ? <TrendingUp size={20} /> : <TrendingDown size={20} />} />
@@ -114,7 +112,7 @@ export function DashboardHero({
             )}
           </div>
           <Sparkline values={history} width={110} height={44} className="hidden sm:block text-brand-500" />
-        </Link>
+        </a>
       </div>
     </Card>
   );
@@ -135,7 +133,7 @@ export interface KpiData {
 
 export function KpiStrip({ items }: { items: KpiData[] }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {items.map((k, i) => (
         <motion.div key={k.key} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * i }} className={i === items.length - 1 ? "col-span-2 md:col-span-1" : ""}>
           <Link to={k.to} className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
@@ -249,7 +247,7 @@ const SIGNAL_STATUS: Record<SignalCard["status"], { label: string; className: st
 export function SignalsNow({ signals, isLoading }: { signals: SignalCard[]; isLoading: boolean }) {
   return (
     <Card className="p-5 h-full">
-      <SectionTitle icon={<Activity size={17} />} title="Signals agora" action={{ label: "Ver todos", to: "/signals" }} tone="text-cat-purple" />
+      <SectionTitle icon={<Activity size={17} />} title="Signals agora" tone="text-cat-purple" />
       {isLoading ? (
         <div className="space-y-2">{[0, 1, 2, 3].map((i) => <div key={i} className="h-9 rounded-lg bg-paper dark:bg-ink animate-pulse" />)}</div>
       ) : signals.length === 0 ? (
@@ -261,14 +259,14 @@ export function SignalsNow({ signals, isLoading }: { signals: SignalCard[]; isLo
             const st = SIGNAL_STATUS[s.status];
             return (
               <motion.li key={s.key} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.04 * i }}>
-                <Link to="/signals" className="flex items-center gap-3 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] rounded-lg px-1">
+                <div className="flex items-center gap-3 py-2.5 px-1">
                   <Icon size={16} className="text-slate shrink-0" />
                   <span className="text-sm flex-1 truncate">{s.label}</span>
                   <span className="text-sm font-semibold w-16 text-right">
                     {s.value === null ? "—" : `${s.value}${s.unit ? ` ${s.unit}` : ""}`}
                   </span>
                   <span className={`w-24 text-center rounded-full px-2 py-0.5 text-[11px] font-medium rpg:rounded-[3px] rpg:font-pixel ${st.className}`}>{st.label}</span>
-                </Link>
+                </div>
               </motion.li>
             );
           })}
@@ -293,7 +291,7 @@ export function AttentionPanel({ items, onWater }: { items: AttentionItem[]; onW
     return (
       <Card className="p-4 flex items-center gap-3 border-growth/25 bg-growth/[0.04]">
         <CheckCircle2 size={20} className="text-growth shrink-0" />
-        <p className="text-sm">Nada pedindo atenção agora — prazos, água e metas estão em dia.</p>
+        <p className="text-sm">Nada pedindo atenção agora — prazos e hábitos em dia.</p>
       </Card>
     );
   }
@@ -381,72 +379,6 @@ function NowMarker() {
   );
 }
 
-/* ---------------- Insight ---------------- */
-
-export function InsightCard({ text, basis }: { text: string | null; basis: string | null }) {
-  return (
-    <Card className="p-5">
-      <SectionTitle icon={<Lightbulb size={17} />} title="Insight do LifeOS" action={{ label: "Ver análise", to: "/analytics" }} tone="text-signal-deep" />
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-50 to-transparent dark:from-brand-700/15 p-4 flex items-center gap-4">
-        <IconBadge tone="purple" size={44} icon={<Lightbulb size={20} />} />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-snug">{text ?? "Continue registrando sua rotina — os padrões aparecem com alguns dias de dados."}</p>
-          {basis && <p className="text-[11px] text-slate mt-1">{basis}</p>}
-        </div>
-        <div className="hidden sm:flex items-end gap-1 h-12" aria-hidden>
-          {[35, 50, 45, 70, 90].map((h, i) => (
-            <motion.span key={i} className="w-2.5 rounded-t bg-brand-500/30" initial={{ height: 0 }} whileInView={{ height: `${h}%` }} viewport={{ once: true }} transition={{ delay: 0.1 * i }} />
-          ))}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/* ---------------- Metas e prazos ---------------- */
-
-export function GoalsCard({ goals }: { goals: GoalForecastItem[] }) {
-  return (
-    <Card className="p-5 h-full flex flex-col">
-      <SectionTitle icon={<Target size={17} />} title="Metas e prazos" action={{ label: "Ver todas", to: "/metas" }} tone="text-drop" />
-      {goals.length === 0 ? (
-        <p className="text-sm text-slate flex-1">Nenhuma meta ativa com progresso mensurável.</p>
-      ) : (
-        <ul className="space-y-2 flex-1">
-          {goals.map((g, i) => {
-            const pct = Math.round(g.progressPct ?? 0);
-            return (
-              <li key={g.id} className="rounded-xl border border-paper-border dark:border-ink-border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold truncate">{g.title}</p>
-                  <p className="text-sm font-bold">{pct}%</p>
-                </div>
-                <div className="flex items-center gap-3 mt-2">
-                  <div className="h-1.5 flex-1 rounded-full bg-paper-border dark:bg-ink-border overflow-hidden">
-                    <motion.div
-                      className={`h-full rounded-full ${i % 2 === 0 ? "bg-brand-500" : "bg-signal"}`}
-                      initial={{ width: 0 }}
-                      whileInView={{ width: `${pct}%` }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.9 }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate shrink-0">
-                    {g.forecastDate ? `previsão: ${new Date(`${g.forecastDate}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "")}` : g.statusLabel}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <Link to="/goal-forecast" className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold bg-brand-500/10 text-brand-700 dark:text-brand-100 hover:bg-brand-500/15 transition-colors">
-        Ver Goal Forecast <ArrowRight size={13} />
-      </Link>
-    </Card>
-  );
-}
-
 /* ---------------- Dimensões (scroller horizontal) ---------------- */
 
 export interface DimensionItem {
@@ -464,7 +396,7 @@ export function DimensionScroller({ items }: { items: DimensionItem[] }) {
   const [showHow, setShowHow] = useState(false);
   const scrollBy = (dir: 1 | -1) => scrollRef.current?.scrollBy({ left: dir * 260, behavior: "smooth" });
   return (
-    <Card className="p-5">
+    <Card id="life-score-dimensoes" className="p-5 scroll-mt-20">
       <div className="flex items-center justify-between gap-3 mb-3">
         <p className="flex items-center gap-2 font-display font-semibold text-[15px]">
           <span className="text-brand-600">
@@ -512,89 +444,6 @@ export function DimensionScroller({ items }: { items: DimensionItem[] }) {
           </motion.div>
         ))}
       </div>
-    </Card>
-  );
-}
-
-/* ---------------- Copilot + leitura ---------------- */
-
-export function CopilotBanner({
-  text,
-  isLoading,
-  error,
-  onRegenerate,
-  isRegenerating,
-}: {
-  text: string | null;
-  isLoading: boolean;
-  error: { message: string; status?: number } | null;
-  onRegenerate: () => void;
-  isRegenerating: boolean;
-}) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 text-white bg-gradient-to-r from-brand-600 via-brand-500 to-cat-purple shadow-glow-brand h-full">
-      <motion.div aria-hidden className="absolute -left-10 -bottom-16 w-56 h-56 rounded-full bg-white/10 blur-2xl" animate={{ x: [0, 30, 0] }} transition={{ duration: 10, repeat: Infinity }} />
-      <div className="relative flex flex-col md:flex-row md:items-center gap-4">
-        <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-          <Sparkles size={20} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-display font-semibold">LifeOS Copilot</p>
-          <p className="text-sm text-white/90 mt-0.5 leading-relaxed">
-            {isLoading ? "Preparando o insight de hoje..." : error ? error.message : text ?? "Sem insight gerado ainda para hoje."}
-          </p>
-          {error?.status === 400 && (
-            <Link to="/configuracoes" className="text-xs underline font-semibold">
-              Configurar IA
-            </Link>
-          )}
-          <p className="text-[10px] text-white/70 mt-1">Sugestão gerada por IA a partir dos seus registros reais.</p>
-        </div>
-        <button
-          onClick={onRegenerate}
-          disabled={isRegenerating || isLoading}
-          className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-white text-brand-700 px-4 py-2.5 text-sm font-semibold hover:bg-white/90 disabled:opacity-60 transition-colors"
-        >
-          <Wand2 size={15} /> {isRegenerating ? "Gerando..." : "Gerar outro insight"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function ContinueReading({ book }: { book: { title: string; author: string | null; cover_url: string | null; current_page: number; total_pages: number | null } | null }) {
-  const pct = book?.total_pages ? Math.round((book.current_page / book.total_pages) * 100) : null;
-  return (
-    <Card className="p-5 h-full">
-      <SectionTitle icon={<BookOpen size={17} />} title="Continue de onde parou" action={{ label: "Ver biblioteca", to: "/biblioteca" }} tone="text-cat-pink" />
-      {!book ? (
-        <p className="text-sm text-slate">Nenhum livro em andamento — escolha um na Biblioteca.</p>
-      ) : (
-        <div className="flex items-center gap-3">
-          {book.cover_url ? (
-            <img src={book.cover_url} alt="" className="w-12 h-[70px] object-cover rounded-md border border-paper-border dark:border-ink-border shrink-0" />
-          ) : (
-            <span className="w-12 h-[70px] rounded-md bg-cat-pink/10 flex items-center justify-center shrink-0">
-              <BookOpen size={18} className="text-cat-pink" />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate">{book.title}</p>
-            {book.author && <p className="text-xs text-slate truncate">{book.author}</p>}
-            {pct !== null && (
-              <div className="flex items-center gap-2 mt-2">
-                <div className="h-1.5 flex-1 rounded-full bg-paper-border dark:bg-ink-border overflow-hidden">
-                  <motion.div className="h-full rounded-full bg-cat-pink" initial={{ width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }} transition={{ duration: 0.9 }} />
-                </div>
-                <span className="text-[11px] text-slate">{pct}%</span>
-              </div>
-            )}
-          </div>
-          <Link to="/biblioteca" className="hidden sm:inline-flex shrink-0 items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold border border-brand-500/30 text-brand-700 dark:text-brand-100 hover:bg-brand-500/5">
-            Continuar <ArrowRight size={12} />
-          </Link>
-        </div>
-      )}
     </Card>
   );
 }

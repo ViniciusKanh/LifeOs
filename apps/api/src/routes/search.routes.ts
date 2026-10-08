@@ -54,7 +54,7 @@ searchRouter.get("/", async (req, res) => {
   const like = `%${q}%`;
   const limitEach = 6;
 
-  const [tasks, goals, habits, books, academicProjects, projects, journalEntries, notes, lifeAdmin] = await Promise.all([
+  const [tasks, goals, habits, books, academicProjects, projects, journalEntries, lifeAdmin] = await Promise.all([
     db.execute({
       sql: `SELECT id, title, status FROM tasks WHERE owner_id = ? AND title LIKE ? ORDER BY updated_at DESC LIMIT ?`,
       args: [ownerId, like, limitEach],
@@ -95,12 +95,8 @@ searchRouter.get("/", async (req, res) => {
             ORDER BY entry_date DESC LIMIT ?`,
       args: [ownerId, like, like, like, like, like, like, like, limitEach],
     }),
-    // Notas (segundo cérebro) e Administração da vida — só busca textual, como o Diário.
-    db.execute({
-      sql: `SELECT id, title, plain_text FROM notes WHERE owner_id = ? AND archived_at IS NULL AND (title LIKE ? OR plain_text LIKE ?)
-            ORDER BY updated_at DESC LIMIT ?`,
-      args: [ownerId, like, like, limitEach],
-    }),
+    // Administração da vida — só busca textual, como o Diário. (A tela de Notas
+    // foi removida: as notas continuam no banco, mas não entram mais na busca.)
     db.execute({
       sql: `SELECT id, title, due_date FROM life_admin_items WHERE owner_id = ? AND status = 'active' AND (title LIKE ? OR reference LIKE ? OR notes LIKE ?) LIMIT ?`,
       args: [ownerId, like, like, like, limitEach],
@@ -140,9 +136,6 @@ searchRouter.get("/", async (req, res) => {
         "text"
       );
     }),
-    ...notes.rows.map((r) =>
-      toResult("note", { id: String(r.id), title: String(r.title), subtitle: `Nota · ${String(r.plain_text ?? "").slice(0, 70)}`, link: `/notas?nota=${String(r.id)}` }, "text")
-    ),
     ...lifeAdmin.rows.map((r) =>
       toResult(
         "life_admin",

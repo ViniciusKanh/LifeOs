@@ -27,9 +27,6 @@ export function ContextCard({ context }: { context: CapacityContextSummary }) {
       ) : (
         <p className="text-sm text-slate">Contexto do Dia ainda não configurado.</p>
       )}
-      <Link to="/contexto-do-dia" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 mt-3">
-        Ver detalhes <ChevronRight size={14} />
-      </Link>
     </Card>
   );
 }

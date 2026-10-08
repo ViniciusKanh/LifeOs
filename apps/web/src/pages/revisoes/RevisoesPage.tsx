@@ -179,9 +179,9 @@ export function RevisoesPage() {
               )}
             </RPGPanel>
 
-            <RPGPanel title="Metas deste período" icon={<Target size={16} />} actions={<Link to="/direcao" className="text-xs text-rpg-gold-light hover:underline">Ver todas as metas →</Link>}>
+            <RPGPanel title="Metas deste período" icon={<Target size={16} />} actions={<Link to="/metas" className="text-xs text-rpg-gold-light hover:underline">Ver todas as metas →</Link>}>
               {!m || m.goals.length === 0 ? (
-                <p className="text-sm text-rpg-muted">Nenhuma meta com ciclo neste período. <Link to="/direcao" className="text-rpg-gold-light hover:underline">Definir na Direção →</Link></p>
+                <p className="text-sm text-rpg-muted">Nenhuma meta com ciclo neste período. <Link to="/metas" className="text-rpg-gold-light hover:underline">Definir em Metas →</Link></p>
               ) : (
                 <ul className="space-y-3">
                   {m.goals.map((g) => {
@@ -200,11 +200,6 @@ export function RevisoesPage() {
                     );
                   })}
                 </ul>
-              )}
-              {kind !== "monthly" && (
-                <p className="text-[11px] text-rpg-muted mt-3">
-                  Fechando {kind === "quarterly" ? "o trimestre" : "o ano"}? <Link to="/direcao" className="text-rpg-gold-light hover:underline">Reavalie a roda da vida</Link> para comparar com a anterior.
-                </p>
               )}
             </RPGPanel>
           </div>
@@ -346,7 +341,7 @@ export function RevisoesPage() {
             <p className="text-sm font-semibold mb-2">Metas deste período</p>
             {!m || m.goals.length === 0 ? (
               <p className="text-xs text-slate">
-                Nenhuma meta com ciclo neste período. <Link to="/direcao" className="text-brand-600 dark:text-brand-400 font-medium">Definir na Direção →</Link>
+                Nenhuma meta com ciclo neste período. <Link to="/metas" className="text-brand-600 dark:text-brand-400 font-medium">Definir em Metas →</Link>
               </p>
             ) : (
               <ul className="space-y-2.5">
@@ -366,11 +361,6 @@ export function RevisoesPage() {
                   );
                 })}
               </ul>
-            )}
-            {kind !== "monthly" && (
-              <p className="text-[11px] text-slate mt-3">
-                Fechando {kind === "quarterly" ? "o trimestre" : "o ano"}? <Link to="/direcao" className="text-brand-600 dark:text-brand-400 font-medium">Reavalie a roda da vida</Link> para comparar com a anterior.
-              </p>
             )}
           </Card>
         </div>

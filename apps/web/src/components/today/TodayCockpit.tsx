@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
-import { CalendarCheck, Compass, FileClock } from "lucide-react";
+import { CalendarCheck, FileClock } from "lucide-react";
 import { Card, IconBadge } from "@/components/ui/primitives";
 import { UrgencyPill } from "@/components/lifeAdmin/LifeAdminCard";
-import { WhyChain } from "@/components/direction/WhyChain";
-import { useDirection, useLifeAdminSummary, usePeriodicReview } from "@/hooks/useLifeOs";
+import { useLifeAdminSummary, usePeriodicReview } from "@/hooks/useLifeOs";
 import { currentCycleKeys } from "@/utils/lifeOsLabels";
 
 /** Chave do mês anterior (2026-10 → 2026-09). */
@@ -63,40 +62,6 @@ function AdminAttention() {
   );
 }
 
-/** Quanto do trabalho em aberto serve a alguma meta + o "porquê" da próxima tarefa. */
-function DirectionPulse({ focusTaskId }: { focusTaskId: string | null }) {
-  const { data, isLoading } = useDirection();
-  const a = data?.alignment;
-  return (
-    <Card className="p-4">
-      <CockpitHeader icon={<Compass size={14} />} tone="purple" title="Direção" to="/direcao" linkLabel="Ver metas" />
-      {isLoading ? (
-        skeleton
-      ) : !a || a.alignedPct == null ? (
-        <p className="text-xs text-slate">Sem tarefas abertas para medir o alinhamento.</p>
-      ) : (
-        <>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-cat-purple">{a.alignedPct}%</span>
-            <span className="text-xs text-slate">
-              das tarefas abertas servem a uma meta ({a.alignedOpenTasks} de {a.openTasks})
-            </span>
-          </div>
-          <div className="mt-2 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden" role="progressbar" aria-valuenow={a.alignedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Alinhamento das tarefas">
-            <div className="h-full rounded-full bg-cat-purple" style={{ width: `${a.alignedPct}%` }} />
-          </div>
-        </>
-      )}
-      {focusTaskId && (
-        <div className="mt-3">
-          <p className="text-[11px] font-semibold text-slate mb-1">Por que o próximo movimento importa</p>
-          <WhyChain type="task" id={focusTaskId} compact />
-        </div>
-      )}
-    </Card>
-  );
-}
-
 /** Lembra de fechar o mês anterior enquanto a revisão não foi salva. */
 function ReviewReminder() {
   const key = previousMonthKey();
@@ -127,14 +92,13 @@ function ReviewReminder() {
 }
 
 /**
- * Faixa de cockpit do Hoje: junta os sinais de longo prazo (vencimentos,
- * alinhamento com metas e revisões) que antes ficavam espalhados em telas próprias.
+ * Faixa de cockpit do Hoje: junta os sinais de longo prazo (vencimentos
+ * e revisões) que antes ficavam espalhados em telas próprias.
  */
-export function TodayCockpit({ focusTaskId }: { focusTaskId: string | null }) {
+export function TodayCockpit() {
   return (
-    <section aria-label="Cockpit do dia" className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+    <section aria-label="Cockpit do dia" className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
       <AdminAttention />
-      <DirectionPulse focusTaskId={focusTaskId} />
       <ReviewReminder />
     </section>
   );

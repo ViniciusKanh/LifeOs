@@ -41,7 +41,6 @@ const ProfissionalPage = lazy(() => import("@/pages/profissional/ProfissionalPag
 const CalendarioPage = lazy(() =>
   import("@/pages/calendario/CalendarioPage").then((m) => ({ default: m.CalendarioPage }))
 );
-const SemanaPage = lazy(() => import("@/pages/semana/SemanaPage").then((m) => ({ default: m.SemanaPage })));
 const BibliotecaPage = lazy(() => import("@/pages/biblioteca/BibliotecaPage").then((m) => ({ default: m.BibliotecaPage })));
 const LivroDetalhePage = lazy(() =>
   import("@/pages/biblioteca/LivroDetalhePage").then((m) => ({ default: m.LivroDetalhePage }))
@@ -62,26 +61,18 @@ const HabitosPage = lazy(() => import("@/pages/habitos/HabitosPage").then((m) =>
 const MetasPage = lazy(() => import("@/pages/metas/MetasPage").then((m) => ({ default: m.MetasPage })));
 const ExperimentsPage = lazy(() => import("@/pages/experimentos/ExperimentsPage").then((m) => ({ default: m.ExperimentsPage })));
 const ExperimentDetailPage = lazy(() => import("@/pages/experimentos/ExperimentDetailPage").then((m) => ({ default: m.ExperimentDetailPage })));
-const SignalsPage = lazy(() => import("@/pages/signals/SignalsPage").then((m) => ({ default: m.SignalsPage })));
-const ContextoDoDiaPage = lazy(() => import("@/pages/contexto-do-dia/ContextoDoDiaPage").then((m) => ({ default: m.ContextoDoDiaPage })));
 const ConquistasPage = lazy(() =>
   import("@/pages/conquistas/ConquistasPage").then((m) => ({ default: m.ConquistasPage }))
 );
-const AnalyticsPage = lazy(() => import("@/pages/analytics/AnalyticsPage").then((m) => ({ default: m.AnalyticsPage })));
 const CapacityPlannerPage = lazy(() =>
   import("@/pages/capacity-planner/CapacityPlannerPage").then((m) => ({ default: m.CapacityPlannerPage }))
 );
 const DeadlineRadarPage = lazy(() =>
   import("@/pages/deadline-radar/DeadlineRadarPage").then((m) => ({ default: m.DeadlineRadarPage }))
 );
-const GoalForecastPage = lazy(() =>
-  import("@/pages/goal-forecast/GoalForecastPage").then((m) => ({ default: m.GoalForecastPage }))
-);
 const WeeklyReviewPage = lazy(() =>
   import("@/pages/weekly-review/WeeklyReviewPage").then((m) => ({ default: m.WeeklyReviewPage }))
 );
-const LifeMapPage = lazy(() => import("@/pages/lifemap/LifeMapPage").then((m) => ({ default: m.LifeMapPage })));
-const DataHealthPage = lazy(() => import("@/pages/data-health/DataHealthPage").then((m) => ({ default: m.DataHealthPage })));
 const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
 const InventarioPage = lazy(() => import("@/pages/inventario/InventarioPage").then((m) => ({ default: m.InventarioPage })));
 const BuildPage = lazy(() => import("@/pages/character-build/BuildPage").then((m) => ({ default: m.BuildPage })));
@@ -90,9 +81,7 @@ const DetectorGargalosPage = lazy(() => import("@/pages/detector-gargalos/Detect
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
-const DirecaoPage = lazy(() => import("@/pages/direcao/DirecaoPage").then((m) => ({ default: m.DirecaoPage })));
 const RevisoesPage = lazy(() => import("@/pages/revisoes/RevisoesPage").then((m) => ({ default: m.RevisoesPage })));
-const NotasPage = lazy(() => import("@/pages/notas/NotasPage").then((m) => ({ default: m.NotasPage })));
 const CompartilharPage = lazy(() => import("@/pages/compartilhar/CompartilharPage").then((m) => ({ default: m.CompartilharPage })));
 
 function PageFallback() {
@@ -155,7 +144,7 @@ export default function App() {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/profissional" element={<ProfissionalPage />} />
           <Route path="/calendario" element={<CalendarioPage />} />
-          <Route path="/semana" element={<SemanaPage />} />
+          <Route path="/semana" element={<Navigate to="/calendario" replace />} />
           <Route path="/biblioteca" element={<BibliotecaPage />} />
           <Route path="/biblioteca/:id" element={<LivroDetalhePage />} />
           <Route path="/educacao" element={<EducacaoPage />} />
@@ -165,8 +154,8 @@ export default function App() {
           <Route path="/metas" element={<MetasPage />} />
           <Route path="/experimentos" element={<ExperimentsPage />} />
           <Route path="/experimentos/:id" element={<ExperimentDetailPage />} />
-          <Route path="/signals" element={<SignalsPage />} />
-          <Route path="/contexto-do-dia" element={<ContextoDoDiaPage />} />
+          <Route path="/signals" element={<Navigate to="/hoje" replace />} />
+          <Route path="/contexto-do-dia" element={<Navigate to="/hoje" replace />} />
           <Route path="/conquistas" element={<ConquistasPage />} />
           <Route path="/tesouro" element={<TesouroPage />} />
           <Route path="/inventario" element={<InventarioPage />} />
@@ -175,21 +164,21 @@ export default function App() {
           <Route path="/detector-gargalos" element={<DetectorGargalosPage />} />
           {/* A antiga Loja virou o Tesouro & Recompensas. */}
           <Route path="/loja" element={<Navigate to="/tesouro" replace />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
           <Route path="/capacity-planner" element={<CapacityPlannerPage />} />
           <Route path="/deadline-radar" element={<DeadlineRadarPage />} />
-          <Route path="/goal-forecast" element={<GoalForecastPage />} />
+          <Route path="/goal-forecast" element={<Navigate to="/metas" replace />} />
           <Route path="/timeline" element={<Navigate to="/dashboard" replace />} />
           <Route path="/codex" element={<CodexPage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
-          <Route path="/life-map" element={<LifeMapPage />} />
-          <Route path="/data-health" element={<DataHealthPage />} />
+          <Route path="/life-map" element={<Navigate to="/metas" replace />} />
+          <Route path="/data-health" element={<Navigate to="/dashboard" replace />} />
           <Route path="/gatilhos" element={<GatilhosPage />} />
           <Route path="/diario" element={<DiarioPage />} />
           <Route path="/administracao" element={<AdministracaoPage />} />
-          <Route path="/direcao" element={<DirecaoPage />} />
+          <Route path="/direcao" element={<Navigate to="/metas" replace />} />
           <Route path="/revisoes" element={<RevisoesPage />} />
-          <Route path="/notas" element={<NotasPage />} />
+          <Route path="/notas" element={<Navigate to="/diario" replace />} />
           <Route path="/compartilhar" element={<CompartilharPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route

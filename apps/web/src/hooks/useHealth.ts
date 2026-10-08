@@ -22,12 +22,24 @@ export function useHealthCorrelations() {
   return { correlations: query.data ?? [], isLoading: query.isLoading };
 }
 
+function invalidateHealth(queryClient: ReturnType<typeof useQueryClient>) {
+  Object.values(KEYS).forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
+  queryClient.invalidateQueries({ queryKey: ["analytics"] });
+}
+
+/**
+ * Só a ação de registrar água, sem carregar as listas de Saúde — usada no
+ * Hoje, que precisa apenas do resumo (evita 4 consultas por visita).
+ */
+export function useAddWater() {
+  const queryClient = useQueryClient();
+  const m = useMutation({ mutationFn: healthService.addWater, onSuccess: () => invalidateHealth(queryClient) });
+  return m.mutateAsync;
+}
+
 export function useHealth() {
   const queryClient = useQueryClient();
-  const invalidateAll = () => {
-    Object.values(KEYS).forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
-    queryClient.invalidateQueries({ queryKey: ["analytics"] });
-  };
+  const invalidateAll = () => invalidateHealth(queryClient);
 
   const waterQuery = useQuery({ queryKey: KEYS.water, queryFn: () => healthService.listWater() });
   const sleepQuery = useQuery({ queryKey: KEYS.sleep, queryFn: () => healthService.listSleep() });

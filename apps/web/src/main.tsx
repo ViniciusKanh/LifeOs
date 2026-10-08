@@ -13,6 +13,9 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      // Dados ficam "frescos" por 1 min: voltar a uma tela logo depois não
+      // refaz as consultas. Mutations continuam invalidando o que mudam.
+      staleTime: 60_000,
     },
   },
 });

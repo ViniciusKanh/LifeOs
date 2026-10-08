@@ -8,7 +8,7 @@ import { api } from "@/services/api";
 import { inboxService } from "@/services/inboxService";
 import { useSpeechCapture } from "@/hooks/useSpeechCapture";
 
-type Target = "inbox" | "note" | "task";
+type Target = "inbox" | "task";
 
 /**
  * Destino do "Compartilhar" do celular/Windows (share_target do PWA) e do
@@ -45,14 +45,6 @@ export function CompartilharPage() {
       if (target === "inbox") {
         const r = await inboxService.capture(text);
         setDone(r ? "Guardado no Inbox." : "Sem conexão: guardado no aparelho, sobe sozinho quando voltar.");
-      } else if (target === "note") {
-        const r = await api.postOrQueue<{ id: string }>(
-          "/notes",
-          { title: initial.title || firstLine, content: `<p>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!).replace(/\n/g, "<br>")}</p>`, kind: "referencia", sourceUrl: initial.url || null },
-          firstLine
-        );
-        if (r) return navigate(`/notas?nota=${r.id}`);
-        setDone("Sem conexão: a nota foi guardada no aparelho e sobe sozinha.");
       } else {
         const r = await api.postOrQueue<{ id: string }>("/tasks", { title: firstLine, description: text.length > firstLine.length ? text : undefined, status: "A Fazer" }, firstLine);
         if (r) return navigate(`/tarefas?task=${r.id}`);
@@ -67,7 +59,6 @@ export function CompartilharPage() {
 
   const options: Array<{ key: Target; label: string; hint: string; icon: JSX.Element }> = [
     { key: "inbox", label: "Inbox", hint: "Decidir depois", icon: <Inbox size={16} /> },
-    { key: "note", label: "Nota", hint: "Guardar como referência", icon: <NotebookText size={16} /> },
     { key: "task", label: "Tarefa", hint: "Virar algo a fazer", icon: <ListChecks size={16} /> },
   ];
 

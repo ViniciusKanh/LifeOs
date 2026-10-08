@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
-import { BarChart3, BookOpen, CalendarClock, CalendarDays, CheckCircle2, Clock, Dumbbell, Gem, Heart, Smile, Sparkles, Swords, Trophy, Wand2, Zap } from "lucide-react";
-import type { FocusTask, HealthSummary } from "@/types";
+import { CalendarClock, CheckCircle2, Clock, Gem, Sparkles, Swords, Trophy, Wand2, Zap } from "lucide-react";
+import type { FocusTask } from "@/types";
 import { Sparkline } from "@/components/charts/motion/Sparkline";
-import { useRpgAvatar } from "@/hooks/useRpgAvatar";
 import { useAchievements } from "@/hooks/useAchievements";
 import {
   RPGAvatarButton,
@@ -54,7 +53,7 @@ export function RpgDashboardHero({
       title={`Olá, ${firstName}!`}
       subtitle={subtitle}
       aside={
-        <Link to="/analytics" className="rpg-parchment block px-4 py-3 mx-1.5 my-1.5 w-full sm:w-[320px] hover:brightness-105 transition" aria-label={`Life Score ${overall}. Ver Analytics`}>
+        <a href="#life-score-dimensoes" className="rpg-parchment block px-4 py-3 mx-1.5 my-1.5 w-full sm:w-[320px] hover:brightness-105 transition" aria-label={`Life Score ${overall}. Ver dimensões`}>
           <div className="flex items-center gap-3">
             <Gem size={30} className="text-rpg-green shrink-0" aria-hidden />
             <div className="min-w-0">
@@ -74,7 +73,7 @@ export function RpgDashboardHero({
             {history.length >= 2 && <Sparkline values={history} width={70} height={32} className="ml-auto hidden sm:block text-rpg-ink/70" />}
           </div>
           <p className="mt-2 pt-2 border-t border-rpg-bronze/40 text-center text-xs italic text-rpg-ink/80">&ldquo;{quote}&rdquo;</p>
-        </Link>
+        </a>
       }
     />
   );
@@ -82,7 +81,7 @@ export function RpgDashboardHero({
 
 export function RpgKpiStrip({ items }: { items: KpiData[] }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {items.map((k, i) => (
         <div key={k.key} className={i === items.length - 1 ? "col-span-2 md:col-span-1" : ""}>
           <RPGStatCard icon={k.icon} label={k.label} value={k.value} caption={k.caption} tone={KPI_TONE[k.tone]} pct={k.pct} to={k.to} />
@@ -176,49 +175,6 @@ export function RpgRecentAchievements() {
     </RPGPanel>
   );
 }
-
-/** Atributos do dia: só registros reais de Saúde/Leitura/Agenda; sem dado → "sem dados". */
-export function RpgDayAttributes({ health, pagesRead14d, agendaCount }: { health: HealthSummary | null | undefined; pagesRead14d: number | null; agendaCount: number }) {
-  const rows: Array<{ key: string; icon: JSX.Element; label: string; value: string | null; pct: number | null; tone: RpgTone }> = [
-    { key: "sleep", icon: <Heart size={14} />, label: "Sono", value: health?.lastSleepMinutes ? `${health.lastSleepMinutes} min` : null, pct: health?.lastSleepMinutes ? Math.min(100, (health.lastSleepMinutes / 480) * 100) : null, tone: "red" },
-    { key: "mood", icon: <Smile size={14} />, label: "Humor", value: health?.mood ? `${health.mood.mood} / 5` : null, pct: health?.mood ? (health.mood.mood / 5) * 100 : null, tone: "gold" },
-    { key: "energy", icon: <Zap size={14} />, label: "Energia", value: health?.mood ? `${health.mood.energy} / 5` : null, pct: health?.mood ? (health.mood.energy / 5) * 100 : null, tone: "orange" },
-    { key: "workout", icon: <Dumbbell size={14} />, label: "Exercício", value: health ? `${health.workoutMinutesToday} min` : null, pct: health ? Math.min(100, (health.workoutMinutesToday / 30) * 100) : null, tone: "green" },
-    { key: "reading", icon: <BookOpen size={14} />, label: "Leitura (14d)", value: pagesRead14d ? `${pagesRead14d} pág.` : null, pct: null, tone: "blue" },
-    { key: "agenda", icon: <CalendarDays size={14} />, label: "Agenda", value: `${agendaCount} ${agendaCount === 1 ? "evento" : "eventos"}`, pct: null, tone: "purple" },
-  ];
-  return (
-    <RPGPanel title="Atributos do dia" icon={<BarChart3 size={14} />} actions={<Link to="/saude" className="text-xs font-semibold text-rpg-purple hover:underline">Ver todos</Link>} className="h-full">
-      <ul className="divide-y divide-rpg-border/50">
-        {rows.map((r) => (
-          <li key={r.key} className="grid grid-cols-[18px_minmax(0,1fr)_auto_minmax(60px,110px)] items-center gap-2.5 py-2">
-            <span className={RPG_TONE_ICON[r.tone]} aria-hidden>{r.icon}</span>
-            <span className="text-sm truncate">{r.label}</span>
-            <span className="font-pixel text-sm font-semibold tabular-nums text-right">{r.value ?? "—"}</span>
-            {r.pct != null ? (
-              <RPGProgressBar tone={r.tone} label={r.label} value={r.pct} showLabel={false} />
-            ) : (
-              <span className="text-[11px] text-rpg-muted text-right">{r.value ? "registrado" : "sem dados"}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-      <p className="mt-2 text-[10px] text-rpg-muted">Barras comparam com referências fixas (8 h de sono, 30 min de exercício, escala 1–5).</p>
-    </RPGPanel>
-  );
-}
-
-const RPG_TONE_ICON: Record<RpgTone, string> = {
-  gold: "text-rpg-gold-light",
-  purple: "text-rpg-purple",
-  blue: "text-rpg-blue",
-  green: "text-rpg-green",
-  red: "text-rpg-red",
-  orange: "text-rpg-orange",
-  cyan: "text-rpg-cyan",
-  pink: "text-rpg-pink",
-  muted: "text-rpg-muted",
-};
 
 /** LifeOS Copilot com o mago como guia — mesmo insight real (useDailyInsight). */
 export function RpgCopilotPanel({

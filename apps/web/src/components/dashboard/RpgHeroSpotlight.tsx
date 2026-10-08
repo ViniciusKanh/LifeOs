@@ -1,18 +1,12 @@
-import { useMemo, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Cell, Pie, PieChart, PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip } from "recharts";
-import { Coins, Crown, Flame, ScrollText, Sparkles, Store, Swords, Trophy, Zap } from "lucide-react";
-import { RPGBadge, RPGPanel, RPGPortrait, RPGProgressBar, rpgButtonClass } from "@/components/rpg";
+import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Coins, Crown, Flame, ScrollText, Trophy, Zap } from "lucide-react";
+import { RPGPanel, RPGPortrait, RPGProgressBar, rpgButtonClass } from "@/components/rpg";
 import { useAuth } from "@/hooks/useAuth";
-import { useGamificationProfile, useXpHistory } from "@/hooks/useGamification";
+import { useGamificationProfile } from "@/hooks/useGamification";
 import { useAchievements } from "@/hooks/useAchievements";
-import { useContracts } from "@/hooks/useContracts";
-import { useCampaigns } from "@/hooks/useCampaigns";
-import { pickFeatured, forgeKpis } from "@/utils/campaignDisplay";
-import { Hammer } from "lucide-react";
 import { useEquippedTitle } from "@/hooks/useCodex";
-import { XP_SOURCES } from "@/utils/gamification";
-import { difficultyLabel } from "@/services/gamificationService";
 
 /** Cores dos tokens RPG (sem hex solto). */
 const tok = (name: string) => `rgb(var(--rpg-${name}))`;
@@ -109,119 +103,6 @@ export function RpgLevelSpotlight({ dimensions }: { dimensions: Array<{ key: str
           )}
         </div>
       </div>
-    </RPGPanel>
-  );
-}
-
-/** Origem do XP nos últimos 30 dias (rosca), só com XP real do ledger. */
-export function RpgXpSources() {
-  const { data, isLoading } = useXpHistory(30);
-  const slices = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const d of data?.days ?? []) for (const [k, v] of Object.entries(d.bySource)) totals[k] = (totals[k] ?? 0) + v;
-    return XP_SOURCES.map((s) => ({ ...s, value: totals[s.id] ?? 0 })).filter((s) => s.value > 0);
-  }, [data]);
-  const total = slices.reduce((a, s) => a + s.value, 0);
-
-  return (
-    <RPGPanel title="De onde vem seu XP" icon={<Sparkles size={16} />} className="h-full">
-      {isLoading && <div className="h-48 rpg-bar animate-pulse" aria-label="Carregando origens de XP" />}
-      {!isLoading && total === 0 && <p className="py-10 text-center text-sm text-rpg-muted">Sem XP nos últimos 30 dias.</p>}
-      {total > 0 && (
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="relative w-40 h-40 shrink-0" role="img" aria-label={`XP por origem: ${slices.map((s) => `${s.label} ${s.value}`).join(", ")}`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={slices} dataKey="value" nameKey="label" innerRadius="62%" outerRadius="95%" stroke={tok("bg")} strokeWidth={2} isAnimationActive={false}>
-                  {slices.map((s) => <Cell key={s.id} fill={tok(s.tone)} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <span className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="font-pixel text-lg text-rpg-gold-light">{total.toLocaleString("pt-BR")}</span>
-              <span className="text-[10px] text-rpg-muted">XP · 30 dias</span>
-            </span>
-          </div>
-          <ul className="w-full space-y-1 text-xs">
-            {slices.sort((a, b) => b.value - a.value).map((s) => (
-              <li key={s.id} className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 shrink-0" style={{ backgroundColor: tok(s.tone), borderRadius: 1 }} aria-hidden />
-                <span className="flex-1 text-rpg-text">{s.label}</span>
-                <span className="font-pixel text-rpg-muted">{Math.round((s.value / total) * 100)}%</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </RPGPanel>
-  );
-}
-
-/** Contratos em andamento mais avançados (progresso real das tarefas). */
-export function RpgActiveContracts() {
-  const { contracts, isLoading } = useContracts();
-  const active = contracts.filter((c) => c.status === "ativo").sort((a, b) => b.progressPct - a.progressPct).slice(0, 3);
-  return (
-    <RPGPanel
-      title="Contratos em andamento"
-      icon={<Swords size={16} />}
-      className="h-full"
-      actions={<Link to="/contratos" className="text-xs text-rpg-gold-light hover:underline">Gestão de contratos</Link>}
-    >
-      {isLoading && <div className="h-32 rpg-bar animate-pulse" aria-label="Carregando contratos" />}
-      {!isLoading && active.length === 0 && (
-        <div className="py-6 text-center">
-          <p className="text-sm text-rpg-muted">Nenhum contrato ativo.</p>
-          <Link to="/contratos" className={rpgButtonClass("gold", "mt-2")}>Firmar um contrato</Link>
-        </div>
-      )}
-      <ul className="space-y-3">
-        {active.map((c) => (
-          <li key={c.id}>
-            <div className="flex items-center justify-between gap-2">
-              <Link to="/contratos" className="min-w-0 truncate text-sm font-semibold text-rpg-text hover:text-rpg-gold-light">{c.title}</Link>
-              <RPGBadge tone="gold">{difficultyLabel(c.difficulty)}</RPGBadge>
-            </div>
-            <RPGProgressBar className="mt-1" tone="gold" label={`Progresso de ${c.title}`} value={c.doneTasks} max={Math.max(1, c.totalTasks)} valueLabel={`${c.doneTasks}/${c.totalTasks} · bônus +${c.reward.xp} XP`} />
-          </li>
-        ))}
-      </ul>
-    </RPGPanel>
-  );
-}
-
-/** Campanha em foco (Forja): progresso médio, próximo marco e XP já ganho — dados reais. */
-export function RpgCampaignFocus() {
-  const { campaigns, isLoading } = useCampaigns();
-  const featured = pickFeatured(campaigns);
-  const k = forgeKpis(campaigns);
-  const next = featured?.milestones.find((m) => m.state === "current") ?? null;
-  return (
-    <RPGPanel
-      title="Campanha em foco"
-      icon={<Hammer size={16} />}
-      className="h-full"
-      actions={<Link to="/forja-campanhas" className="text-xs text-rpg-gold-light hover:underline">Forja de Campanhas</Link>}
-    >
-      {isLoading && <div className="h-28 rpg-bar animate-pulse" aria-label="Carregando campanhas" />}
-      {!isLoading && !featured && (
-        <div className="py-6 text-center">
-          <p className="text-sm text-rpg-muted">Nenhuma campanha forjada ainda.</p>
-          <Link to="/forja-campanhas" className={rpgButtonClass("gold", "mt-2")}>⚒️ Forjar campanha</Link>
-        </div>
-      )}
-      {featured && (
-        <>
-          <Link to={`/forja-campanhas/${featured.id}`} className="font-rpg font-bold text-rpg-text hover:text-rpg-gold-light">{featured.title}</Link>
-          <RPGProgressBar className="mt-2" tone="purple" label={`Progresso de ${featured.title}`} value={featured.progress.pct} valueLabel={`${featured.progress.pct}%`} />
-          <ul className="mt-2 space-y-1 text-xs text-rpg-muted">
-            <li>Próximo marco: <span className="text-rpg-text">{next?.title ?? "—"}</span></li>
-            <li>Missões abertas: <span className="text-rpg-text">{featured.counts.missions - featured.counts.missionsDone}</span> · XP ganho: <span className="font-pixel text-rpg-purple">{featured.earned.xp}</span></li>
-            <li>{k.active} campanha(s) ativa(s){k.avgProgress != null && ` · progresso médio ${k.avgProgress}%`}</li>
-          </ul>
-        </>
-      )}
     </RPGPanel>
   );
 }

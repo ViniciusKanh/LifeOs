@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
-import { useHealthSummary, useHealth } from "@/hooks/useHealth";
+import { useAddWater, useHealthSummary } from "@/hooks/useHealth";
 import { useEvents } from "@/hooks/useEvents";
 import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
@@ -74,7 +74,7 @@ export function HojePage() {
   const { focusTasks } = useFocusTasks(5);
   const { habits, summaryByHabitId, checkIn } = useHabits();
   const { summary: health } = useHealthSummary();
-  const { addWater } = useHealth();
+  const addWater = useAddWater();
   const today = todayStr();
   const { items: calendarItems } = useEvents(today, today);
   const copilot = useDailyInsight();
@@ -153,7 +153,7 @@ export function HojePage() {
         </section>
       )}
 
-      <TodayCockpit focusTaskId={focusTasks[0]?.id ?? null} />
+      <TodayCockpit />
 
       {isRpg ? null : (
         <>

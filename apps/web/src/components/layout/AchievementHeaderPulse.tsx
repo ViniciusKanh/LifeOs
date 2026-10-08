@@ -34,7 +34,7 @@ export function AchievementHeaderPulse() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { achievements } = useAchievements();
-  const { trophies } = useCustomAchievements();
+  const { trophies } = useCustomAchievements({ withMetrics: false });
   const all = [...achievements, ...trophies];
 
   const weekAgo = Date.now() - WEEK_MS;

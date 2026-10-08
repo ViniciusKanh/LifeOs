@@ -36,7 +36,7 @@ export function WhyChain({ type, id, compact = false }: { type: "task" | "projec
       {!hasGoal ? (
         <p className="text-[11px] text-slate">
           Ainda não está ligado a nenhuma meta.{" "}
-          <Link to="/direcao" className="text-brand-600 dark:text-brand-400 font-medium">
+          <Link to="/metas" className="text-brand-600 dark:text-brand-400 font-medium">
             Ligue a um projeto ou meta
           </Link>{" "}
           para saber o porquê.
@@ -46,7 +46,7 @@ export function WhyChain({ type, id, compact = false }: { type: "task" | "projec
           {above.map((s, i) => {
             const area = s.type === "value" ? LIFE_AREA_BY_KEY[s.label as LifeArea] : null;
             const label = area ? `${area.emoji} ${area.label}` : s.label;
-            const to = s.type === "project" ? `/projetos/${s.id}` : s.type === "goal" ? "/metas" : "/direcao";
+            const to = s.type === "project" ? `/projetos/${s.id}` : "/metas";
             return (
               <motion.li key={`${s.type}-${s.id ?? i}`} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight size={11} className="text-slate/60" />}

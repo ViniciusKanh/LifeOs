@@ -2,7 +2,6 @@ import {
   Boxes,
   Dna,
   Scroll,
-  BarChart3,
   BookOpen,
   Briefcase,
   CalendarRange,
@@ -17,7 +16,6 @@ import {
   LayoutGrid,
   ListChecks,
   NotebookPen,
-  NotebookText,
   FolderLock,
   Radar,
   Repeat,
@@ -26,7 +24,6 @@ import {
   Coins,
   Backpack,
   Settings,
-  Share2,
   Sun,
   Trophy,
   Users,
@@ -87,31 +84,12 @@ export const NAV_GROUPS: NavGroup[] = [
         quote: "Consistência hoje, resultados amanhã.",
         tabs: [
           { to: "/hoje", label: "Hoje" },
-          { to: "/contexto-do-dia", label: "Contexto do dia" },
           { to: "/gatilhos", label: "Lembretes" },
         ],
       },
       { to: "/inbox", label: "Inbox", icon: Inbox, quote: "Capture agora, decida depois." },
-      {
-        to: "/semana",
-        label: "Agenda",
-        icon: CalendarRange,
-        quote: "Quem planeja o tempo, comanda o progresso.",
-        tabs: [
-          { to: "/semana", label: "Semana" },
-          { to: "/calendario", label: "Calendário" },
-        ],
-      },
-      {
-        to: "/direcao",
-        label: "Direção",
-        icon: Compass,
-        quote: "Um objetivo sem plano é apenas um desejo.",
-        tabs: [
-          { to: "/direcao", label: "Visão e ciclos" },
-          { to: "/metas", label: "Metas" },
-        ],
-      },
+      { to: "/calendario", label: "Agenda", icon: CalendarRange, quote: "Quem planeja o tempo, comanda o progresso." },
+      { to: "/metas", label: "Metas", icon: Compass, quote: "Um objetivo sem plano é apenas um desejo." },
       { to: "/forja-campanhas", label: "Forja de Campanhas", icon: Hammer, quote: "Grandes conquistas nascem de muitas pequenas vitórias." },
     ],
   },
@@ -141,7 +119,6 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Registrar",
     items: [
       { to: "/diario", label: "Diário", icon: NotebookPen, quote: "Escrever é enxergar o próprio caminho." },
-      { to: "/notas", label: "Notas", icon: NotebookText, quote: "Ideias conectadas viram conhecimento." },
       { to: "/habitos", label: "Hábitos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
@@ -153,18 +130,6 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "medir",
     label: "Medir",
     items: [
-      {
-        to: "/analytics",
-        label: "Analytics",
-        icon: BarChart3,
-        quote: "Dados transformam esforço em clareza.",
-        tabs: [
-          { to: "/analytics", label: "Visão geral" },
-          { to: "/signals", label: "Sinais" },
-          { to: "/goal-forecast", label: "Previsão de metas" },
-          { to: "/data-health", label: "Qualidade dos dados" },
-        ],
-      },
       { to: "/codex", label: "Códex da Jornada", icon: BookMarked, quote: "Toda grande história começa com um registro." },
     ],
   },
@@ -183,7 +148,6 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { to: "/experimentos", label: "Experimentos", icon: FlaskConical, quote: "Teste pequeno, aprenda grande." },
-      { to: "/life-map", label: "Life Map", icon: Share2, quote: "Clareza nasce quando você enxerga as conexões." },
       {
         to: "/conquistas",
         label: "Conquistas",
@@ -215,7 +179,7 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 /** Atalhos fixos da barra inferior no celular. */
-export const MOBILE_PRIMARY: string[] = ["/dashboard", "/hoje", "/tarefas", "/notas"];
+export const MOBILE_PRIMARY: string[] = ["/dashboard", "/hoje", "/tarefas", "/inbox"];
 
 export const DEFAULT_QUOTE = "Disciplina de hoje, liberdade de amanhã.";
 

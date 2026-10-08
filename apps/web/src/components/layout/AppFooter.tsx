@@ -41,7 +41,6 @@ export function AppFooter() {
         <nav aria-label="Links do rodapé" className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:ml-auto">
           <Link to="/privacidade" className="hover:text-brand-600 transition-colors">Privacidade</Link>
           <Link to="/termos" className="hover:text-brand-600 transition-colors">Termo de Uso</Link>
-          <Link to="/data-health" className="hover:text-brand-600 transition-colors">Qualidade dos dados</Link>
           {isAdmin && <Link to="/configuracoes" className="hover:text-brand-600 transition-colors">Configurações</Link>}
         </nav>
 

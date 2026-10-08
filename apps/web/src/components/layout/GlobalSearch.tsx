@@ -100,28 +100,13 @@ function usePaletteItems(query: string, close: () => void) {
             close();
           },
         },
-        {
-          id: "note",
-          section: "Ações",
-          label: `Criar nota “${q}”`,
-          icon: NotebookText,
-          tone: "bg-cat-pink/10 text-cat-pink",
-          run: async () => {
-            const r = await api.postOrQueue<{ id: string }>("/notes", { title: q.slice(0, 200) }, q.slice(0, 80));
-            if (r) navigate(`/notas?nota=${r.id}`);
-            else setToast("Sem conexão: nota guardada no aparelho.");
-            close();
-          },
-        }
       );
     }
     const fixed: PaletteItem[] = [
       { id: "new-task", section: "Ações", label: "Nova tarefa", sub: "Abre o formulário completo", icon: Plus, tone: "bg-signal/15 text-signal-deep dark:text-signal", run: go("/tarefas?nova=1") },
-      { id: "new-note", section: "Ações", label: "Nova nota", icon: NotebookText, tone: "bg-cat-pink/10 text-cat-pink", run: go("/notas?nova=1") },
       { id: "new-admin", section: "Ações", label: "Novo vencimento, manutenção ou documento", icon: FolderLock, tone: "bg-cat-blue/10 text-cat-blue", run: go("/administracao?novo=1") },
       { id: "capture-page", section: "Ações", label: "Captura rápida (ditar ou colar)", icon: Zap, tone: "bg-brand-500/10 text-brand-600", run: go("/compartilhar") },
       { id: "review", section: "Ações", label: "Fazer a revisão do mês", icon: CalendarCheck, tone: "bg-cat-purple/10 text-cat-purple", run: go("/revisoes") },
-      { id: "wheel", section: "Ações", label: "Avaliar a roda da vida", icon: Compass, tone: "bg-cat-purple/10 text-cat-purple", run: go("/direcao") },
       { id: "import", section: "Ações", label: "Importar tarefas (Todoist, Notion, Google Tasks)", icon: Upload, tone: "bg-cat-blue/10 text-cat-blue", run: go("/tarefas?importar=1") },
     ].filter((a) => !nq || norm(a.label).includes(nq)) as PaletteItem[];
 

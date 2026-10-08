@@ -190,9 +190,6 @@ export function BottleneckMapModal({ itemKey, period, onClose }: { itemKey: stri
             </div>
           </details>
           {data.truncated && <p className="text-[11px] text-rpg-muted">Há dependências mais profundas além do que cabe neste mapa.</p>}
-          <Link to="/life-map" className={rpgButtonClass("secondary")} onClick={onClose}>
-            Abrir Life Map
-          </Link>
         </div>
       )}
     </Modal>

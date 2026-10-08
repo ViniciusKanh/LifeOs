@@ -39,9 +39,10 @@ export interface AttentionItem {
 /** Itens que "merecem atenção" — prazos, água, metas em risco, hábitos pendentes à noite. */
 export function buildAttentionItems(params: {
   deadlines: DeadlineRadarDashboard | null | undefined;
-  goals: GoalForecastDashboard | null | undefined;
-  waterMl: number;
-  waterGoalMl: number;
+  goals?: GoalForecastDashboard | null;
+  // Água é opcional: o Dashboard enxuto não consulta Saúde.
+  waterMl?: number | null;
+  waterGoalMl?: number;
   habitsPending: number;
   hour: number;
 }): AttentionItem[] {
@@ -59,7 +60,7 @@ export function buildAttentionItems(params: {
     });
   }
   // Água só cobra a partir do meio da manhã — antes disso "0 L" não é sinal de nada.
-  if (params.hour >= 10 && params.waterMl < params.waterGoalMl) {
+  if (params.waterMl != null && params.waterGoalMl && params.hour >= 10 && params.waterMl < params.waterGoalMl) {
     items.push({
       id: "water",
       tone: params.waterMl < params.waterGoalMl / 2 ? "warning" : "info",
@@ -76,8 +77,8 @@ export function buildAttentionItems(params: {
       tone: risky.some((g) => g.risk === "critical" || g.status === "overdue") ? "critical" : "warning",
       title: `${risky.length} meta(s) em risco`,
       description: risky.slice(0, 3).map((g) => g.title).join(", ") + ".",
-      actionLabel: "Goal Forecast",
-      href: "/goal-forecast",
+      actionLabel: "Metas",
+      href: "/metas",
     });
   }
   if (params.hour >= 18 && params.habitsPending > 0) {

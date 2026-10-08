@@ -49,6 +49,14 @@ const TONE_BG: Record<string, string> = {
  */
 export function OnboardingFlow() {
   const { user } = useAuth();
+  const [dismissedLocally, setDismissedLocally] = useState(false);
+  // Só monta os passos (e os hooks que buscam metas/hábitos/tarefas) para
+  // conta nova — antes essas 6 consultas rodavam em toda abertura do app.
+  if (!user || user.onboarding_done || dismissedLocally) return null;
+  return <OnboardingSteps onDone={() => setDismissedLocally(true)} />;
+}
+
+function OnboardingSteps({ onDone }: { onDone: () => void }) {
   const { updateProfile } = useProfile();
   const { createGoal } = useGoals();
   const { createHabit } = useHabits();
@@ -57,12 +65,9 @@ export function OnboardingFlow() {
   const [step, setStep] = useState(0);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
-  const [dismissedLocally, setDismissedLocally] = useState(false);
-
-  if (!user || user.onboarding_done || dismissedLocally) return null;
 
   const finish = () => {
-    setDismissedLocally(true);
+    onDone();
     updateProfile({ onboardingDone: true });
   };
 
