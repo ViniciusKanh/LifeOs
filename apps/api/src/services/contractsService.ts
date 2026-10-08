@@ -125,21 +125,39 @@ export async function listContractTasks(db: Client, ownerId: string, id: string)
   return r.rows;
 }
 
-function taskInsert(ownerId: string, contractId: string, t: ContractTaskInput) {
+/** Estimativa padrão por dificuldade (minutos) — mesma escala do DIFFICULTY_GUIDE. */
+export const DEFAULT_ESTIMATE: Record<DifficultyKey, number> = { facil: 30, medio: 90, dificil: 240, epico: 480 };
+const PRIORITY_BY_DIFFICULTY: Record<DifficultyKey, Priority> = { facil: "Baixa", medio: "Média", dificil: "Alta", epico: "Alta" };
+
+/**
+ * Toda tarefa de contrato nasce completa: dificuldade (a da tarefa ou a do
+ * contrato), prioridade coerente, prazo (o do contrato quando a tarefa não
+ * tem), estimativa e uma descrição de contexto. Assim ela entra no
+ * Capacity Planner, no Detector de Gargalos e rende os bônus de prazo/XP.
+ */
+export function withTaskDefaults(
+  t: ContractTaskInput,
+  contract: { title: string; objective: string | null; difficulty: DifficultyKey; dueDate: string | null },
+): Required<Pick<ContractTaskInput, "title">> & { description: string; priority: Priority; difficulty: DifficultyKey; dueDate: string | null; estimateMinutes: number } {
+  const difficulty = t.difficulty ?? contract.difficulty;
+  const description =
+    t.description?.trim() ||
+    `Etapa do contrato “${contract.title}”${contract.objective ? ` — objetivo: ${contract.objective}` : ""}. Defina o resultado esperado ao começar.`;
+  return {
+    title: t.title.trim(),
+    description: description.slice(0, 2000),
+    priority: t.priority ?? PRIORITY_BY_DIFFICULTY[difficulty],
+    difficulty,
+    dueDate: t.dueDate ?? contract.dueDate ?? null,
+    estimateMinutes: t.estimateMinutes ?? DEFAULT_ESTIMATE[difficulty],
+  };
+}
+
+function taskInsert(ownerId: string, contractId: string, t: ReturnType<typeof withTaskDefaults>) {
   return {
     sql: `INSERT INTO tasks (id, owner_id, contract_id, title, description, status, priority, difficulty, due_date, estimate_minutes)
           VALUES (?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?)`,
-    args: [
-      nanoid(),
-      ownerId,
-      contractId,
-      t.title.trim(),
-      t.description ?? null,
-      t.priority ?? "Média",
-      t.difficulty ?? null,
-      t.dueDate ?? null,
-      t.estimateMinutes ?? null,
-    ],
+    args: [nanoid(), ownerId, contractId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.estimateMinutes],
   };
 }
 
@@ -151,7 +169,9 @@ export async function createContract(db: Client, ownerId: string, input: Contrac
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [id, ownerId, input.title.trim(), input.description ?? null, input.objective ?? null, input.difficulty, input.dueDate ?? null, input.aiGenerated ? 1 : 0],
     },
-    ...(input.tasks ?? []).map((t) => taskInsert(ownerId, id, t)),
+    ...(input.tasks ?? []).map((t) =>
+      taskInsert(ownerId, id, withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null })),
+    ),
   ];
   await db.batch(statements, "write");
   return getContract(db, ownerId, id);
@@ -198,7 +218,10 @@ export async function deleteContract(db: Client, ownerId: string, id: string, de
 export async function addContractTasks(db: Client, ownerId: string, id: string, tasks: ContractTaskInput[]) {
   const c = await getContract(db, ownerId, id);
   if (c.status === "arquivado") throw new ContractError("Reative o contrato antes de adicionar tarefas.");
-  await db.batch(tasks.map((t) => taskInsert(ownerId, id, t)), "write");
+  await db.batch(
+    tasks.map((t) => taskInsert(ownerId, id, withTaskDefaults(t, { title: c.title, objective: c.objective, difficulty: c.difficulty, dueDate: c.dueDate }))),
+    "write",
+  );
   // Contrato já cumprido volta a "ativo" com tarefas novas (o bônus pago não se repete).
   await syncContractStatus(db, ownerId, id);
   return listContractTasks(db, ownerId, id);
@@ -250,6 +273,23 @@ export function sanitizeTasks(raw: unknown, fallbackDifficulty: DifficultyKey, m
     .slice(0, max);
 }
 
+/** Schema de tarefa para a saída estruturada do Gemini: todos os campos obrigatórios. */
+const TASK_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    title: { type: "STRING" },
+    description: { type: "STRING" },
+    priority: { type: "STRING", enum: ["Baixa", "Média", "Alta"] },
+    difficulty: { type: "STRING", enum: ["facil", "medio", "dificil", "epico"] },
+    dueInDays: { type: "INTEGER" },
+    estimateMinutes: { type: "INTEGER" },
+  },
+  required: ["title", "description", "priority", "difficulty", "dueInDays", "estimateMinutes"],
+} as const;
+const TASK_RULES =
+  "Cada tarefa DEVE ter: título com verbo no infinitivo; descrição de 1 a 2 frases dizendo o que fazer e como saber que terminou (critério de pronto); prioridade; dificuldade; dueInDays (dias a partir de hoje, dentro do prazo do contrato); estimateMinutes realista.";
+const AI_OPTS = { timeoutMs: 40_000, retries: 1, maxOutputTokens: 4096 };
+
 export const DIFFICULTY_GUIDE = `Dificuldades válidas: "facil" (tarefas curtas, < 30 min), "medio" (1 a 2 h), "dificil" (meio dia, exige foco), "epico" (vários dias de esforço).`;
 
 async function userContextLine(db: Client, ownerId: string): Promise<string> {
@@ -275,11 +315,24 @@ Objetivo descrito pelo usuário: """${input.goal.slice(0, 1200)}"""
 ${input.difficulty ? `Dificuldade desejada para o contrato: ${input.difficulty}.` : ""}
 ${input.deadlineDays ? `Prazo desejado: ${input.deadlineDays} dias a partir de hoje.` : ""}
 ${DIFFICULTY_GUIDE}
-Regras: entre 3 e 8 tarefas, verbos no infinitivo, específicas e mensuráveis; não invente dados sobre o usuário; sem promessas de resultado.
-Responda SOMENTE com JSON no formato:
-{"title":"...","description":"...","objective":"resultado esperado","difficulty":"medio","dueInDays":14,
- "tasks":[{"title":"...","description":"...","priority":"Baixa|Média|Alta","difficulty":"facil","dueInDays":3,"estimateMinutes":45}]}`;
-  const result = await generateText(prompt, config);
+Regras: entre 3 e 8 tarefas específicas e mensuráveis, em ordem de execução; não invente dados sobre o usuário; sem promessas de resultado.
+${TASK_RULES}
+O contrato também precisa de description (1 a 3 frases) e objective (resultado esperado verificável).`;
+  const result = await generateText(prompt, config, {
+    ...AI_OPTS,
+    responseSchema: {
+      type: "OBJECT",
+      properties: {
+        title: { type: "STRING" },
+        description: { type: "STRING" },
+        objective: { type: "STRING" },
+        difficulty: { type: "STRING", enum: ["facil", "medio", "dificil", "epico"] },
+        dueInDays: { type: "INTEGER" },
+        tasks: { type: "ARRAY", items: TASK_SCHEMA },
+      },
+      required: ["title", "description", "objective", "difficulty", "dueInDays", "tasks"],
+    },
+  });
   if (!result.ok) return { ok: false, message: result.message };
   const json = extractJson(result.text) as Record<string, unknown> | null;
   const title = json ? str(json.title, 160) : null;
@@ -311,9 +364,9 @@ Tarefas já existentes (não repita):
 ${existing}
 ${hint ? `Pedido do usuário: """${hint.slice(0, 600)}"""` : ""}
 ${DIFFICULTY_GUIDE}
-Entre 2 e 6 tarefas novas, específicas e executáveis. Responda SOMENTE com JSON:
-{"tasks":[{"title":"...","description":"...","priority":"Média","difficulty":"medio","dueInDays":5,"estimateMinutes":60}]}`;
-  const result = await generateText(prompt, config);
+Entre 2 e 6 tarefas novas, específicas e executáveis.
+${TASK_RULES}`;
+  const result = await generateText(prompt, config, { ...AI_OPTS, responseSchema: { type: "OBJECT", properties: { tasks: { type: "ARRAY", items: TASK_SCHEMA } }, required: ["tasks"] } });
   if (!result.ok) return { ok: false, message: result.message };
   const json = extractJson(result.text) as Record<string, unknown> | null;
   const existingTitles = new Set(tasks.map((t) => String(t.title).trim().toLowerCase()));

@@ -63,7 +63,13 @@ export const journalAiApplySchema = z.object({
     .max(10),
   mediaCategories: z.array(z.object({ id: z.string().min(1), category: z.string().trim().min(1).max(60) })).max(12).optional(),
   tagsToAdd: z.array(z.string().trim().min(1).max(40)).max(15).optional(),
+  highlights: z.array(z.string().trim().min(1).max(300)).max(5).optional(),
+  gratitude: z.string().trim().max(600).optional().nullable(),
+  /** Legendas sugeridas pela IA que o usuário escolheu aplicar às fotos. */
+  mediaCaptions: z.array(z.object({ id: z.string().min(1), caption: z.string().trim().min(1).max(200) })).max(12).optional(),
 });
+/** Pedido de organização: fotos só vão ao Gemini com consentimento explícito. */
+export const journalAiOrganizeSchema = z.object({ includePhotos: z.boolean().optional() }).optional();
 export type JournalAiApplyInput = z.infer<typeof journalAiApplySchema>;
 
 /** Fase 12 (Diário): PIN de privacidade — só dígitos, 4 a 8 caracteres. */

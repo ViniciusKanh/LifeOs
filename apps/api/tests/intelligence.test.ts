@@ -4,6 +4,7 @@ import { createAuthenticatedAgent } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { classMetrics, crossValidate, rocAuc, runArena, timeFolds } from "../src/services/mlEngine.js";
 import { rarityOf, levelFromXp } from "../src/services/intelligenceService.js";
+import { balancedThreshold } from "../src/services/intelligenceDataset.js";
 
 /** Semeia N dias em que dormir 7h+ na véspera leva a mais missões concluídas no dia. */
 async function seedRoutine(userId: string, days = 75) {
@@ -44,6 +45,12 @@ describe("mlEngine", () => {
     expect(results.find((r) => r.algorithm === "baseline")!.cvMean).toBe(0.5);
     expect(crossValidate("logistic", X, y)!.cvMean).toBeGreaterThan(0.85);
   });
+  it("limiar pessoal equilibra os dias positivos e negativos", () => {
+    expect(balancedThreshold([0, 1, 1, 2, 2, 3, 3, 4], 1)).toBe(2);
+    expect(balancedThreshold([0, 0, 0, 0, 1], 1)).toBe(1);
+    expect(balancedThreshold([30, 40, 60, 90, 120, 0], 25)).toBe(60);
+  });
+
   it("raridade considera estabilidade e maturidade, não só acurácia", () => {
     const novo = rarityOf({ cvMean: 0.9, cvStd: 0.2 }, 1, 0, 40).rarity;
     const maduro = rarityOf({ cvMean: 0.9, cvStd: 0.02 }, 6, 90, 200).rarity;
@@ -92,6 +99,18 @@ describe("Forja da Inteligência (API)", () => {
     expect(typeof ov.body.prophecy.probability).toBe("number");
     expect(ov.body.runes.items.length).toBeGreaterThan(5);
 
+    // Interpretabilidade: regras legíveis e "como a runa age".
+    expect(detail.body.insights.rules.length).toBeGreaterThan(0);
+    expect(detail.body.insights.rules[0].conditions[0].label).toBeTruthy();
+    expect(detail.body.insights.pdp.length).toBeGreaterThan(0);
+    // Alquimia: sem valores parte da véspera real; dormir mais aumenta a chance.
+    const sim0 = await agent.post(`/api/intelligence/artifacts/${f.body.artifact.id}/simulate`).send({});
+    expect(sim0.status).toBe(200);
+    expect(typeof sim0.body.probability).toBe("number");
+    const low = await agent.post(`/api/intelligence/artifacts/${f.body.artifact.id}/simulate`).send({ values: { ...sim0.body.values, sleep_duration: 5 } });
+    const high = await agent.post(`/api/intelligence/artifacts/${f.body.artifact.id}/simulate`).send({ values: { ...sim0.body.values, sleep_duration: 8.5 } });
+    expect(high.body.probability).toBeGreaterThan(low.body.probability);
+
     const re = await agent.post("/api/intelligence/forge").send({ objective: "productivity" });
     expect(re.body.artifact.trainings).toBe(2);
     expect(re.body.artifact.xp).toBeGreaterThan(f.body.artifact.xp);
@@ -101,6 +120,7 @@ describe("Forja da Inteligência (API)", () => {
     const ov2 = await other.agent.get("/api/intelligence/overview");
     expect(ov2.body.artifacts).toEqual([]);
     expect((await other.agent.get("/api/intelligence/experiments")).body).toEqual([]);
+    expect((await other.agent.post(`/api/intelligence/artifacts/${f.body.artifact.id}/simulate`).send({})).status).toBe(404);
   }, 60_000);
 
   it("valida o objetivo", async () => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { AlertTriangle, FlaskConical, Hammer, Sword } from "lucide-react";
+import { AlertTriangle, FlaskConical, Hammer, Sparkles, Sword } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { RPGBadge, RPGButton, RPGProgressBar, RPGTabs } from "@/components/rpg";
 import { RPG_TONE_TEXT } from "@/components/rpg/rpgAssets";
@@ -9,10 +9,12 @@ import type { ArtifactDetail } from "@/services/intelligenceService";
 import { ARTIFACT_ICON, GLOSSARY, RARITY_UI, STATUS_UI, num, pct } from "@/utils/intelligenceDisplay";
 import { ArenaTable } from "./ArenaPanel";
 import { RuneList } from "./RunesPanel";
+import { RuneAlchemy, RuneCurves, RulesScroll } from "./ArtifactExplain";
 
-type Mode = "adventurer" | "scientist";
+type Mode = "adventurer" | "scientist" | "alchemy";
 const MODES: Array<{ value: Mode; label: string; icon: JSX.Element }> = [
   { value: "adventurer", label: "Aventureiro", icon: <Sword size={13} className="inline mr-1" aria-hidden /> },
+  { value: "alchemy", label: "Alquimia", icon: <Sparkles size={13} className="inline mr-1" aria-hidden /> },
   { value: "scientist", label: "Cientista", icon: <FlaskConical size={13} className="inline mr-1" aria-hidden /> },
 ];
 
@@ -36,6 +38,14 @@ function Adventurer({ a }: { a: ArtifactDetail }) {
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-rpg-muted">Runas que mais pesam</h3>
         <RuneList items={a.importance} limit={6} showDirection />
+      </section>
+      <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-rpg-muted">Pergaminho de regras — padrões dos seus dias</h3>
+        <RulesScroll a={a} />
+      </section>
+      <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-rpg-muted">Como cada runa age</h3>
+        <RuneCurves a={a} />
       </section>
       <section className="grid gap-2 sm:grid-cols-2 text-xs">
         <p className="border border-rpg-border/60 p-2.5 text-rpg-muted" style={{ borderRadius: 3 }}>
@@ -170,7 +180,7 @@ export function ArtifactDetailModal({ id, onClose, onReforge }: { id: string | n
               <AlertTriangle size={13} aria-hidden /> {a.insights.drift.text}
             </p>
           )}
-          {mode === "adventurer" ? <Adventurer a={a} /> : <Scientist a={a} />}
+          {mode === "adventurer" ? <Adventurer a={a} /> : mode === "alchemy" ? <RuneAlchemy a={a} /> : <Scientist a={a} />}
         </div>
       )}
     </Modal>

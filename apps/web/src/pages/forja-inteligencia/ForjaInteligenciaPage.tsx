@@ -155,7 +155,7 @@ export function ForjaInteligenciaPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-2 min-[1800px]:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.85fr)] items-stretch [&>*]:min-w-0">
               <div className="md:col-span-2 xl:col-span-1">
-                <ArtifactsPanel artifacts={d.artifacts} objectives={d.objectives} onInspect={setDetailId} onForge={openForge} onViewAll={() => setTab("artifacts")} />
+                <ArtifactsPanel artifacts={d.artifacts} objectives={d.objectives} onInspect={setDetailId} onForge={openForge} onViewAll={() => setTab("artifacts")} readiness={d.grimoire?.readiness} />
               </div>
               <ArenaPanel experiment={d.arena} onDetails={() => setTab("arena")} />
               <GrimoirePanel grimoire={d.grimoire} onRefresh={doRefresh} refreshing={refreshGrimoire.isPending} />
@@ -166,7 +166,7 @@ export function ForjaInteligenciaPage() {
           </div>
         );
       case "artifacts":
-        return <ArtifactGrid artifacts={sorted} objectives={d.objectives} onInspect={setDetailId} onForge={openForge} className="lg:grid-cols-3 2xl:grid-cols-4" />;
+        return <ArtifactGrid artifacts={sorted} objectives={d.objectives} onInspect={setDetailId} onForge={openForge} className="lg:grid-cols-3 2xl:grid-cols-4" readiness={d.grimoire?.readiness} />;
       case "arena":
         return <ArenaHistory experiments={experiments.data} isLoading={experiments.isLoading} />;
       case "runes":

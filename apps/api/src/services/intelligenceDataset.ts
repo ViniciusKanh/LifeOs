@@ -80,11 +80,25 @@ export interface ObjectiveDef {
   thresholdText: (t: number) => string;
 }
 
-function median(vals: number[]): number {
-  if (!vals.length) return 0;
-  const s = [...vals].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+/**
+ * Limiar pessoal que deixa as classes o mais equilibradas possível (≥ piso).
+ * Ex.: se metade dos dias tem 2+ missões, o alvo vira "2+". Com dados muito
+ * concentrados (quase todo dia igual), nenhum limiar resolve — e a prontidão
+ * explica o que falta registrar.
+ */
+export function balancedThreshold(values: number[], floor: number): number {
+  const candidates = [...new Set(values.filter((v) => v >= floor).map((v) => Math.ceil(v)))].sort((a, b) => a - b);
+  let best = floor;
+  let bestScore = -1;
+  for (const t of candidates.length ? candidates : [floor]) {
+    const pos = values.filter((v) => v >= t).length;
+    const score = Math.min(pos, values.length - pos);
+    if (score > bestScore) {
+      best = t;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 const countLabel = (k: SeriesKey) => (days: DayData[], i: number, t: number) => ((days[i].v[k] ?? 0) >= t ? 1 : 0) as 0 | 1;
@@ -96,9 +110,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
     description: "Prevê dias de alta produtividade com base na véspera e na sua rotina.",
     targetLabel: "Dia de alta produtividade",
     icon: "sun",
-    threshold: (days) => Math.max(1, Math.ceil(median(days.map((d) => d.v.tasks_completed ?? 0)))),
+    threshold: (days) => balancedThreshold(days.map((d) => d.v.tasks_completed ?? 0), 1),
     label: countLabel("tasks_completed"),
-    thresholdText: (t) => `${t}+ missões concluídas no dia (sua mediana)`,
+    thresholdText: (t) => `${t}+ missões concluídas no dia (seu limiar pessoal)`,
   },
   {
     key: "habits",
@@ -106,9 +120,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
     description: "Prevê os dias em que seus hábitos tendem a ser cumpridos.",
     targetLabel: "Dia de hábitos cumpridos",
     icon: "leaf",
-    threshold: (days) => Math.max(1, Math.ceil(median(days.map((d) => d.v.habits_done ?? 0)))),
+    threshold: (days) => balancedThreshold(days.map((d) => d.v.habits_done ?? 0), 1),
     label: countLabel("habits_done"),
-    thresholdText: (t) => `${t}+ hábitos cumpridos no dia (sua mediana)`,
+    thresholdText: (t) => `${t}+ hábitos cumpridos no dia (seu limiar pessoal)`,
   },
   {
     key: "focus",
@@ -116,7 +130,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
     description: "Prevê dias de foco profundo a partir do seu ritmo recente.",
     targetLabel: "Dia de foco profundo",
     icon: "flame",
-    threshold: (days) => Math.max(25, Math.round(median(days.map((d) => d.v.focus_minutes ?? 0).filter((v) => v > 0)))),
+    threshold: (days) => balancedThreshold(days.map((d) => d.v.focus_minutes ?? 0), 25),
     label: countLabel("focus_minutes"),
     thresholdText: (t) => `${t}+ minutos de foco no dia`,
   },
@@ -217,17 +231,40 @@ export interface Readiness {
   ready: boolean;
   reason: string | null;
   thresholdText: string;
+  /** Ritual de desbloqueio: o que ainda falta registrar (0 = ok). */
+  missing: { samples: number; positives: number; negatives: number };
+  /** Próximo passo concreto e gamificado para destravar o artefato. */
+  hint: string | null;
 }
+
+const UNLOCK_HINT: Record<ObjectiveKey, { pos: string; neg: string; sample: string }> = {
+  productivity: { pos: "dias em que você bata o limiar de missões concluídas", neg: "dias mais leves (abaixo do limiar)", sample: "dias com registros (tarefas, sono, foco…)" },
+  habits: { pos: "dias com seus hábitos cumpridos", neg: "dias com menos hábitos", sample: "dias com check-in de hábitos" },
+  focus: { pos: "dias com sessões de Foco de 25+ min", neg: "dias sem foco profundo", sample: "dias com registros" },
+  energy: { pos: "registros de energia alta (4–5)", neg: "registros de energia baixa ou média (1–3)", sample: "dias com energia registrada em Saúde" },
+  study: { pos: "dias com sessão de estudo registrada em Educação", neg: "dias sem estudo", sample: "dias com registros" },
+};
 
 export function readinessOf(days: DayData[], objective: ObjectiveDef, today: string): Readiness {
   const ds = buildDataset(days, objective, today);
   const positives = ds.y.filter((v) => v === 1).length;
   const negatives = ds.y.length - positives;
+  const missing = {
+    samples: Math.max(0, MIN_SAMPLES - ds.y.length),
+    positives: Math.max(0, MIN_PER_CLASS - positives),
+    negatives: Math.max(0, MIN_PER_CLASS - negatives),
+  };
+  const h = UNLOCK_HINT[objective.key];
   let reason: string | null = null;
-  if (ds.y.length < MIN_SAMPLES) reason = `Faltam ${MIN_SAMPLES - ds.y.length} dia(s) com registro para treinar (mínimo ${MIN_SAMPLES}).`;
-  else if (positives < MIN_PER_CLASS || negatives < MIN_PER_CLASS)
+  let hint: string | null = null;
+  if (missing.samples > 0) {
+    reason = `Faltam ${missing.samples} dia(s) com registro para treinar (mínimo ${MIN_SAMPLES}).`;
+    hint = `Registre mais ${missing.samples} ${h.sample}.`;
+  } else if (missing.positives > 0 || missing.negatives > 0) {
     reason = `Os dias são muito parecidos entre si (${positives} positivos × ${negatives} negativos). São necessários pelo menos ${MIN_PER_CLASS} de cada tipo.`;
-  return { objective: objective.key, samples: ds.y.length, positives, negatives, ready: reason === null, reason, thresholdText: objective.thresholdText(ds.threshold) };
+    hint = missing.positives > 0 ? `Conquiste mais ${missing.positives} ${h.pos}.` : `Faltam ${missing.negatives} ${h.neg} para o artefato comparar.`;
+  }
+  return { objective: objective.key, samples: ds.y.length, positives, negatives, ready: reason === null, reason, thresholdText: objective.thresholdText(ds.threshold), missing, hint };
 }
 
 /* ---------------- resumo do Grimório ---------------- */

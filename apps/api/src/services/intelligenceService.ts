@@ -3,8 +3,11 @@ import { nanoid } from "nanoid";
 import { todayKeyFor } from "./gamificationService.js";
 import {
   ALGORITHM_LABEL,
+  extractRules,
+  featureStats,
   fitModel,
   localEffects,
+  partialDependence,
   pearson,
   permutationImportance,
   runArena,
@@ -35,11 +38,33 @@ export interface Importance {
   importance: number;
   direction: "positive" | "negative" | "neutral";
 }
+export interface RuleView {
+  conditions: Array<{ key: string; label: string; op: "<=" | ">"; value: number }>;
+  n: number;
+  positives: number;
+  rate: number;
+}
+export interface FeatureStat {
+  key: string;
+  label: string;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  coverage: number;
+}
 export interface ArtifactInsights {
   drift: { detected: boolean; text: string | null };
   opportunities: Array<{ feature: string; label: string; coverage: number }>;
   threshold: string;
   baselineCv: number;
+  /** Taxa-base do alvo no histórico (para comparar as regras). Ausente em artefatos antigos. */
+  baseRate?: number;
+  /** Pergaminho de regras (árvore substituta em valores reais). */
+  rules?: RuleView[];
+  /** Como cada runa principal age no modelo (dependência parcial). */
+  pdp?: Array<{ key: string; label: string; points: Array<{ x: number; p: number }> }>;
+  /** Faixas reais de cada runa (simulador). */
+  stats?: FeatureStat[];
 }
 export interface ArtifactMetrics extends ClassMetrics {
   cvMean: number;
@@ -206,14 +231,24 @@ export async function forgeArtifact(db: Client, ownerId: string, objectiveKey: O
   const opportunities = FEATURES.map((f, j) => ({ feature: f.key, label: f.label, coverage: Math.round((ds.X.filter((r) => r[j] !== null).length / ds.X.length) * 100) }))
     .filter((o) => SUBJECTIVE.has(o.feature) && o.coverage < 40)
     .sort((a, b) => a.coverage - b.coverage);
+  const model: FittedModel = fitModel(arena.winner, ds.X, ds.y);
+  const stats = featureStats(ds.X);
   const insights: ArtifactInsights = {
     drift: detectDrift(ds.X, ds.y, topIdx, objective.targetLabel),
     opportunities,
     threshold: ready.thresholdText,
     baselineCv,
+    baseRate: Math.round((ds.y.reduce((a, b) => a + b, 0) / ds.y.length) * 1000) / 1000,
+    rules: extractRules(ds.X, ds.y)
+      .slice(0, 4)
+      .map((r) => ({ ...r, conditions: r.conditions.map((c) => ({ key: FEATURES[c.feature].key, label: FEATURES[c.feature].label, op: c.op, value: Math.round(c.value * 100) / 100 })) })),
+    pdp: topIdx
+      .filter((j) => j >= 0 && FEATURES[j].key !== "weekend")
+      .map((j) => ({ key: FEATURES[j].key, label: FEATURES[j].label, points: partialDependence(model, ds.X, j) }))
+      .filter((d) => d.points.length >= 2),
+    stats: FEATURES.map((f, j) => ({ key: f.key, label: f.label, ...stats[j] })),
   };
 
-  const model: FittedModel = fitModel(arena.winner, ds.X, ds.y);
   const metrics: ArtifactMetrics = { ...winner.metrics, cvMean: winner.cvMean, cvStd: winner.cvStd, folds: winner.folds };
   // Só vira "produção" se superar a linha de base com folga; senão é honesto chamar de experimental.
   const status = winner.cvMean - baselineCv >= 0.05 && arena.winner !== "baseline" ? "production" : "experimental";
@@ -397,5 +432,42 @@ export async function getArtifactDetail(db: Client, ownerId: string, id: string)
     insights: a.insights,
     experiments: exps.rows.map((row) => parseExperiment(row as unknown as Record<string, unknown>)),
     predictions: { total: Number(p?.total ?? 0), resolved: Number(p?.resolved ?? 0), correct: Number(p?.correct ?? 0) },
+  };
+}
+
+/**
+ * Alquimia de runas (simulador): o usuário ajusta valores das runas e vê a
+ * probabilidade que o artefato atribuiria. Sem `values`, devolve as runas
+ * de hoje (véspera real) como ponto de partida. Nada é gravado.
+ */
+export async function simulateArtifact(db: Client, ownerId: string, id: string, values?: Record<string, number | null>) {
+  const r = await db.execute({ sql: `SELECT ${ARTIFACT_COLS}, model_json FROM ml_artifacts WHERE id = ? AND owner_id = ?`, args: [id, ownerId] });
+  if (!r.rows[0]) throw new IntelligenceError(404, "Artefato não encontrado.");
+  const a = parseArtifact(r.rows[0] as unknown as Record<string, unknown>);
+  const model = JSON.parse(String(r.rows[0].model_json)) as FittedModel;
+  let base: Record<string, number | null> = {};
+  if (!values) {
+    const today = await todayKeyFor(db, ownerId);
+    const days = await loadDays(db, ownerId, today, 9);
+    const idx = days.findIndex((d) => d.date === today);
+    if (idx >= 1) {
+      const row = featureRow(days, idx);
+      base = Object.fromEntries(FEATURES.map((f, j) => [f.key, row[j]]));
+    } else base = Object.fromEntries(FEATURES.map((f) => [f.key, null]));
+  }
+  const input = values ?? base;
+  const row = FEATURES.map((f) => {
+    const v = input[f.key];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  });
+  const { p, effects } = localEffects(model, row);
+  return {
+    artifactId: a.id,
+    targetLabel: OBJECTIVES.find((o) => o.key === a.objective)!.targetLabel,
+    values: Object.fromEntries(FEATURES.map((f, j) => [f.key, row[j]])),
+    probability: p,
+    effects: FEATURES.map((f, j) => ({ key: f.key, label: f.label, effect: Math.round(effects[j] * 100) })).filter((e) => e.effect !== 0).sort((x, y) => Math.abs(y.effect) - Math.abs(x.effect)),
+    stats: a.insights.stats ?? null,
+    baseRate: a.insights.baseRate ?? null,
   };
 }

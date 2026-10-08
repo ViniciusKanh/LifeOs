@@ -63,11 +63,35 @@ export interface GenerateOptions {
   responseSchema?: Record<string, unknown>;
   /** Tempo máximo por tentativa (ms). */
   timeoutMs?: number;
-  /** Novas tentativas só para falhas transitórias (429, 5xx, timeout, rede). */
+  /** Novas tentativas só para falhas transitórias (429, 5xx, timeout, rede, resposta vazia). */
   retries?: number;
+  /** Imagens enviadas junto com o texto (multimodal), já autorizadas pelo usuário. */
+  images?: Array<{ mimeType: string; base64: string }>;
+  /** Teto de tokens da resposta (evita JSON cortado em respostas longas). */
+  maxOutputTokens?: number;
 }
 
 const TRANSIENT = (status: number) => status === 429 || status >= 500;
+
+type GeminiResponse = {
+  candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
+  promptFeedback?: { blockReason?: string };
+  error?: { message?: string };
+};
+
+/**
+ * Junta o texto de TODAS as partes da resposta, ignorando as de raciocínio
+ * ("thought"). Modelos com raciocínio podem devolver várias partes — ler só
+ * a primeira gerava JSON incompleto e o erro "formato inesperado".
+ */
+export function responseText(data: GeminiResponse | null): string {
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p) => !p.thought && typeof p.text === "string")
+    .map((p) => p.text)
+    .join("")
+    .trim();
+}
 
 /**
  * Chamada genérica à API do Gemini — usada tanto pelo teste de
@@ -77,8 +101,13 @@ const TRANSIENT = (status: number) => status === 429 || status >= 500;
  */
 export async function generateText(prompt: string, config: GeminiConfig, opts: GenerateOptions = {}): Promise<GeminiCallResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-  const body: Record<string, unknown> = { contents: [{ parts: [{ text: prompt }] }] };
-  if (opts.responseSchema) body.generationConfig = { responseMimeType: "application/json", responseSchema: opts.responseSchema };
+  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+  for (const img of opts.images ?? []) parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+  const body: Record<string, unknown> = { contents: [{ parts }] };
+  const generationConfig: Record<string, unknown> = {};
+  if (opts.responseSchema) Object.assign(generationConfig, { responseMimeType: "application/json", responseSchema: opts.responseSchema });
+  if (opts.maxOutputTokens) generationConfig.maxOutputTokens = opts.maxOutputTokens;
+  if (Object.keys(generationConfig).length > 0) body.generationConfig = generationConfig;
   const attempts = 1 + Math.max(0, Math.min(2, opts.retries ?? 0));
   let last: GeminiCallResult = { ok: false, message: "Falha ao chamar a API do Gemini." };
 
@@ -93,9 +122,7 @@ export async function generateText(prompt: string, config: GeminiConfig, opts: G
         signal: controller?.signal,
       });
 
-      const data = (await res.json().catch(() => null)) as
-        | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; error?: { message?: string } }
-        | null;
+      const data = (await res.json().catch(() => null)) as GeminiResponse | null;
 
       if (!res.ok) {
         const apiMessage = data?.error?.message ?? `HTTP ${res.status}`;
@@ -104,9 +131,18 @@ export async function generateText(prompt: string, config: GeminiConfig, opts: G
         return last;
       }
 
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (data?.promptFeedback?.blockReason) {
+        return { ok: false, message: "O Gemini recusou este conteúdo pelos filtros de segurança dele. Ajuste o texto e tente de novo." };
+      }
+      const text = responseText(data);
+      const finish = data?.candidates?.[0]?.finishReason;
       if (!text) {
-        return { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.` };
+        last = { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia${finish ? ` (${finish})` : ""}.` };
+        continue; // resposta vazia costuma ser transitória
+      }
+      if (finish === "MAX_TOKENS" && opts.responseSchema) {
+        last = { ok: false, message: "A resposta da IA foi cortada por ser longa demais. Tente de novo." };
+        continue;
       }
       return { ok: true, text };
     } catch (err) {
@@ -194,7 +230,12 @@ export async function generateWithTools(
       };
     }
 
-    const text = parts.find((p) => p.text)?.text?.trim();
+    // Ignora partes de raciocínio e junta o texto de todas as demais.
+    const text = parts
+      .filter((p) => p.text && !(p as { thought?: boolean }).thought)
+      .map((p) => p.text)
+      .join("")
+      .trim();
     if (!text) {
       return { ok: false, message: `Conexão com o modelo "${config.model}" funcionando, mas a resposta veio vazia.` };
     }

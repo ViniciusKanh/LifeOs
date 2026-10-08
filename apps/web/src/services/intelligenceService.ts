@@ -82,6 +82,9 @@ export interface Readiness {
   ready: boolean;
   reason: string | null;
   thresholdText: string;
+  /** Ritual de desbloqueio: o que ainda falta registrar (ausente em grimórios antigos). */
+  missing?: { samples: number; positives: number; negatives: number };
+  hint?: string | null;
 }
 
 export interface Grimoire {
@@ -141,6 +144,30 @@ export interface IntelligenceOverview {
   prophecy: Prophecy | null;
 }
 
+export interface RuleView {
+  conditions: Array<{ key: string; label: string; op: "<=" | ">"; value: number }>;
+  n: number;
+  positives: number;
+  rate: number;
+}
+export interface FeatureStat {
+  key: string;
+  label: string;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  coverage: number;
+}
+export interface SimulationResult {
+  artifactId: string;
+  targetLabel: string;
+  values: Record<string, number | null>;
+  probability: number;
+  effects: Array<{ key: string; label: string; effect: number }>;
+  stats: FeatureStat[] | null;
+  baseRate: number | null;
+}
+
 export interface ArtifactDetail extends ArtifactSummary {
   importance: Importance[];
   insights: {
@@ -148,6 +175,10 @@ export interface ArtifactDetail extends ArtifactSummary {
     opportunities: Array<{ feature: string; label: string; coverage: number }>;
     threshold: string;
     baselineCv: number;
+    baseRate?: number;
+    rules?: RuleView[];
+    pdp?: Array<{ key: string; label: string; points: Array<{ x: number; p: number }> }>;
+    stats?: FeatureStat[];
   };
   experiments: Experiment[];
   predictions: { total: number; resolved: number; correct: number };
@@ -166,4 +197,5 @@ export const intelligenceService = {
   artifact: (id: string) => api.get<ArtifactDetail>(`/intelligence/artifacts/${encodeURIComponent(id)}`),
   refreshGrimoire: () => api.post<Grimoire>("/intelligence/grimoire/refresh"),
   forge: (objective: ObjectiveKey) => api.post<ForgeResult>("/intelligence/forge", { objective }),
+  simulate: (id: string, values?: Record<string, number | null>) => api.post<SimulationResult>(`/intelligence/artifacts/${encodeURIComponent(id)}/simulate`, values ? { values } : {}),
 };

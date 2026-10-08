@@ -1071,11 +1071,11 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               {photoError && <p className="text-xs text-drop mt-2">{photoError}</p>}
             </SectionCard>
 
-            <SectionCard icon={<Sparkles size={16} />} title="Organização do dia" subtitle="O Gemini agrupa seus textos por temas — você confirma antes de salvar" className="xl:col-span-3">
+            <SectionCard icon={<Sparkles size={16} />} title="Organização do dia" subtitle="O Gemini lê seu texto, sua gratidão e (se você permitir) suas fotos — você confirma antes de salvar" className="xl:col-span-3">
               <JournalAiOrganizer
                 saved={entry?.ai ?? null}
                 media={entry?.media ?? []}
-                onSuggest={() => suggestOrganization()}
+                onSuggest={(includePhotos) => suggestOrganization(includePhotos)}
                 onApply={async (input) => {
                   const updated = await applyOrganization(input);
                   // As etiquetas escolhidas entram no form local, senão o próximo autosave as sobrescreveria.

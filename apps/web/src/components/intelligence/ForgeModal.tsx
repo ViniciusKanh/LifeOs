@@ -6,6 +6,7 @@ import { RPGBadge, RPGButton } from "@/components/rpg";
 import { RPG_TONE_TEXT } from "@/components/rpg/rpgAssets";
 import type { ForgeResult, Grimoire, IntelligenceOverview, ObjectiveKey } from "@/services/intelligenceService";
 import { ALGO_SHORT, ARTIFACT_ICON, RARITY_UI, pct } from "@/utils/intelligenceDisplay";
+import { UnlockRitual } from "./UnlockRitual";
 
 /**
  * Nova forja / reforja. Mostra a prontidão real de cada objetivo e só treina
@@ -135,8 +136,8 @@ export function ForgeModal({
                       </span>
                       <span className="block text-xs text-rpg-muted">Alvo: {o.targetLabel.toLowerCase()}</span>
                       {r && (
-                        <span className={clsx("block text-[11px] mt-0.5", r.ready ? "text-rpg-green" : "text-rpg-orange")}>
-                          {r.ready ? `${r.samples} dias prontos (${r.positives} × ${r.negatives})` : r.reason}
+                        <span className="block mt-1">
+                          <UnlockRitual r={r} compact={r.ready || !active} />
                         </span>
                       )}
                     </span>

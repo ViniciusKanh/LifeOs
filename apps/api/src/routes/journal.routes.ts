@@ -3,7 +3,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema, journalAiApplySchema, journalAiAssistSchema } from "../validators/journal.schema.js";
+import { journalUpsertSchema, journalMediaCreateSchema, journalMediaUpdateSchema, journalPinSetSchema, journalPinVerifySchema, journalAudioCreateSchema, journalAiApplySchema, journalAiOrganizeSchema, journalAiAssistSchema } from "../validators/journal.schema.js";
 import { mimeFromDataUri } from "../validators/attachment.schema.js";
 import { organizeJournalDay, applyJournalOrganization, clearJournalOrganization, assistJournalDay } from "../services/journalAIService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
@@ -66,10 +66,19 @@ function parseAiOrganization(row: Record<string, unknown> | undefined) {
   } catch {
     categories = [];
   }
+  let highlights: string[] = [];
+  try {
+    const parsed = JSON.parse((row.ai_highlights as string) || "[]");
+    if (Array.isArray(parsed)) highlights = parsed.filter((h): h is string => typeof h === "string");
+  } catch {
+    highlights = [];
+  }
   return {
     title: (row.ai_title as string | null) ?? null,
     summary: (row.ai_summary as string | null) ?? null,
     categories,
+    highlights,
+    gratitude: (row.ai_gratitude as string | null) ?? null,
     organizedAt: row.ai_organized_at as string,
   };
 }
@@ -508,7 +517,8 @@ journalRouter.delete("/:date/media/:mediaId", async (req, res) => {
 journalRouter.post("/:date/ai/organize", rateLimit({ windowMs: 60_000, max: 6 }), async (req, res) => {
   const { date } = req.params;
   if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
-  const result = await organizeJournalDay(getDb(), req.user!.id, date);
+  const body = journalAiOrganizeSchema.safeParse(req.body);
+  const result = await organizeJournalDay(getDb(), req.user!.id, date, { includePhotos: body.success ? !!body.data?.includePhotos : false });
   if (!result.ok) return res.status(result.status).json({ error: result.message });
   return res.json(result.suggestion);
 });

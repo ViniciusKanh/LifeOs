@@ -823,6 +823,10 @@ export interface JournalAiOrganization {
   title: string | null;
   summary: string | null;
   categories: JournalAiCategory[];
+  /** Momentos marcantes confirmados pelo usuário. */
+  highlights: string[];
+  /** Reflexão sobre a gratidão do dia (inferência confirmada). */
+  gratitude: string | null;
   organizedAt: string;
 }
 
@@ -830,9 +834,26 @@ export interface JournalAiOrganization {
 export interface JournalAiSuggestion {
   title: string | null;
   summary: string | null;
+  highlights: string[];
+  gratitude: string | null;
   categories: JournalAiCategory[];
   mediaCategories: Array<{ id: string; category: string }>;
+  /** Descrição visual (inferência) e legenda sugerida — só para fotos enviadas com consentimento. */
+  photoNotes: Array<{ id: string; description: string; suggestedCaption: string | null }>;
   suggestedTags: string[];
+  photosAnalyzed: number;
+}
+
+/** O que o usuário confirma ao salvar a organização. */
+export interface JournalAiApplyInput {
+  title: string | null;
+  summary: string | null;
+  highlights: string[];
+  gratitude: string | null;
+  categories: JournalAiCategory[];
+  mediaCategories: Array<{ id: string; category: string }>;
+  mediaCaptions: Array<{ id: string; caption: string }>;
+  tagsToAdd: string[];
 }
 
 /** Um "diário" — coleção nomeada (Pessoal, Viagens, Estudos...) pra organizar entradas do Diário. */

@@ -157,11 +157,11 @@ function gini(pos: number, n: number) {
   return 1 - p * p - (1 - p) * (1 - p);
 }
 
-function buildTree(X: number[][], y: number[], idx: number[], depth: number): TreeNode {
+function buildTree(X: number[][], y: number[], idx: number[], depth: number, maxDepth = 3, minLeaf = 5): TreeNode {
   const n = idx.length;
   const pos = idx.reduce((s, i) => s + y[i], 0);
   const leaf: TreeNode = { leaf: true, p: (pos + 1) / (n + 2), n };
-  if (depth >= 3 || n < 12 || pos === 0 || pos === n) return leaf;
+  if (depth >= maxDepth || n < minLeaf * 2 + 2 || pos === 0 || pos === n) return leaf;
   const parent = gini(pos, n);
   let best: { f: number; t: number; gain: number } | null = null;
   const d = X[0].length;
@@ -175,7 +175,7 @@ function buildTree(X: number[][], y: number[], idx: number[], depth: number): Tr
       let lp = 0;
       for (const i of idx) if (X[i][f] <= t) (ln++, (lp += y[i]));
       const rn = n - ln;
-      if (ln < 5 || rn < 5) continue;
+      if (ln < minLeaf || rn < minLeaf) continue;
       const gain = parent - (ln / n) * gini(lp, ln) - (rn / n) * gini(pos - lp, rn);
       if (!best || gain > best.gain) best = { f, t, gain };
     }
@@ -183,7 +183,7 @@ function buildTree(X: number[][], y: number[], idx: number[], depth: number): Tr
   if (!best || best.gain < 1e-4) return leaf;
   const li = idx.filter((i) => X[i][best!.f] <= best!.t);
   const ri = idx.filter((i) => X[i][best!.f] > best!.t);
-  return { leaf: false, f: best.f, t: round(best.t, 4), l: buildTree(X, y, li, depth + 1), r: buildTree(X, y, ri, depth + 1) };
+  return { leaf: false, f: best.f, t: round(best.t, 4), l: buildTree(X, y, li, depth + 1, maxDepth, minLeaf), r: buildTree(X, y, ri, depth + 1, maxDepth, minLeaf) };
 }
 
 export function fitParams(alg: AlgorithmId, X: number[][], y: number[]): ModelParams {
@@ -401,4 +401,63 @@ export function pearson(xs: Array<number | null>, ys: number[]): number {
     syy += (y - my) ** 2;
   }
   return sxx && syy ? round(sxy / Math.sqrt(sxx * syy)) : 0;
+}
+
+/* ---------------- interpretabilidade global ---------------- */
+
+export interface Rule {
+  conditions: Array<{ feature: number; op: "<=" | ">"; value: number }>;
+  /** Dias que caem nesta regra e quantos deles foram positivos. */
+  n: number;
+  positives: number;
+  rate: number;
+}
+
+/**
+ * Pergaminho de regras: árvore rasa (substituta) ajustada nos valores REAIS
+ * (só imputação pela média, sem padronizar) para que os limiares sejam
+ * legíveis ("sono > 7,1 h"). Explica padrões dos dados; não é o campeão.
+ */
+export function extractRules(X: Row[], y: number[], maxDepth = 2): Rule[] {
+  if (X.length < 12) return [];
+  const prep = fitPrep(X);
+  const raw = X.map((r) => r.map((v, j) => (v === null || !Number.isFinite(v) ? prep.mean[j] : v)));
+  const root = buildTree(raw, y, raw.map((_, i) => i), 0, maxDepth, Math.max(5, Math.round(X.length * 0.08)));
+  const rules: Rule[] = [];
+  const walk = (node: TreeNode, conds: Rule["conditions"], idx: number[]) => {
+    if (node.leaf) {
+      if (conds.length === 0) return;
+      const positives = idx.reduce((s, i) => s + y[i], 0);
+      rules.push({ conditions: conds, n: idx.length, positives, rate: round(idx.length ? positives / idx.length : 0) });
+      return;
+    }
+    walk(node.l, [...conds, { feature: node.f, op: "<=", value: node.t }], idx.filter((i) => raw[i][node.f] <= node.t));
+    walk(node.r, [...conds, { feature: node.f, op: ">", value: node.t }], idx.filter((i) => raw[i][node.f] > node.t));
+  };
+  walk(root, [], raw.map((_, i) => i));
+  return rules.filter((r) => r.n >= 5).sort((a, b) => Math.abs(b.rate - 0.5) * Math.sqrt(b.n) - Math.abs(a.rate - 0.5) * Math.sqrt(a.n));
+}
+
+/**
+ * Dependência parcial: probabilidade média prevista quando a runa j assume
+ * cada valor da grade (quantis 10%–90% dos valores observados), mantendo as
+ * demais como estão. Mostra "como a runa age" no modelo — associação, não causa.
+ */
+export function partialDependence(model: FittedModel, X: Row[], j: number, points = 7): Array<{ x: number; p: number }> {
+  const vals = X.map((r) => r[j]).filter((v): v is number => v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+  if (vals.length < 5) return [];
+  const q = (f: number) => vals[Math.min(vals.length - 1, Math.max(0, Math.round(f * (vals.length - 1))))];
+  const grid = [...new Set(Array.from({ length: points }, (_, i) => round(q(0.1 + (0.8 * i) / (points - 1)), 3)))];
+  if (grid.length < 2) return [];
+  return grid.map((g) => ({ x: g, p: round(mean(X.map((r) => predict(model, r.map((v, c) => (c === j ? g : v))))), 3) }));
+}
+
+/** Estatísticas por runa (faixa dos simuladores e cobertura). */
+export function featureStats(X: Row[]): Array<{ min: number | null; max: number | null; mean: number | null; coverage: number }> {
+  const d = X[0]?.length ?? 0;
+  return Array.from({ length: d }, (_, j) => {
+    const vals = X.map((r) => r[j]).filter((v): v is number => v !== null && Number.isFinite(v));
+    if (!vals.length) return { min: null, max: null, mean: null, coverage: 0 };
+    return { min: round(Math.min(...vals), 3), max: round(Math.max(...vals), 3), mean: round(mean(vals), 3), coverage: round(vals.length / X.length, 3) };
+  });
 }

@@ -8,6 +8,7 @@ import { DIFFICULTIES, difficultyLabel } from "@/services/gamificationService";
 import type { ProposedTask } from "@/services/contractsService";
 import type { Difficulty } from "@/types";
 import { DIFFICULTY_TONE, STATUS_LABEL, STATUS_TONE, dateInDays, fmtDate, rpgField } from "./contractUi";
+import { ContractTaskEditor, draftsToInput, emptyDraft, type TaskDraft } from "./ContractTaskEditor";
 
 const DONE = "Concluído";
 
@@ -21,8 +22,7 @@ export function ContractDetailModal({ id, onClose, onToast }: { id: string; onCl
   const { update, remove, addTasks } = useContracts(false);
   const { proposeTasks } = useContractAI();
   const refresh = useContractRefresh();
-  const [newTitle, setNewTitle] = useState("");
-  const [newDiff, setNewDiff] = useState<Difficulty | "">("");
+  const [drafts, setDrafts] = useState<TaskDraft[]>([emptyDraft()]);
   const [hint, setHint] = useState("");
   const [suggestions, setSuggestions] = useState<ProposedTask[] | null>(null);
   const [picked, setPicked] = useState<boolean[]>([]);
@@ -45,10 +45,12 @@ export function ContractDetailModal({ id, onClose, onToast }: { id: string; onCl
   };
 
   const addManual = async () => {
-    if (!newTitle.trim()) return;
+    const tasks = draftsToInput(drafts);
+    if (tasks.length === 0) return;
     try {
-      await addTasks.mutateAsync({ id, tasks: [{ title: newTitle.trim(), difficulty: newDiff || null }] });
-      setNewTitle("");
+      await addTasks.mutateAsync({ id, tasks });
+      setDrafts([emptyDraft()]);
+      onToast(`${tasks.length} tarefa(s) adicionada(s) ao contrato.`);
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Não foi possível adicionar a tarefa.", "error");
     }
@@ -152,14 +154,10 @@ export function ContractDetailModal({ id, onClose, onToast }: { id: string; onCl
 
           {c.status !== "arquivado" && (
             <section className="space-y-2">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addManual()} placeholder="Nova tarefa…" className={rpgField} style={{ borderRadius: 3 }} aria-label="Título da nova tarefa" />
-                <select value={newDiff} onChange={(e) => setNewDiff(e.target.value as Difficulty | "")} className={`${rpgField} sm:!w-40`} style={{ borderRadius: 3 }} aria-label="Dificuldade da nova tarefa">
-                  <option value="">Do contrato</option>
-                  {DIFFICULTIES.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-                </select>
-                <RPGButton variant="secondary" disabled={!newTitle.trim() || addTasks.isPending} onClick={addManual}><Plus size={14} aria-hidden /> Adicionar</RPGButton>
-              </div>
+              <ContractTaskEditor drafts={drafts} onChange={setDrafts} contractDue={c.dueDate} />
+              <RPGButton variant="secondary" disabled={!drafts.some((d) => d.title.trim()) || addTasks.isPending} onClick={addManual}>
+                <Plus size={14} aria-hidden /> Adicionar ao contrato
+              </RPGButton>
 
               <div className="rpg-panel p-3 space-y-2">
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-rpg-purple"><Wand2 size={13} aria-hidden /> Próximas tarefas com o Copilot</p>

@@ -67,7 +67,7 @@ export function useJournal(date: string) {
   });
 
   // IA (Gemini): sugerir não grava nada; aplicar/descartar sim.
-  const suggestOrganization = useMutation({ mutationFn: () => journalService.suggestOrganization(date) });
+  const suggestOrganization = useMutation({ mutationFn: (includePhotos: boolean = false) => journalService.suggestOrganization(date, includePhotos) });
   const assistWriting = useMutation({ mutationFn: (notes?: string) => journalService.assistWriting(date, notes) });
   const applyOrganization = useMutation({
     mutationFn: (input: Parameters<typeof journalService.applyOrganization>[1]) => journalService.applyOrganization(date, input),

@@ -2,7 +2,8 @@ import clsx from "clsx";
 import { Lock, Sparkles } from "lucide-react";
 import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
 import { RPG_TONE_TEXT } from "@/components/rpg/rpgAssets";
-import type { ArtifactSummary, IntelligenceOverview } from "@/services/intelligenceService";
+import type { ArtifactSummary, IntelligenceOverview, Readiness } from "@/services/intelligenceService";
+import { UnlockRitual } from "./UnlockRitual";
 import { ARTIFACT_ICON, GLOSSARY, RARITY_UI, STATUS_UI, pct } from "@/utils/intelligenceDisplay";
 
 type Objective = IntelligenceOverview["objectives"][number];
@@ -54,7 +55,7 @@ export function ArtifactCard({ a, onInspect }: { a: ArtifactSummary; onInspect: 
 }
 
 /** Objetivo ainda não forjado: mostra o que ele faria e convida a forjar. */
-export function LockedArtifactCard({ o, onForge }: { o: Objective; onForge: () => void }) {
+export function LockedArtifactCard({ o, onForge, readiness }: { o: Objective; onForge: () => void; readiness?: Readiness | null }) {
   const ic = ARTIFACT_ICON[o.icon];
   return (
     <article className="flex flex-col border border-dashed border-rpg-border/80 bg-rpg-bg/40 p-3 min-w-0" style={{ borderRadius: 3 }}>
@@ -70,6 +71,11 @@ export function LockedArtifactCard({ o, onForge }: { o: Objective; onForge: () =
         </div>
       </div>
       <p className="mt-2 text-xs text-rpg-muted leading-snug flex-1">{o.description}</p>
+      {readiness && (
+        <div className="mt-2">
+          <UnlockRitual r={readiness} compact />
+        </div>
+      )}
       <RPGButton variant="ghost" className="mt-2 self-start !px-2 !py-1 text-xs" onClick={onForge}>
         <Sparkles size={13} aria-hidden /> Forjar
       </RPGButton>
@@ -77,17 +83,17 @@ export function LockedArtifactCard({ o, onForge }: { o: Objective; onForge: () =
   );
 }
 
-export function ArtifactGrid({ artifacts, objectives, onInspect, onForge, limit, className }: { artifacts: ArtifactSummary[]; objectives: Objective[]; onInspect: (id: string) => void; onForge: (key: Objective["key"]) => void; limit?: number; className?: string }) {
+export function ArtifactGrid({ artifacts, objectives, onInspect, onForge, limit, className, readiness }: { artifacts: ArtifactSummary[]; objectives: Objective[]; onInspect: (id: string) => void; onForge: (key: Objective["key"]) => void; limit?: number; className?: string; readiness?: Readiness[] }) {
   const locked = objectives.filter((o) => !o.forged);
   const items = [...artifacts.map((a) => ({ kind: "a" as const, a })), ...locked.map((o) => ({ kind: "o" as const, o }))].slice(0, limit ?? Infinity);
   return (
     <div className={clsx("grid gap-3 sm:grid-cols-2", className)}>
-      {items.map((it) => (it.kind === "a" ? <ArtifactCard key={it.a.id} a={it.a} onInspect={() => onInspect(it.a.id)} /> : <LockedArtifactCard key={it.o.key} o={it.o} onForge={() => onForge(it.o.key)} />))}
+      {items.map((it) => (it.kind === "a" ? <ArtifactCard key={it.a.id} a={it.a} onInspect={() => onInspect(it.a.id)} /> : <LockedArtifactCard key={it.o.key} o={it.o} onForge={() => onForge(it.o.key)} readiness={readiness?.find((r) => r.objective === it.o.key) ?? null} />))}
     </div>
   );
 }
 
-export function ArtifactsPanel(props: { artifacts: ArtifactSummary[]; objectives: Objective[]; onInspect: (id: string) => void; onForge: (key: Objective["key"]) => void; onViewAll: () => void }) {
+export function ArtifactsPanel(props: { artifacts: ArtifactSummary[]; objectives: Objective[]; onInspect: (id: string) => void; onForge: (key: Objective["key"]) => void; onViewAll: () => void; readiness?: Readiness[] }) {
   return (
     <RPGPanel
       title="Artefatos ativos"

@@ -7,6 +7,7 @@ import { DIFFICULTIES, difficultyLabel } from "@/services/gamificationService";
 import type { ContractProposal } from "@/services/contractsService";
 import type { Difficulty } from "@/types";
 import { DIFFICULTY_TONE, dateInDays, rpgField } from "./contractUi";
+import { ContractTaskEditor, draftsToInput, emptyDraft, type TaskDraft } from "./ContractTaskEditor";
 
 /**
  * Firmar contrato: manual ou com o Gemini. A IA só PROPÕE — o usuário revisa,
@@ -20,7 +21,7 @@ export function ContractCreateModal({ mode, onClose, onCreated }: { mode: "manua
   const [objective, setObjective] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("medio");
   const [dueDate, setDueDate] = useState("");
-  const [tasksText, setTasksText] = useState("");
+  const [drafts, setDrafts] = useState<TaskDraft[]>([emptyDraft(), emptyDraft()]);
   const [goal, setGoal] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("");
   const [proposal, setProposal] = useState<ContractProposal | null>(null);
@@ -50,12 +51,7 @@ export function ContractCreateModal({ mode, onClose, onCreated }: { mode: "manua
       ? proposal.tasks
           .filter((_, i) => picked[i])
           .map((t) => ({ title: t.title, description: t.description, priority: t.priority, difficulty: t.difficulty, dueDate: dateInDays(t.dueInDays), estimateMinutes: t.estimateMinutes }))
-      : tasksText
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean)
-          .slice(0, 30)
-          .map((t) => ({ title: t.slice(0, 200) }));
+      : draftsToInput(drafts);
     try {
       const c = await create.mutateAsync({
         title: title.trim(),
@@ -177,10 +173,10 @@ export function ContractCreateModal({ mode, onClose, onCreated }: { mode: "manua
               </label>
             </div>
             {mode === "manual" && (
-              <label className="block text-[11px] text-rpg-muted">
-                Tarefas (uma por linha)
-                <textarea rows={4} value={tasksText} onChange={(e) => setTasksText(e.target.value)} className={`${rpgField} mt-1`} style={{ borderRadius: 3 }} placeholder={"Levantar referências\nEscrever rascunho\nRevisar com o orientador"} />
-              </label>
+              <fieldset>
+                <legend className="text-[11px] text-rpg-muted mb-1">Tarefas</legend>
+                <ContractTaskEditor drafts={drafts} onChange={setDrafts} contractDue={dueDate || null} />
+              </fieldset>
             )}
           </section>
         )}

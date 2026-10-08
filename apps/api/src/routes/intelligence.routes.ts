@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { IntelligenceError, forgeArtifact, getArtifactDetail, getOverview, listExperiments, refreshGrimoire } from "../services/intelligenceService.js";
+import { IntelligenceError, forgeArtifact, getArtifactDetail, getOverview, listExperiments, refreshGrimoire, simulateArtifact } from "../services/intelligenceService.js";
 
 /**
  * Forja da Inteligência. A visão geral só lê resultados já calculados;
@@ -38,6 +38,20 @@ intelligenceRouter.get("/artifacts/:id", async (req, res) => {
   if (!id.success) return res.status(400).json({ error: "Artefato inválido." });
   try {
     return res.json(await getArtifactDetail(getDb(), req.user!.id, id.data));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+const simulateSchema = z.object({ values: z.record(z.string().max(40), z.number().finite().min(-1e6).max(1e6).nullable()).optional() });
+
+/** POST /api/intelligence/artifacts/:id/simulate — Alquimia de runas (não grava nada). */
+intelligenceRouter.post("/artifacts/:id/simulate", async (req, res) => {
+  const id = idSchema.safeParse(req.params.id);
+  const body = simulateSchema.safeParse(req.body ?? {});
+  if (!id.success || !body.success) return res.status(400).json({ error: "Simulação inválida." });
+  try {
+    return res.json(await simulateArtifact(getDb(), req.user!.id, id.data, body.data.values));
   } catch (e) {
     return fail(res, e);
   }
