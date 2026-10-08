@@ -81,6 +81,44 @@ Chaves:
 
 O workflow falha antes de compilar se o secret da chave não existir. Uma release só fica "latest" (visível ao updater) depois de compilar, assinar e passar nos testes.
 
+## Instalador
+
+O instalador NSIS tem a identidade do LifeOS:
+
+- ícone próprio;
+- arte lateral e cabeçalho em pixel art (`src-tauri/installer/sidebar.bmp` e `header.bmp`);
+- página de **Termos de Uso e Política de Privacidade**;
+- metadados de editor, copyright e site.
+
+A página de termos usa `src-tauri/installer/license.rtf`, gerado pelo `npm run docs:legal` a partir de `apps/web/src/content/legal.ts`. Rode o comando sempre que o texto jurídico mudar.
+
+Nas atualizações automáticas (modo passivo), a página de termos é pulada.
+
+## Login com Google no Desktop
+
+O Google bloqueia OAuth dentro de webviews, então o login funciona assim:
+
+1. "Continuar com Google" gera um verificador PKCE e chama o comando nativo `open_google_login`. O comando só aceita a URL `/api/auth/google/start` do próprio LifeOS.
+2. O login acontece no navegador padrão. O callback não cria sessão nesse navegador: grava um código de uso único (só o hash, válido por 3 minutos, tabela `desktop_auth_codes`) e abre `/auth/desktop-handoff`.
+3. Essa página chama `lifeos://auth?code=...`. O instalador registra o esquema `lifeos`.
+4. O app leva a janela para `/auth/desktop`, que envia código + verificador para `POST /api/auth/desktop/exchange`. A sessão é criada com o mesmo cookie httpOnly do login normal. Com MFA ativo, segue para a 2ª etapa.
+
+Um código interceptado não serve sem o verificador, que nunca sai do app, e não pode ser usado duas vezes.
+
+Vincular o Google pelo Perfil continua disponível só na Web.
+
+## Assinatura de código (aviso "Fornecedor desconhecido")
+
+O SmartScreen avisa porque o `.exe` não tem assinatura **Authenticode**. A assinatura do updater (minisign) não resolve isso. Opções:
+
+- **Azure Trusted/Artifact Signing:** serviço da Microsoft, de baixo custo e integrável ao GitHub Actions. Verifique antes se a sua conta e o seu país são elegíveis.
+- **Certificado OV:** por exemplo, de uma CA como Certum, Sectigo ou DigiCert. Mostra "Vinicius Santos" como editor. A reputação no SmartScreen cresce com os downloads.
+- **Certificado EV:** confiança imediata no SmartScreen, mas é o mais caro.
+
+Para ativar, configure `bundle.windows.signCommand` (ou `certificateThumbprint`) no `tauri.conf.json` e guarde as credenciais **apenas** em GitHub Secrets. O workflow assina o instalador e o executável antes de publicar a release.
+
+Até lá, a pessoa usuária precisa clicar em **Mais informações → Executar assim mesmo**.
+
 ## Próximas etapas
 
 - **Etapa 4:** bandeja, notificações nativas, atalhos globais e inicialização com o Windows. Os comandos novos entram em `remote_capability()` com o mínimo necessário.

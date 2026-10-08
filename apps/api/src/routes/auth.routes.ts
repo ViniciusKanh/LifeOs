@@ -39,7 +39,9 @@ import {
   mfaDisableSchema,
   acceptTermsSchema,
   deleteAccountSchema,
+  desktopExchangeSchema,
 } from "../validators/auth.schema.js";
+import { DESKTOP_CHALLENGE_RE, consumeDesktopHandoff, createDesktopHandoff } from "../services/desktopAuthService.js";
 import { requireAuth, SESSION_COOKIE_NAME } from "../middleware/auth.js";
 import { COOKIE_BASE, clearSession, invalidateAuthState, issueSession, revokeAllSessions } from "../services/sessionService.js";
 import {
@@ -743,6 +745,10 @@ authRouter.get("/google/status", async (_req, res) => {
  * redireciona pra tela de consentimento do Google com um "state"
  * aleatório guardado em cookie de curta duração (proteção CSRF,
  * conferido de volta no callback).
+ * Com ?desktop=<desafio PKCE>, o fluxo foi aberto pelo LifeOS Desktop no
+ * navegador do sistema (o Google bloqueia OAuth dentro de webviews): o
+ * desafio viaja assinado no state e o callback devolve ao app um código de
+ * uso único em vez de criar a sessão neste navegador.
  */
 authRouter.get("/google/start", async (req, res) => {
   const db = getDb();
@@ -752,7 +758,9 @@ authRouter.get("/google/start", async (req, res) => {
       .status(503)
       .send("Login com Google ainda não foi configurado. Peça a um administrador para configurar em Configurações → Login com Google.");
   }
-  const state = signOAuthState("google_oauth");
+  const desktop = typeof req.query.desktop === "string" ? req.query.desktop : null;
+  if (desktop !== null && !DESKTOP_CHALLENGE_RE.test(desktop)) return res.status(400).send("Pedido de login do Desktop inválido.");
+  const state = signOAuthState("google_oauth", desktop ? { dc: desktop } : {});
   // O cookie ainda é setado como camada extra (liga o state a esta aba/navegador
   // quando o cookie sobrevive ao redirect), mas o callback não depende mais dele.
   res.cookie(GOOGLE_STATE_COOKIE, state, { ...COOKIE_BASE, maxAge: 10 * 60 * 1000 });
@@ -854,6 +862,13 @@ authRouter.get("/google/callback", async (req, res) => {
     }
   }
 
+  // Login iniciado no Desktop: nenhuma sessão neste navegador — o app recebe
+  // um código de uso único (deep link) e troca em /desktop/exchange, onde o MFA é exigido.
+  if (stateCheck.dc) {
+    const handoff = await createDesktopHandoff(db, user.id, stateCheck.dc);
+    return res.redirect(`${appUrl}/auth/desktop-handoff?code=${encodeURIComponent(handoff)}`);
+  }
+
   // Google também respeita o MFA: sem sessão até o código do app ser confirmado.
   const secState = (await db.execute({ sql: "SELECT mfa_enabled, session_version FROM users WHERE id = ?", args: [user.id] })).rows[0] as unknown as
     | { mfa_enabled: number; session_version: number }
@@ -863,4 +878,27 @@ authRouter.get("/google/callback", async (req, res) => {
   }
   await completeLogin(db, res, { ...user, session_version: secState?.session_version ?? 0 }, true);
   return res.redirect(`${appUrl}/dashboard`);
+});
+
+/**
+ * POST /api/auth/desktop/exchange — chamado pela janela do LifeOS Desktop
+ * depois do deep link: código de uso único + verificador PKCE (que só o app
+ * conhece) viram a sessão normal (cookie httpOnly) dentro do app. Com MFA
+ * ativo, devolve a 2ª etapa como no login por senha.
+ */
+authRouter.post("/desktop/exchange", rateLimit({ max: 10 }), async (req, res) => {
+  const parsed = desktopExchangeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  const db = getDb();
+  const userId = await consumeDesktopHandoff(db, parsed.data.code, parsed.data.verifier);
+  if (!userId) return res.status(401).json({ error: "Login expirado ou inválido. Tente entrar com o Google novamente." });
+
+  const user = (await db.execute({ sql: "SELECT id, name, email, role, mfa_enabled, session_version FROM users WHERE id = ?", args: [userId] }))
+    .rows[0] as unknown as { id: string; name: string; email: string; role: "user" | "admin"; mfa_enabled: number; session_version: number } | undefined;
+  if (!user) return res.status(401).json({ error: "Conta não encontrada." });
+  if (Number(user.mfa_enabled ?? 0) === 1) {
+    return res.json({ mfaRequired: true, mfaToken: signMfaLoginToken(user.id, true) });
+  }
+  await completeLogin(db, res, user, true);
+  return res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });

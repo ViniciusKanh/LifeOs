@@ -60,7 +60,7 @@ export function googleRedirectUri(req: { protocol: string; get(name: string): st
  * chegar de volta. O cookie continua sendo setado como camada extra,
  * mas não é mais obrigatório pra aceitar o retorno do Google.
  */
-export function signOAuthState(purpose: string, extra: { uid?: string } = {}): string {
+export function signOAuthState(purpose: string, extra: { uid?: string; dc?: string } = {}): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET não configurado");
   return jwt.sign({ purpose, ...extra }, secret, { expiresIn: "10m" });
@@ -69,16 +69,22 @@ export function signOAuthState(purpose: string, extra: { uid?: string } = {}): s
 /**
  * Lê o state assinado sem exigir um propósito fixo — o mesmo callback
  * atende login ("google_oauth") e vínculo a partir do Perfil
- * ("google_link", que carrega o id do usuário logado em `uid`).
+ * ("google_link", que carrega o id do usuário logado em `uid`). `dc` é o
+ * desafio PKCE do LifeOS Desktop, presente só quando o login começou no app.
  */
 export function readOAuthState(
   state: string
-): { ok: true; purpose: string; uid: string | null } | { ok: false; reason: "chave_ausente" | "state_expirado" | "state_assinatura_invalida" } {
+): { ok: true; purpose: string; uid: string | null; dc: string | null } | { ok: false; reason: "chave_ausente" | "state_expirado" | "state_assinatura_invalida" } {
   const secret = process.env.JWT_SECRET;
   if (!secret) return { ok: false, reason: "chave_ausente" };
   try {
-    const payload = jwt.verify(state, secret) as { purpose?: string; uid?: string };
-    return { ok: true, purpose: payload.purpose ?? "", uid: typeof payload.uid === "string" ? payload.uid : null };
+    const payload = jwt.verify(state, secret) as { purpose?: string; uid?: string; dc?: string };
+    return {
+      ok: true,
+      purpose: payload.purpose ?? "",
+      uid: typeof payload.uid === "string" ? payload.uid : null,
+      dc: typeof payload.dc === "string" ? payload.dc : null,
+    };
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) return { ok: false, reason: "state_expirado" };
     return { ok: false, reason: "state_assinatura_invalida" };

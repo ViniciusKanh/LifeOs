@@ -1,4 +1,6 @@
-import { platformFeatures } from "@/platform";
+import { useState } from "react";
+import { IS_DESKTOP } from "@/platform";
+import { startDesktopGoogleLogin } from "@/platform/desktopAuth";
 import { useGoogleLoginAvailable } from "@/hooks/useAuth";
 import { GOOGLE_LOGIN_START_URL } from "@/services/authService";
 
@@ -32,8 +34,25 @@ function GoogleGlyph() {
  */
 export function GoogleLoginButton() {
   const available = useGoogleLoginAvailable();
-  // No Desktop o OAuth por redirecionamento sairia da janela do app; login por e-mail/senha.
-  if (!available || !platformFeatures.googleOAuthRedirect) return null;
+  const [waiting, setWaiting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!available) return null;
+
+  const className =
+    "w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors disabled:opacity-60";
+
+  // No Desktop o login abre no navegador do sistema e volta ao app sozinho.
+  const startDesktop = async () => {
+    setError(null);
+    setWaiting(true);
+    try {
+      await startDesktopGoogleLogin(GOOGLE_LOGIN_START_URL);
+    } catch {
+      setWaiting(false);
+      setError("Não foi possível abrir o navegador. Tente novamente.");
+    }
+  };
+
   return (
     <>
       <div className="flex items-center gap-3 text-[11px] text-slate">
@@ -41,13 +60,25 @@ export function GoogleLoginButton() {
         ou
         <div className="flex-1 h-px bg-paper-border dark:bg-ink-border" />
       </div>
-      <a
-        href={GOOGLE_LOGIN_START_URL}
-        className="w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.06] transition-colors"
-      >
-        <GoogleGlyph />
-        Continuar com Google
-      </a>
+      {IS_DESKTOP ? (
+        <>
+          <button type="button" onClick={startDesktop} className={className} aria-describedby="google-desktop-hint">
+            <GoogleGlyph />
+            {waiting ? "Abrir o Google de novo" : "Continuar com Google"}
+          </button>
+          <p id="google-desktop-hint" role="status" className="text-[11px] text-slate text-center">
+            {error ??
+              (waiting
+                ? "Conclua o login no navegador — o LifeOS volta para esta janela sozinho."
+                : "O login abre no seu navegador padrão, com a segurança do Google.")}
+          </p>
+        </>
+      ) : (
+        <a href={GOOGLE_LOGIN_START_URL} className={className}>
+          <GoogleGlyph />
+          Continuar com Google
+        </a>
+      )}
     </>
   );
 }

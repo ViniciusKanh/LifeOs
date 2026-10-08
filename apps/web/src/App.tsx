@@ -22,6 +22,8 @@ const ForgotPasswordPage = lazy(() =>
 const ResetPasswordPage = lazy(() =>
   import("@/pages/auth/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage }))
 );
+const DesktopHandoffPage = lazy(() => import("@/pages/auth/DesktopAuthPages").then((m) => ({ default: m.DesktopHandoffPage })));
+const DesktopCallbackPage = lazy(() => import("@/pages/auth/DesktopAuthPages").then((m) => ({ default: m.DesktopCallbackPage })));
 const VerifyEmailPage = lazy(() =>
   import("@/pages/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage }))
 );
@@ -132,6 +134,9 @@ export default function App() {
         <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
         <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
         <Route path="/verificar-email" element={<VerifyEmailPage />} />
+        {/* Login com Google do Desktop: navegador → deep link → janela do app. */}
+        <Route path="/auth/desktop-handoff" element={<DesktopHandoffPage />} />
+        <Route path="/auth/desktop" element={<DesktopCallbackPage />} />
 
         <Route element={<ProtectedRoutes />}>
           <Route path="/dashboard" element={<DashboardPage />} />

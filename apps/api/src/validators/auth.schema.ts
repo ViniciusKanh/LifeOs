@@ -145,3 +145,9 @@ export const deleteAccountSchema = z.object({
   password: z.string().max(200).optional(),
   code: z.string().max(20).optional(),
 });
+
+/** Troca do código do login Desktop (deep link) pela sessão — ver desktopAuthService. */
+export const desktopExchangeSchema = z.object({
+  code: z.string().regex(/^[A-Za-z0-9_-]{20,128}$/, "Código inválido."),
+  verifier: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/, "Verificador inválido."),
+});

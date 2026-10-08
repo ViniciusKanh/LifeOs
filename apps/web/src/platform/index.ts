@@ -10,7 +10,9 @@ export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__"
 export const platformFeatures = {
   // WebView2 não entrega Web Push; as notificações do Desktop serão nativas (Etapa 4).
   webPush: !IS_DESKTOP,
-  // O Google recusa login OAuth dentro de webviews embutidas; no Desktop entra-se por e-mail e senha.
+  // O Google recusa OAuth dentro de webviews: na Web o fluxo é por redirect; no
+  // Desktop o login abre no navegador do sistema e volta por deep link
+  // (platform/desktopAuth.ts). Vincular o Google pelo Perfil segue só na Web.
   googleOAuthRedirect: !IS_DESKTOP,
 } as const;
 

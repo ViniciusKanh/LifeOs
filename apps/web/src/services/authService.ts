@@ -20,6 +20,9 @@ export const authService = {
     api.post<CurrentUser | MfaChallenge>("/auth/login", { email, password, rememberMe }),
   loginMfa: (mfaToken: string, code: string) =>
     api.post<CurrentUser & { usedRecoveryCode?: boolean }>("/auth/login/mfa", { mfaToken, code }),
+  /** Login Desktop: código do deep link + verificador PKCE viram a sessão (ou a 2ª etapa do MFA). */
+  desktopExchange: (code: string, verifier: string) =>
+    api.post<CurrentUser | MfaChallenge>("/auth/desktop/exchange", { code, verifier }),
   logoutAll: () => api.post<void>("/auth/logout-all"),
   mfaStatus: () => api.get<MfaStatus>("/auth/mfa/status"),
   mfaSetup: () => api.post<MfaSetup>("/auth/mfa/setup"),
