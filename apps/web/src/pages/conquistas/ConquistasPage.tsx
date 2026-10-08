@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Target, Timer, Trash2, Trophy, X } from "lucide-react";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useTheme } from "@/hooks/useTheme";
@@ -214,6 +214,10 @@ function CreateTrophyModal({
 
 export function ConquistasPage() {
   const { achievements, unlocked, isLoading, isError, refetch } = useAchievements();
+  // Nesta tela o progresso precisa estar atualizado (o catálogo fica em cache nas demais).
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
   const { trophies, unlockedCount, metrics, isLoading: trophiesLoading, create, remove } = useCustomAchievements();
   const [modalOpen, setModalOpen] = useState(false);
   const { isRpg } = useTheme();

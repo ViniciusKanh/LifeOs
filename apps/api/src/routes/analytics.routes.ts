@@ -60,11 +60,11 @@ async function sleepWaterAverages(ownerId: string, from: string, to: string) {
   const db = getDb();
   const [sleepAvg, waterAvg] = await Promise.all([
     db.execute({
-      sql: "SELECT AVG(duration_minutes) AS avg_minutes FROM sleep_entries WHERE owner_id = ? AND date(went_to_bed_at) >= date(?) AND date(went_to_bed_at) < date(?)",
+      sql: "SELECT AVG(duration_minutes) AS avg_minutes FROM sleep_entries WHERE owner_id = ? AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?)",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT AVG(daily_total) AS avg_ml FROM (SELECT date(recorded_at) AS d, SUM(amount_ml) AS daily_total FROM water_entries WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) < date(?) GROUP BY d)",
+      sql: "SELECT AVG(daily_total) AS avg_ml FROM (SELECT date(recorded_at) AS d, SUM(amount_ml) AS daily_total FROM water_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?) GROUP BY d)",
       args: [ownerId, from, to],
     }),
   ]);
@@ -117,13 +117,13 @@ analyticsRouter.get("/overview", async (req, res) => {
     }),
     db.execute({
       sql: `SELECT date(started_at) AS day, COALESCE(SUM(pages_read), 0) AS total FROM reading_sessions
-            WHERE owner_id = ? AND date(started_at) >= date(?)
+            WHERE owner_id = ? AND started_at >= date(?)
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),
     db.execute({
       sql: `SELECT date(performed_at) AS day, COUNT(*) AS total FROM workouts
-            WHERE owner_id = ? AND date(performed_at) >= date(?)
+            WHERE owner_id = ? AND performed_at >= date(?)
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),
@@ -135,13 +135,13 @@ analyticsRouter.get("/overview", async (req, res) => {
     }),
     db.execute({
       sql: `SELECT date(went_to_bed_at) AS day, AVG(duration_minutes) AS total FROM sleep_entries
-            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(went_to_bed_at) >= date(?)
+            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND went_to_bed_at >= date(?)
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),
     db.execute({
       sql: `SELECT date(recorded_at) AS day, COALESCE(SUM(amount_ml), 0) AS total FROM water_entries
-            WHERE owner_id = ? AND date(recorded_at) >= date(?)
+            WHERE owner_id = ? AND recorded_at >= date(?)
             GROUP BY day ORDER BY day ASC`,
       args: [ownerId, fromStr],
     }),
@@ -226,7 +226,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
     db.execute({
       sql: `SELECT t.id, t.title AS label, t.updated_at AS at, p.name AS project_name, p.kind AS project_kind
             FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-            WHERE t.owner_id = ? AND t.status = 'Concluído' AND date(t.updated_at) >= date(?) AND date(t.updated_at) <= date(?)`,
+            WHERE t.owner_id = ? AND t.status = 'Concluído' AND t.updated_at >= date(?) AND t.updated_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
@@ -235,49 +235,49 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, kind AS label, performed_at AS at, distance_km, duration_minutes FROM workouts WHERE owner_id = ? AND date(performed_at) >= date(?) AND date(performed_at) <= date(?)",
+      sql: "SELECT id, kind AS label, performed_at AS at, distance_km, duration_minutes FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
       sql: `SELECT rs.id, b.title AS label, rs.started_at AS at, rs.pages_read FROM reading_sessions rs JOIN books b ON b.id = rs.book_id
-            WHERE rs.owner_id = ? AND date(rs.started_at) >= date(?) AND date(rs.started_at) <= date(?)`,
+            WHERE rs.owner_id = ? AND rs.started_at >= date(?) AND rs.started_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, name AS label, created_at AS at FROM subjects WHERE owner_id = ? AND status = 'Concluída' AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
+      sql: "SELECT id, name AS label, created_at AS at FROM subjects WHERE owner_id = ? AND status = 'Concluída' AND created_at >= date(?) AND created_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, went_to_bed_at AS at, woke_up_at, duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND date(went_to_bed_at) >= date(?) AND date(went_to_bed_at) <= date(?)",
+      sql: "SELECT id, went_to_bed_at AS at, woke_up_at, duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, mood, energy, stress, recorded_at AS at FROM mood_entries WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) <= date(?)",
+      sql: "SELECT id, mood, energy, stress, recorded_at AS at FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, amount_ml, recorded_at AS at FROM water_entries WHERE owner_id = ? AND date(recorded_at) >= date(?) AND date(recorded_at) <= date(?)",
+      sql: "SELECT id, amount_ml, recorded_at AS at FROM water_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, title AS label, content, COALESCE(created_at, occurred_at) AS at, occurred_at FROM work_notes WHERE owner_id = ? AND date(occurred_at) >= date(?) AND date(occurred_at) <= date(?)",
+      sql: "SELECT id, title AS label, content, COALESCE(created_at, occurred_at) AS at, occurred_at FROM work_notes WHERE owner_id = ? AND occurred_at >= date(?) AND occurred_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     // Experimentos Pessoais: só os marcos (início/conclusão/cancelamento), nunca um evento por
     // check-in diário — isso poluiria a Timeline (ver seção 50 do briefing de Experimentos).
     db.execute({
       sql: `SELECT id, title AS label, created_at AS at FROM personal_experiments
-            WHERE owner_id = ? AND date(created_at) >= date(?) AND date(created_at) <= date(?)`,
+            WHERE owner_id = ? AND created_at >= date(?) AND created_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
       sql: `SELECT id, title AS label, updated_at AS at, status FROM personal_experiments
-            WHERE owner_id = ? AND status IN ('completed', 'cancelled') AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)`,
+            WHERE owner_id = ? AND status IN ('completed', 'cancelled') AND updated_at >= date(?) AND updated_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
       sql: `SELECT id, entry_date AS at FROM journal_entries
-            WHERE owner_id = ? AND date(entry_date) >= date(?) AND date(entry_date) <= date(?)
+            WHERE owner_id = ? AND entry_date >= date(?) AND entry_date < date(?, '+1 day')
             AND (COALESCE(thoughts, '') != '' OR COALESCE(intention, '') != '')`,
       args: [ownerId, from, to],
     }),
@@ -287,7 +287,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, kind, period_key, updated_at AS at FROM periodic_reviews WHERE owner_id = ? AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)",
+      sql: "SELECT id, kind, period_key, updated_at AS at FROM periodic_reviews WHERE owner_id = ? AND updated_at >= date(?) AND updated_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
   ]);
@@ -298,64 +298,64 @@ analyticsRouter.get("/timeline", async (req, res) => {
     db.execute({
       sql: `SELECT te.id, te.ended_at AS at, te.duration_minutes, t.title AS label FROM time_entries te LEFT JOIN tasks t ON t.id = te.task_id
             WHERE te.owner_id = ? AND te.ended_at IS NOT NULL AND COALESCE(te.duration_minutes, 0) > 0
-              AND date(te.ended_at) >= date(?) AND date(te.ended_at) <= date(?)`,
+              AND te.ended_at >= date(?) AND te.ended_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, name AS label, completed_at AS at FROM projects WHERE owner_id = ? AND status = 'completed' AND completed_at IS NOT NULL AND date(completed_at) >= date(?) AND date(completed_at) <= date(?)",
+      sql: "SELECT id, name AS label, completed_at AS at FROM projects WHERE owner_id = ? AND status = 'completed' AND completed_at IS NOT NULL AND completed_at >= date(?) AND completed_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
       sql: `SELECT ua.id, ua.achievement_id, a.title AS label, a.description, a.tier, ua.unlocked_at AS at FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id
-            WHERE ua.owner_id = ? AND date(ua.unlocked_at) >= date(?) AND date(ua.unlocked_at) <= date(?)`,
+            WHERE ua.owner_id = ? AND ua.unlocked_at >= date(?) AND ua.unlocked_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, title AS label, description, icon AS emoji, unlocked_at AS at FROM custom_achievements WHERE owner_id = ? AND unlocked_at IS NOT NULL AND date(unlocked_at) >= date(?) AND date(unlocked_at) <= date(?)",
+      sql: "SELECT id, title AS label, description, icon AS emoji, unlocked_at AS at FROM custom_achievements WHERE owner_id = ? AND unlocked_at IS NOT NULL AND unlocked_at >= date(?) AND unlocked_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, reward_name AS label, cost, redeemed_at AS at FROM reward_redemptions WHERE owner_id = ? AND date(redeemed_at) >= date(?) AND date(redeemed_at) <= date(?)",
+      sql: "SELECT id, reward_name AS label, cost, redeemed_at AS at FROM reward_redemptions WHERE owner_id = ? AND redeemed_at >= date(?) AND redeemed_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     getLevelHistory(db, ownerId),
     getXpIndex(db, ownerId, from, to),
     db.execute({
-      sql: "SELECT id, title AS label, completed_at AS at FROM contracts WHERE owner_id = ? AND status = 'concluido' AND completed_at IS NOT NULL AND date(completed_at) >= date(?) AND date(completed_at) <= date(?)",
+      sql: "SELECT id, title AS label, completed_at AS at FROM contracts WHERE owner_id = ? AND status = 'concluido' AND completed_at IS NOT NULL AND completed_at >= date(?) AND completed_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, campaign_id, kind, ref_id, label, created_at AS at FROM campaign_events WHERE owner_id = ? AND kind != 'archived' AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
+      sql: "SELECT id, campaign_id, kind, ref_id, label, created_at AS at FROM campaign_events WHERE owner_id = ? AND kind != 'archived' AND created_at >= date(?) AND created_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT kind, item_id, unlocked_at AS at FROM codex_unlocks WHERE owner_id = ? AND date(unlocked_at) >= date(?) AND date(unlocked_at) <= date(?)",
+      sql: "SELECT kind, item_id, unlocked_at AS at FROM codex_unlocks WHERE owner_id = ? AND unlocked_at >= date(?) AND unlocked_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, title, discovered_at AS at FROM codex_discoveries WHERE owner_id = ? AND status = 'active' AND date(discovered_at) >= date(?) AND date(discovered_at) <= date(?)",
+      sql: "SELECT id, title, discovered_at AS at FROM codex_discoveries WHERE owner_id = ? AND status = 'active' AND discovered_at >= date(?) AND discovered_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
   ]);
   // Tesouro: recompensa criada, recompensa usada e gemas obtidas (sugestões recusadas da IA nunca entram).
   const [rewardsCreated, rewardsUsed, gemsEarned] = await Promise.all([
     db.execute({
-      sql: "SELECT id, name AS label, created_at AS at FROM rewards WHERE owner_id = ? AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
+      sql: "SELECT id, name AS label, created_at AS at FROM rewards WHERE owner_id = ? AND created_at >= date(?) AND created_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, reward_name AS label, used_at AS at FROM reward_redemptions WHERE owner_id = ? AND status = 'used' AND used_at IS NOT NULL AND date(used_at) >= date(?) AND date(used_at) <= date(?)",
+      sql: "SELECT id, reward_name AS label, used_at AS at FROM reward_redemptions WHERE owner_id = ? AND status = 'used' AND used_at IS NOT NULL AND used_at >= date(?) AND used_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: "SELECT id, label, amount, created_at AS at FROM gem_ledger WHERE owner_id = ? AND amount > 0 AND date(created_at) >= date(?) AND date(created_at) <= date(?)",
+      sql: "SELECT id, label, amount, created_at AS at FROM gem_ledger WHERE owner_id = ? AND amount > 0 AND created_at >= date(?) AND created_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
   ]);
   // Protocolos (execuções reais, nunca simples visualização) e dias de recuperação.
   const [protocolRuns, recoveryDays] = await Promise.all([
     db.execute({
-      sql: "SELECT id, protocol_name AS label, status, COALESCE(completed_at, started_at) AS at FROM protocol_runs WHERE owner_id = ? AND status != 'canceled' AND date(started_at) >= date(?) AND date(started_at) <= date(?)",
+      sql: "SELECT id, protocol_name AS label, status, COALESCE(completed_at, started_at) AS at FROM protocol_runs WHERE owner_id = ? AND status != 'canceled' AND started_at >= date(?) AND started_at < date(?, '+1 day')",
       args: [ownerId, from, to],
     }),
     db.execute({ sql: "SELECT day_key, created_at AS at FROM recovery_days WHERE owner_id = ? AND day_key >= ? AND day_key <= ?", args: [ownerId, from, to] }),
@@ -367,7 +367,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
           WHERE owner_id = ? AND type IN ('acquire', 'use', 'equip')
             AND item_key NOT LIKE 'relic:%' AND item_key NOT LIKE 'title:%' AND NOT (type = 'acquire' AND item_key LIKE 'voucher:%')
             AND NOT (type = 'use' AND item_key LIKE 'voucher:%')
-            AND date(created_at) >= date(?) AND date(created_at) <= date(?)`,
+            AND created_at >= date(?) AND created_at < date(?, '+1 day')`,
     args: [ownerId, from, to],
   });
   const codexName = (kind: string, id: string) =>

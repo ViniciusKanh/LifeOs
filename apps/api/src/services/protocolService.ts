@@ -89,9 +89,9 @@ export async function loadProtocolContext(db: Client, ownerId: string): Promise<
   const [sleep, mood, overdue, dueToday, events, capacity] = await Promise.all([
     db.execute({ sql: "SELECT duration_minutes FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= datetime('now', '-30 hours') AND duration_minutes IS NOT NULL ORDER BY woke_up_at DESC LIMIT 1", args: [ownerId] }),
     db.execute({ sql: "SELECT energy FROM mood_entries WHERE owner_id = ? AND recorded_at >= datetime('now', '-24 hours') ORDER BY recorded_at DESC LIMIT 1", args: [ownerId] }),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND date(due_date) < date(?)", args: [ownerId, today] }),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND date(due_date) = date(?)", args: [ownerId, today] }),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM events WHERE owner_id = ? AND date(starts_at) = date(?)", args: [ownerId, tomorrow] }),
+    db.execute({ sql: "SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND due_date < date(?)", args: [ownerId, today] }),
+    db.execute({ sql: "SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND (due_date >= date(?2) AND due_date < date(?2, '+1 day'))", args: [ownerId, today] }),
+    db.execute({ sql: "SELECT COUNT(*) AS n FROM events WHERE owner_id = ? AND (starts_at >= date(?2) AND starts_at < date(?2, '+1 day'))", args: [ownerId, tomorrow] }),
     computeCapacitySummary(db, ownerId, today).catch(() => null),
   ]);
   const ctx: ProtocolContext = { today, weekday: new Date(`${today}T12:00:00Z`).getUTCDay() };

@@ -2,25 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationsService } from "@/services/notificationsService";
 import type { CustomNotificationTrigger, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
 
-/**
- * Notificações calculadas em tempo real (tarefas atrasadas/vencendo
- * hoje, hábitos pendentes, weekly review em aberto) — sem persistência
- * ainda, então refetch periódico é o jeito de "atualizar" a lista.
- */
-export function useNotifications() {
-  const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: ["notifications", "live"],
-    queryFn: notificationsService.live,
-    refetchInterval: 60_000,
-  });
-  const dismiss = useMutation({
-    mutationFn: (ids: string[]) => notificationsService.dismiss(ids),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications", "live"] }),
-  });
-  return { notifications: query.data ?? [], isLoading: query.isLoading, dismiss: dismiss.mutateAsync };
-}
-
 export function useNotificationTriggers() {
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -37,14 +18,12 @@ export function useNotificationTriggers() {
       notificationsService.updateTrigger(eventType, patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications", "triggers"] });
-      queryClient.invalidateQueries({ queryKey: ["notifications", "live"] });
     },
   });
 
   const run = useMutation({ mutationFn: notificationsService.runTriggers });
   const invalidateCustom = () => {
     queryClient.invalidateQueries({ queryKey: ["notifications", "triggers", "custom"] });
-    queryClient.invalidateQueries({ queryKey: ["notifications", "live"] });
   };
   const createCustom = useMutation({ mutationFn: (input: Omit<CustomNotificationTrigger, "id">) => notificationsService.createCustomTrigger(input), onSuccess: invalidateCustom });
   const updateCustom = useMutation({ mutationFn: ({ id, patch }: { id: string; patch: Partial<Omit<CustomNotificationTrigger, "id">> }) => notificationsService.updateCustomTrigger(id, patch), onSuccess: invalidateCustom });

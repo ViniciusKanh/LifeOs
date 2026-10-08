@@ -19,7 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useLifeScore, useLifeScoreHistory, useAnalyticsOverview, useInsights, useTimeline } from "@/hooks/useAnalytics";
+import { useLifeScore, useLifeScoreHistory, useAnalyticsOverview, useInsights } from "@/hooks/useAnalytics";
 import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useProjectWorkload } from "@/hooks/useProjects";
 import { Link } from "react-router-dom";
@@ -120,7 +120,6 @@ export function DashboardPage() {
   const { data: deadlines } = useDeadlineRadar("7d");
   const { data: goalForecast } = useGoalForecast("all");
   const { items: calendarItems } = useEvents(today, today);
-  const { events } = useTimeline({ from: today, to: today });
   const copilot = useDailyInsight();
   const { isRpg } = useTheme();
   const [completing, setCompleting] = useState(false);
@@ -224,7 +223,7 @@ export function DashboardPage() {
     }
   };
 
-  const dayEntries = useMemo(() => buildDayEntries(calendarItems, events, today), [calendarItems, events, today]);
+  const dayEntries = useMemo(() => buildDayEntries(calendarItems, today), [calendarItems, today]);
 
   // Insight com base declarada — melhor dia da semana ou relação sono × produtividade.
   const insight = useMemo(() => {

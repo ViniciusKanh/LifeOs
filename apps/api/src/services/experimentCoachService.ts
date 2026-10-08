@@ -316,7 +316,7 @@ export async function generateInsightReport(db: Db, ownerId: string, experimentI
   // Reaproveita o relatório de hoje se nada mudou desde então (evita custo e respostas repetidas).
   if (!opts.refresh) {
     const latest = await db.execute({
-      sql: "SELECT id, kind, content_json, logs_count, created_at FROM experiment_ai_reports WHERE owner_id = ? AND experiment_id = ? AND date(created_at) = date('now') ORDER BY created_at DESC LIMIT 1",
+      sql: "SELECT id, kind, content_json, logs_count, created_at FROM experiment_ai_reports WHERE owner_id = ? AND experiment_id = ? AND (created_at >= date('now') AND created_at < date('now', '+1 day')) ORDER BY created_at DESC LIMIT 1",
       args: [ownerId, experimentId],
     });
     const row = latest.rows[0] as unknown as ReportRow | undefined;

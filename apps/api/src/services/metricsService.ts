@@ -81,14 +81,14 @@ async function professionalScore(db: Db, ownerId: string): Promise<DimensionScor
 async function healthScore(db: Db, ownerId: string, date: string): Promise<number> {
   const waterMl = await scalar(
     db,
-    "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
+    "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
     [ownerId, date]
   );
   const waterScore = clamp((waterMl / 2500) * 100);
 
   const sleepRow = await db.execute({
     sql: `SELECT quality, duration_minutes FROM sleep_entries
-          WHERE owner_id = ? AND date(went_to_bed_at) BETWEEN date(?, '-1 day') AND date(?)
+          WHERE owner_id = ? AND went_to_bed_at >= date(?, '-1 day') AND went_to_bed_at < date(?, '+1 day')
           ORDER BY went_to_bed_at DESC LIMIT 1`,
     args: [ownerId, date, date],
   });
@@ -100,13 +100,13 @@ async function healthScore(db: Db, ownerId: string, date: string): Promise<numbe
 
   const workouts = await scalar(
     db,
-    "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?)",
+    "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
     [ownerId, date]
   );
   const workoutScore = workouts > 0 ? 100 : 0;
   const moodCheckIns = await scalar(
     db,
-    "SELECT COUNT(*) FROM mood_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
+    "SELECT COUNT(*) FROM mood_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
     [ownerId, date]
   );
   const moodScore = moodCheckIns > 0 ? 100 : 0;
@@ -397,34 +397,34 @@ export async function computeRangeMetrics(ownerId: string, from: string, to: str
   const [tasksCompleted, tasksPlanned, pagesRead, workouts, readingMinutes, workoutMinutes, habitsTotal, habitsDone] = await Promise.all([
     scalar(
       db,
-      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?) AND date(updated_at) < date(?)",
+      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?) AND updated_at < date(?)",
       [ownerId, from, to]
     ),
     // "Planejadas": todas as tarefas criadas no período, concluídas ou não —
     // o denominador real de "48 de 100 planejadas", nunca uma meta inventada.
     scalar(
       db,
-      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND date(created_at) >= date(?) AND date(created_at) < date(?)",
+      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND created_at >= date(?) AND created_at < date(?)",
       [ownerId, from, to]
     ),
     scalar(
       db,
-      "SELECT COALESCE(SUM(pages_read), 0) FROM reading_sessions WHERE owner_id = ? AND date(started_at) >= date(?) AND date(started_at) < date(?)",
+      "SELECT COALESCE(SUM(pages_read), 0) FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?)",
       [ownerId, from, to]
     ),
     scalar(
       db,
-      "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND date(performed_at) >= date(?) AND date(performed_at) < date(?)",
+      "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?)",
       [ownerId, from, to]
     ),
     scalar(
       db,
-      "SELECT COALESCE(SUM(duration_minutes), 0) FROM reading_sessions WHERE owner_id = ? AND date(started_at) >= date(?) AND date(started_at) < date(?)",
+      "SELECT COALESCE(SUM(duration_minutes), 0) FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?)",
       [ownerId, from, to]
     ),
     scalar(
       db,
-      "SELECT COALESCE(SUM(duration_minutes), 0) FROM workouts WHERE owner_id = ? AND date(performed_at) >= date(?) AND date(performed_at) < date(?)",
+      "SELECT COALESCE(SUM(duration_minutes), 0) FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?)",
       [ownerId, from, to]
     ),
     scalar(
@@ -509,13 +509,13 @@ export async function computeInsights(ownerId: string, from: string, to: string)
   const [sleepByNight, tasksByDay] = await Promise.all([
     db.execute({
       sql: `SELECT date(went_to_bed_at) AS d, AVG(duration_minutes) AS minutes FROM sleep_entries
-            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(went_to_bed_at) >= date(?) AND date(went_to_bed_at) <= date(?)
+            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?, '+1 day')
             GROUP BY d`,
       args: [ownerId, from, to],
     }),
     db.execute({
       sql: `SELECT date(updated_at) AS d, COUNT(*) AS total FROM tasks
-            WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?) AND date(updated_at) <= date(?)
+            WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?) AND updated_at < date(?, '+1 day')
             GROUP BY d`,
       args: [ownerId, from, to],
     }),

@@ -8,9 +8,7 @@ import {
   Moon,
   Target,
   Star,
-  History as HistoryIcon,
   Sparkles,
-  CheckSquare,
   Repeat,
   Dumbbell,
   BookOpen,
@@ -29,7 +27,6 @@ import { useTasks, useFocusTasks } from "@/hooks/useTasks";
 import { useHabits } from "@/hooks/useHabits";
 import { useHealthSummary, useHealth } from "@/hooks/useHealth";
 import { useEvents } from "@/hooks/useEvents";
-import { useTimeline } from "@/hooks/useAnalytics";
 import { useDailyInsight } from "@/hooks/useCopilot";
 import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
 import { TaskModal } from "@/components/tasks/TaskModal";
@@ -44,8 +41,7 @@ import { taskService } from "@/services/taskService";
 import { RpgCopilotPanel } from "@/components/dashboard/RpgDashboardSections";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useTheme } from "@/hooks/useTheme";
-import type { Task, TimelineEvent } from "@/types";
-import { TIMELINE_META } from "@/components/timeline/timelineMeta";
+import type { Task } from "@/types";
 
 // Metas de referência usadas só para calcular "% da meta" nos
 // indicadores — ainda não são configuráveis por usuário no backend
@@ -66,27 +62,6 @@ function formatHM(totalMinutes: number) {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
-// Ícones vêm da fonte única da Timeline (cobre todos os tipos do backend).
-const TIMELINE_ICON = Object.fromEntries(Object.entries(TIMELINE_META).map(([k, v]) => [k, v.icon])) as Record<TimelineEvent["type"], typeof CheckSquare>;
-
-function timelineLabel(e: TimelineEvent): string {
-  switch (e.type) {
-    case "task":
-      return `Tarefa concluída: ${e.label}`;
-    case "habit":
-      return `Hábito cumprido: ${e.label}`;
-    case "workout":
-      return e.label;
-    case "reading":
-      return `Leitura: ${e.label}`;
-    case "education":
-      return `Disciplina concluída: ${e.label}`;
-    case "work_note":
-      return `Reunião/anotação: ${e.label}`;
-    default:
-      return e.label;
-  }
-}
 
 function formatTime(at: string) {
   const iso = at.includes("T") ? at : at.replace(" ", "T");
@@ -101,7 +76,6 @@ export function HojePage() {
   const { summary: health } = useHealthSummary();
   const { addWater } = useHealth();
   const today = todayStr();
-  const { events } = useTimeline({ from: today, to: today });
   const { items: calendarItems } = useEvents(today, today);
   const copilot = useDailyInsight();
   const { isRpg } = useTheme();
@@ -136,9 +110,6 @@ export function HojePage() {
   const waterPct = health ? Math.round((health.waterMl / WATER_GOAL_ML) * 100) : 0;
   const sleepPct = health?.lastSleepMinutes ? Math.round((health.lastSleepMinutes / SLEEP_GOAL_MINUTES) * 100) : 0;
 
-  const todaysEvents = [...events]
-    .filter((e) => String(e.at).slice(0, 10) === today)
-    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
 
   const todaysAgenda = [...calendarItems]
     .filter((it) => String(it.startsAt).slice(0, 10) === today)
@@ -431,41 +402,6 @@ export function HojePage() {
             />
           )}
 
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2.5">
-                <IconBadge tone="blue" size={32} icon={<HistoryIcon size={15} />} />
-                <div>
-                  <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Linha do dia</p>
-                  <p className="text-xs text-slate">O que você já registrou hoje.</p>
-                </div>
-              </div>
-            </div>
-
-            {todaysEvents.length === 0 ? (
-              <p className="text-xs text-slate mt-4">
-                Nada registrado ainda hoje — conclua tarefas, marque hábitos ou registre um treino para ver aqui.
-              </p>
-            ) : (
-              <div className="mt-3 relative pl-4 border-l-2 border-paper-border dark:border-ink-border space-y-4">
-                {todaysEvents.map((e) => {
-                  const Icon = TIMELINE_ICON[e.type] ?? CheckSquare;
-                  return (
-                    <div key={`${e.type}-${e.id}`} className="relative">
-                      <span className="absolute -left-[21px] top-0.5 w-2.5 h-2.5 rounded-full bg-brand-500 ring-4 ring-paper-raised dark:ring-ink-raised" />
-                      <div className="flex items-start gap-2.5">
-                        <Icon size={14} className="text-slate mt-0.5 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium truncate">{timelineLabel(e)}</p>
-                          <p className="text-[11px] text-slate">{formatTime(String(e.at))}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
 
           <Card className="p-5">
             <div className="flex items-center justify-between mb-3">

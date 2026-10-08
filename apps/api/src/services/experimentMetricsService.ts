@@ -96,7 +96,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
   switch (metric) {
     case "sleep_duration": {
       const r = await db.execute({
-        sql: "SELECT date(went_to_bed_at) AS d, AVG(duration_minutes) / 60.0 AS v FROM sleep_entries WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(went_to_bed_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(went_to_bed_at) AS d, AVG(duration_minutes) / 60.0 AS v FROM sleep_entries WHERE owner_id = ? AND duration_minutes IS NOT NULL AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -104,7 +104,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "sleep_quality": {
       const r = await db.execute({
-        sql: "SELECT date(went_to_bed_at) AS d, AVG(quality) AS v FROM sleep_entries WHERE owner_id = ? AND quality IS NOT NULL AND date(went_to_bed_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(went_to_bed_at) AS d, AVG(quality) AS v FROM sleep_entries WHERE owner_id = ? AND quality IS NOT NULL AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -112,7 +112,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "energy": {
       const r = await db.execute({
-        sql: "SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -120,7 +120,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "mood": {
       const r = await db.execute({
-        sql: "SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -128,7 +128,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "stress": {
       const r = await db.execute({
-        sql: "SELECT date(recorded_at) AS d, AVG(stress) AS v FROM mood_entries WHERE owner_id = ? AND stress IS NOT NULL AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(recorded_at) AS d, AVG(stress) AS v FROM mood_entries WHERE owner_id = ? AND stress IS NOT NULL AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -136,7 +136,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "water_ml": {
       const r = await db.execute({
-        sql: "SELECT date(recorded_at) AS d, SUM(amount_ml) AS v FROM water_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(recorded_at) AS d, SUM(amount_ml) AS v FROM water_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -144,7 +144,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "focus_minutes": {
       const r = await db.execute({
-        sql: "SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -152,7 +152,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "focus_sessions": {
       const r = await db.execute({
-        sql: "SELECT date(started_at) AS d, COUNT(*) AS v FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(started_at) AS d, COUNT(*) AS v FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -160,7 +160,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "exercise_minutes": {
       const r = await db.execute({
-        sql: "SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND date(performed_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -168,7 +168,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "exercise_sessions": {
       const r = await db.execute({
-        sql: "SELECT date(performed_at) AS d, COUNT(*) AS v FROM workouts WHERE owner_id = ? AND date(performed_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(performed_at) AS d, COUNT(*) AS v FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -176,7 +176,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "reading_pages": {
       const r = await db.execute({
-        sql: "SELECT date(started_at) AS d, SUM(pages_read) AS v FROM reading_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(started_at) AS d, SUM(pages_read) AS v FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -184,7 +184,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "reading_minutes": {
       const r = await db.execute({
-        sql: "SELECT date(started_at) AS d, SUM(duration_minutes) AS v FROM reading_sessions WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(started_at) AS d, SUM(duration_minutes) AS v FROM reading_sessions WHERE owner_id = ? AND duration_minutes IS NOT NULL AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");
@@ -192,7 +192,7 @@ async function rawDailySeries(db: Db, ownerId: string, metric: ExperimentMetricK
     }
     case "study_minutes": {
       const r = await db.execute({
-        sql: "SELECT date(occurred_at) AS d, SUM(duration_minutes) AS v FROM study_sessions WHERE owner_id = ? AND date(occurred_at) BETWEEN date(?) AND date(?) GROUP BY d",
+        sql: "SELECT date(occurred_at) AS d, SUM(duration_minutes) AS v FROM study_sessions WHERE owner_id = ? AND occurred_at >= date(?) AND occurred_at < date(?, '+1 day') GROUP BY d",
         args: [ownerId, from, to],
       });
       put(r.rows as unknown as RowMap[], "d", "v");

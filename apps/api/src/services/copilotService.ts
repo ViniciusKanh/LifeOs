@@ -29,7 +29,7 @@ async function buildContext(ownerId: string) {
     scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído'", [ownerId]),
     scalar(
       db,
-      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND date(due_date) < date(?)",
+      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND due_date < date(?)",
       [ownerId, today]
     ),
     scalar(db, "SELECT COUNT(*) FROM habits WHERE owner_id = ? AND archived_at IS NULL", [ownerId]),
@@ -39,7 +39,7 @@ async function buildContext(ownerId: string) {
        WHERE he.owner_id = ? AND he.entry_date = ? AND h.archived_at IS NULL AND he.count >= h.target_count`,
       [ownerId, today]
     ),
-    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)", [
+    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))", [
       ownerId,
       today,
     ]),
@@ -114,7 +114,7 @@ async function buildHealthContext(ownerId: string) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [waterTodayMl, sleepRows, workoutsWeekRows, moodRows] = await Promise.all([
-    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)", [
+    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))", [
       ownerId,
       today,
     ]),
@@ -641,7 +641,7 @@ async function buildWeeklyReviewContext(ownerId: string, weekStartDate: string) 
   const db = getDb();
   const overdueTasks = await scalar(
     db,
-    "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND date(due_date) < date(?)",
+    "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND due_date < date(?)",
     [ownerId, weekEndExclusive]
   );
 

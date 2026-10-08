@@ -15,7 +15,6 @@ export function useLifeAdmin(includeArchived = false) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ADMIN_KEY });
     qc.invalidateQueries({ queryKey: ["notifications"] });
-    qc.invalidateQueries({ queryKey: ["analytics", "timeline"] });
   };
   const create = useMutation({ mutationFn: lifeAdminService.create, onSuccess: invalidate });
   const update = useMutation({ mutationFn: ({ id, patch }: { id: string; patch: Partial<LifeAdminInput> }) => lifeAdminService.update(id, patch), onSuccess: invalidate });
@@ -85,8 +84,7 @@ export function usePeriodicReview(kind: PeriodicKind, key: string) {
     onSuccess: (data) => {
       qc.setQueryData([...DIRECTION_KEY, "review", kind, key], data);
       qc.invalidateQueries({ queryKey: [...DIRECTION_KEY, "reviews"] });
-      qc.invalidateQueries({ queryKey: ["analytics", "timeline"] });
-      // Fechar o ciclo pode render XP (uma vez por período, decidido no backend).
+        // Fechar o ciclo pode render XP (uma vez por período, decidido no backend).
       notifyGamification();
     },
   });

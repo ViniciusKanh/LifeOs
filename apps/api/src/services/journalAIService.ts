@@ -224,15 +224,15 @@ async function collectDayFacts(db: Db, ownerId: string, date: string): Promise<{
       args: [ownerId, date],
     }),
     db.execute({
-      sql: "SELECT kind, duration_minutes FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?) LIMIT 5",
+      sql: "SELECT kind, duration_minutes FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day')) LIMIT 5",
       args: [ownerId, date],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS total, COUNT(*) AS n FROM focus_sessions WHERE owner_id = ? AND date(started_at) = date(?) AND actual_minutes > 0",
+      sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS total, COUNT(*) AS n FROM focus_sessions WHERE owner_id = ? AND (started_at >= date(?2) AND started_at < date(?2, '+1 day')) AND actual_minutes > 0",
       args: [ownerId, date],
     }),
     db.execute({
-      sql: `SELECT title FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND date(due_date) <= date(?)
+      sql: `SELECT title FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND due_date < date(?, '+1 day')
             ORDER BY CASE priority WHEN 'Alta' THEN 0 WHEN 'Média' THEN 1 ELSE 2 END, due_date ASC LIMIT 5`,
       args: [ownerId, nextDay(date)],
     }),

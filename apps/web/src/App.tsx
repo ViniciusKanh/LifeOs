@@ -77,7 +77,6 @@ const DeadlineRadarPage = lazy(() =>
 const GoalForecastPage = lazy(() =>
   import("@/pages/goal-forecast/GoalForecastPage").then((m) => ({ default: m.GoalForecastPage }))
 );
-const TimelinePage = lazy(() => import("@/pages/timeline/TimelinePage").then((m) => ({ default: m.TimelinePage })));
 const WeeklyReviewPage = lazy(() =>
   import("@/pages/weekly-review/WeeklyReviewPage").then((m) => ({ default: m.WeeklyReviewPage }))
 );
@@ -180,7 +179,7 @@ export default function App() {
           <Route path="/capacity-planner" element={<CapacityPlannerPage />} />
           <Route path="/deadline-radar" element={<DeadlineRadarPage />} />
           <Route path="/goal-forecast" element={<GoalForecastPage />} />
-          <Route path="/timeline" element={<TimelinePage />} />
+          <Route path="/timeline" element={<Navigate to="/dashboard" replace />} />
           <Route path="/codex" element={<CodexPage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
           <Route path="/life-map" element={<LifeMapPage />} />

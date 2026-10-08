@@ -1,4 +1,4 @@
-import type { CalendarItem, DeadlineRadarDashboard, GoalForecastDashboard, LifeScoreBreakdown, Task, TimelineEvent } from "@/types";
+import type { CalendarItem, DeadlineRadarDashboard, GoalForecastDashboard, LifeScoreBreakdown, Task } from "@/types";
 
 /**
  * Regras do Dashboard (fora da UI): tudo aqui é derivado de dados reais já
@@ -109,22 +109,8 @@ function hhmm(iso: string) {
   return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
-const TIMELINE_SUBTITLE: Partial<Record<TimelineEvent["type"], string>> = {
-  task: "Tarefa concluída",
-  habit: "Hábito cumprido",
-  workout: "Exercício",
-  reading: "Leitura",
-  education: "Educação",
-  sleep: "Sono",
-  mood: "Humor registrado",
-  water: "Água",
-  work_note: "Reunião / anotação",
-  experiment: "Experimento",
-  journal: "Diário",
-};
-
-/** Agenda do dia (Calendário) + o que já aconteceu (Timeline), numa linha do tempo única. */
-export function buildDayEntries(calendar: CalendarItem[], events: TimelineEvent[], today: string): DayEntry[] {
+/** Agenda do dia (Calendário) em ordem de horário. */
+export function buildDayEntries(calendar: CalendarItem[], today: string): DayEntry[] {
   const planned: DayEntry[] = calendar
     .filter((c) => c.startsAt.slice(0, 10) === today)
     .map((c) => {
@@ -139,13 +125,7 @@ export function buildDayEntries(calendar: CalendarItem[], events: TimelineEvent[
         href: c.link,
       };
     });
-  const happened: DayEntry[] = events
-    .filter((e) => String(e.at).slice(0, 10) === today && e.type !== "water")
-    .map((e) => {
-      const time = hhmm(String(e.at));
-      return { id: `tl-${e.type}-${e.id}`, time, sortKey: time, title: e.label, subtitle: TIMELINE_SUBTITLE[e.type] ?? "Registro", done: true, href: "/timeline" };
-    });
-  return [...planned, ...happened].sort((a, b) => {
+  return planned.sort((a, b) => {
     if (a.time === null && b.time !== null) return -1;
     if (b.time === null && a.time !== null) return 1;
     return a.sortKey.localeCompare(b.sortKey);

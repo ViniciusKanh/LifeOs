@@ -1,32 +1,30 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ACHIEVEMENT_UNLOCKED_EVENT, achievementsService } from "@/services/achievementsService";
+import { ACHIEVEMENT_UNLOCKED_EVENT, achievementsService, scheduleAchievementsCheck } from "@/services/achievementsService";
 
 const KEY = ["achievements"];
 
 /**
  * Catálogo de conquistas com o progresso real do usuário. Ao montar,
- * também dispara um recálculo no backend (idempotente) — cobre o
- * caso de algo ter sido desbloqueado sem passar por um gatilho
- * explícito (ex.: dado importado, ou uma ação de uma versão anterior
- * do app que ainda não chamava triggerAchievementsCheck).
+ * agenda um recálculo no backend (idempotente e agrupado — ver
+ * scheduleAchievementsCheck) para cobrir desbloqueios sem gatilho
+ * explícito (ex.: dado importado).
  */
 export function useAchievements(runCheck = true) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: KEY, queryFn: achievementsService.list });
+  // O catálogo calcula o progresso sobre todo o histórico: cache de 10 min,
+  // renovado quando uma conquista é destravada.
+  const query = useQuery({ queryKey: KEY, queryFn: achievementsService.list, staleTime: 10 * 60_000 });
 
   useEffect(() => {
-    // Leitores secundários (ex.: retrato do jogador) só leem o catálogo.
-    if (!runCheck) return;
-    achievementsService.check().then(({ newlyUnlocked }) => {
-      if (newlyUnlocked.length > 0) {
-        queryClient.invalidateQueries({ queryKey: KEY });
-        queryClient.invalidateQueries({ queryKey: ["achievements", "custom"] });
-        window.dispatchEvent(new CustomEvent(ACHIEVEMENT_UNLOCKED_EVENT, { detail: newlyUnlocked }));
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const onUnlock = () => {
+      void queryClient.invalidateQueries({ queryKey: KEY });
+      void queryClient.invalidateQueries({ queryKey: ["achievements", "custom"] });
+    };
+    window.addEventListener(ACHIEVEMENT_UNLOCKED_EVENT, onUnlock);
+    if (runCheck) scheduleAchievementsCheck();
+    return () => window.removeEventListener(ACHIEVEMENT_UNLOCKED_EVENT, onUnlock);
+  }, [runCheck, queryClient]);
 
   const unlocked = (query.data ?? []).filter((a) => a.unlockedAt);
   const locked = (query.data ?? []).filter((a) => !a.unlockedAt);

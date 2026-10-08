@@ -60,19 +60,19 @@ function pctDiff(a: number, b: number): number | null {
 async function internalDailySeries(db: Db, ownerId: string, from: string, to: string) {
   const [focusRows, walkRows, moodRows, sleepRows] = await Promise.all([
     db.execute({
-      sql: `SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+      sql: `SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND date(performed_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+      sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND performed_at >= date(?) AND performed_at < date(?, '+1 day') GROUP BY d`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+      sql: `SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+      sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day') GROUP BY d`,
       args: [ownerId, from, to],
     }),
   ]);

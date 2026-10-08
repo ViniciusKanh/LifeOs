@@ -36,8 +36,9 @@ healthRouter.get("/water", async (req, res) => {
   const args: Array<string> = [req.user!.id];
   let sql = "SELECT * FROM water_entries WHERE owner_id = ?";
   if (date) {
-    sql += " AND date(recorded_at) = date(?)";
-    args.push(date);
+    // Intervalo do dia (usa o índice owner_id + recorded_at em vez de varrer o histórico).
+    sql += " AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')";
+    args.push(date, date);
   }
   sql += " ORDER BY recorded_at DESC";
   const result = await db.execute({ sql, args });
@@ -418,7 +419,7 @@ healthRouter.get("/summary", async (req, res) => {
 
   const [waterToday, lastSleep, workoutsToday, latestMood] = await Promise.all([
     db.execute({
-      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
+      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
       args: [ownerId, date],
     }),
     db.execute({
@@ -426,7 +427,7 @@ healthRouter.get("/summary", async (req, res) => {
       args: [ownerId],
     }),
     db.execute({
-      sql: "SELECT COUNT(*) AS total, COALESCE(SUM(duration_minutes), 0) AS minutes FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?)",
+      sql: "SELECT COUNT(*) AS total, COALESCE(SUM(duration_minutes), 0) AS minutes FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
       args: [ownerId, date],
     }),
     db.execute({

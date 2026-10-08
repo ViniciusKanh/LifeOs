@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import {
   BookOpen,
@@ -194,11 +193,6 @@ export function RpgAchievementsView({
         title="Conquistas"
         subtitle="Cada conquista é um capítulo da sua história."
         aside={<p className="hidden md:block mx-1.5 my-1.5 max-w-[260px] px-4 py-3 text-sm italic text-rpg-text/90 text-right">&ldquo;{quote}&rdquo;</p>}
-        actions={
-          <Link to="/timeline" className="rpg-btn rpg-btn-secondary">
-            Ver minha história →
-          </Link>
-        }
       />
 
       {isError && (

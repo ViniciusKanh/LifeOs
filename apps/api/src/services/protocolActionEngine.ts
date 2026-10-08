@@ -80,7 +80,7 @@ function pickForDefer(tasks: DayTask[], scope: string) {
 async function priorityCandidates(db: Client, ctx: ActionContext) {
   const r = await db.execute({
     sql: `SELECT id, title, priority, due_date FROM tasks WHERE owner_id = ? AND status != 'Concluído'
-          AND (date(due_date) <= date(?) OR priority = 'Alta')
+          AND (due_date < date(?, '+1 day') OR priority = 'Alta')
           ORDER BY CASE priority WHEN 'Alta' THEN 0 WHEN 'Média' THEN 1 ELSE 2 END, due_date IS NULL, due_date ASC LIMIT 6`,
     args: [ctx.ownerId, ctx.today],
   });

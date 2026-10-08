@@ -56,23 +56,28 @@ function nowTimeIn(tz: string, now = new Date()): string {
 
 /* ------------------------------- Impressão digital ------------------------------- */
 
-/** Uma única query: muda sempre que algo relevante para a análise muda. */
+/**
+ * Uma única query barata: só MAX() em colunas indexadas (owner_id, coluna),
+ * que o banco resolve lendo 1 linha — nada de COUNT(*) varrendo o histórico.
+ * Edições de tarefas mudam updated_at; exclusões e ajustes finos que não
+ * mexem nessas colunas são cobertos pelo TTL curto do cache.
+ */
 async function fingerprint(db: Client, ownerId: string, today: string): Promise<string> {
   const r = await db.execute({
     sql: `SELECT
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') || ':' || COALESCE(SUM(CASE WHEN status = '${DONE}' THEN 1 ELSE 0 END), 0) FROM tasks WHERE owner_id = ?1) AS t,
+      (SELECT MAX(updated_at) FROM tasks WHERE owner_id = ?1) AS t,
+      (SELECT MAX(completed_at) FROM tasks WHERE owner_id = ?1 AND status = 'Concluído') AS tc,
       (SELECT COUNT(*) FROM task_dependencies d JOIN tasks x ON x.id = d.task_id WHERE x.owner_id = ?1) AS d,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM projects WHERE owner_id = ?1) AS p,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM campaigns WHERE owner_id = ?1) AS c,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(completed_at), '') || ':' || SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) FROM campaign_milestones WHERE owner_id = ?1) AS m,
-      (SELECT COUNT(*) FROM campaign_tasks WHERE owner_id = ?1) || ':' || (SELECT COUNT(*) FROM campaign_projects WHERE owner_id = ?1) || ':' || (SELECT COUNT(*) FROM campaign_habits WHERE owner_id = ?1) AS l,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM goals WHERE owner_id = ?1) AS g,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(created_at), '') FROM habit_entries WHERE owner_id = ?1) AS h,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_at), '') FROM planned_time_blocks WHERE owner_id = ?1) AS b,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(created_at), '') FROM events WHERE owner_id = ?1) AS e,
-      (SELECT COUNT(*) FROM focus_sessions WHERE owner_id = ?1) AS f,
-      (SELECT COUNT(*) || ':' || COALESCE(MAX(recorded_at), '') FROM mood_entries WHERE owner_id = ?1) AS mo,
-      (SELECT COUNT(*) FROM sleep_entries WHERE owner_id = ?1) AS sl`,
+      (SELECT MAX(updated_at) FROM projects WHERE owner_id = ?1) AS p,
+      (SELECT MAX(updated_at) FROM campaigns WHERE owner_id = ?1) AS c,
+      (SELECT MAX(completed_at) FROM campaign_milestones WHERE owner_id = ?1) AS m,
+      (SELECT MAX(updated_at) FROM goals WHERE owner_id = ?1) AS g,
+      (SELECT MAX(entry_date) FROM habit_entries WHERE owner_id = ?1) AS h,
+      (SELECT MAX(date) FROM planned_time_blocks WHERE owner_id = ?1) AS b,
+      (SELECT MAX(starts_at) FROM events WHERE owner_id = ?1) AS e,
+      (SELECT MAX(started_at) FROM focus_sessions WHERE owner_id = ?1) AS f,
+      (SELECT MAX(recorded_at) FROM mood_entries WHERE owner_id = ?1) AS mo,
+      (SELECT MAX(went_to_bed_at) FROM sleep_entries WHERE owner_id = ?1) AS sl`,
     args: [ownerId],
   });
   const row = r.rows[0] as unknown as Row;
@@ -282,8 +287,8 @@ export async function previewFocusSession(db: Client, ownerId: string, input: Fo
   const [blocks, events, summary] = await Promise.all([
     getPlannedBlocks(db, ownerId, input.date),
     db.execute({
-      sql: "SELECT title, starts_at, ends_at, all_day FROM events WHERE owner_id = ? AND substr(starts_at, 1, 10) = ? ORDER BY starts_at",
-      args: [ownerId, input.date],
+      sql: "SELECT title, starts_at, ends_at, all_day FROM events WHERE owner_id = ? AND starts_at >= date(?) AND starts_at < date(?, '+1 day') ORDER BY starts_at",
+      args: [ownerId, input.date, input.date],
     }),
     computeCapacitySummary(db, ownerId, input.date),
   ]);

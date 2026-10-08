@@ -108,9 +108,9 @@ async function computeComparativo(db: Db, ownerId: string, lat: number, lon: num
     const toStr = isoDate(toD);
     const [weather, focusRes, moodRes, walkRes] = await Promise.all([
       OpenMeteoWeatherProvider.getHistoricalWeather(lat, lon, timezone, fromStr, toStr),
-      db.execute({ sql: `SELECT SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?)`, args: [ownerId, fromStr, toStr] }),
-      db.execute({ sql: `SELECT AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?)`, args: [ownerId, fromStr, toStr] }),
-      db.execute({ sql: `SELECT SUM(distance_km) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND date(performed_at) BETWEEN date(?) AND date(?)`, args: [ownerId, fromStr, toStr] }),
+      db.execute({ sql: `SELECT SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day')`, args: [ownerId, fromStr, toStr] }),
+      db.execute({ sql: `SELECT AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')`, args: [ownerId, fromStr, toStr] }),
+      db.execute({ sql: `SELECT SUM(distance_km) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND performed_at >= date(?) AND performed_at < date(?, '+1 day')`, args: [ownerId, fromStr, toStr] }),
     ]);
     const temps = weather.map((w) => w.temperatureMean).filter((v): v is number => v != null);
     const rainyDays = weather.filter((w) => w.precipitationSum != null && w.precipitationSum > 0).length;

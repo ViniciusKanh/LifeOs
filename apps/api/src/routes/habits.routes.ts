@@ -215,7 +215,7 @@ habitsRouter.post("/generate-tasks", async (req, res) => {
       args: [ownerId, lookFromStr, to],
     }),
     db.execute({
-      sql: "SELECT habit_id, date(due_date) AS day FROM tasks WHERE owner_id = ? AND habit_id IS NOT NULL AND date(due_date) BETWEEN date(?) AND date(?)",
+      sql: "SELECT habit_id, date(due_date) AS day FROM tasks WHERE owner_id = ? AND habit_id IS NOT NULL AND due_date >= date(?) AND due_date < date(?, '+1 day')",
       args: [ownerId, lookFromStr, to],
     }),
   ]);

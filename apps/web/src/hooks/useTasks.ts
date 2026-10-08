@@ -182,7 +182,8 @@ export function useTaskTimer(taskId: string | null) {
     queryKey: ["tasks", "time-active", taskId],
     queryFn: () => taskService.activeTimeEntry(taskId as string),
     enabled: !!taskId,
-    refetchInterval: 15_000,
+    // Sem polling: iniciar/encerrar já invalidam esta consulta.
+    staleTime: 5 * 60_000,
   });
 
   const start = useMutation({

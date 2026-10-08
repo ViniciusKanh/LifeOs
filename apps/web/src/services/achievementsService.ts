@@ -30,15 +30,18 @@ export const ACHIEVEMENT_UNLOCKED_EVENT = "lifeos:achievement-unlocked";
 export const ACHIEVEMENT_CREATED_EVENT = "lifeos:achievement-created";
 
 /**
- * Dispara a checagem de conquistas sem bloquear a ação que a chamou
- * nem estourar erro se falhar (best-effort). Se algo novo foi
- * destravado, emite um evento global — o AchievementToast (montado no
- * AppShell) escuta e mostra a comemoração, não importa em qual tela
- * a ação que destravou aconteceu.
+ * A checagem recalcula métricas sobre todo o histórico no servidor — é a
+ * consulta mais cara do app. Por isso ela é agrupada: no máximo uma a cada
+ * CHECK_WINDOW_MS, com uma execução "atrasada" no fim da janela para não
+ * perder o que aconteceu nesse meio-tempo (ex.: várias tarefas concluídas
+ * em sequência viram uma única checagem).
  */
-export function triggerAchievementsCheck() {
-  // Mesmos gatilhos de conquista também podem render XP/moedas.
-  notifyGamification();
+const CHECK_WINDOW_MS = 60_000;
+let lastCheckAt = 0;
+let trailing: number | null = null;
+
+function runAchievementsCheck() {
+  lastCheckAt = Date.now();
   achievementsService
     .check()
     .then(({ newlyUnlocked }) => {
@@ -47,4 +50,26 @@ export function triggerAchievementsCheck() {
       }
     })
     .catch(() => undefined);
+}
+
+/** Agenda uma checagem respeitando a janela (best-effort, nunca bloqueia a ação). */
+export function scheduleAchievementsCheck() {
+  const wait = lastCheckAt + CHECK_WINDOW_MS - Date.now();
+  if (wait <= 0) return runAchievementsCheck();
+  if (trailing !== null) return;
+  trailing = window.setTimeout(() => {
+    trailing = null;
+    runAchievementsCheck();
+  }, wait);
+}
+
+/**
+ * Chamado depois de ações que podem destravar uma conquista. Se algo novo
+ * for destravado, emite um evento global — o AchievementToast (montado no
+ * AppShell) mostra a comemoração em qualquer tela.
+ */
+export function triggerAchievementsCheck() {
+  // Mesmos gatilhos de conquista também podem render XP/moedas.
+  notifyGamification();
+  scheduleAchievementsCheck();
 }

@@ -134,7 +134,7 @@ function mergeIntervals(intervals: Interval[]): Interval[] {
 
 async function getFixedEvents(db: Db, ownerId: string, date: string): Promise<Interval[]> {
   const result = await db.execute({
-    sql: `SELECT starts_at, ends_at FROM events WHERE owner_id = ? AND date(starts_at) = date(?) AND all_day = 0`,
+    sql: `SELECT starts_at, ends_at FROM events WHERE owner_id = ? AND (starts_at >= date(?2) AND starts_at < date(?2, '+1 day')) AND all_day = 0`,
     args: [ownerId, date],
   });
   const rows = result.rows as unknown as Array<{ starts_at: string; ends_at: string | null }>;
@@ -193,9 +193,9 @@ export async function getDayTasks(db: Db, ownerId: string, date: string): Promis
           LEFT JOIN planned_time_blocks b ON b.entity_type = 'task' AND b.entity_id = t.id AND b.date = ?
           WHERE t.owner_id = ? AND t.status != 'Concluído'
                 AND (
-                  date(t.due_date) = date(?)
+                  (t.due_date >= date(?3) AND t.due_date < date(?3, '+1 day'))
                   OR b.id IS NOT NULL
-                  OR (? = 1 AND date(t.due_date) < date(?))
+                  OR (? = 1 AND t.due_date < date(?))
                 )
           ORDER BY (b.start_time IS NULL), b.start_time ASC, t.priority DESC`,
     args: [date, ownerId, date, isToday ? 1 : 0, date],

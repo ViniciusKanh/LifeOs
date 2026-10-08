@@ -128,11 +128,11 @@ export async function detectPatterns(db: Db, ownerId: string, from: string, to: 
 
   const [sleepRows, moodRows] = await Promise.all([
     db.execute({
-      sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) BETWEEN date(?) AND date(?) AND duration_minutes IS NOT NULL GROUP BY d`,
+      sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day') AND duration_minutes IS NOT NULL GROUP BY d`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+      sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
       args: [ownerId, from, to],
     }),
   ]);

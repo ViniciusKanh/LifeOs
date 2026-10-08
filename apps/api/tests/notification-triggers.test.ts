@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getDb } from "../src/db/client.js";
+import { matchingCustomTasks } from "../src/services/notificationTriggersService.js";
 import { createAuthenticatedAgent } from "./helpers.js";
 
 describe("Gatilhos de notificação", () => {
-  it("lista regras padrão, atualiza canais e filtra alertas in-app", async () => {
+  it("lista regras padrão e atualiza canais", async () => {
     const { agent } = await createAuthenticatedAgent();
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
@@ -18,10 +19,6 @@ describe("Gatilhos de notificação", () => {
     expect(initial.status).toBe(200);
     expect(initial.body.some((rule: { eventType: string }) => rule.eventType === "task_overdue")).toBe(true);
 
-    const liveBefore = await agent.get("/api/notifications/live");
-    expect(liveBefore.status).toBe(200);
-    expect(liveBefore.body.some((notification: { kind: string }) => notification.kind === "task_overdue")).toBe(true);
-
     const updated = await agent.patch("/api/notifications/triggers/task_overdue").send({
       channelInApp: false,
       alertLevel: "critical",
@@ -29,9 +26,6 @@ describe("Gatilhos de notificação", () => {
     expect(updated.status).toBe(200);
     expect(updated.body.channelInApp).toBe(false);
     expect(updated.body.alertLevel).toBe("critical");
-
-    const liveAfter = await agent.get("/api/notifications/live");
-    expect(liveAfter.body.some((notification: { kind: string }) => notification.kind === "task_overdue")).toBe(false);
   });
 
   it("executa checagem manual de tarefas vencidas sem exigir SMTP/push configurado", async () => {
@@ -55,8 +49,9 @@ describe("Gatilhos de notificação", () => {
   });
 
   it("cria gatilho condicional por prazo e prioridade, isolado entre usuários", async () => {
-    const { agent } = await createAuthenticatedAgent();
+    const { agent, userId } = await createAuthenticatedAgent();
     const other = await createAuthenticatedAgent();
+    const today = new Date().toISOString().slice(0, 10);
     const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     await agent.post("/api/tasks").send({ title: "Entrega alta", dueDate: tomorrow, priority: "Alta" });
     await agent.post("/api/tasks").send({ title: "Entrega baixa", dueDate: tomorrow, priority: "Baixa" });
@@ -68,10 +63,9 @@ describe("Gatilhos de notificação", () => {
     expect(created.status).toBe(201);
     expect((await other.agent.get("/api/notifications/triggers/custom")).body).toHaveLength(0);
 
-    const live = await agent.get("/api/notifications/live");
-    const notification = live.body.find((item: { kind: string }) => item.kind === "custom_trigger");
-    expect(notification?.body).toContain("Entrega alta");
-    expect(notification?.body).not.toContain("Entrega baixa");
+    // O sino saiu do app; a regra continua valendo para push/e-mail (cron).
+    const matched = (await matchingCustomTasks(userId, created.body, today)) as Array<{ title: string }>;
+    expect(matched.map((t) => t.title)).toEqual(["Entrega alta"]);
 
     expect((await other.agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ active: false })).status).toBe(404);
     const edited = await agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ name: "Entrega crítica amanhã", days: 2 });
@@ -79,8 +73,6 @@ describe("Gatilhos de notificação", () => {
     expect(edited.body.name).toBe("Entrega crítica amanhã");
     expect((await agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ channelInApp: false })).status).toBe(400);
     expect((await agent.patch(`/api/notifications/triggers/custom/${created.body.id}`).send({ active: false })).status).toBe(200);
-    const after = await agent.get("/api/notifications/live");
-    expect(after.body.some((item: { kind: string }) => item.kind === "custom_trigger")).toBe(false);
 
     expect((await agent.post("/api/notifications/triggers/custom").send({
       name: "Sem canal", conditionType: "task_due_in", days: 1,

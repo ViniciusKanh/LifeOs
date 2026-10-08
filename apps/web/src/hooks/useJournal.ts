@@ -38,7 +38,6 @@ export function useJournal(date: string) {
     mutationFn: (input: JournalUpsertInput) => journalService.save(date, input),
     onSuccess: (data) => {
       queryClient.setQueryData(key, data);
-      queryClient.invalidateQueries({ queryKey: ["analytics", "timeline"] });
       queryClient.invalidateQueries({ queryKey: ["journal", "insights"] });
       // A primeira crônica do dia pode render XP (backend é idempotente).
       notifyGamification();

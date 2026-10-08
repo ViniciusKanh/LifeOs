@@ -112,14 +112,14 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       db.execute({
         sql: `SELECT date(e.started_at) AS day, SUM(COALESCE(e.duration_minutes, 0)) AS v FROM time_entries e
               JOIN tasks t ON t.id = e.task_id AND t.owner_id = e.owner_id
-              WHERE e.owner_id = ? AND e.ended_at IS NOT NULL AND ${proTask} AND date(e.started_at) > date(?)
+              WHERE e.owner_id = ? AND e.ended_at IS NOT NULL AND ${proTask} AND e.started_at >= date(?, '+1 day')
               GROUP BY day`,
         args: [ownerId, ownerId, from],
       }),
       db.execute({
         sql: `SELECT date(f.started_at) AS day, SUM(COALESCE(f.actual_minutes, 0)) AS v FROM focus_sessions f
               LEFT JOIN tasks t ON t.id = f.task_id AND t.owner_id = f.owner_id
-              WHERE f.owner_id = ? AND date(f.started_at) > date(?)
+              WHERE f.owner_id = ? AND f.started_at >= date(?, '+1 day')
                 AND COALESCE(f.project_id, t.project_id) IN (SELECT id FROM projects WHERE owner_id = ? AND kind = 'professional')
               GROUP BY day`,
         args: [ownerId, from, ownerId],
@@ -127,15 +127,15 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       // Sono atribuído ao dia em que a pessoa acordou (a noite "antes" do dia de trabalho).
       db.execute({
         sql: `SELECT date(woke_up_at) AS day, SUM(duration_minutes) / 60.0 AS v FROM sleep_entries
-              WHERE owner_id = ? AND duration_minutes IS NOT NULL AND date(woke_up_at) > date(?) GROUP BY day`,
+              WHERE owner_id = ? AND duration_minutes IS NOT NULL AND woke_up_at >= date(?, '+1 day') GROUP BY day`,
         args: [ownerId, from],
       }),
       db.execute({
-        sql: `SELECT date(recorded_at) AS day, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) > date(?) GROUP BY day`,
+        sql: `SELECT date(recorded_at) AS day, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?, '+1 day') GROUP BY day`,
         args: [ownerId, from],
       }),
       db.execute({
-        sql: `SELECT date(performed_at) AS day, COUNT(*) AS v FROM workouts WHERE owner_id = ? AND date(performed_at) > date(?) GROUP BY day`,
+        sql: `SELECT date(performed_at) AS day, COUNT(*) AS v FROM workouts WHERE owner_id = ? AND performed_at >= date(?, '+1 day') GROUP BY day`,
         args: [ownerId, from],
       }),
       db.execute({
@@ -155,7 +155,7 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       db.execute({
         sql: `SELECT t.id, t.title, t.status, t.due_date, t.priority_score, p.name AS project_name, p.color AS project_color
               FROM tasks t JOIN projects p ON p.id = t.project_id AND p.owner_id = t.owner_id
-              WHERE t.owner_id = ? AND p.kind = 'professional' AND t.status != ? AND t.due_date IS NOT NULL AND date(t.due_date) <= date(?)
+              WHERE t.owner_id = ? AND p.kind = 'professional' AND t.status != ? AND t.due_date IS NOT NULL AND t.due_date < date(?, '+1 day')
               ORDER BY date(t.due_date) ASC, t.priority_score DESC LIMIT 8`,
         args: [ownerId, DONE_STATUS, shiftDays(today, 14)],
       }),

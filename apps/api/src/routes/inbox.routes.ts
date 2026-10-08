@@ -37,11 +37,11 @@ inboxRouter.get("/stats", async (req, res) => {
       args: [req.user!.id],
     }),
     db.execute({
-      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND processed_at IS NOT NULL AND date(processed_at) >= date('now', '-6 days')",
+      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND processed_at IS NOT NULL AND processed_at >= date('now', '-6 days')",
       args: [req.user!.id],
     }),
     db.execute({
-      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND date(created_at) >= date('now', '-6 days')",
+      sql: "SELECT COUNT(*) as n FROM inbox_items WHERE owner_id = ? AND created_at >= date('now', '-6 days')",
       args: [req.user!.id],
     }),
   ]);

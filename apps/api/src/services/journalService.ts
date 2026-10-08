@@ -546,11 +546,11 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     bestStreakRes,
   ] = await Promise.all([
     db.execute({
-      sql: "SELECT mood, energy, stress FROM mood_entries WHERE owner_id = ? AND date(recorded_at) = date(?) ORDER BY recorded_at DESC LIMIT 1",
+      sql: "SELECT mood, energy, stress FROM mood_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day')) ORDER BY recorded_at DESC LIMIT 1",
       args: [ownerId, date],
     }),
     db.execute({
-      sql: "SELECT duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) = date(?) ORDER BY woke_up_at DESC LIMIT 1",
+      sql: "SELECT duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND (woke_up_at >= date(?2) AND woke_up_at < date(?2, '+1 day')) ORDER BY woke_up_at DESC LIMIT 1",
       args: [ownerId, date],
     }),
     db.execute({
@@ -559,7 +559,7 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     }),
     db.execute({
       sql: `SELECT id, title, priority FROM tasks
-            WHERE owner_id = ? AND status != 'Concluído' AND (due_date IS NULL OR date(due_date) <= date(?))
+            WHERE owner_id = ? AND status != 'Concluído' AND (due_date IS NULL OR due_date < date(?, '+1 day'))
             ORDER BY CASE priority WHEN 'Alta' THEN 0 WHEN 'Média' THEN 1 ELSE 2 END, COALESCE(due_date, '9999-12-31') ASC
             LIMIT 3`,
       args: [ownerId, date],
@@ -576,7 +576,7 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     // Mesma definição de "tarefas de hoje" usada no Dashboard: due_date = hoje
     // (qualquer status), pra os dois números baterem em qualquer tela.
     db.execute({
-      sql: "SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) AS done FROM tasks WHERE owner_id = ? AND date(due_date) = date(?)",
+      sql: "SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) AS done FROM tasks WHERE owner_id = ? AND (due_date >= date(?2) AND due_date < date(?2, '+1 day'))",
       args: [ownerId, date],
     }),
     db.execute({
@@ -584,15 +584,15 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
       args: [ownerId],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
+      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
       args: [ownerId, date],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS total FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?)",
+      sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS total FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
       args: [ownerId, date],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(pages_read), 0) AS pages, COALESCE(SUM(duration_minutes), 0) AS minutes FROM reading_sessions WHERE owner_id = ? AND date(started_at) = date(?)",
+      sql: "SELECT COALESCE(SUM(pages_read), 0) AS pages, COALESCE(SUM(duration_minutes), 0) AS minutes FROM reading_sessions WHERE owner_id = ? AND (started_at >= date(?2) AND started_at < date(?2, '+1 day'))",
       args: [ownerId, date],
     }),
     db.execute({

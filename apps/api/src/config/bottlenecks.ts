@@ -62,7 +62,7 @@ export const bottleneckConfig = {
     searchDays: 3,
   },
   causes: { complexityMinutes: 120, continuousMinutes: 45, competingDays: 7 },
-  cache: { ttlMs: 10 * 60 * 1000 },
+  cache: { ttlMs: 5 * 60 * 1000 },
   ai: { rateLimit: { windowMs: 60 * 60 * 1000, max: 8 }, timeoutMs: 20_000, retries: 1, maxText: 600 },
   /** Dados mínimos para a análise fazer sentido. */
   minimum: { openTasks: 3 },

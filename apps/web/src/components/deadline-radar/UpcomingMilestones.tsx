@@ -1,5 +1,3 @@
-import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/primitives";
 import type { DeadlineItem } from "@/types";
 
@@ -35,9 +33,6 @@ export function UpcomingMilestones({ items }: { items: DeadlineItem[] }) {
           })}
         </ul>
       )}
-      <Link to="/timeline" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 mt-4">
-        Ver linha do tempo completa <ChevronRight size={14} />
-      </Link>
     </Card>
   );
 }

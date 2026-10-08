@@ -285,7 +285,7 @@ export async function matchingCustomTasks(ownerId: string, rule: CustomNotificat
   const dueExpression = rule.conditionType === "task_due_in"
     ? "date(due_date) = date(?, '+' || ? || ' days')"
     : rule.days === 0
-      ? "date(due_date) < date(?)"
+      ? "due_date < date(?)"
       : "date(due_date) = date(?, '-' || ? || ' days')";
   const args: Array<string | number | null> = [ownerId, date];
   if (rule.conditionType === "task_due_in" || rule.days > 0) args.push(rule.days);
@@ -388,13 +388,13 @@ export async function runTaskDeadlineTriggers(ownerId: string, date = new Date()
   const [overdue, dueToday] = await Promise.all([
     db.execute({
       sql: `SELECT id, title, due_date FROM tasks
-            WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND date(due_date) < date(?)
+            WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND due_date < date(?)
             ORDER BY due_date ASC LIMIT 10`,
       args: [ownerId, date],
     }),
     db.execute({
       sql: `SELECT id, title, due_date FROM tasks
-            WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND date(due_date) = date(?)
+            WHERE owner_id = ? AND status != 'Concluído' AND due_date IS NOT NULL AND (due_date >= date(?2) AND due_date < date(?2, '+1 day'))
             ORDER BY due_date ASC LIMIT 10`,
       args: [ownerId, date],
     }),

@@ -50,7 +50,7 @@ export async function checkAutomaticRule(
     case "sleep_before": {
       const beforeTime = String(config?.beforeTime ?? "23:00");
       const r = await db.execute({
-        sql: "SELECT strftime('%H:%M', went_to_bed_at) AS t FROM sleep_entries WHERE owner_id = ? AND date(went_to_bed_at) = date(?) ORDER BY went_to_bed_at ASC LIMIT 1",
+        sql: "SELECT strftime('%H:%M', went_to_bed_at) AS t FROM sleep_entries WHERE owner_id = ? AND (went_to_bed_at >= date(?2) AND went_to_bed_at < date(?2, '+1 day')) ORDER BY went_to_bed_at ASC LIMIT 1",
         args: [ownerId, date],
       });
       const row = r.rows[0] as unknown as { t?: string } | undefined;
@@ -60,7 +60,7 @@ export async function checkAutomaticRule(
     case "water_target": {
       const targetMl = Number(config?.targetMl ?? 3000);
       const r = await db.execute({
-        sql: "SELECT COALESCE(SUM(amount_ml), 0) AS v FROM water_entries WHERE owner_id = ? AND date(recorded_at) = date(?)",
+        sql: "SELECT COALESCE(SUM(amount_ml), 0) AS v FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
         args: [ownerId, date],
       });
       const total = Number((r.rows[0] as unknown as { v?: number })?.v ?? 0);
@@ -69,7 +69,7 @@ export async function checkAutomaticRule(
     case "focus_minimum": {
       const minMinutes = Number(config?.minMinutes ?? 25);
       const r = await db.execute({
-        sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS v FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND date(started_at) = date(?)",
+        sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS v FROM focus_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND (started_at >= date(?2) AND started_at < date(?2, '+1 day'))",
         args: [ownerId, date],
       });
       const total = Number((r.rows[0] as unknown as { v?: number })?.v ?? 0);
@@ -78,7 +78,7 @@ export async function checkAutomaticRule(
     case "reading_pages_minimum": {
       const minPages = Number(config?.minPages ?? 20);
       const r = await db.execute({
-        sql: "SELECT COALESCE(SUM(pages_read), 0) AS v FROM reading_sessions WHERE owner_id = ? AND date(started_at) = date(?)",
+        sql: "SELECT COALESCE(SUM(pages_read), 0) AS v FROM reading_sessions WHERE owner_id = ? AND (started_at >= date(?2) AND started_at < date(?2, '+1 day'))",
         args: [ownerId, date],
       });
       const total = Number((r.rows[0] as unknown as { v?: number })?.v ?? 0);
@@ -87,7 +87,7 @@ export async function checkAutomaticRule(
     case "exercise_minimum": {
       const minMinutes = Number(config?.minMinutes ?? 30);
       const r = await db.execute({
-        sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS v FROM workouts WHERE owner_id = ? AND date(performed_at) = date(?)",
+        sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS v FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
         args: [ownerId, date],
       });
       const total = Number((r.rows[0] as unknown as { v?: number })?.v ?? 0);
@@ -96,7 +96,7 @@ export async function checkAutomaticRule(
     case "study_minimum": {
       const minMinutes = Number(config?.minMinutes ?? 60);
       const r = await db.execute({
-        sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS v FROM study_sessions WHERE owner_id = ? AND date(occurred_at) = date(?)",
+        sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS v FROM study_sessions WHERE owner_id = ? AND (occurred_at >= date(?2) AND occurred_at < date(?2, '+1 day'))",
         args: [ownerId, date],
       });
       const total = Number((r.rows[0] as unknown as { v?: number })?.v ?? 0);

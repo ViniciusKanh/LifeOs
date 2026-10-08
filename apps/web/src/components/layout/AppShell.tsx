@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, Menu, X } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
-import { NotificationsBell } from "./NotificationsBell";
 import { ProfileMenu } from "./ProfileMenu";
 import { AchievementToast } from "./AchievementToast";
 import { GamificationFeedback } from "./GamificationFeedback";
@@ -154,7 +153,6 @@ export function AppShell() {
             </button>
             {isRpg && <RPGPlayerHUD compact />}
             <AchievementHeaderPulse />
-            <NotificationsBell />
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
             <ProfileMenu />
           </div>

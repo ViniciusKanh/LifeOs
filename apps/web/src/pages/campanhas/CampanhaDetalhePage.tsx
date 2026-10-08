@@ -318,7 +318,6 @@ export function CampanhaDetalhePage() {
             ))}
             {data.events.length === 0 && <li className="text-sm text-rpg-muted">Sem atividade registrada.</li>}
           </ul>
-          <Link to="/timeline" className="mt-2 inline-block text-xs text-rpg-gold-light hover:underline">Ver na Timeline →</Link>
         </RPGPanel>
       )}
 

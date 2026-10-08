@@ -20,23 +20,23 @@ type TrendSignal = (typeof TREND_SIGNALS)[number];
 
 const TREND_QUERIES: Record<TrendSignal, { sql: string; scale: (v: number) => number }> = {
   sleep: {
-    sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+    sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day') GROUP BY d`,
     scale: (v) => Math.max(0, Math.min(100, Math.round((v / 480) * 100))),
   },
   mood: {
-    sql: `SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+    sql: `SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
     scale: (v) => Math.max(0, Math.min(100, Math.round(((v - 1) / 4) * 100))),
   },
   energy: {
-    sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+    sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
     scale: (v) => Math.max(0, Math.min(100, Math.round(((v - 1) / 4) * 100))),
   },
   exercise: {
-    sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND date(performed_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+    sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day') GROUP BY d`,
     scale: (v) => Math.max(0, Math.min(100, Math.round((v / 30) * 100))),
   },
   reading: {
-    sql: `SELECT date(started_at) AS d, SUM(pages_read) AS v FROM reading_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?) GROUP BY d`,
+    sql: `SELECT date(started_at) AS d, SUM(pages_read) AS v FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d`,
     scale: (v) => Math.max(0, Math.min(100, Math.round((v / 20) * 100))),
   },
 };

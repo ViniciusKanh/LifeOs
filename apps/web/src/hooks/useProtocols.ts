@@ -10,7 +10,7 @@ export function useProtocols() {
   const refresh = () => void qc.invalidateQueries({ queryKey: KEY });
   const afterRun = () => {
     refresh();
-    for (const k of ["tasks", "habits", "capacity", "timeline", "analytics"]) void qc.invalidateQueries({ queryKey: [k] });
+    for (const k of ["tasks", "habits", "capacity", "analytics"]) void qc.invalidateQueries({ queryKey: [k] });
   };
   return {
     ...query,

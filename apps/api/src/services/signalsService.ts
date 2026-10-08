@@ -99,31 +99,31 @@ interface Aggregates {
 async function fetchAggregates(db: Db, ownerId: string, from: string, to: string, days: number): Promise<Aggregates> {
   const [sleep, mood, exercise, water, reading, tasks, agenda] = await Promise.all([
     db.execute({
-      sql: `SELECT AVG(duration_minutes) AS mins, AVG(quality) AS qual FROM sleep_entries WHERE owner_id = ? AND date(woke_up_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT AVG(duration_minutes) AS mins, AVG(quality) AS qual FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT AVG(mood) AS mood, AVG(energy) AS energy, AVG(stress) AS stress FROM mood_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT AVG(mood) AS mood, AVG(energy) AS energy, AVG(stress) AS stress FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT SUM(duration_minutes) AS mins FROM workouts WHERE owner_id = ? AND date(performed_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT SUM(duration_minutes) AS mins FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT SUM(amount_ml) AS ml FROM water_entries WHERE owner_id = ? AND date(recorded_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT SUM(amount_ml) AS ml FROM water_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT SUM(duration_minutes) AS mins, SUM(pages_read) AS pages FROM reading_sessions WHERE owner_id = ? AND date(started_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT SUM(duration_minutes) AS mins, SUM(pages_read) AS pages FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?) AND updated_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
     db.execute({
-      sql: `SELECT COUNT(*) AS n FROM events WHERE owner_id = ? AND date(starts_at) BETWEEN date(?) AND date(?)`,
+      sql: `SELECT COUNT(*) AS n FROM events WHERE owner_id = ? AND starts_at >= date(?) AND starts_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
   ]);

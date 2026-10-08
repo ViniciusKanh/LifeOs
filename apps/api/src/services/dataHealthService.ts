@@ -538,14 +538,14 @@ export async function recheckDataHealth(ownerId: string): Promise<DataHealthSumm
 
   const today = new Date().toISOString().slice(0, 10);
   const existing = await db.execute({
-    sql: "SELECT id FROM data_health_snapshots WHERE owner_id = ? AND date(created_at) = ?",
+    sql: "SELECT id FROM data_health_snapshots WHERE owner_id = ? AND (created_at >= date(?2) AND created_at < date(?2, '+1 day'))",
     args: [ownerId, today],
   });
   if (existing.rows.length === 0) {
     await db.execute({
       sql: `INSERT INTO data_health_snapshots
               (id, owner_id, score, completeness_score, consistency_score, integrity_score, freshness_score, sync_score, history_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         nanoid(),
         ownerId,

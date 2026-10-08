@@ -240,7 +240,7 @@ export async function detectDiscoveries(db: Client, ownerId: string, today: stri
   const [insights, focus, exps, streaks, activeDays, tzRow] = await Promise.all([
     computeInsights(ownerId, from, today),
     db.execute({
-      sql: "SELECT ended_at, duration_minutes FROM time_entries WHERE owner_id = ? AND ended_at IS NOT NULL AND duration_minutes >= 10 AND date(ended_at) >= date(?)",
+      sql: "SELECT ended_at, duration_minutes FROM time_entries WHERE owner_id = ? AND ended_at IS NOT NULL AND duration_minutes >= 10 AND ended_at >= date(?)",
       args: [ownerId, from],
     }),
     db.execute({
@@ -252,7 +252,7 @@ export async function detectDiscoveries(db: Client, ownerId: string, today: stri
       sql: `SELECT x.source_id, x.label FROM xp_events x WHERE x.owner_id = ? AND x.source_type = 'habit_streak'`,
       args: [ownerId],
     }),
-    db.execute({ sql: "SELECT COUNT(DISTINCT date(updated_at)) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND date(updated_at) >= date(?)", args: [ownerId, from] }),
+    db.execute({ sql: "SELECT COUNT(DISTINCT date(updated_at)) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?)", args: [ownerId, from] }),
     db.execute({ sql: "SELECT timezone FROM users WHERE id = ?", args: [ownerId] }),
   ]);
   const period = { from, to: today };

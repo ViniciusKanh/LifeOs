@@ -4,7 +4,9 @@ import { gamificationService, type RedemptionStatus, type RewardInput, type XpSe
 const KEY = ["gamification"] as const;
 
 export function useGamificationProfile(enabled = true) {
-  return useQuery({ queryKey: [...KEY, "profile"], queryFn: gamificationService.profile, enabled, staleTime: 30_000 });
+  // O perfil soma todo o XP no servidor: cache de 5 min, renovado por
+  // notifyGamification() sempre que uma ação rende XP.
+  return useQuery({ queryKey: [...KEY, "profile"], queryFn: gamificationService.profile, enabled, staleTime: 5 * 60_000 });
 }
 
 export function useXpHistory(days = 30, enabled = true) {

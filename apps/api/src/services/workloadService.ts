@@ -115,14 +115,14 @@ export async function getProjectWorkload(
               COUNT(*) AS total,
               SUM(CASE WHEN t.status = ? THEN 1 ELSE 0 END) AS done,
               SUM(CASE WHEN t.status IN (${doing}) THEN 1 ELSE 0 END) AS doing,
-              SUM(CASE WHEN t.status != ? AND t.due_date IS NOT NULL AND date(t.due_date) < date(?) THEN 1 ELSE 0 END) AS overdue,
-              SUM(CASE WHEN t.status != ? AND t.due_date IS NOT NULL AND date(t.due_date) BETWEEN date(?) AND date(?) THEN 1 ELSE 0 END) AS due_week,
+              SUM(CASE WHEN t.status != ? AND t.due_date IS NOT NULL AND t.due_date < date(?) THEN 1 ELSE 0 END) AS overdue,
+              SUM(CASE WHEN t.status != ? AND t.due_date IS NOT NULL AND t.due_date >= date(?) AND t.due_date < date(?, '+1 day') THEN 1 ELSE 0 END) AS due_week,
               SUM(CASE WHEN t.status != ? AND t.estimate_minutes IS NULL THEN 1 ELSE 0 END) AS unestimated,
               SUM(CASE WHEN t.status != ? THEN COALESCE(t.estimate_minutes, 0) ELSE 0 END) AS open_estimate,
               SUM(CASE WHEN t.status != ? THEN MAX(COALESCE(t.estimate_minutes, 0) - COALESCE(t.time_spent_minutes, 0), 0) ELSE 0 END) AS remaining,
               SUM(COALESCE(t.time_spent_minutes, 0)) AS spent,
               SUM(CASE WHEN t.status = ? AND date(COALESCE(t.completed_at, t.updated_at)) > date(?) THEN 1 ELSE 0 END) AS done_period,
-              SUM(CASE WHEN date(t.created_at) > date(?) THEN 1 ELSE 0 END) AS created_period
+              SUM(CASE WHEN t.created_at >= date(?, '+1 day') THEN 1 ELSE 0 END) AS created_period
             FROM tasks t
             WHERE t.owner_id = ? ${taskScope}
             GROUP BY t.project_id`,
@@ -143,14 +143,14 @@ export async function getProjectWorkload(
     db.execute({
       sql: `SELECT COALESCE(e.project_id, t.project_id) AS pid, SUM(COALESCE(e.duration_minutes, 0)) AS mins
             FROM time_entries e LEFT JOIN tasks t ON t.id = e.task_id AND t.owner_id = e.owner_id
-            WHERE e.owner_id = ? AND e.ended_at IS NOT NULL AND date(e.started_at) > date(?)
+            WHERE e.owner_id = ? AND e.ended_at IS NOT NULL AND e.started_at >= date(?, '+1 day')
             GROUP BY pid`,
       args: [ownerId, from],
     }),
     db.execute({
       sql: `SELECT COALESCE(f.project_id, t.project_id) AS pid, SUM(COALESCE(f.actual_minutes, 0)) AS mins
             FROM focus_sessions f LEFT JOIN tasks t ON t.id = f.task_id AND t.owner_id = f.owner_id
-            WHERE f.owner_id = ? AND date(f.started_at) > date(?)
+            WHERE f.owner_id = ? AND f.started_at >= date(?, '+1 day')
             GROUP BY pid`,
       args: [ownerId, from],
     }),
