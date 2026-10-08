@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LifeOS</title>
+    <link rel="stylesheet" href="boot.css" />
+  </head>
+  <body>
+    <main class="panel" aria-live="polite">
+      <img src="logo.png" alt="" class="logo" width="88" height="88" />
+      <h1>LifeOS</h1>
+      <p class="tagline">Transforme sua rotina em progresso.</p>
+
+      <section id="loading">
+        <div class="bar" role="progressbar" aria-label="Conectando ao LifeOS"><span></span></div>
+        <p class="status">Conectando ao reino…</p>
+      </section>
+
+      <section id="offline" hidden>
+        <p class="title">Sem conexão com o LifeOS</p>
+        <p class="status">Seus dados ficam no servidor. Verifique a internet — tentaremos de novo automaticamente.</p>
+        <button id="retry" type="button">Tentar novamente</button>
+      </section>
+
+      <p class="version" id="version"></p>
+    </main>
+    <script src="boot.js"></script>
+  </body>
+</html>

@@ -3,25 +3,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
-/**
- * `--mode desktop` gera o frontend do LifeOS Desktop (Tauri 2): sem PWA/Service
- * Worker, saída em dist-desktop e API absoluta (a janela nativa não tem o proxy
- * /api da Vercel). A URL da API é pública; nenhum segredo entra no bundle.
- */
-const DEFAULT_DESKTOP_API_URL = "https://lifeos-sigma-five.vercel.app/api";
-
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  const desktop = mode === "desktop";
-  return {
-  define: desktop
-    ? {
-        "import.meta.env.VITE_PLATFORM": JSON.stringify("desktop"),
-        "import.meta.env.VITE_API_URL": JSON.stringify(process.env.LIFEOS_DESKTOP_API_URL ?? DEFAULT_DESKTOP_API_URL),
-      }
-    : {},
-  // No `tauri dev` a saída do Vite fica visível junto com a do Rust.
-  clearScreen: !desktop,
+export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -29,7 +12,7 @@ export default defineConfig(({ mode }) => {
   },
   plugins: [
     react(),
-    !desktop && VitePWA({
+    VitePWA({
       // injectManifest (em vez de generateSW): o service worker agora é
       // escrito à mão (src/sw.ts) porque precisa reagir a eventos 'push'
       // e 'notificationclick' (Web Push/VAPID) — o generateSW automático
@@ -74,10 +57,8 @@ export default defineConfig(({ mode }) => {
   ],
   server: {
     port: 5173,
-    strictPort: desktop,
   },
   build: {
-    outDir: desktop ? "dist-desktop" : "dist",
     // Code-splitting: cada rota já vira um chunk via React.lazy (App.tsx);
     // aqui separamos as libs pesadas usadas só por parte do app (gráficos,
     // formulários) do vendor principal, pra elas só baixarem quando a
@@ -91,5 +72,4 @@ export default defineConfig(({ mode }) => {
       },
     },
   },
-};
 });

@@ -20,7 +20,6 @@ _to_delete/
 *.timestamp-*.mjs
 
 # LifeOS Desktop (Tauri)
-apps/web/dist-desktop
 apps/desktop/src-tauri/target
 apps/desktop/src-tauri/gen/schemas
 *.key

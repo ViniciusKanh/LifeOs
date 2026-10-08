@@ -81,7 +81,6 @@ import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { authHeaders } from "@/platform/requestAuth";
 
 /* ============================================================
    Diário — inspirado no app Diário/Journal da Apple (macOS Tahoe):
@@ -144,7 +143,7 @@ const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
  * pelo botão do editor do dia e pelo menu do card no feed "Entradas".
  */
 async function downloadJournalPdf(date: string) {
-  const res = await fetch(`${API_URL}/journal/${date}/export/pdf`, { credentials: "include", headers: await authHeaders() });
+  const res = await fetch(`${API_URL}/journal/${date}/export/pdf`, { credentials: "include" });
   if (!res.ok) throw new Error("Falha ao gerar PDF.");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

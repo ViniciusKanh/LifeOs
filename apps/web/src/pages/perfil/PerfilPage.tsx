@@ -34,6 +34,7 @@ import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
 import { platformFeatures } from "@/platform";
+import { DesktopAppCard } from "@/components/desktop/DesktopAppCard";
 import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
@@ -466,6 +467,7 @@ export function PerfilPage() {
           {passwordCard}
 
           {platformFeatures.googleOAuthRedirect && <GoogleAccountCard user={user} />}
+          <DesktopAppCard />
           <MfaSettingsCard user={user} />
 
           <PushNotificationsCard />

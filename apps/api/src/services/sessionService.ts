@@ -54,29 +54,6 @@ export function issueSession(res: Response, user: { id: string; role: "user" | "
   const ttl = remember ? REMEMBER_MS : SHORT_MS;
   const token = jwt.sign(claims, secret(), { expiresIn: Math.floor(ttl / 1000) });
   res.cookie(SESSION_COOKIE, token, { ...COOKIE_BASE, maxAge: ttl });
-  // LifeOS Desktop (Tauri): a janela roda em outra origem (tauri.localhost), onde o
-  // cookie não viaja. O app nativo recebe o mesmo token por cabeçalho e o guarda no
-  // Gerenciador de Credenciais do Windows — nunca em localStorage.
-  if (isDesktopClient(res.req)) res.setHeader(DESKTOP_SESSION_HEADER, token);
-}
-
-export const DESKTOP_CLIENT_HEADER = "x-lifeos-client";
-export const DESKTOP_SESSION_HEADER = "X-LifeOS-Session";
-
-export function isDesktopClient(req: { get(name: string): string | undefined } | undefined): boolean {
-  return req?.get(DESKTOP_CLIENT_HEADER) === "desktop";
-}
-
-/**
- * Token de sessão da requisição: cookie httpOnly (web) ou, apenas para o
- * cliente Desktop identificado, cabeçalho Authorization: Bearer.
- */
-export function sessionTokenFrom(req: { cookies?: Record<string, string>; get(name: string): string | undefined }): string | undefined {
-  const cookie = req.cookies?.[SESSION_COOKIE];
-  if (cookie) return cookie;
-  if (!isDesktopClient(req)) return undefined;
-  const auth = req.get("authorization");
-  return auth?.startsWith("Bearer ") ? auth.slice(7).trim() || undefined : undefined;
 }
 
 export function clearSession(res: Response) {

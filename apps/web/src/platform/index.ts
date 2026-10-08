@@ -1,27 +1,22 @@
 /**
- * Camada de plataforma: o mesmo código React roda na Web (Vercel) e no
- * LifeOS Desktop (Tauri 2 / WebView2). A plataforma é decidida em tempo de
- * build (`vite build --mode desktop`), então o bundle Web não carrega nada do
- * Tauri — os imports nativos ficam em chunks dinâmicos só alcançados no Desktop.
+ * Camada de plataforma. O LifeOS Desktop (Tauri 2) é um app nativo instalado
+ * que abre esta mesma aplicação publicada na Vercel — por isso Web e Desktop
+ * recebem toda atualização juntos, a cada deploy. Aqui só detectamos, em
+ * tempo de execução, quando estamos dentro da janela nativa.
  */
-export const IS_DESKTOP = import.meta.env.VITE_PLATFORM === "desktop";
+export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** Recursos que dependem do ambiente (o Desktop não usa Service Worker nem OAuth por redirecionamento). */
+/** Recursos que dependem do ambiente. */
 export const platformFeatures = {
+  // WebView2 não entrega Web Push; as notificações do Desktop serão nativas (Etapa 4).
   webPush: !IS_DESKTOP,
+  // O Google recusa login OAuth dentro de webviews embutidas; no Desktop entra-se por e-mail e senha.
   googleOAuthRedirect: !IS_DESKTOP,
 } as const;
 
-/** Prepara a plataforma antes do primeiro render (no Desktop, carrega a sessão salva). */
-export async function initPlatform(): Promise<void> {
-  if (!IS_DESKTOP) return;
-  const { loadDesktopSession } = await import("./desktopSession");
-  await loadDesktopSession();
-}
-
-/** Versão do app nativo (null na Web). */
+/** Versão do aplicativo instalado (null na Web). */
 export async function desktopVersion(): Promise<string | null> {
   if (!IS_DESKTOP) return null;
   const { getVersion } = await import("@tauri-apps/api/app");
-  return getVersion();
+  return getVersion().catch(() => null);
 }

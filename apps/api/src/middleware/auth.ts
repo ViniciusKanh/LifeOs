@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { SESSION_COOKIE, clearSession, sessionTokenFrom, getAuthState, issueSession, readSession, shouldRenew, touchLastSeen } from "../services/sessionService.js";
+import { SESSION_COOKIE, clearSession, getAuthState, issueSession, readSession, shouldRenew, touchLastSeen } from "../services/sessionService.js";
 import type { AuthenticatedUser } from "../types/index.js";
 
 declare global {
@@ -25,7 +25,7 @@ declare global {
  * sessão sozinha enquanto o usuário usa o app ("permanecer conectado").
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = sessionTokenFrom(req);
+  const token = req.cookies?.[SESSION_COOKIE];
   if (!token) {
     return res.status(401).json({ error: "Sessão não encontrada. Faça login novamente." });
   }

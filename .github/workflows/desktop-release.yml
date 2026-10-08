@@ -1,6 +1,7 @@
-# LifeOS Desktop (Windows) — gera o instalador NSIS e publica no GitHub Releases.
-# Independente do deploy Web: a Vercel continua publicando a cada push na branch
-# de produção; este workflow só roda com uma tag desktop-vX.Y.Z (ou manualmente).
+# LifeOS Desktop (Windows) — gera o instalador NSIS da parte NATIVA e publica no
+# GitHub Releases. A interface vem da Vercel, então deploys da Web chegam ao app
+# sem nova versão; este workflow só roda com uma tag desktop-vX.Y.Z (ou manualmente),
+# quando a parte nativa muda.
 name: Desktop (Windows) — release
 
 on:
@@ -26,9 +27,9 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
     env:
-      # URL pública da API usada pelo app (não é segredo). Pode ser trocada em
-      # Settings → Variables → LIFEOS_DESKTOP_API_URL sem mexer no código.
-      LIFEOS_DESKTOP_API_URL: ${{ vars.LIFEOS_DESKTOP_API_URL || 'https://lifeos-sigma-five.vercel.app/api' }}
+      # Endereço do LifeOS publicado na Vercel que o app abre (não é segredo).
+      # Pode ser trocado em Settings → Variables → LIFEOS_REMOTE_URL.
+      LIFEOS_REMOTE_URL: ${{ vars.LIFEOS_REMOTE_URL || 'https://lifeos-sigma-five.vercel.app' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,9 +50,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            apps/desktop/package-lock.json
+          cache-dependency-path: apps/desktop/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -59,10 +58,9 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
 
-      - name: Dependências (Web + Desktop)
-        run: |
-          npm ci
-          npm ci --prefix apps/desktop
+      # A interface vem da Vercel; aqui só se compila a parte nativa.
+      - name: Dependências do Desktop
+        run: npm ci --prefix apps/desktop
 
       - name: Compilar instalador e anexar à release em rascunho
         uses: tauri-apps/tauri-action@v0

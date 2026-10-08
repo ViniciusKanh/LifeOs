@@ -1,0 +1,50 @@
+/* Tela de abertura do LifeOS Desktop — mesma paleta do tema RPG (tokens copiados de index.css). */
+:root {
+  --bg: #0b1020;
+  --panel: #131a2e;
+  --gold: #c9a24a;
+  --gold-light: #e8c773;
+  --text: #ece6d6;
+  --muted: #9aa3b8;
+  --purple: #8b5cf6;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at top, #1a2140 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+.panel {
+  width: min(420px, 90vw);
+  padding: 32px 28px 22px;
+  text-align: center;
+  background: var(--panel);
+  border: 2px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 0 0 4px rgba(201, 162, 74, 0.15), 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+.logo { image-rendering: auto; border-radius: 18px; }
+h1 { margin: 12px 0 2px; font-family: "Cinzel", Georgia, serif; color: var(--gold-light); font-size: 30px; letter-spacing: 0.04em; }
+.tagline { margin: 0 0 22px; color: var(--muted); font-size: 14px; }
+.title { font-weight: 600; color: var(--gold-light); margin: 0 0 6px; }
+.status { color: var(--muted); font-size: 13px; margin: 10px 0 0; line-height: 1.45; }
+.bar { height: 10px; border: 1px solid var(--gold); border-radius: 2px; background: #0d1326; overflow: hidden; }
+.bar span { display: block; height: 100%; width: 35%; background: linear-gradient(90deg, #6d4bd8, var(--purple)); animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+@media (prefers-reduced-motion: reduce) { .bar span { animation: none; width: 100%; opacity: 0.6; } }
+button {
+  margin-top: 16px;
+  padding: 9px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--purple);
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  cursor: pointer;
+}
+button:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.version { margin: 18px 0 0; color: var(--muted); font-size: 11px; }
