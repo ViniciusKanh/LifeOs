@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { BookOpen, Cpu, Heart, Leaf, Target, Trophy, Zap, type LucideIcon } from "lucide-react";
+import { BookOpen, Cpu, Dumbbell, Heart, Leaf, Target, Trophy, Zap, type LucideIcon } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { RPGPanel, RPGProgressBar } from "@/components/rpg";
 import { RPG_TONE_TEXT, type RpgTone } from "@/components/rpg/rpgAssets";
@@ -11,10 +11,10 @@ const AREA_UI: Record<string, { icon: LucideIcon; tone: RpgTone }> = {
   habitos: { icon: Leaf, tone: "green" },
   saude: { icon: Heart, tone: "pink" },
   educacao: { icon: BookOpen, tone: "blue" },
-  foco: { icon: Target, tone: "red" },
+  treino: { icon: Dumbbell, tone: "red" },
   energia: { icon: Zap, tone: "cyan" },
 };
-const LEFT = ["metas", "foco", "energia"];
+const LEFT = ["metas", "treino", "energia"];
 const RIGHT = ["habitos", "saude", "educacao"];
 
 function AreaNode({ area, side }: { area: IntelligenceOverview["core"]["areas"][number] | { key: string; label: string; days: number; active: boolean }; side: "left" | "right" }) {
@@ -43,7 +43,7 @@ function AreaNode({ area, side }: { area: IntelligenceOverview["core"]["areas"][
  */
 export function IntelligenceCorePanel({ core, hasGrimoire }: { core: IntelligenceOverview["core"]; hasGrimoire: boolean }) {
   const reduce = useReducedMotion();
-  const areas = hasGrimoire ? core.areas : Object.keys(AREA_UI).map((key) => ({ key, label: { metas: "Metas", habitos: "Hábitos", saude: "Saúde", educacao: "Educação", foco: "Foco", energia: "Energia" }[key]!, days: 0, active: false }));
+  const areas = hasGrimoire ? core.areas : Object.keys(AREA_UI).map((key) => ({ key, label: { metas: "Metas", habitos: "Hábitos", saude: "Saúde", educacao: "Educação", treino: "Treino", energia: "Energia" }[key]!, days: 0, active: false }));
   const by = (k: string) => areas.find((a) => a.key === k)!;
   const span = core.nextLevelXp - core.levelStartXp;
   return (

@@ -8,13 +8,8 @@ import { RPGBadge, RPGButton } from "@/components/rpg";
 import { rpgFieldClass } from "@/components/rpg/rpgAssets";
 import { protocolsService, type ActionMode, type Protocol, type ProtocolRun, type StepPreview } from "@/services/protocolsService";
 import { newRequestId } from "@/utils/requestId";
-import { MODE_UI } from "@/utils/protocolDisplay";
+import { MODE_UI, formatMinutes, stepDisplayTitle } from "@/utils/protocolDisplay";
 
-const GROUPS: Array<{ mode: ActionMode; title: string }> = [
-  { mode: "auto", title: "Automáticas" },
-  { mode: "suggested", title: "Sugeridas" },
-  { mode: "manual", title: "Manuais" },
-];
 
 type TaskRef = { id: string; title: string; priority?: string };
 const asTasks = (v: unknown): TaskRef[] => (Array.isArray(v) ? v.filter((t): t is TaskRef => !!t && typeof t === "object" && "id" in t && "title" in t) : []);
@@ -70,7 +65,7 @@ const STATUS_ICON = {
 
 /**
  * Execução em duas etapas: preview (o servidor calcula o efeito real de cada
- * ação) → confirmação com seleção individual. Ações sugeridas só alteram
+ * passo, mostrados na ordem do protocolo) → confirmação com seleção individual. Ações sugeridas só alteram
  * dados quando marcadas; nada roda em segundo plano.
  */
 export function ProtocolExecutionModal({
@@ -134,7 +129,7 @@ export function ProtocolExecutionModal({
     }
   };
 
-  const title = run ? "Protocolo executado" : `Executar: ${protocol?.name ?? ""}`;
+  const title = run ? "Protocolo em andamento" : `Usar: ${protocol?.name ?? ""}`;
   const footer = run ? (
     <>
       {run.navigate && (
@@ -158,7 +153,7 @@ export function ProtocolExecutionModal({
         Cancelar
       </RPGButton>
       <RPGButton variant="gold" onClick={() => void confirm()} disabled={executing || selected.size === 0 || preview.isLoading}>
-        {executing ? "Executando…" : `Executar ${selected.size} ${selected.size === 1 ? "ação selecionada" : "ações selecionadas"}`}
+        {executing ? "Executando…" : `Começar com ${selected.size} ${selected.size === 1 ? "passo marcado" : "passos marcados"}`}
       </RPGButton>
     </>
   );
@@ -169,53 +164,57 @@ export function ProtocolExecutionModal({
       {preview.isError && <p className="text-sm text-rpg-red">Não foi possível calcular a prévia. Tente novamente.</p>}
 
       {!run && steps.length > 0 && (
-        <div className="space-y-4">
-          <p className="text-sm text-rpg-muted">Revise o que cada ação fará hoje. Desmarque o que não quiser — nada é alterado antes de você confirmar.</p>
-          {GROUPS.map((g) => {
-            const list = steps.filter((s) => s.mode === g.mode);
-            if (list.length === 0) return null;
-            return (
-              <section key={g.mode} aria-label={g.title}>
-                <p className="flex items-center gap-2 font-pixel text-[10px] uppercase tracking-[0.14em] text-rpg-gold">
-                  {g.title} <span className="normal-case tracking-normal font-sans text-[11px] text-rpg-muted">— {MODE_UI[g.mode].hint}</span>
-                </p>
-                <ul className="mt-2 space-y-2">
-                  {list.map((s) => (
-                    <li key={s.ref} className={clsx("border bg-rpg-bg-2/60 p-3", selected.has(s.ref) ? "border-rpg-gold/70" : "border-rpg-border/60", s.noop && "opacity-60")} style={{ borderRadius: 3 }}>
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input type="checkbox" className="mt-1 accent-rpg-gold" checked={selected.has(s.ref)} disabled={s.noop} onChange={() => toggle(s.ref)} />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-1.5 text-sm text-rpg-text">
-                            {s.title}
-                            <RPGBadge tone={MODE_UI[s.mode].tone}>{s.actionLabel}</RPGBadge>
-                            {s.optional && <span className="text-[11px] text-rpg-muted">opcional</span>}
-                          </span>
-                          {s.summary && <span className="block text-xs text-rpg-text/80 mt-0.5">{s.summary}</span>}
-                        </span>
-                      </label>
-                      <div className="pl-7">
-                        <StepDetails step={s} taskId={taskId} onTask={setTaskId} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+        <div className="space-y-3">
+          <p className="text-sm text-rpg-text/85">
+            Confira o passo a passo{protocol ? ` (${formatMinutes(protocol.totalMinutes)} no total)` : ""}. Desmarque o que não quiser hoje — nada muda antes de você clicar em “Começar”.
+          </p>
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-rpg-muted" aria-label="O que cada etiqueta significa">
+            {(Object.keys(MODE_UI) as ActionMode[]).map((m) => (
+              <li key={m} className="inline-flex items-center gap-1">
+                <RPGBadge tone={MODE_UI[m].tone}>{MODE_UI[m].label}</RPGBadge> {MODE_UI[m].hint}
+              </li>
+            ))}
+          </ul>
+          <ol className="space-y-2">
+            {steps.map((s, i) => (
+              <li key={s.ref} className={clsx("border bg-rpg-bg-2/60 p-3", selected.has(s.ref) ? "border-rpg-gold/70" : "border-rpg-border/60", s.noop && "opacity-60")} style={{ borderRadius: 3 }}>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" className="mt-1 accent-rpg-gold" checked={selected.has(s.ref)} disabled={s.noop} onChange={() => toggle(s.ref)} />
+                  <span className="font-pixel text-[10px] leading-6 text-rpg-gold-light w-4 shrink-0" aria-hidden>
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5 text-sm text-rpg-text">
+                      <span className="sr-only">Passo {i + 1}: </span>
+                      {stepDisplayTitle(s)}
+                      <RPGBadge tone={MODE_UI[s.mode].tone}>{MODE_UI[s.mode].label}</RPGBadge>
+                      {s.minutes > 0 && <span className="text-[11px] text-rpg-muted">{s.minutes} min</span>}
+                      {s.optional && <span className="text-[11px] text-rpg-muted">opcional</span>}
+                    </span>
+                    {s.summary && <span className="block text-xs text-rpg-text/80 mt-0.5">{s.summary}</span>}
+                    {s.noop && <span className="block text-[11px] text-rpg-muted">Nada a fazer neste passo hoje.</span>}
+                  </span>
+                </label>
+                <div className="pl-14">
+                  <StepDetails step={s} taskId={taskId} onTask={setTaskId} />
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
       )}
 
       {run && (
         <div className="space-y-3">
           <p className="text-sm text-rpg-text">
-            {run.replayed ? "Esta execução já tinha sido registrada — nada foi repetido." : "Pronto! Veja o que foi feito e marque os passos manuais quando concluir."}
+            {run.replayed ? "Esta execução já tinha sido registrada — nada foi repetido." : "Pronto! O LifeOS já fez a parte dele. Os passos de “Você faz” ficam aqui (e em “Execuções recentes”) para você marcar quando concluir."}
           </p>
           <ul className="space-y-2">
             {run.steps.map((s) => (
               <li key={s.ref} className="flex items-start gap-2 border border-rpg-border/60 bg-rpg-bg-2/60 p-2.5 text-sm" style={{ borderRadius: 3 }}>
                 {STATUS_ICON[s.status]}
                 <span className="min-w-0 flex-1">
-                  <span className="block text-rpg-text">{s.title}</span>
+                  <span className="block text-rpg-text">{stepDisplayTitle(s)}</span>
                   {typeof s.result.message === "string" && <span className="block text-[11px] text-rpg-muted">{s.result.message}</span>}
                 </span>
                 {s.status === "pending" && (

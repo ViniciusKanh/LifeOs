@@ -407,7 +407,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       ...r,
       label: `Revisão ${r.kind === "monthly" ? "mensal" : r.kind === "quarterly" ? "trimestral" : "anual"} (${r.period_key})`,
     })),
-    ...asRows(focusEntries.rows).map((r) => ({ type: "focus", icon: "⏱️", ...r, label: r.label ? String(r.label) : "Sessão de foco" })),
+    ...asRows(focusEntries.rows).map((r) => ({ type: "focus", icon: "⏱️", ...r, label: r.label ? String(r.label) : "Sessão de trabalho" })),
     ...asRows(projectsDone.rows).map((r) => ({ type: "project", icon: "🏰", ...r })),
     ...asRows(achievementsUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r })),
     ...asRows(customUnlocked.rows).map((r) => ({ type: "achievement", icon: "🏆", ...r, id: `custom-${r.id}` })),

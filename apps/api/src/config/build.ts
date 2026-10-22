@@ -79,7 +79,7 @@ export const ARCHETYPES: ArchetypeDef[] = [
     name: "Construtor",
     avatar: "inventor",
     profile: { knowledge: 0.5, discipline: 0.8, focus: 1, health: 0.4, creativity: 0.5, wellbeing: 0.4 },
-    description: "Seu padrão atual é de execução: foco longo e entregas concretas.",
+    description: "Seu padrão atual é de execução: blocos longos de trabalho e entregas concretas.",
     tags: ["Executor", "Focado", "Prático", "Entregas"],
   },
   {
@@ -150,10 +150,10 @@ export const ATTRIBUTE_GUIDES: Record<AttributeKey, AttributeGuide> = {
     actions: [{ id: "discipline-review", label: "Missão: fazer a revisão semanal", item: { kind: "task", title: "Fazer a revisão semanal", priority: "Média", dueInDays: 7 } }],
   },
   focus: {
-    sources: "sessões de foco e missões de concentração",
-    recommendation: "Proteger blocos de foco nos dias úteis.",
+    sources: "cronômetro de missões e missões concluídas",
+    recommendation: "Proteger blocos de trabalho nos dias úteis.",
     // Foco vem das sessões registradas no modo Foco (não de hábitos).
-    actions: [{ id: "focus-open", label: "Abrir Hoje para iniciar uma sessão de foco", item: { kind: "open", path: "/hoje" } }],
+    actions: [{ id: "focus-open", label: "Abrir Hoje e iniciar o cronômetro de uma missão", item: { kind: "open", path: "/hoje" } }],
   },
   health: {
     sources: "hábitos de saúde (exercício, água, sono)",

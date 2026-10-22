@@ -146,7 +146,8 @@ export async function previewStep(db: Client, step: StepInput, ctx: ActionContex
     case "OPEN_SCREEN":
       return { ...base, summary: `Abre ${str(c.path, "/hoje")}`, details: { path: str(c.path, "/hoje") } };
     case "START_FOCUS":
-      return { ...base, summary: `Foco de ${num(c.minutes, 25)} minutos (inicie em Hoje)`, details: { path: "/hoje", minutes: num(c.minutes, 25) } };
+      // Passo legado (antigo "Iniciar foco"): agora é um bloco de trabalho manual.
+      return { ...base, summary: `Bloco de trabalho de ${num(c.minutes, 25)} min — você marca quando concluir.`, details: { minutes: num(c.minutes, 25) } };
     case "CHECKLIST":
       return { ...base, details: { items: Array.isArray(c.items) ? c.items.filter((i): i is string => typeof i === "string") : [] }, summary: "Você marca quando concluir." };
     case "SHOW_INSTRUCTION":
@@ -166,8 +167,6 @@ export async function executeStep(db: Client, step: StepInput, ctx: ActionContex
   switch (step.actionType) {
     case "OPEN_SCREEN":
       return { status: "completed", message: "Tela aberta.", data: { navigate: str(c.path, "/hoje") } };
-    case "START_FOCUS":
-      return { status: "completed", message: "Inicie o foco em Hoje.", data: { navigate: "/hoje" } };
     case "ADJUST_CAPACITY":
     case "DEFER_TASK": {
       let ids: string[];

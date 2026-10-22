@@ -46,7 +46,7 @@ const n = (v: unknown) => Number(v ?? 0);
 const SOURCE_LABEL: Record<string, string> = {
   task: "Missões",
   day: "Bônus do dia",
-  focus: "Foco",
+  focus: "Execução",
   habit_entry: "Hábitos",
   habit_streak: "Sequências",
   journal: "Diário",
@@ -307,12 +307,12 @@ export async function detectDiscoveries(db: Client, ownerId: string, today: stri
     if (diff >= 15) {
       out.push({
         key: "focus_time_of_day",
-        title: `Horário de ouro do foco: ${best}`,
-        description: `Suas sessões de foco ${best === "manhã" ? "antes do meio-dia" : "depois do meio-dia"} duraram em média ${Math.round(Math.max(am, pm))} min — ${diff}% a mais que as do outro período.`,
+        title: `Horário de ouro do trabalho: ${best}`,
+        description: `Suas sessões de trabalho ${best === "manhã" ? "antes do meio-dia" : "depois do meio-dia"} duraram em média ${Math.round(Math.max(am, pm))} min — ${diff}% a mais que as do outro período.`,
         category: "Produtividade",
         sourceType: "focus",
         sourceId: null,
-        evidence: { ...period, metric: "duração média das sessões de foco", morningAvg: Math.round(am), laterAvg: Math.round(pm), sample: morning.length + later.length },
+        evidence: { ...period, metric: "duração média das sessões de trabalho", morningAvg: Math.round(am), laterAvg: Math.round(pm), sample: morning.length + later.length },
         confidence: morning.length + later.length >= 30 ? "high" : "medium",
       });
     }

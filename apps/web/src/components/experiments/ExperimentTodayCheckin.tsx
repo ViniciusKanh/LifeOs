@@ -28,7 +28,7 @@ const RULE_SOURCE: Record<string, { path: string; label: string }> = {
   sleep_before: { path: "/saude", label: "Registrar sono" },
   water_target: { path: "/saude", label: "Registrar água" },
   exercise_minimum: { path: "/saude", label: "Registrar exercício" },
-  focus_minimum: { path: "/foco", label: "Abrir Focus" },
+  focus_minimum: { path: "/tarefas", label: "Abrir Missões" },
   reading_pages_minimum: { path: "/biblioteca", label: "Registrar leitura" },
   study_minimum: { path: "/educacao", label: "Registrar estudo" },
   habit_completion: { path: "/habitos", label: "Marcar hábito" },

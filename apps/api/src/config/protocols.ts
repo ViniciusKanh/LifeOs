@@ -47,7 +47,8 @@ export type ActionType = (typeof ACTION_TYPES)[number];
 export type ActionMode = "auto" | "suggested" | "manual";
 export const ACTION_MODE: Record<ActionType, ActionMode> = {
   OPEN_SCREEN: "auto",
-  START_FOCUS: "auto",
+  // Legado: o módulo Foco saiu do app; o passo vira um bloco de trabalho que o próprio usuário marca como feito.
+  START_FOCUS: "manual",
   CREATE_TASK: "suggested",
   CREATE_HABIT: "suggested",
   ADJUST_CAPACITY: "suggested",
@@ -68,12 +69,18 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   SET_DAILY_PRIORITY: "Definir missão principal",
   ACTIVATE_RECOVERY: "Ativar modo recuperação",
   ADD_REMINDER: "Criar lembrete",
-  START_FOCUS: "Iniciar foco",
+  START_FOCUS: "Bloco de trabalho",
   SHOW_INSTRUCTION: "Instrução",
   CHECKLIST: "Checklist",
   DEFER_TASK: "Adiar missões",
   CUSTOM: "Passo livre",
 };
+
+/**
+ * Tipos mantidos só para protocolos antigos: continuam válidos, exibidos e
+ * executáveis, mas não são mais oferecidos na criação/edição.
+ */
+export const LEGACY_ACTION_TYPES: readonly ActionType[] = ["START_FOCUS"];
 
 /** Telas que um protocolo pode abrir (lista fechada — nada de URL arbitrária). */
 export const OPEN_SCREEN_PATHS = ["/hoje", "/inbox", "/tarefas", "/contratos", "/saude", "/diario", "/capacity-planner", "/calendario", "/revisoes", "/weekly-review", "/notas", "/metas", "/educacao", "/biblioteca", "/signals", "/build", "/protocolos"] as const;
@@ -152,7 +159,7 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
       { title: "Reduzir a carga do dia em 30%", actionType: "ADJUST_CAPACITY", config: { reducePct: 30 }, minutes: 2 },
       { title: "Definir uma única missão principal", actionType: "SET_DAILY_PRIORITY", minutes: 1 },
       { title: "Abrir o Capacity Planner", actionType: "OPEN_SCREEN", config: { path: "/capacity-planner" }, optional: true, minutes: 3 },
-      { title: "Bloco de foco de 25 minutos", actionType: "START_FOCUS", config: { minutes: 25 }, optional: true, minutes: 25 },
+      { title: "Trabalhar 25 minutos só na missão principal", actionType: "CUSTOM", description: "Um único bloco, sem trocar de tarefa.", optional: true, minutes: 25 },
       { title: "Pausa curta sem telas", actionType: "CUSTOM", minutes: 10 },
     ],
   },
@@ -202,7 +209,7 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
     steps: [
       { title: "Listar os tópicos que mais caem", actionType: "CHECKLIST", config: { items: ["Tópicos da ementa", "Exercícios anteriores", "Dúvidas"] }, minutes: 15 },
       { title: "Criar missão de revisão", actionType: "CREATE_TASK", config: { title: "Revisão para a prova", priority: "Alta", dueInDays: 0 }, minutes: 1 },
-      { title: "Bloco de foco de 50 minutos", actionType: "START_FOCUS", config: { minutes: 50 }, minutes: 50 },
+      { title: "Estudar 50 minutos sem interrupções", actionType: "CUSTOM", description: "Celular longe e um tópico por vez.", minutes: 50 },
       { title: "Resolver exercícios sem consultar", actionType: "CUSTOM", minutes: 30 },
       { title: "Revisar erros e anotar", actionType: "CUSTOM", minutes: 15 },
       { title: "Definir a revisão como missão principal", actionType: "SET_DAILY_PRIORITY", minutes: 1 },
@@ -229,7 +236,7 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
   {
     key: "inicio-semana",
     name: "Início da semana",
-    description: "Ritual de planejamento semanal e definição de foco.",
+    description: "Ritual de planejamento semanal e definição de prioridades.",
     category: "planejamento",
     triggerDescription: "Toda segunda-feira.",
     trigger: { type: "time", weekday: 1 },
@@ -241,7 +248,7 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
       { title: "Conferir a agenda", actionType: "OPEN_SCREEN", config: { path: "/calendario" }, minutes: 5 },
       { title: "Definir a missão principal de hoje", actionType: "SET_DAILY_PRIORITY", minutes: 1 },
       { title: "Checar a carga no Capacity Planner", actionType: "OPEN_SCREEN", config: { path: "/capacity-planner" }, optional: true, minutes: 3 },
-      { title: "Bloco de foco de abertura", actionType: "START_FOCUS", config: { minutes: 25 }, optional: true, minutes: 25 },
+      { title: "Primeiros 25 minutos na missão principal", actionType: "CUSTOM", optional: true, minutes: 25 },
       { title: "Lembrete de revisão na sexta", actionType: "CREATE_TASK", config: { title: "Revisão da semana", priority: "Média", dueInDays: 4 }, minutes: 1 },
       { title: "Separar um horário para descanso", actionType: "CUSTOM", minutes: 2 },
     ],
@@ -266,7 +273,7 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
   {
     key: "ansiedade-estresse",
     name: "Ansiedade e estresse",
-    description: "Técnicas para acalmar a mente e recuperar o foco.",
+    description: "Técnicas para acalmar a mente e recuperar a clareza.",
     category: "bem-estar",
     triggerDescription: "Manual — quando a pressão aumenta.",
     trigger: { type: "manual" },
@@ -310,7 +317,7 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
       { title: "Trocar de ambiente por 10 minutos", actionType: "CUSTOM", minutes: 10 },
       { title: "Escrever 10 ideias ruins de propósito", actionType: "SHOW_INSTRUCTION", config: { text: "Quantidade antes de qualidade: tire o peso da primeira ideia." }, minutes: 10 },
       { title: "Abrir Notas para capturar ideias", actionType: "OPEN_SCREEN", config: { path: "/notas" }, minutes: 5 },
-      { title: "Bloco de criação de 25 minutos", actionType: "START_FOCUS", config: { minutes: 25 }, optional: true, minutes: 25 },
+      { title: "Criar por 25 minutos sem julgar", actionType: "CUSTOM", optional: true, minutes: 25 },
       { title: "Escolher uma ideia para testar", actionType: "CUSTOM", minutes: 5 },
     ],
   },

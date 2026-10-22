@@ -15,7 +15,7 @@ export type EffectType = (typeof EFFECT_TYPES)[number];
 
 /** Regras de cada efeito. Iguais não acumulam multiplicativamente. */
 export const EFFECT_RULES = {
-  XP_MULTIPLIER_FOCUS: { pct: 25, durationMin: 30, stacking: "extend" as const, maxRemainingMin: 90, label: "XP de foco" },
+  XP_MULTIPLIER_FOCUS: { pct: 25, durationMin: 30, stacking: "extend" as const, maxRemainingMin: 90, label: "XP do cronômetro" },
   XP_MULTIPLIER_TASK: { pct: 25, durationMin: 24 * 60, stacking: "block" as const, maxRemainingMin: 24 * 60, label: "XP da próxima missão" },
 } as const;
 export type TimedEffect = keyof typeof EFFECT_RULES;
@@ -39,14 +39,14 @@ export interface ItemDef {
 export const ITEM_CATALOG: ItemDef[] = [
   {
     id: "pocao-foco",
-    name: "Poção de Foco",
+    name: "Poção do Ritmo",
     description: "Um gole antes da sessão de concentração.",
     type: "consumable",
     rarity: "common",
     art: "potion",
     stackable: true,
     maxStack: 99,
-    effectText: "+25% XP em sessões de foco",
+    effectText: "+25% XP no cronômetro de missões",
     durationText: "30 min",
     effect: { type: "XP_MULTIPLIER_FOCUS", value: 25 },
     obtainedBy: "1 a cada nível alcançado",
@@ -91,7 +91,7 @@ export const ITEM_CATALOG: ItemDef[] = [
     effectText: "Colecionável do Conjunto do Explorador",
     durationText: "Passivo",
     effect: null,
-    obtainedBy: "25 sessões de foco registradas",
+    obtainedBy: "25 sessões de cronômetro de missões",
   },
   {
     id: "kit-acampamento",
@@ -174,7 +174,7 @@ export const ITEM_SETS: SetDef[] = [
   {
     id: "alquimista",
     name: "Conjunto do Alquimista",
-    description: "Hipóteses, foco e clareza.",
+    description: "Hipóteses, ritmo e clareza.",
     items: ["pocao-foco", "fragmento-cristal", "relic:frasco", "title:alquimista-foco"],
     emblem: { name: "Emblema do Alquimista", rarity: "rare" },
   },

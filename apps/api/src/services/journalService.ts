@@ -61,7 +61,7 @@ function buildSummary(parts: {
   if (parts.waterMl > 0) clauses.push(`${(parts.waterMl / 1000).toFixed(1)}L de água`);
 
   if (clauses.length === 0) {
-    return "Ainda não há registros de hoje nos outros módulos do LifeOS — comece por uma tarefa, um hábito ou uma sessão de foco.";
+    return "Ainda não há registros de hoje nos outros módulos do LifeOS — comece por uma tarefa, um hábito ou um registro de saúde.";
   }
   const moodNote = parts.mood ? ` Humor ${parts.mood.mood}/5, energia ${parts.mood.energy}/5.` : "";
   return `Hoje: ${clauses.join(", ")}.${moodNote}`;

@@ -22,11 +22,33 @@ const REUSED: Record<string, string> = { moon: "/assets/rpg/rewards/moon.webp", 
 export const PROTOCOL_ARTS = ["moon", "storm", "stage", "heart", "study", "sunrise", "map", "campfire", "meditate", "coins", "crystal", "digital"] as const;
 export const protocolArtUrl = (art: string) => REUSED[art] ?? `/assets/rpg/protocols/${art}.webp`;
 
+/** Quem faz cada passo, em linguagem simples. */
 export const MODE_UI: Record<ActionMode, { label: string; tone: RpgTone; hint: string }> = {
-  auto: { label: "Automática", tone: "blue", hint: "Só navegação — não altera seus dados." },
-  suggested: { label: "Sugerida", tone: "purple", hint: "Altera dados apenas se você marcar." },
-  manual: { label: "Manual", tone: "orange", hint: "Você faz e marca como feito depois." },
+  auto: { label: "Abre uma tela", tone: "blue", hint: "O LifeOS só leva você até a tela certa — nada é alterado." },
+  suggested: { label: "LifeOS faz", tone: "purple", hint: "O LifeOS faz por você (cria, adia, ajusta) — só se você deixar marcado." },
+  manual: { label: "Você faz", tone: "orange", hint: "Algo fora do app: você faz e marca como feito depois." },
 };
+
+/** "45 min" / "1 h 10 min" — duração total de um protocolo. */
+export function formatMinutes(total: number): string {
+  if (total <= 0) return "sem tempo definido";
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+/**
+ * Título exibido de um passo. Passos legados START_FOCUS (o módulo Foco foi
+ * removido) aparecem como "Bloco de trabalho de N min" quando o título ainda
+ * fala em foco; títulos personalizados pelo usuário são mantidos.
+ */
+export function stepDisplayTitle(s: { actionType: string; title: string; config?: Record<string, unknown>; details?: Record<string, unknown>; minutes?: number }): string {
+  if (s.actionType !== "START_FOCUS" || !/foco|focus/i.test(s.title)) return s.title;
+  const raw = s.config?.minutes ?? s.details?.minutes ?? s.minutes;
+  const min = typeof raw === "number" && raw > 0 ? raw : null;
+  return min ? `Bloco de trabalho de ${min} min` : "Bloco de trabalho";
+}
 
 export type ProtocolFilter = "all" | "mine" | "templates" | "used" | "recent" | "favorites";
 export type ProtocolSort = "relevance" | "used" | "recent" | "az";

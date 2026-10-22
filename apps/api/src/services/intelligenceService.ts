@@ -15,7 +15,7 @@ import {
   type ClassMetrics,
   type FittedModel,
 } from "./mlEngine.js";
-import { FEATURES, OBJECTIVES, buildDataset, featureRow, loadDays, readinessOf, summarizeGrimoire, type GrimoireSummary, type ObjectiveKey } from "./intelligenceDataset.js";
+import { FEATURES, OBJECTIVES, RETIRED_OBJECTIVES, type DayData, buildDataset, effectsForFeatures, featureRow, loadDays, readinessOf, rowForModel, summarizeGrimoire, type GrimoireSummary, type ObjectiveKey } from "./intelligenceDataset.js";
 
 /**
  * Forja da Inteligência — orquestra treino (forja/reforja), arena, profecia e
@@ -109,11 +109,19 @@ interface ArtifactRow {
   insights: ArtifactInsights;
   firstTrainedAt: string;
   trainedAt: string;
+  /** Forjado antes de a runa de Foco sair do LifeOS — vale reforjar. */
+  legacy: boolean;
 }
+
+/** Runas que não existem mais (o módulo Foco saiu do LifeOS). */
+const RETIRED_FEATURES = new Set(["focus_minutes"]);
+const keep = (key: string) => !RETIRED_FEATURES.has(key);
 
 const ARTIFACT_COLS = "id, objective, algorithm, status, xp, trainings, samples, metrics_json, importance_json, insights_json, first_trained_at, trained_at";
 
 function parseArtifact(r: Record<string, unknown>): ArtifactRow {
+  const importance = JSON.parse(String(r.importance_json)) as Importance[];
+  const insights = JSON.parse(String(r.insights_json)) as ArtifactInsights;
   return {
     id: String(r.id),
     objective: String(r.objective) as ObjectiveKey,
@@ -123,10 +131,16 @@ function parseArtifact(r: Record<string, unknown>): ArtifactRow {
     trainings: Number(r.trainings),
     samples: Number(r.samples),
     metrics: JSON.parse(String(r.metrics_json)) as ArtifactMetrics,
-    importance: JSON.parse(String(r.importance_json)) as Importance[],
-    insights: JSON.parse(String(r.insights_json)) as ArtifactInsights,
+    importance: importance.filter((i) => keep(i.key)),
+    insights: {
+      ...insights,
+      opportunities: insights.opportunities.filter((o) => keep(o.feature)),
+      pdp: insights.pdp?.filter((x) => keep(x.key)),
+      stats: insights.stats?.filter((x) => keep(x.key)),
+    },
     firstTrainedAt: String(r.first_trained_at),
     trainedAt: String(r.trained_at),
+    legacy: importance.some((i) => !keep(i.key)),
   };
 }
 
@@ -160,7 +174,11 @@ export function summarizeArtifact(a: ArtifactRow) {
 export type ArtifactSummary = ReturnType<typeof summarizeArtifact>;
 
 async function getArtifacts(db: Client, ownerId: string): Promise<ArtifactRow[]> {
-  const r = await db.execute({ sql: `SELECT ${ARTIFACT_COLS} FROM ml_artifacts WHERE owner_id = ? ORDER BY trained_at DESC`, args: [ownerId] });
+  // Artefatos de objetivos aposentados (ex.: Foco) continuam no banco, mas saem da Forja.
+  const r = await db.execute({
+    sql: `SELECT ${ARTIFACT_COLS} FROM ml_artifacts WHERE owner_id = ? AND objective NOT IN (${RETIRED_OBJECTIVES.map(() => "?").join(", ")}) ORDER BY trained_at DESC`,
+    args: [ownerId, ...RETIRED_OBJECTIVES],
+  });
   return r.rows.map((row) => parseArtifact(row as unknown as Record<string, unknown>));
 }
 
@@ -320,12 +338,15 @@ function parseExperiment(r: Record<string, unknown>) {
 }
 
 export async function listExperiments(db: Client, ownerId: string, limit = 30) {
-  const r = await db.execute({ sql: "SELECT * FROM ml_experiments WHERE owner_id = ? ORDER BY created_at DESC LIMIT ?", args: [ownerId, limit] });
+  const r = await db.execute({
+    sql: `SELECT * FROM ml_experiments WHERE owner_id = ? AND objective NOT IN (${RETIRED_OBJECTIVES.map(() => "?").join(", ")}) ORDER BY created_at DESC LIMIT ?`,
+    args: [ownerId, ...RETIRED_OBJECTIVES, limit],
+  });
   return r.rows.map((row) => parseExperiment(row as unknown as Record<string, unknown>));
 }
 
 /** Profecia do dia com o artefato escolhido; calculada uma vez por dia e guardada. */
-async function prophecyFor(db: Client, ownerId: string, a: ArtifactRow, today: string) {
+async function prophecyFor(db: Client, ownerId: string, a: ArtifactRow, today: string, preloaded?: DayData[]) {
   const o = OBJECTIVES.find((x) => x.key === a.objective)!;
   const base = { artifactId: a.id, artifactName: o.name, targetLabel: o.targetLabel, targetDate: today, confidence: a.metrics.confidence, status: a.status };
   const cached = await db.execute({ sql: "SELECT probability, explanation_json FROM ml_predictions WHERE owner_id = ? AND artifact_id = ? AND target_date = ?", args: [ownerId, a.id, today] });
@@ -336,11 +357,13 @@ async function prophecyFor(db: Client, ownerId: string, a: ArtifactRow, today: s
   if (!modelRes.rows[0]) return null;
   const model = JSON.parse(String(modelRes.rows[0].model_json)) as FittedModel;
   // Só os últimos 9 dias: véspera + janela de 7 dias da carga semanal.
-  const days = await loadDays(db, ownerId, today, 9);
+  const days = preloaded ?? (await loadDays(db, ownerId, today, 9));
   const idx = days.findIndex((d) => d.date === today);
   if (idx < 1) return { ...base, probability: null, factors: [], reason: "Sem registros na véspera para basear a profecia." };
   const row = featureRow(days, idx);
-  const { p, effects } = localEffects(model, row);
+  const local = localEffects(model, rowForModel(model, row));
+  const p = local.p;
+  const effects = effectsForFeatures(model, local.effects);
   const factors: Factor[] = FEATURES.map((f, j) => ({ key: f.key, label: f.label, effect: Math.round(effects[j] * 100), value: row[j] }))
     .filter((f) => f.effect !== 0)
     .sort((x, y) => Math.abs(y.effect) - Math.abs(x.effect))
@@ -366,7 +389,8 @@ function buildAlerts(artifacts: ArtifactRow[]) {
     const name = OBJECTIVES.find((o) => o.key === a.objective)!.name;
     if (a.insights.drift.detected) alerts.push({ type: "drift", severity: "high", title: "Deriva detectada", description: `${name}: ${a.insights.drift.text}`, artifactId: a.id });
     const since = daysSince(a.trainedAt);
-    if (since >= STALE_DAYS) alerts.push({ type: "reforge", severity: "medium", title: "Reforja recomendada", description: `${name} está há ${since} dias sem treino.`, artifactId: a.id });
+    if (a.legacy) alerts.push({ type: "reforge", severity: "medium", title: "Reforja recomendada", description: `${name} foi forjado com a runa de Foco, que saiu do LifeOS. Reforje para treinar só com as runas atuais.`, artifactId: a.id });
+    else if (since >= STALE_DAYS) alerts.push({ type: "reforge", severity: "medium", title: "Reforja recomendada", description: `${name} está há ${since} dias sem treino.`, artifactId: a.id });
     if (a.status === "experimental") alerts.push({ type: "experimental", severity: "medium", title: "Sem vantagem sobre o acaso", description: `${name} ainda não supera a linha de base — siga registrando para reforjar.`, artifactId: a.id });
   }
   const opp = artifacts.flatMap((a) => a.insights.opportunities.map((o) => ({ ...o, artifactId: a.id })))[0];
@@ -379,8 +403,14 @@ export async function getOverview(db: Client, ownerId: string) {
   const today = await todayKeyFor(db, ownerId);
   const [rows, expCount, latestExp, snap] = await Promise.all([
     getArtifacts(db, ownerId),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM ml_experiments WHERE owner_id = ?", args: [ownerId] }),
-    db.execute({ sql: "SELECT * FROM ml_experiments WHERE owner_id = ? ORDER BY created_at DESC LIMIT 1", args: [ownerId] }),
+    db.execute({
+      sql: `SELECT COUNT(*) AS n FROM ml_experiments WHERE owner_id = ? AND objective NOT IN (${RETIRED_OBJECTIVES.map(() => "?").join(", ")})`,
+      args: [ownerId, ...RETIRED_OBJECTIVES],
+    }),
+    db.execute({
+      sql: `SELECT * FROM ml_experiments WHERE owner_id = ? AND objective NOT IN (${RETIRED_OBJECTIVES.map(() => "?").join(", ")}) ORDER BY created_at DESC LIMIT 1`,
+      args: [ownerId, ...RETIRED_OBJECTIVES],
+    }),
     db.execute({ sql: "SELECT summary_json, updated_at FROM ml_grimoire_snapshots WHERE owner_id = ?", args: [ownerId] }),
   ]);
   const artifacts = rows.map(summarizeArtifact);
@@ -390,6 +420,9 @@ export async function getOverview(db: Client, ownerId: string) {
 
   // Profecia: Oráculo de Produtividade quando existir; senão o melhor artefato em produção.
   const pick = rows.find((a) => a.objective === "productivity") ?? rows.find((a) => a.status === "production") ?? rows[0];
+  // Quadro de profecias: uma previsão por artefato (guardadas por dia — custo só na 1ª visita).
+  const recentDays = rows.length ? await loadDays(db, ownerId, today, 9) : [];
+  const prophecies = (await Promise.all(rows.map((a) => prophecyFor(db, ownerId, a, today, recentDays)))).filter((p): p is NonNullable<typeof p> => p !== null);
   const best = [...rows].sort((a, b) => b.metrics.cvMean - a.metrics.cvMean)[0];
 
   return {
@@ -408,7 +441,8 @@ export async function getOverview(db: Client, ownerId: string) {
     grimoire,
     runes: best ? { artifactId: best.id, artifactName: OBJECTIVES.find((o) => o.key === best.objective)!.name, items: best.importance } : null,
     alerts: buildAlerts(rows),
-    prophecy: pick ? await prophecyFor(db, ownerId, pick, today) : null,
+    prophecy: pick ? prophecies.find((p) => p.artifactId === pick.id) ?? null : null,
+    prophecies,
   };
 }
 
@@ -416,6 +450,7 @@ export async function getArtifactDetail(db: Client, ownerId: string, id: string)
   const r = await db.execute({ sql: `SELECT ${ARTIFACT_COLS} FROM ml_artifacts WHERE id = ? AND owner_id = ?`, args: [id, ownerId] });
   if (!r.rows[0]) throw new IntelligenceError(404, "Artefato não encontrado.");
   const a = parseArtifact(r.rows[0] as unknown as Record<string, unknown>);
+  if (!OBJECTIVES.some((o) => o.key === a.objective)) throw new IntelligenceError(404, "Artefato não encontrado.");
   const [exps, preds] = await Promise.all([
     db.execute({ sql: "SELECT * FROM ml_experiments WHERE owner_id = ? AND objective = ? ORDER BY created_at DESC LIMIT 10", args: [ownerId, a.objective] }),
     db.execute({
@@ -444,6 +479,7 @@ export async function simulateArtifact(db: Client, ownerId: string, id: string, 
   const r = await db.execute({ sql: `SELECT ${ARTIFACT_COLS}, model_json FROM ml_artifacts WHERE id = ? AND owner_id = ?`, args: [id, ownerId] });
   if (!r.rows[0]) throw new IntelligenceError(404, "Artefato não encontrado.");
   const a = parseArtifact(r.rows[0] as unknown as Record<string, unknown>);
+  if (!OBJECTIVES.some((o) => o.key === a.objective)) throw new IntelligenceError(404, "Artefato não encontrado.");
   const model = JSON.parse(String(r.rows[0].model_json)) as FittedModel;
   let base: Record<string, number | null> = {};
   if (!values) {
@@ -460,7 +496,9 @@ export async function simulateArtifact(db: Client, ownerId: string, id: string, 
     const v = input[f.key];
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   });
-  const { p, effects } = localEffects(model, row);
+  const local = localEffects(model, rowForModel(model, row));
+  const p = local.p;
+  const effects = effectsForFeatures(model, local.effects);
   return {
     artifactId: a.id,
     targetLabel: OBJECTIVES.find((o) => o.key === a.objective)!.targetLabel,

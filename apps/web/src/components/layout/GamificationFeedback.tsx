@@ -36,7 +36,7 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
   if (main.sourceType === "life_admin") return { title: "ITEM RESOLVIDO", stamp: "contract", detail: main.label?.replace(/^Resolvido: /, "") ?? null };
   if (main.sourceType === "habit_streak") return { title: "MARCO DE SEQUÊNCIA", stamp: "contract", detail: main.label };
   if (main.sourceType === "review") return { title: "CICLO CONCLUÍDO", stamp: "mission", detail: main.label };
-  if (main.sourceType === "focus") return { title: "FOCO REGISTRADO", stamp: null, detail: main.label };
+  if (main.sourceType === "focus") return { title: "TEMPO REGISTRADO", stamp: null, detail: main.label };
   if (main.sourceType === "journal") return { title: "CRÔNICA REGISTRADA", stamp: null, detail: null };
   return { title: "BÔNUS", stamp: null, detail: main.label };
 }

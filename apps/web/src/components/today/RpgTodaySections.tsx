@@ -100,8 +100,8 @@ const DIFFICULTY: Record<string, string> = { Baixa: "Fácil", Média: "Média", 
 /**
  * "Missões de hoje": as prioridades reais do dia com dificuldade (prioridade),
  * projeto, prazo, duração estimada e a recompensa prevista pelas regras do
- * backend. A missão principal (1ª do Priority Score) ganha "Iniciar Focus",
- * que abre o cronômetro da tarefa — encerrar o foco registra os blocos de 25 min.
+ * backend. A missão principal (1ª do Priority Score) ganha "Iniciar cronômetro",
+ * que mede o tempo real da tarefa — parar registra os blocos de 25 min (XP).
  */
 export function RpgTodayMissions({
   tasks,
@@ -177,11 +177,11 @@ export function RpgTodayMissions({
                       <div className="mt-2">
                         {timer.activeEntry ? (
                           <RPGButton variant="secondary" className="!py-1.5" onClick={() => void timer.stop()}>
-                            <Square size={12} aria-hidden /> Encerrar Focus
+                            <Square size={12} aria-hidden /> Parar cronômetro
                           </RPGButton>
                         ) : (
                           <RPGButton variant="blue" className="!py-1.5" onClick={() => onStartFocus(t.id)}>
-                            <Timer size={13} aria-hidden /> Iniciar Focus
+                            <Timer size={13} aria-hidden /> Iniciar cronômetro
                           </RPGButton>
                         )}
                       </div>

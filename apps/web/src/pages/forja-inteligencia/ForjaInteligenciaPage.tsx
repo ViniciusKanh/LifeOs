@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { BookMarked, Box, FlaskConical, Gem, Hammer, LayoutGrid, Swords, Target, Zap } from "lucide-react";
+import { BookMarked, Box, FlaskConical, Gem, Hammer, LayoutGrid, NotebookPen, ScrollText, Swords, Target, Zap } from "lucide-react";
 import { RPGBadge, RPGButton, RPGPanel, RPGStatCard, RPGTabs, RPGToast } from "@/components/rpg";
 import { rpgFieldClass } from "@/components/rpg/rpgAssets";
 import { IntelligenceHero } from "@/components/intelligence/IntelligenceHero";
 import { IntelligenceCorePanel } from "@/components/intelligence/IntelligenceCorePanel";
 import { ProphecyModal, ProphecyPanel } from "@/components/intelligence/ProphecyPanel";
 import { CoreAlertsPanel } from "@/components/intelligence/CoreAlertsPanel";
+import { ProphecyBoard } from "@/components/intelligence/ProphecyBoard";
+import { RPGHowItWorks } from "@/components/rpg/RPGHowItWorks";
 import { ArtifactGrid, ArtifactsPanel } from "@/components/intelligence/ArtifactPanels";
 import { ArenaHistory, ArenaPanel } from "@/components/intelligence/ArenaPanel";
 import { GrimoireFull, GrimoirePanel } from "@/components/intelligence/GrimoirePanel";
@@ -133,7 +135,7 @@ export function ForjaInteligenciaPage() {
 
   const s = data?.summary;
   const stats = (
-    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
       <RPGStatCard layout="wide" tone="purple" icon={<Box size={26} />} value={s ? String(s.artifactsActive) : "—"} label="Artefatos ativos" caption="modelos em produção" />
       <RPGStatCard layout="wide" tone="purple" icon={<FlaskConical size={26} />} value={s ? String(s.experiments) : "—"} label="Experimentos" caption="arenas realizadas" />
       <RPGStatCard layout="wide" tone="purple" icon={<Target size={26} />} value={s?.avgAccuracy != null ? pct(s.avgAccuracy) : "—"} label="Precisão média" caption={s?.avgAccuracy != null ? "média dos artefatos ativos" : "sem artefatos ativos"} />
@@ -153,6 +155,7 @@ export function ForjaInteligenciaPage() {
               <ProphecyPanel prophecy={d.prophecy} onAnalyze={() => setProphecyOpen(true)} onForge={() => openForge("productivity")} />
               <CoreAlertsPanel alerts={d.alerts} onInspect={setDetailId} onReforge={reforgeById} />
             </div>
+            <ProphecyBoard prophecies={d.prophecies ?? []} artifacts={d.artifacts} onInspect={setDetailId} />
             <div className="grid gap-4 md:grid-cols-2 min-[1800px]:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.85fr)] items-stretch [&>*]:min-w-0">
               <div className="md:col-span-2 xl:col-span-1">
                 <ArtifactsPanel artifacts={d.artifacts} objectives={d.objectives} onInspect={setDetailId} onForge={openForge} onViewAll={() => setTab("artifacts")} readiness={d.grimoire?.readiness} />
@@ -181,6 +184,14 @@ export function ForjaInteligenciaPage() {
   return (
     <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-4">
       <IntelligenceHero onNew={() => openForge()} />
+      <RPGHowItWorks
+        storageKey="lifeos:forja-como-funciona"
+        steps={[
+          { icon: NotebookPen, title: "1. Registre sua rotina", text: "Sono, humor, treinos, hábitos, estudos e missões viram as runas — os sinais que a forja estuda.", tone: "blue" },
+          { icon: Hammer, title: "2. Forje um artefato", text: "Cada artefato é um modelo que aprende um alvo (ex.: dia de treino). Ele só entra em produção se acertar mais que o acaso.", tone: "gold" },
+          { icon: ScrollText, title: "3. Leia as profecias", text: "Todo dia, cada artefato estima a chance de hoje a partir de ontem e mostra o que mais pesou. Reforje para incluir os dias novos.", tone: "purple" },
+        ]}
+      />
       {stats}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <RPGTabs label="Seções da Forja" tabs={TABS} value={tab} onChange={setTab} className="max-w-full" />

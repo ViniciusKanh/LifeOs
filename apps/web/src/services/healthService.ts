@@ -1,5 +1,6 @@
 import { api } from "./api";
-import type { WaterEntry, SleepEntry, Workout, MoodEntry, HealthSummary, HealthCorrelation } from "@/types";
+import type { WaterEntry, SleepEntry, Workout, MoodEntry, HealthSummary, HealthCorrelation, WorkoutCategory, FightModality } from "@/types";
+import { browserTzOffset } from "@/utils/localDate";
 
 export interface WaterEntryInput {
   amountMl: number;
@@ -13,9 +14,24 @@ export interface SleepEntryInput {
   notes?: string | null;
 }
 
+export interface WorkoutSetInput {
+  exercise: string;
+  sets?: number | null;
+  reps?: number | null;
+  loadKg?: number | null;
+}
+
 export interface WorkoutInput {
-  kind: string;
+  /** Tipo estável; a API grava o rótulo em `kind` para compatibilidade. */
+  category: WorkoutCategory;
+  kind?: string;
   durationMinutes: number;
+  modality?: FightModality | null;
+  rpe?: number | null;
+  muscleGroups?: string | null;
+  rounds?: number | null;
+  roundMinutes?: number | null;
+  sets?: WorkoutSetInput[];
   distanceKm?: number | null;
   calories?: number | null;
   intensity?: "leve" | "moderada" | "intensa" | null;
@@ -36,7 +52,7 @@ export interface MoodEntryInput {
  * certo em vez do fuso do servidor (ver localDayBoundsUtc no health.routes.ts). */
 function dateQuery(date?: string, tzOffsetMinutes?: number) {
   if (!date) return "";
-  const tz = tzOffsetMinutes ?? new Date().getTimezoneOffset();
+  const tz = tzOffsetMinutes ?? browserTzOffset();
   return `?date=${date}&tz=${tz}`;
 }
 
@@ -55,7 +71,7 @@ export const healthService = {
   updateSleep: (id: string, patch: Partial<SleepEntryInput>) => api.patch<SleepEntry>(`/health/sleep/${id}`, patch),
   removeSleep: (id: string) => api.delete<void>(`/health/sleep/${id}`),
 
-  listWorkouts: (limit = 30) => api.get<Workout[]>(`/health/workouts?limit=${limit}`),
+  listWorkouts: (limit = 60) => api.get<Workout[]>(`/health/workouts?limit=${limit}`),
   addWorkout: (input: WorkoutInput) => api.post<Workout>("/health/workouts", input),
   updateWorkout: (id: string, patch: Partial<WorkoutInput>) => api.patch<Workout>(`/health/workouts/${id}`, patch),
   removeWorkout: (id: string) => api.delete<void>(`/health/workouts/${id}`),

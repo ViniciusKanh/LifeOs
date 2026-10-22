@@ -2,7 +2,7 @@ import { api } from "./api";
 
 /** Espelho de /api/intelligence — treino, arena e profecias rodam no servidor; a UI só apresenta. */
 export type AlgorithmId = "baseline" | "logistic" | "naive_bayes" | "knn" | "tree";
-export type ObjectiveKey = "productivity" | "habits" | "focus" | "energy" | "study";
+export type ObjectiveKey = "productivity" | "habits" | "training" | "energy" | "study";
 export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 export type ArtifactIcon = "sun" | "leaf" | "flame" | "bolt" | "book";
 
@@ -142,6 +142,8 @@ export interface IntelligenceOverview {
   runes: { artifactId: string; artifactName: string; items: Importance[] } | null;
   alerts: CoreAlert[];
   prophecy: Prophecy | null;
+  /** Uma profecia por artefato (Quadro de Profecias). Ausente em respostas antigas. */
+  prophecies?: Prophecy[];
 }
 
 export interface RuleView {

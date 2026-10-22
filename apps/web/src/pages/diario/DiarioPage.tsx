@@ -60,6 +60,7 @@ import { JournalAiOrganizer } from "@/components/journal/JournalAiOrganizer";
 import { JournalWritingAssistant } from "@/components/journal/JournalWritingAssistant";
 import { JournalDayClosing } from "@/components/journal/JournalDayClosing";
 import { JournalWordCloud } from "@/components/journal/JournalWordCloud";
+import { JournalChapterBadge } from "@/components/journal/JournalChapterBadge";
 import { MOOD_EMOJI } from "@/utils/journalMood";
 import { useQueryClient } from "@tanstack/react-query";
 import { healthService } from "@/services/healthService";
@@ -192,28 +193,127 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * Bloco de seção do editor do dia. Com `chapter`, vira um "capítulo" da
+ * crônica: ganha âncora (`id`) para o sumário, numeração e um contador
+ * opcional (`meta`) — sempre derivado do que o usuário registrou de fato.
+ * Blocos grandes (editor, mídia) não "levantam" no hover para não
+ * atrapalhar a digitação.
+ */
 function SectionCard({
+  id,
   icon,
   title,
   subtitle,
+  chapter,
+  meta,
   children,
   className,
 }: {
+  id?: string;
   icon: React.ReactNode;
   title: string;
   subtitle?: string;
+  chapter?: string;
+  meta?: string;
   children: React.ReactNode;
   className?: string;
 }) {
+  const headingId = id ? `${id}-titulo` : undefined;
   return (
-    <Card className={`p-4 sm:p-5 border-t-2 border-t-cat-pink/40 flex flex-col transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:scale-[0.99] ${className ?? ""}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-cat-pink shrink-0">{icon}</span>
-        <p className="text-sm font-semibold">{title}</p>
+    <Card
+      id={id}
+      aria-labelledby={headingId}
+      role={id ? "region" : undefined}
+      className={`p-4 sm:p-5 border-t-2 border-t-cat-pink/40 flex flex-col min-w-0 scroll-mt-4 ${
+        chapter ? "" : "transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md"
+      } ${className ?? ""}`}
+    >
+      <div className="flex items-center gap-2 mb-1 min-w-0">
+        {chapter && <JournalChapterBadge chapter={chapter} />}
+        <span className="text-cat-pink shrink-0 rpg:text-rpg-pink">{icon}</span>
+        <h2 id={headingId} className={`text-sm font-semibold leading-snug min-w-0 break-words ${RPG_SECTION_TITLE}`}>
+          {title}
+        </h2>
+        {meta && (
+          <span className="ml-auto shrink-0 text-[11px] font-medium text-slate rounded-full px-2 py-0.5 bg-black/[0.04] dark:bg-white/[0.06] rpg:rounded-[3px] rpg:bg-rpg-bg rpg:border rpg:border-rpg-border rpg:text-rpg-muted">
+            {meta}
+          </span>
+        )}
       </div>
       {subtitle ? <p className="text-xs text-slate italic mb-3">{subtitle}</p> : <div className="mb-3" />}
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </Card>
+  );
+}
+
+/** Conta palavras do HTML do editor rico (só texto visível, sem tags). */
+function countWords(html: string | null | undefined): number {
+  if (!html) return 0;
+  const plain = html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim();
+  return plain ? plain.split(/\s+/).length : 0;
+}
+
+type ChronicleChapter = {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  /** Resumo do que existe registrado (ex.: "3 fotos") ou convite quando vazio. */
+  value: string;
+  filled: boolean;
+};
+
+/**
+ * "Sumário da crônica": índice do dia com cada seção e o que já foi
+ * registrado nela (contagens reais do form/entrada). Tocar leva até a seção
+ * e move o foco para o título dela — útil no mobile, onde o editor é longo.
+ */
+function ChronicleIndex({ chapters }: { chapters: ChronicleChapter[] }) {
+  const filledCount = chapters.filter((c) => c.filled).length;
+  const goTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    document.getElementById(`${id}-titulo`)?.setAttribute("tabindex", "-1");
+    document.getElementById(`${id}-titulo`)?.focus({ preventScroll: true });
+  };
+  return (
+    <nav aria-label="Sumário da entrada do dia" className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 rpg:rpg-panel">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2.5">
+        <p className={`text-xs font-semibold ${RPG_SECTION_TITLE}`}>Sumário da crônica</p>
+        <p className="text-[11px] text-slate">
+          {filledCount} de {chapters.length} seções com registro
+        </p>
+      </div>
+      <ol className="grid grid-cols-2 sm:grid-cols-4 2xl:grid-cols-8 gap-2">
+        {chapters.map((c) => (
+          <li key={`${c.id}:${c.label}`} className="min-w-0">
+            <button
+              type="button"
+              onClick={() => goTo(c.id)}
+              className={`w-full h-full min-h-[52px] flex items-start gap-2 text-left rounded-xl px-2.5 py-2 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cat-pink rpg:rounded-[3px] ${
+                c.filled
+                  ? "border-cat-pink/30 bg-cat-pink/[0.06] hover:bg-cat-pink/10 rpg:border-rpg-gold/50 rpg:bg-rpg-gold/10 rpg:hover:bg-rpg-gold/15"
+                  : "border-dashed border-paper-border dark:border-ink-border hover:border-cat-pink/50 rpg:border-rpg-border rpg:hover:border-rpg-gold/60"
+              }`}
+            >
+              <span className={`mt-0.5 shrink-0 ${c.filled ? "text-cat-pink rpg:text-rpg-gold-light" : "text-slate"}`} aria-hidden>
+                {c.icon}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold leading-tight truncate">{c.label}</span>
+                <span className="block text-[11px] text-slate leading-tight truncate">
+                  {c.value}
+                  <span className="sr-only">{c.filled ? " (registrado)" : " (vazio)"}</span>
+                </span>
+              </span>
+              {c.filled && <Check size={12} className="ml-auto mt-0.5 shrink-0 text-growth rpg:text-rpg-green" aria-hidden />}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -419,7 +519,8 @@ function LocationTagsLinksSection({
   ].filter((opt) => !links.some((l) => l.targetType === opt.type && l.targetId === opt.id));
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    // 3 colunas no tablet (o card ocupa a largura toda); empilhado no desktop largo, onde fica na coluna lateral estreita.
+    <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-4">
       <div>
         <p className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
           <MapPin size={12} /> Onde você está?
@@ -561,7 +662,7 @@ const MOMENT_META: Record<JournalMomentKind, { icon: React.ReactNode; label: str
 function JournalMomentsRow({ moments, addedIds, onInsert }: { moments: JournalMoment[]; addedIds: Set<string>; onInsert: (moment: JournalMoment) => void }) {
   if (moments.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised p-3 sm:p-4 mb-4 rpg:rpg-panel">
+    <div className="rounded-xl border border-dashed border-paper-border dark:border-ink-border bg-paper/60 dark:bg-ink/40 p-3 rpg:rounded-[3px] rpg:border-rpg-border rpg:bg-rpg-bg-2">
       <div className="flex items-center gap-2 mb-2">
         <Sparkles size={14} className="text-cat-purple" />
         <p className="text-xs font-semibold">Sugestões de hoje</p>
@@ -846,6 +947,33 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   const book = entry?.auto.currentBook;
   const auto = entry?.auto;
 
+  // Contagens do sumário — sempre do que está no form (o que o usuário vê agora) ou na entrada salva.
+  const wordCount = useMemo(() => countWords(form.thoughts), [form.thoughts]);
+  const gratitudeCount = form.gratitude.filter((g) => g.trim().length > 0).length;
+  const selfCareCount = combinedSelfCare.size + (form.selfCareOther.trim() ? 1 : 0);
+  const visualMediaCount = (entry?.media ?? []).filter((m) => m.kind !== "audio").length;
+  const audioCount = (entry?.media ?? []).filter((m) => m.kind === "audio").length;
+  const highlightsCount = entry?.ai?.highlights.length ?? 0;
+  const hasClosing = countWords(form.nightTakeaway) > 0 || !!auto?.mood;
+  const placeCount = (form.locationLabel ? 1 : 0) + form.tags.length + (entry?.links.length ?? 0);
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const chapters: ChronicleChapter[] = [
+    { id: "cronica-relato", icon: <PenLine size={14} />, label: "Relato", value: wordCount > 0 ? plural(wordCount, "palavra", "palavras") : "Escrever", filled: wordCount > 0 },
+    {
+      id: "cronica-momentos",
+      icon: <Sparkles size={14} />,
+      label: "Momentos",
+      value: entry?.ai ? plural(highlightsCount, "destaque", "destaques") : "Organizar com IA",
+      filled: !!entry?.ai,
+    },
+    { id: "cronica-gratidao", icon: <Heart size={14} />, label: "Gratidão", value: gratitudeCount > 0 ? `${gratitudeCount}/3` : "Registrar", filled: gratitudeCount > 0 },
+    { id: "cronica-gratidao", icon: <Check size={14} />, label: "Cuidado", value: selfCareCount > 0 ? plural(selfCareCount, "item", "itens") : "Marcar", filled: selfCareCount > 0 },
+    { id: "cronica-midias", icon: <Camera size={14} />, label: "Mídias", value: visualMediaCount > 0 ? plural(visualMediaCount, "anexo", "anexos") : "Adicionar", filled: visualMediaCount > 0 },
+    { id: "cronica-voz", icon: <Mic size={14} />, label: "Voz", value: audioCount > 0 ? plural(audioCount, "nota", "notas") : "Gravar", filled: audioCount > 0 },
+    { id: "cronica-fechamento", icon: <Moon size={14} />, label: "Fechamento", value: hasClosing ? "Registrado" : "Fechar o dia", filled: hasClosing },
+    { id: "cronica-lugar", icon: <MapPin size={14} />, label: "Lugar e tags", value: form.locationLabel || (placeCount > 0 ? plural(placeCount, "marcação", "marcações") : "Marcar"), filled: placeCount > 0 },
+  ];
+
   return (
     <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
       {/* Masthead — inspirado no app Diário/Journal da Apple: gradiente suave do
@@ -1009,9 +1137,282 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate">Carregando…</p>
+        <div className="space-y-4" aria-busy="true" aria-label="Carregando a entrada do dia">
+          <div className="h-[72px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.05] motion-safe:animate-pulse rpg:rounded-[4px] rpg:bg-rpg-panel" />
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] gap-4">
+            <div className="h-[380px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.05] motion-safe:animate-pulse rpg:rounded-[4px] rpg:bg-rpg-panel" />
+            <div className="hidden xl:block h-[380px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.05] motion-safe:animate-pulse rpg:rounded-[4px] rpg:bg-rpg-panel" />
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
+          <ChronicleIndex chapters={chapters} />
+
+          {/* Coluna principal = o que o usuário escreveu/registrou, na ordem em que o
+              dia é contado (relato → momentos → gratidão → mídia → voz → fechamento).
+              Coluna lateral = contexto (lugar, etiquetas, reflexão, insight, leitura).
+              No tablet/mobile a lateral desce para baixo do conteúdo principal. */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] gap-4 items-start">
+            <div className="min-w-0 space-y-4">
+              <SectionCard
+                id="cronica-relato"
+                chapter="I"
+                icon={<PenLine size={16} />}
+                title="Como foi meu dia"
+                subtitle="Escreva do seu jeito, corrido — sem perguntas prontas"
+                meta={wordCount > 0 ? `${wordCount.toLocaleString("pt-BR")} ${wordCount === 1 ? "palavra" : "palavras"}` : undefined}
+              >
+                <div className="space-y-3">
+                  <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
+                  <RichTextEditor
+                    value={form.thoughts}
+                    onChange={(v) => updateField({ thoughts: v })}
+                    onBlur={() => saveNow()}
+                    placeholder="Querido diário, hoje…"
+                    minHeightClass="min-h-[260px]"
+                  />
+                  <JournalWritingAssistant
+                    onAssist={(notes) => assistWriting(notes)}
+                    isLoading={isAssistingWriting}
+                    onInsertDraft={(text) => appendHtml("thoughts", toParagraphs(text))}
+                    onInsertQuestion={(q) => appendHtml("thoughts", `<p><strong>${escapeHtml(q)}</strong></p><p></p>`)}
+                    onUseTakeaway={(t) => appendHtml("nightTakeaway", `<p>${escapeHtml(t)}</p>`)}
+                  />
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                id="cronica-momentos"
+                chapter="II"
+                icon={<Sparkles size={16} />}
+                title="Momentos e organização"
+                subtitle="O Gemini lê seu texto, sua gratidão e (se você permitir) suas fotos — você confirma antes de salvar"
+                meta={entry?.ai ? `${entry.ai.highlights.length} ${entry.ai.highlights.length === 1 ? "destaque" : "destaques"}` : undefined}
+              >
+                <JournalAiOrganizer
+                  saved={entry?.ai ?? null}
+                  media={entry?.media ?? []}
+                  onSuggest={(includePhotos) => suggestOrganization(includePhotos)}
+                  onApply={async (input) => {
+                    const updated = await applyOrganization(input);
+                    // As etiquetas escolhidas entram no form local, senão o próximo autosave as sobrescreveria.
+                    setForm((prev) => ({ ...prev, tags: updated.tags }));
+                  }}
+                  onClear={() => clearOrganization()}
+                  isSuggesting={isSuggestingOrganization}
+                  isApplying={isApplyingOrganization}
+                />
+              </SectionCard>
+
+              <SectionCard
+                id="cronica-gratidao"
+                chapter="III"
+                icon={<Heart size={16} />}
+                title="Gratidão e cuidado"
+                subtitle="Pelo que sou grato hoje — e o que fiz para manter a mente tranquila"
+                meta={gratitudeCount > 0 ? `${gratitudeCount}/3 gratidões` : undefined}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <fieldset className="min-w-0">
+                    <legend className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
+                      <Heart size={12} /> Hoje sou grato por:
+                    </legend>
+                    <div className="space-y-2">
+                      {[0, 1, 2].map((i) => (
+                        <input
+                          key={i}
+                          value={form.gratitude[i]}
+                          onChange={(e) => updateField({ gratitude: form.gratitude.map((g, gi) => (gi === i ? e.target.value : g)) })}
+                          onBlur={() => saveNow()}
+                          placeholder={`${i + 1}.`}
+                          aria-label={`Gratidão ${i + 1}`}
+                          className="w-full rounded-xl px-3 py-2 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+                        />
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset className="min-w-0">
+                    <legend className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
+                      <Sparkles size={12} /> Cuidado comigo
+                    </legend>
+                    <div className="space-y-1.5">
+                      {SELF_CARE_OPTIONS.map((opt) => {
+                        const isAuto = (entry?.auto.autoSelfCare ?? []).includes(opt.key);
+                        const checked = combinedSelfCare.has(opt.key);
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            role="checkbox"
+                            aria-checked={checked}
+                            onClick={() => toggleSelfCare(opt.key)}
+                            className="w-full flex items-center gap-2.5 text-left rounded-lg px-1.5 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
+                          >
+                            <span
+                              className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-all duration-150 motion-safe:active:scale-90 ${
+                                checked ? "bg-cat-pink border-cat-pink text-white scale-100" : "border-paper-border dark:border-ink-border scale-90"
+                              }`}
+                            >
+                              {checked && <Check size={11} className="motion-safe:animate-check-pop" />}
+                            </span>
+                            <span className="text-xs">{opt.label}</span>
+                            {isAuto && <span className="text-[10px] text-cat-pink ml-auto shrink-0">hábito de hoje</span>}
+                          </button>
+                        );
+                      })}
+                      <input
+                        value={form.selfCareOther}
+                        onChange={(e) => updateField({ selfCareOther: e.target.value })}
+                        onBlur={() => saveNow()}
+                        placeholder="Outro…"
+                        aria-label="Outro cuidado comigo"
+                        className="w-full mt-1 rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
+                      />
+                    </div>
+                  </fieldset>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                id="cronica-midias"
+                chapter="IV"
+                icon={<Camera size={16} />}
+                title="Fotos, vídeos e documentos"
+                subtitle="Cada mídia guarda a história que você contar sobre ela"
+                meta={visualMediaCount > 0 ? `${visualMediaCount} ${visualMediaCount === 1 ? "mídia" : "mídias"}` : undefined}
+              >
+                <JournalMediaSection
+                  media={entry?.media ?? []}
+                  onUpload={(input) => addMedia(input)}
+                  onUpdate={(mediaId, patch) => updateMedia({ mediaId, ...patch })}
+                  onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
+                />
+                {photoError && (
+                  <p className="text-xs text-drop mt-2" role="alert">
+                    {photoError}
+                  </p>
+                )}
+              </SectionCard>
+
+              <SectionCard
+                id="cronica-voz"
+                chapter="V"
+                icon={<Mic size={16} />}
+                title="Notas de voz"
+                subtitle="Registre um pensamento falado"
+                meta={audioCount > 0 ? `${audioCount} ${audioCount === 1 ? "nota" : "notas"}` : undefined}
+              >
+                <JournalAudioSection
+                  media={(entry?.media ?? []).filter((m) => m.kind === "audio")}
+                  onAdd={(dataUri, durationSeconds) => addAudioMedia({ dataUri, durationSeconds }).catch(() => undefined)}
+                  onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
+                  isUploading={isAddingAudioMedia}
+                />
+              </SectionCard>
+
+              <div id="cronica-fechamento" className="scroll-mt-4 min-w-0">
+                <JournalDayClosing
+                  chapter="VI"
+                  headingId="cronica-fechamento-titulo"
+                  auto={auto}
+                  legacyNightMood={entry?.nightMood ?? null}
+                  takeaway={form.nightTakeaway}
+                  onTakeawayChange={(v) => updateField({ nightTakeaway: v })}
+                  onTakeawayBlur={() => saveNow()}
+                  onRegisterMood={registerMood}
+                />
+              </div>
+            </div>
+
+            <aside aria-label="Contexto do dia" className="min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+              <SectionCard
+                id="cronica-lugar"
+                icon={<MapPin size={16} />}
+                title="Lugar, etiquetas e vínculos"
+                subtitle="Onde você estava, o que marcar e o que este dia conecta"
+                className="sm:col-span-2 xl:col-span-1"
+              >
+                <LocationTagsLinksSection
+                  locationLabel={form.locationLabel}
+                  tags={form.tags}
+                  links={entry?.links ?? []}
+                  onSetLocation={(label, lat, lng) => saveNow({ locationLabel: label, locationLat: lat, locationLng: lng })}
+                  onClearLocation={() => saveNow({ locationLabel: "", locationLat: null, locationLng: null })}
+                  onChangeTags={(tags) => saveNow({ tags })}
+                  onAddLink={(targetType, targetId) => addLink({ targetType, targetId }).catch(() => undefined)}
+                  onRemoveLink={(linkId) => removeLink(linkId).catch(() => undefined)}
+                />
+              </SectionCard>
+
+              <SectionCard
+                icon={<Quote size={16} />}
+                title={auto?.dailyQuote.kind === "versiculo" ? "Versículo do dia" : "Provérbio do dia"}
+                subtitle="Uma pausa para reflexão"
+              >
+                {auto?.dailyQuote ? (
+                  <blockquote className="flex flex-col gap-2">
+                    <p className="italic text-[15px] leading-relaxed text-[#3a3430] dark:text-[#EDEBE4]/90 rpg:text-rpg-text">“{auto.dailyQuote.text}”</p>
+                    <footer className="text-[11px] text-cat-pink font-semibold not-italic">— {auto.dailyQuote.source}</footer>
+                  </blockquote>
+                ) : (
+                  <p className="text-xs text-slate">Reflexão do dia indisponível.</p>
+                )}
+              </SectionCard>
+
+              <SectionCard icon={<Lightbulb size={16} />} title="Insight do dia" subtitle="Gerado pelo LifeOS Copilot a partir dos seus dados reais">
+                {entry?.auto.insightText ? (
+                  <p className="text-sm">{entry.auto.insightText}</p>
+                ) : (
+                  <p className="text-xs text-slate">
+                    Ainda não há insight gerado para hoje.{" "}
+                    <Link to="/dashboard" className="text-cat-pink font-medium">
+                      Gerar no Dashboard →
+                    </Link>
+                  </p>
+                )}
+              </SectionCard>
+
+              {book && (
+                <SectionCard icon={<BookOpen size={16} />} title="Leitura atual" subtitle="Registrado na Biblioteca">
+                  <div className="flex gap-3">
+                    {book.coverUrl ? (
+                      <img src={book.coverUrl} alt={book.title} className="w-10 h-[60px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border" />
+                    ) : (
+                      <div className="w-10 h-[60px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
+                        <BookOpen size={16} className="text-cat-pink" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{book.title}</p>
+                      {book.author && <p className="text-xs text-slate truncate">{book.author}</p>}
+                      {entry.auto.reading.minutes > 0 && (
+                        <p className="text-[11px] text-slate mt-1">
+                          {fmtMinutes(entry.auto.reading.minutes)} lidos hoje · {entry.auto.reading.pages} páginas
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </SectionCard>
+              )}
+
+              {streakHighlight && (
+                <SectionCard icon={<Flame size={16} />} title="Sequência em destaque" subtitle="Seu hábito mais consistente agora">
+                  <div className="flex items-center gap-2.5">
+                    <Flame size={20} className="text-signal" />
+                    <div>
+                      <p className="text-sm font-semibold">{streakHighlight.habitName}</p>
+                      <p className="text-xs text-slate">{streakHighlight.streak} dias seguidos</p>
+                    </div>
+                  </div>
+                  <Link to="/habitos" className="text-xs text-cat-pink font-medium mt-2 inline-block">
+                    Ver hábitos →
+                  </Link>
+                </SectionCard>
+              )}
+            </aside>
+          </div>
+
+          {/* Insights da semana (Analytics) ficam depois do registro do dia: contexto, não o foco da escrita. */}
           {isRpg ? (
             hasWeekInsights && (
               <section aria-label="Insights da semana">
@@ -1022,212 +1423,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           ) : (
             <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
           )}
-
-          <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            <SectionCard
-              icon={<PenLine size={16} />}
-              title="Como foi meu dia"
-              subtitle="Escreva do seu jeito, corrido — sem perguntas prontas"
-              className="sm:col-span-2 xl:col-span-3"
-            >
-              <div className="space-y-3">
-                <RichTextEditor
-                  value={form.thoughts}
-                  onChange={(v) => updateField({ thoughts: v })}
-                  onBlur={() => saveNow()}
-                  placeholder="Querido diário, hoje…"
-                  minHeightClass="min-h-[260px]"
-                />
-                <JournalWritingAssistant
-                  onAssist={(notes) => assistWriting(notes)}
-                  isLoading={isAssistingWriting}
-                  onInsertDraft={(text) => appendHtml("thoughts", toParagraphs(text))}
-                  onInsertQuestion={(q) => appendHtml("thoughts", `<p><strong>${escapeHtml(q)}</strong></p><p></p>`)}
-                  onUseTakeaway={(t) => appendHtml("nightTakeaway", `<p>${escapeHtml(t)}</p>`)}
-                />
-              </div>
-            </SectionCard>
-
-            <div className="sm:col-span-2 xl:col-span-3">
-              <JournalDayClosing
-                auto={auto}
-                legacyNightMood={entry?.nightMood ?? null}
-                takeaway={form.nightTakeaway}
-                onTakeawayChange={(v) => updateField({ nightTakeaway: v })}
-                onTakeawayBlur={() => saveNow()}
-                onRegisterMood={registerMood}
-              />
-            </div>
-
-            <SectionCard icon={<Camera size={16} />} title="Fotos, vídeos e documentos" subtitle="Cada mídia guarda a história que você contar sobre ela" className="xl:col-span-3">
-              <JournalMediaSection
-                media={entry?.media ?? []}
-                onUpload={(input) => addMedia(input)}
-                onUpdate={(mediaId, patch) => updateMedia({ mediaId, ...patch })}
-                onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
-              />
-              {photoError && <p className="text-xs text-drop mt-2">{photoError}</p>}
-            </SectionCard>
-
-            <SectionCard icon={<Sparkles size={16} />} title="Organização do dia" subtitle="O Gemini lê seu texto, sua gratidão e (se você permitir) suas fotos — você confirma antes de salvar" className="xl:col-span-3">
-              <JournalAiOrganizer
-                saved={entry?.ai ?? null}
-                media={entry?.media ?? []}
-                onSuggest={(includePhotos) => suggestOrganization(includePhotos)}
-                onApply={async (input) => {
-                  const updated = await applyOrganization(input);
-                  // As etiquetas escolhidas entram no form local, senão o próximo autosave as sobrescreveria.
-                  setForm((prev) => ({ ...prev, tags: updated.tags }));
-                }}
-                onClear={() => clearOrganization()}
-                isSuggesting={isSuggestingOrganization}
-                isApplying={isApplyingOrganization}
-              />
-            </SectionCard>
-
-            <SectionCard icon={<Mic size={16} />} title="Notas de voz" subtitle="Registre um pensamento falado" className="xl:col-span-3">
-              <JournalAudioSection
-                media={(entry?.media ?? []).filter((m) => m.kind === "audio")}
-                onAdd={(dataUri, durationSeconds) => addAudioMedia({ dataUri, durationSeconds }).catch(() => undefined)}
-                onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
-                isUploading={isAddingAudioMedia}
-              />
-            </SectionCard>
-
-            <SectionCard icon={<MapPin size={16} />} title="Localização, etiquetas e vínculos" subtitle="Onde você estava, o que marcar e o que este dia conecta" className="xl:col-span-3">
-              <LocationTagsLinksSection
-                locationLabel={form.locationLabel}
-                tags={form.tags}
-                links={entry?.links ?? []}
-                onSetLocation={(label, lat, lng) => saveNow({ locationLabel: label, locationLat: lat, locationLng: lng })}
-                onClearLocation={() => saveNow({ locationLabel: "", locationLat: null, locationLng: null })}
-                onChangeTags={(tags) => saveNow({ tags })}
-                onAddLink={(targetType, targetId) => addLink({ targetType, targetId }).catch(() => undefined)}
-                onRemoveLink={(linkId) => removeLink(linkId).catch(() => undefined)}
-              />
-            </SectionCard>
-
-            <SectionCard
-              icon={<Quote size={16} />}
-              title={auto?.dailyQuote.kind === "versiculo" ? "Versículo do dia" : "Provérbio do dia"}
-              subtitle="Uma pausa para reflexão"
-            >
-              {auto?.dailyQuote ? (
-                <blockquote className="flex flex-col gap-2">
-                  <p className="italic text-[15px] leading-relaxed text-[#3a3430] dark:text-[#EDEBE4]/90">
-                    “{auto.dailyQuote.text}”
-                  </p>
-                  <footer className="text-[11px] text-cat-pink font-semibold not-italic">— {auto.dailyQuote.source}</footer>
-                </blockquote>
-              ) : (
-                <p className="text-xs text-slate">Carregando reflexão do dia…</p>
-              )}
-            </SectionCard>
-
-            <SectionCard icon={<Lightbulb size={16} />} title="Insight do dia" subtitle="Gerado pelo LifeOS Copilot a partir dos seus dados reais">
-              {entry?.auto.insightText ? (
-                <p className="text-sm">{entry.auto.insightText}</p>
-              ) : (
-                <p className="text-xs text-slate">
-                  Ainda não há insight gerado para hoje.{" "}
-                  <Link to="/dashboard" className="text-cat-pink font-medium">
-                    Gerar no Dashboard →
-                  </Link>
-                </p>
-              )}
-            </SectionCard>
-
-            <SectionCard icon={<Heart size={16} />} title="Gratidão" subtitle="Hoje sou grato por:">
-              <div className="space-y-2">
-                {[0, 1, 2].map((i) => (
-                  <input
-                    key={i}
-                    value={form.gratitude[i]}
-                    onChange={(e) => updateField({ gratitude: form.gratitude.map((g, gi) => (gi === i ? e.target.value : g)) })}
-                    onBlur={() => saveNow()}
-                    placeholder={`${i + 1}.`}
-                    className="w-full rounded-xl px-3 py-2 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
-                  />
-                ))}
-              </div>
-            </SectionCard>
-
-            <SectionCard icon={<Sparkles size={16} />} title="Cuidado comigo" subtitle="O que posso fazer para manter minha mente tranquila hoje?">
-              <div className="space-y-1.5">
-                {SELF_CARE_OPTIONS.map((opt) => {
-                  const isAuto = (entry?.auto.autoSelfCare ?? []).includes(opt.key);
-                  const checked = combinedSelfCare.has(opt.key);
-                  return (
-                    <button
-                      key={opt.key}
-                      onClick={() => toggleSelfCare(opt.key)}
-                      className="w-full flex items-center gap-2.5 text-left rounded-lg px-1.5 py-1 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                    >
-                      <span
-                        className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-all duration-150 motion-safe:active:scale-90 ${
-                          checked
-                            ? "bg-cat-pink border-cat-pink text-white scale-100"
-                            : "border-paper-border dark:border-ink-border scale-90"
-                        }`}
-                      >
-                        {checked && <Check size={11} className="motion-safe:animate-check-pop" />}
-                      </span>
-                      <span className="text-xs">{opt.label}</span>
-                      {isAuto && <span className="text-[10px] text-cat-pink ml-auto shrink-0">hábito de hoje</span>}
-                    </button>
-                  );
-                })}
-                <input
-                  value={form.selfCareOther}
-                  onChange={(e) => updateField({ selfCareOther: e.target.value })}
-                  onBlur={() => saveNow()}
-                  placeholder="Outro…"
-                  className="w-full mt-1 rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
-                />
-              </div>
-            </SectionCard>
-
-            {book && (
-              <SectionCard icon={<BookOpen size={16} />} title="Leitura atual" subtitle="Registrado na Biblioteca">
-                <div className="flex gap-3">
-                  {book.coverUrl ? (
-                    <img src={book.coverUrl} alt={book.title} className="w-10 h-[60px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border" />
-                  ) : (
-                    <div className="w-10 h-[60px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
-                      <BookOpen size={16} className="text-cat-pink" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{book.title}</p>
-                    {book.author && <p className="text-xs text-slate truncate">{book.author}</p>}
-                    {entry.auto.reading.minutes > 0 && (
-                      <p className="text-[11px] text-slate mt-1">
-                        {fmtMinutes(entry.auto.reading.minutes)} lidos hoje · {entry.auto.reading.pages} páginas
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </SectionCard>
-            )}
-
-            {streakHighlight && (
-              <SectionCard icon={<Flame size={16} />} title="Sequência em destaque" subtitle="Seu hábito mais consistente agora">
-                <div className="flex items-center gap-2.5">
-                  <Flame size={20} className="text-signal" />
-                  <div>
-                    <p className="text-sm font-semibold">{streakHighlight.habitName}</p>
-                    <p className="text-xs text-slate">{streakHighlight.streak} dias seguidos</p>
-                  </div>
-                </div>
-                <Link to="/habitos" className="text-xs text-cat-pink font-medium mt-2 inline-block">
-                  Ver hábitos →
-                </Link>
-              </SectionCard>
-            )}
-
-          </div>
         </div>
       )}
     </div>

@@ -70,6 +70,8 @@ export function TaskCard({
       draggable={dragProps.draggable}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
+        // Sem dado no dataTransfer, alguns motores (Firefox/WebKit) não iniciam o arraste.
+        e.dataTransfer.setData("text/plain", task.id);
         // Adia a mudanca de estado (que altera a opacidade do card) para depois
         // que o navegador ja capturou a imagem de arraste: mudar o DOM de forma
         // sincrona dentro do "dragstart" cancela o drag nativo em alguns

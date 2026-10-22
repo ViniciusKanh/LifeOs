@@ -306,13 +306,14 @@ export async function listAchievements(ownerId: string): Promise<AchievementView
     threshold: number | null;
     tier: AchievementTier;
   }>;
-  const metrics = await computeMetrics(db, ownerId, catalogRows.map((row) => row.metric).filter((metric): metric is string => !!metric));
-
   const unlockedMap = new Map(
     (unlocked.rows as unknown as Array<{ achievement_id: string; unlocked_at: string }>).map((r) => [r.achievement_id, r.unlocked_at])
   );
+  const metrics = await computeMetrics(db, ownerId, catalogRows.map((row) => row.metric).filter((metric): metric is string => !!metric));
 
-  return catalogRows.map((row) => {
+  // Conquistas de Foco (módulo removido): ficam só as já desbloqueadas, como histórico.
+  const visible = catalogRows.filter((row) => !(row.metric?.startsWith("focus_") && !unlockedMap.has(row.id)));
+  return visible.map((row) => {
     const currentValue = row.metric ? (metrics[row.metric] ?? 0) : 0;
     const progress = row.threshold ? Math.min(100, Math.round((currentValue / row.threshold) * 100)) : 0;
     return {

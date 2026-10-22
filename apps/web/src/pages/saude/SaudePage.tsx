@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, ChevronLeft, ChevronRight, Dumbbell, Droplets, FlaskRound, HeartPulse, Loader2, Moon, Sun, Zap } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHealth, useHealthCorrelations } from "@/hooks/useHealth";
@@ -14,8 +14,11 @@ import {
   WaterCard,
   WellnessIllustrationCard,
   WellnessInsightCard,
-  WorkoutCard,
 } from "@/components/health/HealthCards";
+import { WorkoutCard } from "@/components/health/WorkoutCard";
+import { useTodayKey } from "@/hooks/useTodayKey";
+import { addDaysKey, dateKeyToLocalDate } from "@/utils/localDate";
+import { weeklyWorkoutSummary } from "@/utils/workoutStats";
 import {
   SLEEP_GOAL_MINUTES,
   WATER_GOAL_ML,
@@ -24,7 +27,6 @@ import {
   localDateKey,
   parseHealthDate,
   startOfWeek,
-  todayKey,
   weeklySeries,
 } from "@/components/health/healthUtils";
 import { useTheme } from "@/hooks/useTheme";
@@ -48,16 +50,8 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-/** dateKey +/- N dias (mesmo padrão usado no Diário e no Capacity Planner). */
-function addDaysKey(dateKey: string, delta: number) {
-  const d = new Date(`${dateKey}T00:00:00`);
-  d.setDate(d.getDate() + delta);
-  return localDateKey(d);
-}
-
 function formatDayLabel(dateKey: string) {
-  const d = new Date(`${dateKey}T00:00:00`);
-  return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+  return dateKeyToLocalDate(dateKey).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 }
 
 export function SaudePage() {
@@ -96,10 +90,19 @@ export function SaudePage() {
   // semana" (Date.now()), então dava pra ver um dia passado só cavando o
   // histórico de cada card, nunca a tela toda daquele dia de uma vez. Segue o
   // mesmo padrão de dia selecionável do Diário e do Capacity Planner.
-  const [selectedDate, setSelectedDate] = useState(todayKey());
-  const todayStr = todayKey();
+  const todayStr = useTodayKey();
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  // Virou o dia com a tela aberta: quem estava olhando "hoje" passa a ver o
+  // novo hoje (senão os registros iriam para ontem); dia passado fica como está.
+  const previousToday = useRef(todayStr);
+  useEffect(() => {
+    const prev = previousToday.current;
+    if (prev === todayStr) return;
+    previousToday.current = todayStr;
+    setSelectedDate((current) => (current === prev ? todayStr : current));
+  }, [todayStr]);
   const today = selectedDate;
-  const weekStart = useMemo(() => startOfWeek(new Date(`${selectedDate}T00:00:00`)), [selectedDate]);
+  const weekStart = useMemo(() => startOfWeek(dateKeyToLocalDate(selectedDate)), [selectedDate]);
 
   const waterToday = useMemo(() => water.filter((entry) => localDateKey(entry.recorded_at) === today), [water, today]);
   const waterTotal = waterToday.reduce((sum, entry) => sum + entry.amount_ml, 0);
@@ -119,8 +122,10 @@ export function SaudePage() {
   const avgSleepMinutes = average(sleepThisWeek.map((entry) => entry.duration_minutes ?? 0));
   const avgQuality = average(sleepThisWeek.map((entry) => entry.quality).filter((value): value is number => value !== null));
 
-  const workoutsThisWeek = useMemo(() => workouts.filter((entry) => parseHealthDate(entry.performed_at) >= weekStart), [workouts, weekStart]);
-  const workoutsThisWeekMinutes = workoutsThisWeek.reduce((sum, entry) => sum + (entry.duration_minutes ?? 0), 0);
+  // Mesma regra do card de Exercícios (utils/workoutStats): janela [segunda, segunda + 7).
+  const workoutWeek = useMemo(() => weeklyWorkoutSummary(workouts, weekStart), [workouts, weekStart]);
+  const workoutsThisWeekCount = workoutWeek.sessions;
+  const workoutsThisWeekMinutes = workoutWeek.minutes;
   const workoutsWeekly = useMemo(() => weeklySeries(workouts, (entry) => entry.performed_at, () => 1, weekStart), [workouts, weekStart]);
 
   const moodThisWeek = useMemo(() => mood.filter((entry) => parseHealthDate(entry.recorded_at) >= weekStart), [mood, weekStart]);
@@ -144,7 +149,7 @@ export function SaudePage() {
     waterPct >= 100 ? { label: "Otimo!", tone: "green" } : waterPct >= 50 ? { label: "Quase la", tone: "amber" } : { label: "Beba mais agua", tone: "slate" };
   const sleepBadge = statusBadge(lastNightMinutes ? (lastNightMinutes / SLEEP_GOAL_MINUTES) * 100 : null, "Otima noite", "Quase la");
   const workoutsBadge: HealthBadge =
-    workoutsThisWeek.length >= 3 ? { label: "Boa semana", tone: "green" } : workoutsThisWeek.length >= 1 ? { label: "Continue assim", tone: "amber" } : { label: "Bora se mexer", tone: "slate" };
+    workoutsThisWeekCount >= 3 ? { label: "Boa semana", tone: "green" } : workoutsThisWeekCount >= 1 ? { label: "Continue assim", tone: "amber" } : { label: "Bora se mexer", tone: "slate" };
   const moodBadge: HealthBadge =
     avgMoodWeek === null ? { label: "Sem registro", tone: "slate" } : avgMoodWeek >= 4 ? { label: "Bem hoje", tone: "green" } : avgMoodWeek >= 2.5 ? { label: "Estavel", tone: "amber" } : { label: "Atencao", tone: "slate" };
 
@@ -238,25 +243,33 @@ export function SaudePage() {
             <ChevronRight size={14} />
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          {WEEKDAY_LABELS.map((_, i) => {
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* A semana começa na segunda: o rótulo vem da data real de cada botão
+              (antes usava o índice 0..6 de um array que começa no domingo, então
+              cada dia aparecia com a letra do dia anterior — "hoje marcava ontem"). */}
+          {Array.from({ length: 7 }, (_, i) => {
             const dayKey = addDaysKey(localDateKey(weekStart), i);
             const isSelected = dayKey === selectedDate;
             const isToday = dayKey === todayStr;
+            const isFuture = dayKey > todayStr;
+            const weekday = WEEKDAY_LABELS[dateKeyToLocalDate(dayKey).getDay()];
             return (
               <button
                 key={dayKey}
                 onClick={() => setSelectedDate(dayKey)}
-                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors rpg:rounded-[3px] rpg:w-7 rpg:h-7 rpg:font-pixel ${
+                disabled={isFuture}
+                aria-pressed={isSelected}
+                className={`flex h-10 w-9 flex-col items-center justify-center rounded-lg text-[10px] font-semibold leading-tight transition-colors disabled:opacity-30 rpg:rounded-[3px] rpg:font-pixel ${
                   isSelected
                     ? "bg-growth text-white rpg:bg-rpg-green rpg:text-rpg-bg rpg:ring-2 rpg:ring-rpg-gold/70"
                     : isToday
-                      ? "text-growth border border-growth/50"
+                      ? "text-growth border border-growth/50 rpg:text-rpg-green rpg:border-rpg-green/60"
                       : "text-slate border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
                 }`}
-                aria-label={formatDayLabel(dayKey)}
+                aria-label={`${formatDayLabel(dayKey)}${isToday ? " (hoje)" : ""}`}
               >
-                {WEEKDAY_LABELS[i][0]}
+                <span>{weekday}</span>
+                <span className="text-[11px]">{dayKey.slice(8, 10)}</span>
               </button>
             );
           })}
@@ -366,7 +379,7 @@ export function SaudePage() {
           tone="green"
           icon={<Dumbbell size={16} />}
           label="Exercícios"
-          value={`${workoutsThisWeek.length} ${workoutsThisWeek.length === 1 ? "atividade" : "atividades"}`}
+          value={`${workoutsThisWeekCount} ${workoutsThisWeekCount === 1 ? "atividade" : "atividades"}`}
           badge={workoutsBadge}
           caption={`${workoutsThisWeekMinutes} min no total`}
           weekly={workoutsWeekly}
@@ -413,12 +426,11 @@ export function SaudePage() {
         />
         <WorkoutCard
           workouts={workouts}
-          workoutsWeekly={workoutsWeekly}
-          workoutsThisWeekMinutes={workoutsThisWeekMinutes}
+          weekStart={weekStart}
           selectedDate={selectedDate}
           onAddWorkout={async (input) => {
             await addWorkout(input);
-            setToast("Exercicio registrado.");
+            setToast("Treino registrado.");
           }}
           onDelete={(id) => deleteByKind("workouts", id)}
           onEdit={openEdit}

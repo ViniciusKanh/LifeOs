@@ -128,3 +128,34 @@ describe("Forja da Inteligência (API)", () => {
     expect((await agent.post("/api/intelligence/forge").send({ objective: "x" })).status).toBe(400);
   });
 });
+
+describe("Forja sem o módulo Foco", () => {
+  it("modelos antigos (14 runas) leem a runa de foco como ausente", async () => {
+    const { FEATURES, rowForModel, effectsForFeatures } = await import("../src/services/intelligenceDataset.js");
+    const row = FEATURES.map((_, j) => j + 1);
+    const legacy = { prep: { mean: new Array(FEATURES.length + 1).fill(0) } };
+    const adapted = rowForModel(legacy, row);
+    expect(adapted).toHaveLength(FEATURES.length + 1);
+    expect(adapted[7]).toBeNull(); // posição antiga de focus_minutes
+    expect(adapted.filter((v) => v !== null)).toHaveLength(FEATURES.length);
+    const back = effectsForFeatures(legacy, adapted.map((v) => v ?? 99));
+    expect(back).toEqual(row);
+    expect(rowForModel({ prep: { mean: new Array(FEATURES.length).fill(0) } }, row)).toBe(row);
+  });
+
+  it("artefato de Foco antigo some da Forja e o objetivo Treino pode ser forjado", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    await db.execute({
+      sql: `INSERT INTO ml_artifacts (id, owner_id, objective, algorithm, status, xp, trainings, samples, metrics_json, model_json, importance_json, insights_json)
+            VALUES (?, ?, 'focus', 'baseline', 'production', 10, 1, 30, '{}', '{}', '[]', '{}')`,
+      args: [nanoid(), userId],
+    });
+    const ov = await agent.get("/api/intelligence/overview");
+    expect(ov.status).toBe(200);
+    expect(ov.body.artifacts).toHaveLength(0);
+    expect(ov.body.objectives.map((o: { key: string }) => o.key)).toContain("training");
+    expect(ov.body.objectives.map((o: { key: string }) => o.key)).not.toContain("focus");
+    expect((await agent.post("/api/intelligence/forge").send({ objective: "focus" })).status).toBe(400);
+  });
+});

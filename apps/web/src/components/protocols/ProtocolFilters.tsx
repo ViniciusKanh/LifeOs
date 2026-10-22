@@ -6,7 +6,7 @@ import type { ProtocolFilter, ProtocolSort } from "@/utils/protocolDisplay";
 const FILTERS: Array<{ id: ProtocolFilter; label: string }> = [
   { id: "all", label: "Todos" },
   { id: "mine", label: "Meus Protocolos" },
-  { id: "templates", label: "Templates" },
+  { id: "templates", label: "Modelos prontos" },
   { id: "used", label: "Mais usados" },
   { id: "recent", label: "Recentes" },
   { id: "favorites", label: "Favoritos" },
@@ -68,9 +68,9 @@ export function ProtocolFilters({
           <input type="search" className={`${rpgFieldClass} pl-8`} style={{ borderRadius: 3 }} value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Buscar protocolos…" />
         </label>
         <label>
-          <span className="sr-only">Situação</span>
+          <span className="sr-only">Área da vida</span>
           <select className={rpgFieldClass} style={{ borderRadius: 3 }} value={category} onChange={(e) => onCategory(e.target.value)}>
-            <option value="all">Situação: todas</option>
+            <option value="all">Área: todas</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}

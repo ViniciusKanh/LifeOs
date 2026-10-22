@@ -1,22 +1,14 @@
+import { dateTimeLocalToIso, localDateKey, parseUtcTimestamp, todayKey, toDateTimeLocal } from "@/utils/localDate";
+
 export const WATER_QUICK_ADD = [200, 300, 500];
 export const WATER_GOAL_ML = 2500;
 export const SLEEP_GOAL_MINUTES = 8 * 60;
 export const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 
-export function parseHealthDate(value: string) {
-  return new Date(value.includes("T") ? value : value.replace(" ", "T"));
-}
-
-export function localDateKey(value: string | Date) {
-  const d = value instanceof Date ? value : parseHealthDate(value);
-  const month = `${d.getMonth() + 1}`.padStart(2, "0");
-  const day = `${d.getDate()}`.padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
-
-export function todayKey() {
-  return localDateKey(new Date());
-}
+// Datas: tudo passa pelo utilitário central (ver utils/localDate.ts — instantes
+// UTC sem "Z" vindos do SQLite eram lidos como hora local e mudavam de dia).
+export { localDateKey, todayKey, toDateTimeLocal, dateTimeLocalToIso, addDaysKey, dateKeyToLocalDate } from "@/utils/localDate";
+export const parseHealthDate = parseUtcTimestamp;
 
 export function startOfWeek(d: Date) {
   const day = d.getDay();
@@ -42,18 +34,6 @@ export function formatHM(minutes: number) {
   return m > 0 ? `${h}h${m.toString().padStart(2, "0")}` : `${h}h`;
 }
 
-export function toDateTimeLocal(value?: string | null) {
-  if (!value) return "";
-  const d = parseHealthDate(value);
-  if (Number.isNaN(d.getTime())) return "";
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-export function dateTimeLocalToIso(value: string) {
-  return new Date(value).toISOString();
-}
-
 /**
  * Valor padrão pro campo "Quando" de um registro retroativo: se o dia
  * selecionado na navegação da tela é hoje, usa a hora atual (comportamento
@@ -62,8 +42,19 @@ export function dateTimeLocalToIso(value: string) {
  * quiser, mas o registro já nasce no dia certo em vez de cair em "agora".
  */
 export function defaultEntryDateTimeLocal(selectedDate: string) {
-  if (selectedDate === todayKey()) return toDateTimeLocal(new Date().toISOString());
+  if (selectedDate === todayKey()) return toDateTimeLocal(new Date());
   return `${selectedDate}T12:00`;
+}
+
+/**
+ * Instante a enviar para a API a partir do campo "Quando". Se o usuário não
+ * mexeu no campo e o dia selecionado é hoje, usa "agora" no momento do envio —
+ * o valor pré-preenchido foi calculado quando a tela abriu e pode estar velho
+ * (app aberto há horas ou desde ontem à noite).
+ */
+export function entryInstantIso(whenLocal: string, touched: boolean, selectedDate: string) {
+  if (!touched && selectedDate === todayKey()) return new Date().toISOString();
+  return dateTimeLocalToIso(whenLocal);
 }
 
 export function optionalText(value: string) {

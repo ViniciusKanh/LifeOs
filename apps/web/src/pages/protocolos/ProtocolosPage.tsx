@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BookOpen, History, ListChecks, Plus, ScrollText, SearchX } from "lucide-react";
+import { BookOpen, CheckCircle2, History, ListChecks, ListOrdered, Play, Plus, ScrollText, SearchX } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { RPGButton, RPGToast } from "@/components/rpg";
 import { TreasureSidePanel } from "@/components/treasure/TreasureSidePanel";
@@ -10,10 +10,17 @@ import { ProtocolCard } from "@/components/protocols/ProtocolCard";
 import { ProtocolActionList, ProtocolDetail, ProtocolRunsList } from "@/components/protocols/ProtocolDetail";
 import { ProtocolExecutionModal } from "@/components/protocols/ProtocolExecutionModal";
 import { ProtocolWizard } from "@/components/protocols/ProtocolWizard";
+import { RPGHowItWorks, type HowItWorksStep } from "@/components/rpg/RPGHowItWorks";
 import { useProtocolRuns, useProtocols } from "@/hooks/useProtocols";
 import { useWide } from "@/hooks/useWide";
 import type { Protocol } from "@/services/protocolsService";
 import { filterProtocols, matchesProtocol, sortProtocols, type ProtocolFilter, type ProtocolSort } from "@/utils/protocolDisplay";
+
+const HOW_IT_WORKS: HowItWorksStep[] = [
+  { icon: ListOrdered, tone: "blue", title: "Escolha ou monte uma rotina", text: "Use um modelo pronto (ex.: “Dormi mal”, “Início da semana”) ou crie o seu com os passos na ordem que você faria." },
+  { icon: Play, tone: "purple", title: "Use quando o momento chegar", text: "Clique em “Usar agora”, confira os passos e desmarque o que não quiser. O LifeOS pode até lembrar você na hora certa." },
+  { icon: CheckCircle2, tone: "green", title: "Menos decisões, mais ação", text: "O LifeOS faz a parte dele (cria tarefas, adia o que não cabe, agenda lembretes) e você marca o resto. Tudo fica no seu histórico." },
+];
 
 const FILTER_IDS: ProtocolFilter[] = ["all", "mine", "templates", "used", "recent", "favorites"];
 
@@ -93,14 +100,16 @@ export function ProtocolosPage() {
   const grimoire = (
     <div className="rpg-panel rpg-panel-gold flex flex-col items-center text-center gap-3 py-10 px-4">
       <BookOpen size={36} className="text-rpg-gold" aria-hidden />
-      <p className="font-pixel text-xs uppercase tracking-[0.16em] text-rpg-gold">Seu primeiro grimório ainda não foi escrito</p>
-      <p className="text-sm text-rpg-muted max-w-md">Crie um protocolo para uma situação que se repete na sua rotina, ou comece adicionando um template pronto à sua conta.</p>
+      <p className="font-pixel text-xs uppercase tracking-[0.16em] text-rpg-gold">Você ainda não tem protocolos seus</p>
+      <p className="text-sm text-rpg-muted max-w-md">
+        Pense numa situação que se repete — acordar, começar a semana, um dia de prova — e liste o que você costuma fazer nela. Ou comece copiando um modelo pronto e ajustando ao seu jeito.
+      </p>
       <div className="flex flex-wrap justify-center gap-2">
         <RPGButton variant="gold" onClick={() => setWizard({ open: true, editing: null })}>
           <Plus size={14} aria-hidden /> Criar protocolo
         </RPGButton>
         <RPGButton variant="secondary" onClick={() => setFilter("templates")}>
-          <ScrollText size={14} aria-hidden /> Ver templates
+          <ScrollText size={14} aria-hidden /> Ver modelos prontos
         </RPGButton>
       </div>
     </div>
@@ -111,6 +120,7 @@ export function ProtocolosPage() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px] items-start">
         <div className="space-y-4 min-w-0">
           <ProtocolHero onCreate={() => setWizard({ open: true, editing: null })} />
+          <RPGHowItWorks storageKey="lifeos:protocolos:como-funciona" steps={HOW_IT_WORKS} />
           {isError ? (
             <div className="rpg-panel p-6 text-center">
               <p className="text-sm text-rpg-red">Não foi possível carregar os protocolos.</p>
@@ -181,16 +191,16 @@ export function ProtocolosPage() {
           {wide && (
             <TreasureSidePanel id="protocolo-destaque" title={selectedRef ? "Protocolo selecionado" : "Protocolo em destaque"} icon={<ScrollText size={16} />}>
               {isLoading && <div className="h-64 rpg-bar animate-pulse" />}
-              {!isLoading && !detailProps && <p className="text-sm text-rpg-muted py-2">Selecione um protocolo para ver detalhes.</p>}
+              {!isLoading && !detailProps && <p className="text-sm text-rpg-muted py-2">Toque num protocolo para ver para que serve e o passo a passo.</p>}
               {detailProps && <ProtocolDetail {...detailProps} />}
             </TreasureSidePanel>
           )}
-          {selected && (
-            <TreasureSidePanel id="protocolo-acoes" title="Ações do protocolo" icon={<ListChecks size={16} />}>
+          {selected && wide && (
+            <TreasureSidePanel id="protocolo-acoes" title="Passo a passo" icon={<ListChecks size={16} />}>
               <ProtocolActionList protocol={selected} />
             </TreasureSidePanel>
           )}
-          <TreasureSidePanel id="protocolo-execucoes" title="Execuções recentes" icon={<History size={16} />} defaultOpen={wide}>
+          <TreasureSidePanel id="protocolo-execucoes" title="Seus últimos usos" icon={<History size={16} />} defaultOpen={wide}>
             {runs.isLoading ? (
               <div className="h-24 rpg-bar animate-pulse" />
             ) : (
@@ -228,6 +238,10 @@ export function ProtocolosPage() {
                   detailProps.onDelete();
                 }}
               />
+              <section aria-label="Passo a passo" className="border-t border-rpg-border/60 pt-3">
+                <h3 className="mb-2 font-pixel text-[10px] uppercase tracking-[0.14em] text-rpg-gold">Passo a passo</h3>
+                <ProtocolActionList protocol={detailProps.protocol} />
+              </section>
             </div>
           )}
         </Modal>
@@ -288,7 +302,7 @@ export function ProtocolosPage() {
         }
       >
         <p className="text-sm text-rpg-text">
-          Excluir “{deleting?.name}”? O histórico de execuções e tudo que ele já criou (tarefas, hábitos) continuam intactos.
+          Excluir “{deleting?.name}”? O histórico de usos e tudo que ele já criou (tarefas, hábitos, lembretes) continuam intactos.
         </p>
       </Modal>
       <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />

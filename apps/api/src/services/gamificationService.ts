@@ -631,7 +631,7 @@ export async function awardFocusSession(db: Client, ownerId: string, entryId: st
         eventType: "session",
         xp: boost ? applyPct(baseXp, boost.pct) : baseXp,
         coins: blocks * F.coinsPerBlock,
-        label: `Foco: ${blocks * F.blockMinutes} min${boost ? ` (+${boost.pct}% Poção de Foco)` : ""}`,
+        label: `Tempo de missão: ${blocks * F.blockMinutes} min${boost ? ` (+${boost.pct}% Poção do Ritmo)` : ""}`,
         projectId,
         baseXp: boost ? baseXp : null,
         multiplier: boost ? (100 + boost.pct) / 100 : null,

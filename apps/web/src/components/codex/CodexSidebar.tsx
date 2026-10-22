@@ -21,7 +21,7 @@ export function CodexSidebar({ codex, onSelect, onSeeAll }: { codex: Codex; onSe
   return (
     <aside className="space-y-3 min-w-0" aria-label="Descobertas, relíquias, títulos e conhecimento">
       <RPGPanel title="Descobertas recentes" icon={<Lightbulb size={16} />} actions={<button type="button" className={VER} onClick={() => onSeeAll("overview")}>Ver todas →</button>}>
-        {codex.discoveries.length === 0 && <p className="text-xs text-rpg-muted">Nenhum padrão com evidência suficiente ainda. Registre foco, sono e tarefas por algumas semanas.</p>}
+        {codex.discoveries.length === 0 && <p className="text-xs text-rpg-muted">Nenhum padrão com evidência suficiente ainda. Registre sono, treinos e tarefas por algumas semanas.</p>}
         <ul className="space-y-1">
           {codex.discoveries.slice(0, 3).map((d) => (
             <li key={d.id}>

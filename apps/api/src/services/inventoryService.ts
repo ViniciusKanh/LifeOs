@@ -87,7 +87,7 @@ async function collectGrants(db: Client, ownerId: string): Promise<Grant[]> {
     if (l.level === G.backpackLevel) out.push({ itemKey: "mochila-explorador", qty: 1, sourceType: "level", sourceId: String(l.level), label: `Nível ${l.level} alcançado`, at, stack: true });
   }
   if (focus.rows.length >= G.lanternFocusSessions) {
-    out.push({ itemKey: "lanterna-explorador", qty: 1, sourceType: "focus_count", sourceId: String(G.lanternFocusSessions), label: `${G.lanternFocusSessions} sessões de foco`, at: sqlFrom(focus.rows[G.lanternFocusSessions - 1].created_at), stack: true });
+    out.push({ itemKey: "lanterna-explorador", qty: 1, sourceType: "focus_count", sourceId: String(G.lanternFocusSessions), label: `${G.lanternFocusSessions} sessões de cronômetro`, at: sqlFrom(focus.rows[G.lanternFocusSessions - 1].created_at), stack: true });
   }
   for (let n = G.penEveryJournalEntries; n <= journal.rows.length; n += G.penEveryJournalEntries) {
     out.push({ itemKey: "pena-escriba", qty: 1, sourceType: "journal_count", sourceId: String(n), label: `${n} crônicas no Diário`, at: sqlFrom(journal.rows[n - 1].created_at), stack: true });

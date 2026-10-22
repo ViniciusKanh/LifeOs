@@ -1,6 +1,6 @@
 import { BookOpen, CalendarDays, CheckSquare, Flame, GraduationCap, HeartPulse, Leaf, Moon, Repeat, Sun, Zap, type LucideIcon } from "lucide-react";
 import type { RpgTone } from "@/components/rpg";
-import type { AlgorithmId, ArtifactIcon, Rarity } from "@/services/intelligenceService";
+import type { AlgorithmId, ArtifactIcon, ProphecyFactor, Rarity } from "@/services/intelligenceService";
 
 /** Apresentação da Forja da Inteligência (rótulos, cores e ícones). Nenhum número é calculado aqui. */
 
@@ -31,7 +31,6 @@ export const STATUS_UI = {
 /** Ícone por fonte da runa (feature). */
 export const SOURCE_ICON: Record<string, LucideIcon> = {
   saude: HeartPulse,
-  foco: Flame,
   tarefas: CheckSquare,
   habitos: Repeat,
   educacao: GraduationCap,
@@ -57,3 +56,11 @@ export const GLOSSARY = {
   balance: "Equilíbrio = acurácia balanceada: média do acerto nos dias positivos e negativos.",
   confidence: "Confiança = Brier Skill Score: quanto as probabilidades são melhores que chutar a taxa-base (0% = igual ao acaso).",
 };
+
+/** Rótulo do fator com o valor real de ontem (ex.: "Sono (horas): 6,5"). */
+export function factorText(f: ProphecyFactor): string {
+  if (f.key === "weekend") return f.value === 1 ? "Hoje é fim de semana" : "Hoje é dia útil";
+  if (f.value === null) return f.label;
+  return `${f.label}: ${(Math.round(f.value * 10) / 10).toLocaleString("pt-BR")}`;
+}
+

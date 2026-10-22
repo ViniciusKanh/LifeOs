@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/primitives";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
 import { ProvenanceBadge } from "@/components/experiments/AiThinking";
 import { MOOD_EMOJI, MOOD_LABEL } from "@/utils/journalMood";
+import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
+import { JournalChapterBadge } from "@/components/journal/JournalChapterBadge";
 
 function fmtMinutes(min: number): string {
   const h = Math.floor(min / 60);
@@ -27,6 +29,8 @@ export function JournalDayClosing({
   onTakeawayChange,
   onTakeawayBlur,
   onRegisterMood,
+  chapter,
+  headingId,
 }: {
   auto: JournalAutoData | undefined;
   /** night_mood antigo, anotado no diário antes da integração com Saúde. */
@@ -35,6 +39,10 @@ export function JournalDayClosing({
   onTakeawayChange: (html: string) => void;
   onTakeawayBlur: () => void;
   onRegisterMood: (mood: number, energy: number) => Promise<unknown>;
+  /** Numeração de capítulo no editor do dia (Crônicas da Jornada). */
+  chapter?: string;
+  /** id do título — âncora focável do sumário do dia. */
+  headingId?: string;
 }) {
   const [mood, setMood] = useState<number | null>(null);
   const [energy, setEnergy] = useState<number | null>(null);
@@ -62,8 +70,11 @@ export function JournalDayClosing({
   return (
     <Card className="p-4 sm:p-5 border-t-2 border-t-cat-purple/40">
       <div className="flex items-center gap-2 mb-4">
+        {chapter && <JournalChapterBadge chapter={chapter} />}
         <Moon size={16} className="text-cat-purple" />
-        <p className="text-sm font-semibold">Fechamento do dia</p>
+        <h2 id={headingId} className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>
+          Fechamento do dia
+        </h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

@@ -1,18 +1,25 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Compass, RefreshCw, Search, Telescope } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Compass, Footprints, RefreshCw, ScanSearch, Search, Telescope } from "lucide-react";
 import { RPGButton, RPGTabs, RPGToast, rpgButtonClass } from "@/components/rpg";
 import { BottleneckHero } from "@/components/bottlenecks/BottleneckHero";
 import { PrimaryBottleneckCard } from "@/components/bottlenecks/PrimaryBottleneckCard";
 import { BottleneckCauseList, BottleneckPotentialList, BottleneckRanking, BottleneckRelatedList } from "@/components/bottlenecks/BottleneckLists";
 import { BottleneckDependencyGraph } from "@/components/bottlenecks/BottleneckDependencyGraph";
-import { BottleneckRecommendedAction, FocusScheduleModal } from "@/components/bottlenecks/BottleneckRecommendedAction";
+import { BottleneckRecommendedAction, ScheduleBlockModal } from "@/components/bottlenecks/BottleneckRecommendedAction";
+import { RPGHowItWorks, type HowItWorksStep } from "@/components/rpg/RPGHowItWorks";
 import { BottleneckImpactForecast } from "@/components/bottlenecks/BottleneckImpactForecast";
 import { BottleneckOraclePanel } from "@/components/bottlenecks/BottleneckOraclePanel";
 import { BottleneckAllModal, BottleneckDetailModal, BottleneckMapModal } from "@/components/bottlenecks/BottleneckDetailModal";
 import { useBottlenecks } from "@/hooks/useBottlenecks";
 import { useWide } from "@/hooks/useWide";
 import type { AnalysisPeriod, BottleneckAnalysis, FocusInput, RecommendedAction } from "@/services/bottlenecksService";
+
+const HOW_IT_WORKS: HowItWorksStep[] = [
+  { icon: ClipboardList, tone: "blue", title: "Você registra sua rotina", text: "Tarefas com prazo e tempo estimado, projetos, campanhas, hábitos e agenda — o que você já usa no LifeOS." },
+  { icon: ScanSearch, tone: "purple", title: "O LifeOS procura o que trava", text: "Cada item ganha uma nota de 0 a 100. Sobe quando outras coisas esperam por ele, o prazo aperta ou ele está parado há dias." },
+  { icon: Footprints, tone: "green", title: "Você dá um passo", text: "Mostramos o item que mais trava e UMA ação para destravá-lo agora. Nada muda sem você confirmar." },
+];
 
 const PERIODS: Array<{ value: AnalysisPeriod; label: string }> = [
   { value: "today", label: "Hoje" },
@@ -35,7 +42,7 @@ function StatePanel({ icon, title, children }: { icon: ReactNode; title: string;
 /**
  * Detector de Gargalos: o que mais impede o progresso agora. A engine
  * determinística (servidor) decide o gargalo; o Oráculo (IA) só explica.
- * Nada aqui altera dados — criar o Focus exige prévia e confirmação.
+ * Nada aqui altera dados — reservar horário na agenda exige prévia e confirmação.
  */
 export function DetectorGargalosPage() {
   const [period, setPeriod] = useState<AnalysisPeriod>("7d");
@@ -44,25 +51,26 @@ export function DetectorGargalosPage() {
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [mapKey, setMapKey] = useState<string | null>(null);
   const [allOpen, setAllOpen] = useState(false);
-  const [focus, setFocus] = useState<{ input: FocusInput; title: string } | null>(null);
+  const [reserve, setReserve] = useState<{ input: FocusInput; title: string } | null>(null);
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
 
-  const openFocus = (action: RecommendedAction, title: string) => {
+  const openReserve = (action: RecommendedAction, title: string) => {
     if (!action.targetId || !action.preview || !action.estimatedMinutes) return;
     setDetailKey(null);
-    setFocus({ input: { taskId: action.targetId, date: action.preview.date, start: action.preview.start, minutes: action.estimatedMinutes }, title });
+    setReserve({ input: { taskId: action.targetId, date: action.preview.date, start: action.preview.start, minutes: action.estimatedMinutes }, title });
   };
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-3">
+      <span className="text-xs text-rpg-muted">Olhar para:</span>
       <RPGTabs size="sm" label="Período da análise" tabs={PERIODS} value={period} onChange={setPeriod} />
       <RPGButton variant="secondary" className="!py-1 text-xs" onClick={() => reanalyze.mutate()} disabled={reanalyze.isPending}>
         <RefreshCw size={13} className={reanalyze.isPending ? "animate-spin motion-reduce:animate-none" : ""} aria-hidden /> Reanalisar
       </RPGButton>
       {data && (
         <span className="text-[11px] text-rpg-muted">
-          Análise de {new Date(data.generatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          {data.cached ? " (sem mudanças nos dados)" : ""} · o ranking considera o estado atual
+          Atualizado às {new Date(data.generatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          {data.cached ? " (nada mudou nos seus dados desde então)" : ""}
         </span>
       )}
     </div>
@@ -78,14 +86,17 @@ export function DetectorGargalosPage() {
     if (a.status === "insufficient")
       return (
         <StatePanel icon={<Search size={36} />} title="Precisamos de mais pistas">
-          <p className="text-sm text-rpg-muted max-w-lg">Registre tarefas, projetos, prazos e progresso para que o LifeOS consiga identificar gargalos reais.</p>
-          <ul className="text-sm text-rpg-text text-left list-disc pl-5 max-w-lg">
+          <p className="text-sm text-rpg-muted max-w-lg">
+            Para descobrir o que trava sua rotina, o detector precisa de alguns registros reais. Quanto mais completo, mais certeira a análise. Falta:
+          </p>
+          <ul className="text-sm text-rpg-text text-left list-disc pl-5 max-w-lg space-y-0.5">
             {a.missing.map((m) => (
               <li key={m}>{m}</li>
             ))}
           </ul>
+          <p className="text-xs text-rpg-muted max-w-lg">Dica: ao criar uma tarefa, preencha o prazo, o tempo estimado e, se ela só puder começar depois de outra, marque “depende de”.</p>
           <div className="flex flex-wrap justify-center gap-2">
-            <Link to="/tarefas?nova=1" className={rpgButtonClass("primary")}>
+            <Link to="/tarefas?nova=1" className={rpgButtonClass("gold")}>
               Criar tarefa
             </Link>
             <Link to="/projetos" className={rpgButtonClass("secondary")}>
@@ -99,13 +110,13 @@ export function DetectorGargalosPage() {
       return (
         <div className="space-y-4">
           <StatePanel icon={<Compass size={36} />} title="Caminho livre">
-            <p className="text-sm text-rpg-muted">Nenhum gargalo significativo foi detectado neste momento.</p>
+            <p className="text-sm text-rpg-muted max-w-lg">Nada está travando sua rotina agora: nenhum item tem nota alta o suficiente para virar gargalo. Veja o que foi conferido:</p>
             <ul className="space-y-1 text-sm text-left">
               {(
                 [
                   [a.checks.deadlines, "prazos sob controle", "há prazos vencidos"],
-                  [a.checks.capacity, "carga equilibrada", "carga acima da capacidade"],
-                  [a.checks.blocks, "nenhum bloqueio crítico", "há bloqueios a revisar"],
+                  [a.checks.capacity, "agenda dentro do seu tempo disponível", "agenda mais cheia que o tempo disponível"],
+                  [a.checks.blocks, "nenhuma tarefa segurando outras", "há tarefas segurando outras"],
                 ] as const
               ).map(([ok, good, bad]) => (
                 <li key={good} className={ok ? "text-rpg-green" : "text-rpg-orange"}>
@@ -115,7 +126,7 @@ export function DetectorGargalosPage() {
               ))}
             </ul>
             <a href="#gargalos-potenciais" className={rpgButtonClass("secondary")}>
-              <Telescope size={14} aria-hidden /> Ver próximos riscos
+              <Telescope size={14} aria-hidden /> Ver o que pode travar em breve
             </a>
           </StatePanel>
           <div id="gargalos-potenciais" className="grid gap-4 lg:grid-cols-2">
@@ -128,7 +139,7 @@ export function DetectorGargalosPage() {
     const primary = <PrimaryBottleneckCard candidate={p.candidate} onDetail={() => open(p.candidate)} />;
     const causes = <BottleneckCauseList causes={p.causes} />;
     const graph = <BottleneckDependencyGraph graph={p.graph} onOpenMap={() => setMapKey(p.candidate.key)} />;
-    const action = <BottleneckRecommendedAction action={p.action} secondary={p.secondaryActions} today={a.today} onSchedule={() => openFocus(p.action, p.candidate.title)} />;
+    const action = <BottleneckRecommendedAction action={p.action} secondary={p.secondaryActions} today={a.today} onSchedule={() => openReserve(p.action, p.candidate.title)} />;
     const impact = <BottleneckImpactForecast impact={p.impact} />;
     const related = <BottleneckRelatedList related={p.related} />;
 
@@ -174,6 +185,7 @@ export function DetectorGargalosPage() {
   return (
     <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-4">
       <BottleneckHero />
+      <RPGHowItWorks storageKey="lifeos:gargalos:como-funciona" steps={HOW_IT_WORKS} />
       {toolbar}
       {isError ? (
         <div className="rpg-panel p-6 text-center">
@@ -194,7 +206,7 @@ export function DetectorGargalosPage() {
 
       {data && (
         <>
-          <BottleneckDetailModal itemKey={detailKey} period={period} today={data.today} onClose={() => setDetailKey(null)} onSchedule={openFocus} />
+          <BottleneckDetailModal itemKey={detailKey} period={period} today={data.today} onClose={() => setDetailKey(null)} onSchedule={openReserve} />
           <BottleneckAllModal
             open={allOpen}
             onClose={() => setAllOpen(false)}
@@ -207,16 +219,16 @@ export function DetectorGargalosPage() {
           <BottleneckMapModal itemKey={mapKey} period={period} onClose={() => setMapKey(null)} />
         </>
       )}
-      <FocusScheduleModal
-        open={!!focus}
-        onClose={() => setFocus(null)}
-        initial={focus?.input ?? null}
-        taskTitle={focus?.title ?? ""}
+      <ScheduleBlockModal
+        open={!!reserve}
+        onClose={() => setReserve(null)}
+        initial={reserve?.input ?? null}
+        taskTitle={reserve?.title ?? ""}
         saving={scheduleFocus.isPending}
         onConfirm={async (input) => {
           const r = await scheduleFocus.mutateAsync(input);
-          setFocus(null);
-          setToast({ msg: r.created ? `Sessão Focus reservada: ${r.date.split("-").reverse().join("/")} às ${r.start} (Capacity Planner).` : "Essa sessão já estava reservada.", tone: "success" });
+          setReserve(null);
+          setToast({ msg: r.created ? `Horário reservado na agenda: ${r.date.split("-").reverse().join("/")} às ${r.start} (veja no Capacity Planner).` : "Esse horário já estava reservado.", tone: "success" });
         }}
       />
       <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />

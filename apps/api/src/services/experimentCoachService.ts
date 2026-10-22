@@ -2,8 +2,8 @@ import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { extractJson, str } from "./aiJson.js";
-import { METRIC_CATALOG, METRIC_KEYS, getRecordedValues, type ExperimentMetricKey } from "./experimentMetricsService.js";
-import { VERIFICATION_RULES, type VerificationRule } from "./experimentVerificationService.js";
+import { ACTIVE_METRIC_KEYS, METRIC_CATALOG, getRecordedValues, type ExperimentMetricKey } from "./experimentMetricsService.js";
+import { VERIFICATION_RULES, activeVerificationRules, type VerificationRule } from "./experimentVerificationService.js";
 import { CATEGORY_LABEL, ExperimentError, getExperimentDetail, type ExperimentCategory } from "./experimentService.js";
 import { getExperimentAnalysis } from "./experimentAnalysisService.js";
 import { describe, recommendedDuration } from "./experimentStats.js";
@@ -95,7 +95,7 @@ function sanitizeRuleConfig(rule: VerificationRule, raw: Record<string, unknown>
 async function metricContext(db: Db, ownerId: string) {
   const to = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
-  const keys = METRIC_KEYS.filter((k) => !METRIC_CATALOG[k].requiresHabit);
+  const keys = ACTIVE_METRIC_KEYS.filter((k) => !METRIC_CATALOG[k].requiresHabit);
   const rows = await Promise.all(
     keys.map(async (key) => {
       // Média e desvio só dos dias com registro: com 6 dias de água em 30, a base é a média desses 6 — não 6/30 dela.
@@ -126,7 +126,7 @@ export async function designExperiments(db: Db, ownerId: string, goal: string, c
   const metricLines = [...metrics.values()].map(
     (m) => `- ${m.key} (${m.label}${m.unit ? `, ${m.unit}` : ""}): média nos dias com registro ${fmt(m.mean)}, ${m.daysWithData} dia(s) com registro em 30 dias`
   );
-  const ruleLines = Object.values(VERIFICATION_RULES).map((r) => `- ${r.key}: ${r.label} (config: ${r.configLabel}${r.configUnit ? ` em ${r.configUnit}` : ""})`);
+  const ruleLines = activeVerificationRules().map((r) => `- ${r.key}: ${r.label} (config: ${r.configLabel}${r.configUnit ? ` em ${r.configUnit}` : ""})`);
 
   const prompt = [
     "Você é o LifeOS Copilot e vai DESENHAR experimentos pessoais (testes de rotina com começo e fim) para o objetivo do usuário.",

@@ -22,7 +22,7 @@ import {
  * registros reais do usuário, monta a entrada da engine determinística e
  * guarda o resultado em cache por usuário. O cache é invalidado sozinho por
  * uma "impressão digital" barata dos dados (contagens + últimas edições).
- * Nenhuma função daqui altera dados, exceto agendar o Focus confirmado.
+ * Nenhuma função daqui altera dados, exceto reservar o horário confirmado na agenda.
  */
 
 export class BottleneckError extends Error {
@@ -248,7 +248,7 @@ export async function getBottleneckDetail(db: Client, ownerId: string, key: stri
       sql: `SELECT started_at AS at, COALESCE(actual_minutes, planned_minutes) AS mins FROM focus_sessions WHERE owner_id = ? AND task_id = ? ORDER BY started_at DESC LIMIT 5`,
       args: [ownerId, detail.candidate.entityId],
     });
-    for (const x of r.rows) recent.push({ at: String(x.at), label: `Sessão de foco${x.mins ? ` (${n(x.mins)} min)` : ""}` });
+    for (const x of r.rows) recent.push({ at: String(x.at), label: `Sessão de trabalho${x.mins ? ` (${n(x.mins)} min)` : ""}` });
     const t = input.tasks.find((x) => x.id === detail.candidate.entityId);
     if (t?.lastActivity) recent.push({ at: t.lastActivity, label: "Última atualização da tarefa" });
     recent.sort((a, b) => b.at.localeCompare(a.at));
@@ -262,7 +262,7 @@ export async function getExpandedGraph(db: Client, ownerId: string, key: string,
   return g;
 }
 
-/* ------------------------------ Sessão Focus (agenda) ------------------------------ */
+/* ------------------- Reserva de horário na agenda (bloco de trabalho) ------------------- */
 
 const toMin = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -273,7 +273,7 @@ const toHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${
 export interface FocusPreviewInput { taskId: string; date: string; start: string; minutes: number }
 
 /**
- * Prévia do bloco de Focus: valida a tarefa (do usuário), calcula o fim,
+ * Prévia da reserva na agenda: valida a tarefa (do usuário), calcula o fim,
  * conflitos reais com eventos e blocos e a carga do dia antes/depois.
  */
 export async function previewFocusSession(db: Client, ownerId: string, input: FocusPreviewInput) {
@@ -283,7 +283,7 @@ export async function previewFocusSession(db: Client, ownerId: string, input: Fo
   if (String(t.status) === DONE) throw new BottleneckError("Esta tarefa já foi concluída.", 409);
   const startM = toMin(input.start);
   const endM = startM + input.minutes;
-  if (endM > 24 * 60) throw new BottleneckError("A sessão precisa terminar no mesmo dia.");
+  if (endM > 24 * 60) throw new BottleneckError("O horário reservado precisa terminar no mesmo dia.");
   const [blocks, events, summary] = await Promise.all([
     getPlannedBlocks(db, ownerId, input.date),
     db.execute({
@@ -313,7 +313,7 @@ export async function previewFocusSession(db: Client, ownerId: string, input: Fo
   };
 }
 
-/** Confirma a sessão: cria UM bloco de trabalho profundo no Capacity Planner (idempotente). */
+/** Confirma a reserva: cria UM bloco de trabalho na agenda planejada (Capacity Planner), de forma idempotente. */
 export async function scheduleFocusSession(db: Client, ownerId: string, input: FocusPreviewInput) {
   const preview = await previewFocusSession(db, ownerId, input);
   const existing = await db.execute({
@@ -325,7 +325,7 @@ export async function scheduleFocusSession(db: Client, ownerId: string, input: F
   const id = nanoid();
   await db.execute({
     sql: `INSERT INTO planned_time_blocks (id, owner_id, date, start_time, end_time, entity_type, entity_id, title, block_type) VALUES (?, ?, ?, ?, ?, 'task', ?, ?, 'deep_work')`,
-    args: [id, ownerId, input.date, input.start, preview.end, input.taskId, `Focus: ${preview.task.title}`.slice(0, 120)],
+    args: [id, ownerId, input.date, input.start, preview.end, input.taskId, `Bloco de trabalho: ${preview.task.title}`.slice(0, 120)],
   });
   return { id, created: true, ...preview };
 }

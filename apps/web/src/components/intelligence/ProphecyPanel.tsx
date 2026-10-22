@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Sparkles } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { RPGBadge, RPGButton, RPGPanel, RPGProgressRing } from "@/components/rpg";
 import type { Prophecy, ProphecyFactor } from "@/services/intelligenceService";
-import { pct } from "@/utils/intelligenceDisplay";
+import { factorText, pct } from "@/utils/intelligenceDisplay";
 
 /** Data da véspera em dd/mm/aaaa. */
 const eve = (iso: string) => {
@@ -14,14 +14,14 @@ const eve = (iso: string) => {
 const verdict = (p: Prophecy) => ((p.probability ?? 0) >= 0.5 ? p.targetLabel : `Pouco provável: ${p.targetLabel.toLowerCase()}`);
 
 function FactorList({ factors, dense = false }: { factors: ProphecyFactor[]; dense?: boolean }) {
-  if (!factors.length) return <p className="text-xs text-rpg-muted">Nenhuma runa da véspera mudou a previsão de forma relevante.</p>;
+  if (!factors.length) return <p className="text-xs text-rpg-muted">Nenhum registro de ontem mudou muito a chance — vale a taxa de costume.</p>;
   return (
     <ul className={clsx("space-y-1.5", dense ? "text-sm" : "text-sm")}>
       {factors.map((f) => {
         const up = f.effect > 0;
         return (
           <li key={f.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <span className="truncate text-rpg-text/90">{f.label}</span>
+            <span className="truncate text-rpg-text/90" title={factorText(f)}>{factorText(f)}</span>
             <span className={clsx("inline-flex items-center gap-1 font-pixel text-xs tabular-nums", up ? "text-rpg-green" : "text-rpg-red")}>
               {up ? <ArrowUp size={13} aria-hidden /> : <ArrowDown size={13} aria-hidden />}
               {up ? "+" : ""}

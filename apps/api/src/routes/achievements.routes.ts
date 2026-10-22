@@ -24,7 +24,8 @@ achievementsRouter.get("/", async (req, res) => {
 
 /** GET /api/achievements/custom/metrics — lista fixa de métricas disponíveis para criar um troféu. */
 achievementsRouter.get("/custom/metrics", async (_req, res) => {
-  return res.json(CUSTOM_ACHIEVEMENT_METRICS);
+  // Métricas de Foco continuam válidas para troféus antigos, mas não são mais oferecidas.
+  return res.json(CUSTOM_ACHIEVEMENT_METRICS.filter((m) => !m.value.startsWith("focus_")));
 });
 
 /** GET /api/achievements/custom — troféus que o próprio usuário cadastrou, com progresso real. */

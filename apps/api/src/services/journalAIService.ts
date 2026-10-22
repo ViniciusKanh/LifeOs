@@ -366,7 +366,7 @@ async function collectDayFacts(db: Db, ownerId: string, date: string): Promise<{
     facts.push(`Exercício: ${w.kind}${w.duration_minutes ? ` (${minutesLabel(Number(w.duration_minutes))})` : ""}`);
   }
   const focusRow = focus.rows[0] as unknown as { total: number; n: number } | undefined;
-  if (focusRow && Number(focusRow.total) > 0) facts.push(`Foco: ${Number(focusRow.n)} sessão(ões), ${minutesLabel(Number(focusRow.total))}`);
+  if (focusRow && Number(focusRow.total) > 0) facts.push(`Cronômetro de missões: ${Number(focusRow.n)} sessão(ões), ${minutesLabel(Number(focusRow.total))}`);
   if (auto.reading.pages > 0 || auto.reading.minutes > 0) {
     const book = auto.currentBook ? ` de "${auto.currentBook.title}"` : "";
     facts.push(`Leitura: ${auto.reading.pages} páginas${book}${auto.reading.minutes > 0 ? ` em ${minutesLabel(auto.reading.minutes)}` : ""}`);

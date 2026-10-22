@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
 import {
   METRIC_CATALOG,
-  METRIC_KEYS,
+  ACTIVE_METRIC_KEYS,
   getDailySeries,
   aggregateSeries,
   compareMetric,
@@ -128,7 +128,7 @@ async function fetchExperimentRow(db: Db, ownerId: string, id: string): Promise<
 
 export async function getMetricCatalog(db: Db, ownerId: string) {
   const checks = await Promise.all(
-    METRIC_KEYS.map(async (key) => {
+    ACTIVE_METRIC_KEYS.map(async (key) => {
       const def = METRIC_CATALOG[key];
       if (def.requiresHabit) {
         const r = await db.execute({ sql: "SELECT COUNT(*) AS c FROM habits WHERE owner_id = ? AND archived_at IS NULL", args: [ownerId] });
@@ -142,7 +142,7 @@ export async function getMetricCatalog(db: Db, ownerId: string) {
     })
   );
   const byKey = new Map(checks.map((c) => [c.key, c]));
-  return METRIC_KEYS.map((key) => {
+  return ACTIVE_METRIC_KEYS.map((key) => {
     const def = METRIC_CATALOG[key];
     const info = byKey.get(key)!;
     return {

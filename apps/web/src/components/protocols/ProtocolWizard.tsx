@@ -5,13 +5,23 @@ import { Modal } from "@/components/ui/Modal";
 import { RPGBadge, RPGButton } from "@/components/rpg";
 import { rpgFieldClass } from "@/components/rpg/rpgAssets";
 import type { ActionType, Protocol, ProtocolInput, ProtocolsData, Trigger } from "@/services/protocolsService";
-import { MODE_UI, PROTOCOL_ARTS, protocolArtUrl } from "@/utils/protocolDisplay";
+import { MODE_UI, PROTOCOL_ARTS, formatMinutes, protocolArtUrl, stepDisplayTitle } from "@/utils/protocolDisplay";
 
 type StepDraft = ProtocolInput["steps"][number] & { key: string };
 type Draft = Omit<ProtocolInput, "steps"> & { steps: StepDraft[] };
 type Catalog = ProtocolsData["catalog"];
 
-const STEPS = ["Identidade", "Gatilho", "Ações", "Ordem", "Preferências", "Revisão"] as const;
+const STEPS = ["Nome", "Quando usar", "Passos", "Ordem", "Lembretes", "Revisão"] as const;
+
+/** Uma frase por etapa explicando o que preencher. */
+const STAGE_HINT: string[] = [
+  "Dê um nome fácil de reconhecer, como “Ritual da manhã” ou “Dormi mal”.",
+  "Quando o LifeOS deve lembrar você deste protocolo? Ele só sugere — usar é sempre decisão sua.",
+  "Adicione os passos na ordem em que você faria. Cada passo pode ser algo que o LifeOS faz (criar tarefa, adiar, lembrete) ou algo que você faz e marca depois.",
+  "Arraste (ou use as setas) para deixar os passos na ordem certa.",
+  "Escolha onde a sugestão deve aparecer quando o momento chegar.",
+  "Confira o resultado antes de salvar.",
+];
 const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 const OPS: Array<{ id: "lt" | "lte" | "gt" | "gte"; label: string }> = [
   { id: "lt", label: "menor que" },
@@ -144,8 +154,9 @@ function ConfigFields({ step, catalog, onChange }: { step: StepDraft; catalog: C
         </div>
       );
     case "START_FOCUS":
+      // Passo legado (antigo foco): continua editável, mas não é mais oferecido.
       return (
-        <L label="Minutos de foco">
+        <L label="Minutos de trabalho">
           <input type="number" min={5} max={120} className={field} value={num(c.minutes, 25)} onChange={(e) => set("minutes", Number(e.target.value))} />
         </L>
       );
@@ -184,7 +195,7 @@ function ConfigFields({ step, catalog, onChange }: { step: StepDraft; catalog: C
         </L>
       );
     default:
-      return <p className="text-[11px] text-rpg-muted">Sem configuração extra.</p>;
+      return <p className="text-[11px] text-rpg-muted">Você faz este passo e marca como feito depois.</p>;
   }
 }
 
@@ -210,6 +221,8 @@ export function ProtocolWizard({
   const [stage, setStage] = useState(0);
   const [draft, setDraft] = useState<Draft>(() => toDraft(editing));
   const [newType, setNewType] = useState<ActionType>("CREATE_TASK");
+  // Tipos legados (ex.: START_FOCUS) não aparecem para novos passos.
+  const offered = catalog.actions.filter((a) => a.offered !== false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -306,19 +319,20 @@ export function ProtocolWizard({
           </li>
         ))}
       </ol>
+      <p className="mb-3 text-sm text-rpg-text/85">{STAGE_HINT[stage]}</p>
 
       {stage === 0 && (
         <div className="space-y-3">
           <label className="block">
             <span className="text-xs text-rpg-muted">Nome</span>
-            <input className={clsx(rpgFieldClass, "mt-1")} maxLength={60} value={draft.name} onChange={(e) => patch({ name: e.target.value })} placeholder="Ex.: Dormi mal" />
+            <input className={clsx(rpgFieldClass, "mt-1")} maxLength={60} value={draft.name} onChange={(e) => patch({ name: e.target.value })} placeholder="Ex.: Ritual da manhã" />
           </label>
           <label className="block">
-            <span className="text-xs text-rpg-muted">Descrição</span>
-            <textarea className={clsx(rpgFieldClass, "mt-1")} rows={2} maxLength={300} value={draft.description ?? ""} onChange={(e) => patch({ description: e.target.value })} />
+            <span className="text-xs text-rpg-muted">Para que serve (opcional)</span>
+            <textarea className={clsx(rpgFieldClass, "mt-1")} rows={2} maxLength={300} value={draft.description ?? ""} placeholder="Ex.: Começar o dia com calma e já saber a prioridade." onChange={(e) => patch({ description: e.target.value })} />
           </label>
           <label className="block">
-            <span className="text-xs text-rpg-muted">Situação</span>
+            <span className="text-xs text-rpg-muted">Área da vida</span>
             <select className={clsx(rpgFieldClass, "mt-1")} value={draft.category} onChange={(e) => patch({ category: e.target.value })}>
               {catalog.categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -328,7 +342,7 @@ export function ProtocolWizard({
             </select>
           </label>
           <fieldset>
-            <legend className="text-xs text-rpg-muted mb-1">Arte</legend>
+            <legend className="text-xs text-rpg-muted mb-1">Imagem do card</legend>
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
               {PROTOCOL_ARTS.map((a) => (
                 <button key={a} type="button" aria-pressed={draft.art === a} aria-label={`Arte ${a}`} onClick={() => patch({ art: a })} className={clsx("border-2 overflow-hidden", draft.art === a ? "border-rpg-gold" : "border-rpg-border")} style={{ borderRadius: 3 }}>
@@ -343,7 +357,7 @@ export function ProtocolWizard({
       {stage === 1 && (
         <div className="space-y-3">
           <fieldset className="grid gap-2 sm:grid-cols-2">
-            <legend className="text-xs text-rpg-muted mb-1">Quando este protocolo deve ser lembrado?</legend>
+            <legend className="sr-only">Quando este protocolo deve ser lembrado?</legend>
             {(
               [
                 ["manual", "Só quando eu escolher"],
@@ -392,28 +406,31 @@ export function ProtocolWizard({
             </label>
           )}
           <label className="block">
-            <span className="text-xs text-rpg-muted">Descrição do gatilho (opcional)</span>
+            <span className="text-xs text-rpg-muted">Como você descreveria esse momento (opcional)</span>
             <input className={clsx(rpgFieldClass, "mt-1")} maxLength={160} value={draft.triggerDescription ?? ""} placeholder={describeTrigger(t, catalog)} onChange={(e) => patch({ triggerDescription: e.target.value })} />
           </label>
-          <p className="text-[11px] text-rpg-muted">Gatilho só sugere o protocolo — a execução continua dependendo da sua confirmação.</p>
+
         </div>
       )}
 
       {stage === 2 && (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            <select aria-label="Tipo de ação" className={clsx(rpgFieldClass, "flex-1 min-w-[200px]")} value={newType} onChange={(e) => setNewType(e.target.value as ActionType)}>
-              {catalog.actions.map((a) => (
+            <select aria-label="Tipo de passo" className={clsx(rpgFieldClass, "flex-1 min-w-[200px]")} value={newType} onChange={(e) => setNewType(e.target.value as ActionType)}>
+              {offered.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.label} ({MODE_UI[a.mode].label.toLowerCase()})
+                  {a.label} — {MODE_UI[a.mode].label.toLowerCase()}
                 </option>
               ))}
             </select>
             <RPGButton variant="secondary" onClick={addStep} disabled={draft.steps.length >= 15}>
-              <Plus size={14} aria-hidden /> Adicionar ação
+              <Plus size={14} aria-hidden /> Adicionar passo
             </RPGButton>
           </div>
-          {draft.steps.length === 0 && <p className="text-sm text-rpg-muted">Nenhuma ação ainda.</p>}
+          <p className="text-[11px] text-rpg-muted">
+            Dica: para algo que só você pode fazer (ex.: “beber um copo d'água”), escolha “Passo livre” ou “Checklist”.
+          </p>
+          {draft.steps.length === 0 && <p className="text-sm text-rpg-muted">Nenhum passo ainda. Um bom protocolo tem de 3 a 7 passos curtos.</p>}
           <ul className="space-y-2">
             {draft.steps.map((s) => {
               const mode = catalog.actions.find((a) => a.id === s.actionType)?.mode ?? "manual";
@@ -425,14 +442,14 @@ export function ProtocolWizard({
                       <Trash2 size={14} aria-hidden />
                     </button>
                   </div>
-                  <input aria-label="Nome da ação" className={rpgFieldClass} maxLength={120} value={s.title} onChange={(e) => patchStep(s.key, { title: e.target.value })} />
+                  <input aria-label="Nome do passo" className={rpgFieldClass} maxLength={120} value={s.title} onChange={(e) => patchStep(s.key, { title: e.target.value })} />
                   <ConfigFields step={s} catalog={catalog} onChange={(config) => patchStep(s.key, { config })} />
                   <div className="flex flex-wrap items-center gap-4 text-xs text-rpg-muted">
                     <label className="inline-flex items-center gap-1.5">
                       <input type="checkbox" className="accent-rpg-gold" checked={!!s.optional} onChange={(e) => patchStep(s.key, { optional: e.target.checked })} /> Opcional
                     </label>
                     <label className="inline-flex items-center gap-1.5">
-                      Minutos
+                      Quanto tempo (min)
                       <input type="number" min={0} max={240} className={clsx(rpgFieldClass, "!w-20 !py-1")} value={s.minutes ?? 0} onChange={(e) => patchStep(s.key, { minutes: Number(e.target.value) })} />
                     </label>
                   </div>
@@ -485,21 +502,33 @@ export function ProtocolWizard({
               {label}
             </label>
           ))}
-          <p className="text-[11px] text-rpg-muted">Sugestões nunca executam ações sozinhas.</p>
+          <p className="text-[11px] text-rpg-muted">Sugestões nunca executam passos sozinhas: elas só lembram você.</p>
         </div>
       )}
 
       {stage === 5 && (
         <div className="space-y-2 text-sm">
           <p className="font-rpg text-lg font-bold text-rpg-text">{draft.name || "Sem nome"}</p>
+          {draft.description?.trim() && <p className="text-rpg-text/85">{draft.description.trim()}</p>}
           <p className="text-rpg-muted">
-            {catalog.categories.find((c) => c.id === draft.category)?.label} · {draft.triggerDescription?.trim() || describeTrigger(t, catalog)}
+            <strong className="text-rpg-gold-light">Quando usar:</strong> {draft.triggerDescription?.trim() || describeTrigger(t, catalog)} · {catalog.categories.find((c) => c.id === draft.category)?.label}
           </p>
-          <ol className="list-decimal pl-5 space-y-0.5 text-rpg-text">
-            {draft.steps.map((s) => (
-              <li key={s.key}>{s.title}</li>
-            ))}
+          <ol className="space-y-1 text-rpg-text">
+            {draft.steps.map((s, i) => {
+              const mode = catalog.actions.find((a) => a.id === s.actionType)?.mode ?? "manual";
+              return (
+                <li key={s.key} className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-pixel text-[10px] text-rpg-gold-light w-5">{i + 1}.</span>
+                  <span>{stepDisplayTitle(s)}</span>
+                  <RPGBadge tone={MODE_UI[mode].tone}>{MODE_UI[mode].label}</RPGBadge>
+                  {(s.minutes ?? 0) > 0 && <span className="text-[11px] text-rpg-muted">{s.minutes} min</span>}
+                </li>
+              );
+            })}
           </ol>
+          <p className="text-rpg-text/85">
+            Duração total: <strong className="text-rpg-gold-light">{formatMinutes(draft.steps.reduce((sum, s) => sum + (s.minutes ?? 0), 0))}</strong>
+          </p>
         </div>
       )}
 

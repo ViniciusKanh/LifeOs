@@ -23,7 +23,7 @@ import { designExperiments, generateInsightReport, listInsightReports, parseDail
 import { rateLimit } from "../middleware/rateLimit.js";
 import { awardExperimentCheckin, awardExperimentConcluded, awardExperimentStarted } from "../services/gamificationService.js";
 import { METRIC_KEYS } from "../services/experimentMetricsService.js";
-import { VERIFICATION_RULES } from "../services/experimentVerificationService.js";
+import { VERIFICATION_RULES, activeVerificationRules } from "../services/experimentVerificationService.js";
 
 export const experimentsRouter = Router();
 experimentsRouter.use(requireAuth);
@@ -139,7 +139,7 @@ experimentsRouter.post("/ai/tailor", aiLimit, async (req, res) => {
 
 /** GET /api/experiments/verification/rules — regras automáticas disponíveis para o wizard. */
 experimentsRouter.get("/verification/rules", async (_req, res) => {
-  return res.json(Object.values(VERIFICATION_RULES));
+  return res.json(activeVerificationRules());
 });
 
 /** GET /api/experiments/summary — KPIs do topo da página. */

@@ -35,7 +35,7 @@ export function previewTaskReward(
 export const XP_SOURCES: Array<{ id: string; label: string; tone: "purple" | "green" | "cyan" | "gold" | "pink" }> = [
   { id: "task", label: "Missões", tone: "purple" },
   { id: "habit_entry", label: "Hábitos", tone: "green" },
-  { id: "focus", label: "Foco", tone: "cyan" },
+  { id: "focus", label: "Cronômetro", tone: "cyan" },
   { id: "project", label: "Projetos", tone: "gold" },
   { id: "journal", label: "Diário", tone: "pink" },
   { id: "contract", label: "Contratos", tone: "gold" },

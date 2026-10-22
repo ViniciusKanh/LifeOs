@@ -9,7 +9,7 @@ import { analyzeBottlenecks, BottleneckError, getBottleneckDetail, getExpandedGr
 
 /**
  * Detector de Gargalos. Leitura determinística (cache por usuário) +
- * Oráculo (Gemini) sob demanda + agendamento de Focus só após confirmação.
+ * Oráculo (Gemini) sob demanda + reserva de horário na agenda só após confirmação.
  */
 export const bottlenecksRouter = Router();
 bottlenecksRouter.use(requireAuth);

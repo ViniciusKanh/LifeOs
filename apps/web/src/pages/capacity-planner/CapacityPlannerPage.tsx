@@ -93,7 +93,7 @@ export function CapacityPlannerPage() {
       <PageHeader
         icon={<Gauge size={22} />}
         title="Capacity Planner"
-        subtitle="Planeje seu dia com base na sua agenda, energia e foco."
+        subtitle="Planeje seu dia com base na sua agenda, energia e prioridades."
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <DateNavigator date={date} onChange={setDate} />

@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { RPGPanel } from "@/components/rpg";
 import { rpgColor } from "@/components/rpg/rpgAssets";
 import type { DependencyGraph, GraphNode } from "@/services/bottlenecksService";
-import { TYPE_UI } from "@/utils/bottleneckDisplay";
+import { RELATION_LABEL, TYPE_UI } from "@/utils/bottleneckDisplay";
 
 const W = 420;
 const H = 236;
@@ -15,7 +15,7 @@ const NH = 38;
 const SLOTS: Array<[number, number]> = [
   [72, 40], [348, 40], [72, 196], [348, 196], [210, 26], [210, 210], [64, 118], [356, 118],
 ];
-const REL_LABEL: Record<GraphNode["relation"], string> = { center: "Gargalo", blocked: "depende dele", blocker: "precisa vir antes", belongs: "contém o item", affected: "afetada" };
+const REL_LABEL: Record<GraphNode["relation"], string> = RELATION_LABEL;
 
 function layout(graph: DependencyGraph) {
   const center = graph.nodes.find((n) => n.relation === "center");
@@ -43,7 +43,7 @@ export function GraphCanvas({ graph, large = false }: { graph: DependencyGraph; 
   const { placed, hidden } = layout(graph);
   return (
     <div className={clsx("overflow-x-auto", large ? "" : "-mx-1")}>
-      <svg viewBox={`0 0 ${W} ${H}`} className={clsx("mx-auto block w-full h-auto", large ? "min-w-[560px] max-h-[460px]" : "min-w-[360px] max-h-[300px]")} role="img" aria-label="Mapa de dependências do gargalo (lista equivalente disponível)">
+      <svg viewBox={`0 0 ${W} ${H}`} className={clsx("mx-auto block w-full h-auto", large ? "min-w-[560px] max-h-[460px]" : "min-w-[360px] max-h-[300px]")} role="img" aria-label="Mapa do que está ligado ao item travado (lista equivalente disponível)">
         <defs>
           <marker id="bn-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L8,4 L0,8 z" fill={rpgColor("orange")} />
@@ -95,9 +95,11 @@ export function GraphCanvas({ graph, large = false }: { graph: DependencyGraph; 
               <text x={29} y={16} fontSize={9.5} fill={rpgColor("text")} fontWeight={600}>
                 {short(n.label)}
               </text>
-              <text x={29} y={29} fontSize={8} fill={rpgColor("muted-text")}>
-                {isCenter ? "(Gargalo)" : `${ui.label}${n.impact !== null ? ` · ${n.impact}%` : ""}`}
+              <text x={29} y={29} fontSize={8} fill={rpgColor(isCenter ? "red" : n.relation === "blocker" ? "orange" : "muted-text")}>
+                {isCenter ? "está travando" : short(`${ui.label} · ${REL_LABEL[n.relation]}`, 25)}
               </text>
+              {/* Dica nativa ao passar o mouse: nome completo + relação. */}
+              <title>{isCenter ? `${n.label} — é o item que está travando` : `${ui.label}: ${n.label} — ${REL_LABEL[n.relation]}${n.impact !== null ? ` (nota ${n.impact})` : ""}. Clique para abrir.`}</title>
             </g>
           );
         })}
@@ -114,12 +116,29 @@ export function GraphList({ graph }: { graph: DependencyGraph }) {
         .filter((n) => n.relation !== "center")
         .map((n) => (
           <li key={n.key} className="flex items-center gap-2 text-rpg-text">
-            <span className="text-[11px] text-rpg-muted w-24 shrink-0">{REL_LABEL[n.relation]}</span>
+            <span className="text-[11px] text-rpg-muted w-28 shrink-0">{REL_LABEL[n.relation]}</span>
             <span className="truncate">
               {TYPE_UI[n.type].label}: {n.label}
             </span>
           </li>
         ))}
+    </ul>
+  );
+}
+
+/** Legenda do mapa em linguagem simples (reutilizada no painel e no modal). */
+export function GraphLegend() {
+  return (
+    <ul className="mt-2 grid gap-1 text-[11px] text-rpg-text/80 sm:grid-cols-3" aria-label="Legenda do mapa">
+      <li className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-4 shrink-0 border-2 border-rpg-red bg-rpg-red/15" style={{ borderRadius: 2 }} aria-hidden /> Item que está travando
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className="inline-block w-4 shrink-0 border-t-2 border-rpg-orange" aria-hidden />→ “precisa terminar antes de”
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className="inline-block w-4 shrink-0 border-t-2 border-dashed border-rpg-cyan" aria-hidden />→ “faz parte de”
+      </li>
     </ul>
   );
 }
@@ -130,7 +149,7 @@ export function BottleneckDependencyGraph({ graph, onOpenMap }: { graph: Depende
   const empty = graph.nodes.filter((n) => n.relation !== "center").length === 0;
   return (
     <RPGPanel
-      title="Dependências afetadas"
+      title="Ligações"
       icon={<Network size={15} />}
       variant="gold"
       className="h-full"
@@ -141,14 +160,17 @@ export function BottleneckDependencyGraph({ graph, onOpenMap }: { graph: Depende
               {asList ? <GitFork size={13} aria-hidden /> : <List size={13} aria-hidden />} {asList ? "Mapa" : "Lista"}
             </button>
             <button type="button" className="inline-flex items-center gap-1 text-xs text-rpg-green hover:underline" onClick={onOpenMap}>
-              Ver mapa <ArrowRight size={13} aria-hidden />
+              Ampliar <ArrowRight size={13} aria-hidden />
             </button>
           </span>
         )
       }
     >
+      {!empty && <p className="mb-2 text-[11px] text-rpg-text/75">Cada caixa é algo da sua rotina. Siga as setas: elas mostram o que precisa acontecer primeiro. Clique numa caixa para abri-la.</p>}
       {empty ? (
-        <p className="text-sm text-rpg-muted">Nenhuma dependência registrada para este item. Vínculos só aparecem quando existem de verdade (dependências entre tarefas, projetos, campanhas e metas).</p>
+        <p className="text-sm text-rpg-muted">
+          Nada está ligado a este item ainda. O mapa aparece quando você marca, numa tarefa, que ela “depende de” outra, ou quando a tarefa faz parte de um projeto, campanha ou meta.
+        </p>
       ) : asList ? (
         <GraphList graph={graph} />
       ) : (
@@ -156,17 +178,10 @@ export function BottleneckDependencyGraph({ graph, onOpenMap }: { graph: Depende
       )}
       {graph.cycles.length > 0 && (
         <p className="mt-2 flex items-start gap-1.5 text-xs text-rpg-red" role="status">
-          <RefreshCcw size={13} className="shrink-0 mt-0.5" aria-hidden /> Dependência circular detectada: {graph.cycles.map((c) => c.join(" ↔ ")).join("; ")}.
+          <RefreshCcw size={13} className="shrink-0 mt-0.5" aria-hidden /> Laço sem saída: estes itens esperam uns pelos outros, então nenhum consegue começar — {graph.cycles.map((c) => c.join(" ↔ ")).join("; ")}. Remova a ligação que não é real.
         </p>
       )}
-      <p className="mt-2 flex flex-wrap gap-3 text-[10px] text-rpg-muted">
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-4 border-t-2 border-rpg-orange" aria-hidden /> dependência
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-4 border-t-2 border-dashed border-rpg-cyan" aria-hidden /> pertence a
-        </span>
-      </p>
+      {!empty && <GraphLegend />}
     </RPGPanel>
   );
 }

@@ -12,6 +12,12 @@ export interface Contract {
   difficulty: Difficulty;
   status: ContractStatus;
   dueDate: string | null;
+  /** Cláusulas do documento (todas opcionais; contratos antigos vêm com null). */
+  startDate: string | null;
+  weeklyHours: number | null;
+  why: string | null;
+  rewardText: string | null;
+  stakes: string | null;
   aiGenerated: boolean;
   completedAt: string | null;
   createdAt: string;
@@ -33,6 +39,7 @@ export interface ContractTaskInput {
   priority?: TaskPriority;
   difficulty?: Difficulty | null;
   dueDate?: string | null;
+  startDate?: string | null;
   estimateMinutes?: number | null;
 }
 
@@ -55,6 +62,11 @@ export interface ContractInput {
   objective?: string | null;
   difficulty: Difficulty;
   dueDate?: string | null;
+  startDate?: string | null;
+  weeklyHours?: number | null;
+  why?: string | null;
+  rewardText?: string | null;
+  stakes?: string | null;
   aiGenerated?: boolean;
   tasks?: ContractTaskInput[];
   /** Meta/Projeto existente a anexar, ou dados para criar um novo. */
@@ -70,6 +82,7 @@ export interface ProposedTask {
   description: string | null;
   priority: TaskPriority;
   difficulty: Difficulty;
+  startInDays?: number | null;
   dueInDays: number | null;
   estimateMinutes: number | null;
 }
@@ -92,10 +105,30 @@ export interface ContractProposal {
   description: string | null;
   objective: string | null;
   difficulty: Difficulty;
+  startInDays: number;
   dueInDays: number | null;
+  weeklyHours: number | null;
+  why: string | null;
+  rewardText: string | null;
+  stakes: string | null;
   tasks: ProposedTask[];
   goal: SuggestedGoal | null;
   project: SuggestedProject | null;
+}
+
+/** Parâmetros que o usuário passa para a IA redigir o contrato. */
+export interface ProposeContractInput {
+  goal: string;
+  why?: string;
+  area?: string;
+  difficulty?: Difficulty;
+  startInDays?: number;
+  deadlineDays?: number;
+  weeklyHours?: number;
+  taskCount?: "enxuto" | "equilibrado" | "detalhado";
+  goalId?: string;
+  projectId?: string;
+  suggestGoalProject?: boolean;
 }
 
 export const contractsService = {
@@ -107,7 +140,7 @@ export const contractsService = {
   remove: (id: string, deleteOpenTasks: boolean) => api.delete<void>(`/contracts/${id}${deleteOpenTasks ? "?tasks=open" : ""}`),
   addTasks: (id: string, tasks: ContractTaskInput[]) => api.post<Task[]>(`/contracts/${id}/tasks`, { tasks }),
   link: (id: string, taskId: string, linked: boolean) => api.post<void>(`/contracts/${id}/link`, { taskId, linked }),
-  propose: (input: { goal: string; difficulty?: Difficulty; deadlineDays?: number; suggestGoalProject?: boolean }) =>
+  propose: (input: ProposeContractInput) =>
     api.post<{ proposal: ContractProposal }>("/contracts/ai/propose", input),
   proposeTasks: (id: string, hint?: string) => api.post<{ tasks: ProposedTask[] }>(`/contracts/${id}/ai/tasks`, { hint }),
 };

@@ -86,7 +86,7 @@ export function HojePage() {
   const { projects } = useProjects();
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
 
-  // "Iniciar Focus": abre o cronômetro real da tarefa e a coloca em andamento.
+  // "Iniciar cronômetro": abre o cronômetro real da tarefa e a coloca em andamento.
   const startFocus = async (id: string) => {
     await taskService.startTime(id);
     queryClient.invalidateQueries({ queryKey: ["tasks", "time-active", id] });
@@ -258,7 +258,7 @@ export function HojePage() {
             <div className="flex items-center gap-2.5 mb-1">
               <IconBadge tone="pink" size={32} icon={<Flame size={15} />} />
               <div className="min-w-0">
-                <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Foque nisso agora</p>
+                <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Prioridades agora</p>
                 <p className="text-xs text-slate">Priorização automática, calculada por prazo, prioridade e dependências.</p>
               </div>
             </div>

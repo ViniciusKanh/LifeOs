@@ -17,8 +17,10 @@ export function ProtocolHero({ onCreate }: { onCreate: () => void }) {
             </span>
             <div className="min-w-0">
               <h1 className="rpg-title font-bold leading-tight text-3xl sm:text-4xl">Protocolos</h1>
-              <p className="mt-2 font-semibold text-rpg-text">Planos prontos para os momentos que se repetem.</p>
-              <p className="mt-1 text-sm text-rpg-text/85 max-w-xl">Quando a situação aparecer, você revisa as ações, escolhe o que executar e o LifeOS cuida do resto — nada acontece sem sua confirmação.</p>
+              <p className="mt-2 font-semibold text-rpg-text">Rotinas prontas para os momentos que se repetem.</p>
+              <p className="mt-1 text-sm text-rpg-text/85 max-w-xl">
+                Um <strong className="text-rpg-gold-light">protocolo</strong> é uma lista de passos que você monta uma vez e reusa sempre — como um “ritual da manhã” ou “dormi mal, e agora?”. Na hora certa, você abre, confere os passos e o LifeOS faz a parte dele.
+              </p>
             </div>
           </div>
           <div className="flex flex-col items-start lg:items-end gap-3">

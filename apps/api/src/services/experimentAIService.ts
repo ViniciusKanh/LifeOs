@@ -1,7 +1,7 @@
 import type { getDb } from "../db/client.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { getExperimentDetail } from "./experimentService.js";
-import { METRIC_CATALOG, getDailySeries, aggregateSeries, type ExperimentMetricKey } from "./experimentMetricsService.js";
+import { ACTIVE_METRIC_KEYS, METRIC_CATALOG, getDailySeries, aggregateSeries, type ExperimentMetricKey } from "./experimentMetricsService.js";
 
 /**
  * Camada de IA dos Experimentos Pessoais. Só envia ao Gemini agregados
@@ -86,13 +86,12 @@ export async function suggestExperiment(db: Db, ownerId: string) {
     return { ok: false as const, message: "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini em Configurações." };
   }
 
-  const [sleepAvg, energyAvg, moodAvg, stressAvg, waterAvg, focusAvg, exerciseAvg, readingPagesAvg, studyAvg] = await Promise.all([
+  const [sleepAvg, energyAvg, moodAvg, stressAvg, waterAvg, exerciseAvg, readingPagesAvg, studyAvg] = await Promise.all([
     scalarAvg(db, "sleep_duration", ownerId, 30),
     scalarAvg(db, "energy", ownerId, 30),
     scalarAvg(db, "mood", ownerId, 30),
     scalarAvg(db, "stress", ownerId, 30),
     scalarAvg(db, "water_ml", ownerId, 30),
-    scalarAvg(db, "focus_minutes", ownerId, 30),
     scalarAvg(db, "exercise_minutes", ownerId, 30),
     scalarAvg(db, "reading_pages", ownerId, 30),
     scalarAvg(db, "study_minutes", ownerId, 30),
@@ -107,14 +106,13 @@ export async function suggestExperiment(db: Db, ownerId: string) {
     moodAvg !== null ? `Humor médio: ${moodAvg.toFixed(1)}/5.` : "",
     stressAvg !== null ? `Estresse médio: ${stressAvg.toFixed(1)}/5.` : "",
     waterAvg !== null ? `Água média: ${(waterAvg / 1000).toFixed(1)}L/dia.` : "Sem registros de água suficientes.",
-    focusAvg !== null ? `Foco médio: ${Math.round(focusAvg)} min/dia.` : "Sem registros de Focus suficientes.",
     exerciseAvg !== null ? `Exercício médio: ${Math.round(exerciseAvg)} min/dia.` : "Sem registros de exercício suficientes.",
     readingPagesAvg !== null ? `Leitura média: ${Math.round(readingPagesAvg)} páginas/dia.` : "Sem registros de leitura suficientes.",
     studyAvg !== null ? `Estudo médio: ${Math.round(studyAvg)} min/dia.` : "",
     existingTitles.length > 0 ? `Experimentos recentes já feitos (evite repetir): ${existingTitles.join("; ")}.` : "",
   ].filter(Boolean);
 
-  const metricKeys = Object.keys(METRIC_CATALOG).filter((k) => k !== "habit_consistency").join(", ");
+  const metricKeys = ACTIVE_METRIC_KEYS.filter((k) => k !== "habit_consistency").join(", ");
 
   const prompt = [
     "Você é o LifeOS Copilot. Com base SOMENTE nos dados reais abaixo, sugira UM experimento pessoal simples e mensurável para o usuário testar na própria rotina.",

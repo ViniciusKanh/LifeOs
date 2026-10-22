@@ -10,7 +10,7 @@ export type AttributeKey = (typeof ATTRIBUTES)[number];
 export type Distribution = Partial<Record<AttributeKey, number>>;
 
 export const ATTRIBUTE_META: Record<AttributeKey, { label: string; description: string }> = {
-  focus: { label: "Foco", description: "Capacidade de manter sua atenção no que realmente importa." },
+  focus: { label: "Execução", description: "Capacidade de transformar planos em entregas, com atenção no que importa." },
   health: { label: "Saúde", description: "Energia e vitalidade para uma vida longa e sustentável." },
   knowledge: { label: "Conhecimento", description: "Busca por aprendizado contínuo e sabedoria prática." },
   discipline: { label: "Disciplina", description: "Consistência para fazer o que deve ser feito, sempre." },
@@ -90,7 +90,7 @@ export type UnlockRule =
 
 export interface RelicDef { id: string; name: string; description: string; rarity: Rarity; obtainedBy: string; rule: UnlockRule }
 export const RELICS: RelicDef[] = [
-  { id: "ampulheta", name: "Ampulheta do Foco", description: "Areia que só corre quando a atenção está inteira.", rarity: "rare", obtainedBy: "10 sessões de foco registradas", rule: { type: "xp_source_count", source: "focus", min: 10 } },
+  { id: "ampulheta", name: "Ampulheta do Tempo", description: "Areia que só corre quando a atenção está inteira.", rarity: "rare", obtainedBy: "10 sessões de cronômetro de missões", rule: { type: "xp_source_count", source: "focus", min: 10 } },
   { id: "bussola", name: "Bússola da Consistência", description: "Aponta sempre para o próximo passo certo.", rarity: "epic", obtainedBy: "4 revisões semanais fechadas", rule: { type: "xp_source_count", source: "review", min: 4 } },
   { id: "cristal", name: "Cristal do Conhecimento", description: "Brilha mais a cada página e aula concluída.", rarity: "rare", obtainedBy: "Conhecimento com 250 XP", rule: { type: "attribute_xp", attribute: "knowledge", min: 250 } },
   { id: "broto", name: "Broto da Vitalidade", description: "Cresce com cada hábito de saúde cumprido.", rarity: "common", obtainedBy: "Saúde com 100 XP", rule: { type: "attribute_xp", attribute: "health", min: 100 } },
@@ -108,7 +108,7 @@ export const TITLES: TitleDef[] = [
   { id: "estrategista", name: "Estrategista", description: "Planeja antes de agir.", rarity: "uncommon", rule: { type: "global_level", min: 5 } },
   { id: "guardiao", name: "Guardião da Rotina", description: "Mantém a consistência viva.", rarity: "legendary", rule: { type: "all", rules: [{ type: "habit_streak_days", min: 30 }, { type: "attribute_xp", attribute: "discipline", min: 600 }] } },
   { id: "mestre-missoes", name: "Mestre das Missões", description: "Conclui o que começa.", rarity: "epic", rule: { type: "tasks_done", min: 100 } },
-  { id: "alquimista-foco", name: "Alquimista do Foco", description: "Transforma intenção em ação.", rarity: "rare", rule: { type: "all", rules: [{ type: "xp_source_count", source: "focus", min: 20 }, { type: "xp_source_count", source: "experiment", eventType: "concluded", min: 1 }] } },
+  { id: "alquimista-foco", name: "Alquimista do Ritmo", description: "Transforma intenção em ação.", rarity: "rare", rule: { type: "all", rules: [{ type: "xp_source_count", source: "focus", min: 20 }, { type: "xp_source_count", source: "experiment", eventType: "concluded", min: 1 }] } },
   { id: "mestre", name: "Mestre da Consistência", description: "Doze níveis de constância.", rarity: "epic", rule: { type: "global_level", min: 12 } },
   { id: "lenda", name: "Lenda da Jornada", description: "Seu nome já é história.", rarity: "legendary", rule: { type: "global_level", min: 20 } },
 ];
@@ -152,10 +152,10 @@ export const KNOWLEDGE: KnowledgeDef[] = [
   },
   {
     id: "foco-profundo",
-    title: "Técnicas de Foco Profundo",
-    category: "Foco",
+    title: "Técnicas de Trabalho Profundo",
+    category: "Execução",
     attribute: "focus",
-    summary: "Blocos de foco, pausas e proteção contra interrupções.",
+    summary: "Blocos de trabalho, pausas e proteção contra interrupções.",
     unlock: { type: "attribute_xp", min: 250 },
     content: [
       "Trabalhe em blocos de 25 a 50 minutos com uma única tarefa definida antes de começar.",
@@ -207,8 +207,8 @@ export const KNOWLEDGE: KnowledgeDef[] = [
 /** Classes da rotina: arquétipos cosméticos sugeridos pelos 2 atributos mais fortes. */
 export interface ClassDef { id: string; name: string; description: string; attributes: [AttributeKey, AttributeKey] }
 export const CLASSES: ClassDef[] = [
-  { id: "estrategista", name: "Estrategista", description: "Foco e disciplina altos: transforma planos em entregas.", attributes: ["focus", "discipline"] },
-  { id: "estudioso", name: "Estudioso", description: "Conhecimento e foco: aprende com profundidade.", attributes: ["knowledge", "focus"] },
+  { id: "estrategista", name: "Estrategista", description: "Execução e disciplina altas: transforma planos em entregas.", attributes: ["focus", "discipline"] },
+  { id: "estudioso", name: "Estudioso", description: "Conhecimento e execução: aprende com profundidade.", attributes: ["knowledge", "focus"] },
   { id: "guardiao", name: "Guardião", description: "Disciplina e saúde: protege a rotina e a energia.", attributes: ["discipline", "health"] },
   { id: "alquimista", name: "Alquimista", description: "Criatividade e conhecimento: testa ideias e aprende com elas.", attributes: ["creativity", "knowledge"] },
   { id: "explorador", name: "Explorador", description: "Criatividade e bem-estar: busca novas experiências com leveza.", attributes: ["creativity", "wellbeing"] },

@@ -31,20 +31,21 @@ export function BottleneckOraclePanel({
   };
   const a = oracle.data?.answer;
   return (
-    <RPGPanel title="Análise do Oráculo" icon={<Sparkles size={15} className="text-rpg-purple" />} variant="gold">
+    <RPGPanel title="Oráculo explica" icon={<Sparkles size={15} className="text-rpg-purple" />} variant="gold">
       <div className="grid grid-cols-[84px_minmax(0,1fr)] gap-3">
         <img src={ORACLE_ART} alt="Oráculo do LifeOS" className="pixelated w-full aspect-[3/4] object-cover border-2 border-rpg-purple/70 bg-rpg-bg-2" style={{ borderRadius: 3 }} />
         <div className="min-w-0">
           {text ? <p className="text-sm text-rpg-text/90">{text}</p> : <p className="text-sm text-rpg-muted">Sem gargalo identificado para interpretar agora.</p>}
           <RPGBadge tone="blue" className="mt-2">
-            Dado real · engine
+            Calculado dos seus dados
           </RPGBadge>
         </div>
       </div>
 
       {targetKey && (
         <>
-          <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Perguntas ao Oráculo">
+          <p className="mt-3 text-[11px] text-rpg-muted">Quer entender melhor? Escolha uma pergunta e a IA explica com base no que foi calculado acima.</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Perguntas ao Oráculo">
             {(Object.keys(questions) as OracleQuestion[]).map((q) => (
               <button
                 key={q}

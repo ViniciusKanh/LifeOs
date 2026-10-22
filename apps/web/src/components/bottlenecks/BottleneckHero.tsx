@@ -17,9 +17,9 @@ export function BottleneckHero() {
             </span>
             <div className="min-w-0">
               <h1 className="rpg-title font-bold leading-tight text-3xl sm:text-4xl">Detector de Gargalos</h1>
-              <p className="mt-2 font-semibold text-rpg-text">Descubra o que realmente está impedindo sua evolução.</p>
+              <p className="mt-2 font-semibold text-rpg-text">Descubra qual item está segurando o resto da sua rotina.</p>
               <p className="mt-1 text-sm text-rpg-text/85 max-w-xl">
-                O LifeOS analisa sua rotina, projetos, missões, hábitos, agenda e capacidade para identificar os principais gargalos e sugerir próximos movimentos com base nos seus dados reais.
+                Um <strong className="text-rpg-gold-light">gargalo</strong> é aquela tarefa, projeto ou hábito parado que impede outras coisas de andar — como a peça que falta para o resto do quebra-cabeça. Esta tela encontra o seu e diz qual é o próximo passo.
               </p>
             </div>
           </div>

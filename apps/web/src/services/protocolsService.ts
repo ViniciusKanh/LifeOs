@@ -69,7 +69,8 @@ export interface ProtocolsData {
   catalog: {
     categories: Array<{ id: string; label: string }>;
     metrics: Array<{ id: TriggerMetric; label: string; unit: string }>;
-    actions: Array<{ id: ActionType; label: string; mode: ActionMode }>;
+    /** offered=false: tipo legado (ex.: START_FOCUS) — só exibido em protocolos antigos, não oferecido na criação. */
+    actions: Array<{ id: ActionType; label: string; mode: ActionMode; offered?: boolean }>;
     screens: string[];
   };
 }

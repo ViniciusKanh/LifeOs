@@ -2,9 +2,9 @@ import { Clock, ListChecks, Play, Star, Zap } from "lucide-react";
 import clsx from "clsx";
 import { RPGBadge, RPGButton } from "@/components/rpg";
 import type { Protocol } from "@/services/protocolsService";
-import { CATEGORY_TONE, ago, protocolArtUrl } from "@/utils/protocolDisplay";
+import { CATEGORY_TONE, ago, formatMinutes, protocolArtUrl, stepDisplayTitle } from "@/utils/protocolDisplay";
 
-/** Card do grid: arte, situação, gatilho, nº de ações, usos e última execução. */
+/** Card do grid: arte, para que serve, quando usar, primeiros passos, duração total e uso. */
 export function ProtocolCard({
   protocol: p,
   categoryLabel,
@@ -44,7 +44,7 @@ export function ProtocolCard({
         {p.triggered && (
           <span className="absolute left-2 bottom-2">
             <RPGBadge tone="orange" icon={<Zap size={10} aria-hidden />} className="bg-rpg-bg/85">
-              Gatilho ativo
+              Indicado para hoje
             </RPGBadge>
           </span>
         )}
@@ -55,37 +55,47 @@ export function ProtocolCard({
             {p.name}
           </button>
         </h3>
+        {p.description && <p className="text-xs text-rpg-text/85 line-clamp-2">{p.description}</p>}
         <p className="text-xs text-rpg-text/80 line-clamp-2">
-          <span className="text-rpg-muted">Quando: </span>
-          {p.triggerDescription || "Executado manualmente"}
+          <span className="font-semibold text-rpg-gold-light">Quando usar: </span>
+          {p.triggerDescription || "quando você quiser"}
         </p>
+        <ol className="space-y-0.5 text-[11px] text-rpg-text/85" aria-label={`Primeiros passos de ${p.name}`}>
+          {p.steps.slice(0, 3).map((s, i) => (
+            <li key={s.ref} className="flex gap-1.5 min-w-0">
+              <span className="font-pixel text-[9px] leading-4 text-rpg-gold-light shrink-0" aria-hidden>
+                {i + 1}.
+              </span>
+              <span className="truncate">{stepDisplayTitle(s)}</span>
+            </li>
+          ))}
+          {p.steps.length > 3 && <li className="pl-4 text-rpg-muted">+ {p.steps.length - 3} {p.steps.length - 3 === 1 ? "passo" : "passos"}</li>}
+        </ol>
         <dl className="mt-auto grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-rpg-muted">
           <div className="flex items-center gap-1">
             <ListChecks size={12} aria-hidden />
-            <dt className="sr-only">Ações</dt>
+            <dt className="sr-only">Passos e duração</dt>
             <dd>
-              {p.steps.length} {p.steps.length === 1 ? "ação" : "ações"}
+              {p.steps.length} {p.steps.length === 1 ? "passo" : "passos"} · {formatMinutes(p.totalMinutes)}
             </dd>
           </div>
           <div className="flex items-center gap-1">
             <Play size={12} aria-hidden />
-            <dt className="sr-only">Usos</dt>
-            <dd>
-              {p.uses} {p.uses === 1 ? "uso" : "usos"}
-            </dd>
+            <dt className="sr-only">Vezes usado</dt>
+            <dd>{p.uses === 0 ? "nunca usado" : `usado ${p.uses} ${p.uses === 1 ? "vez" : "vezes"}`}</dd>
           </div>
           <div className="flex items-center gap-1">
             <Clock size={12} aria-hidden />
-            <dt className="sr-only">Última execução</dt>
-            <dd>{ago(p.lastRunAt)}</dd>
+            <dt className="sr-only">Último uso</dt>
+            <dd>{p.lastRunAt ? `último: ${ago(p.lastRunAt).toLowerCase()}` : "—"}</dd>
           </div>
           <div>
             <dt className="sr-only">Origem</dt>
-            <dd>{p.kind === "template" ? "Template" : p.sourceTemplate ? "Baseado em template" : "Criado por você"}</dd>
+            <dd>{p.kind === "template" ? "Modelo pronto" : p.sourceTemplate ? "Cópia de modelo" : "Criado por você"}</dd>
           </div>
         </dl>
         <RPGButton variant="primary" className="w-full justify-center" onClick={onExecute}>
-          <Play size={14} aria-hidden /> Executar
+          <Play size={14} aria-hidden /> Usar agora
         </RPGButton>
       </div>
     </article>

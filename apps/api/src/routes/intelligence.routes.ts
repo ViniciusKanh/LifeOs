@@ -14,7 +14,7 @@ export const intelligenceRouter = Router();
 intelligenceRouter.use(requireAuth);
 
 const heavyLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, key: (req) => `intelligence:${req.user?.id ?? req.ip}` });
-const forgeSchema = z.object({ objective: z.enum(["productivity", "habits", "focus", "energy", "study"]) });
+const forgeSchema = z.object({ objective: z.enum(["productivity", "habits", "training", "energy", "study"]) });
 const idSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 const fail = (res: import("express").Response, err: unknown) => {

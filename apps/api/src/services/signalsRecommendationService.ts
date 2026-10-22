@@ -44,7 +44,7 @@ function ruleBasedRecommendation(signals: SignalCard[], patterns: DetectedPatter
     return {
       source: "rule",
       title: "Poucos registros neste período",
-      message: "Ainda não há dados suficientes na maioria dos sinais deste período para uma sugestão mais específica. Registrar sono, humor e foco com mais regularidade ajuda o Signals a detectar padrões reais.",
+      message: "Ainda não há dados suficientes na maioria dos sinais deste período para uma sugestão mais específica. Registrar sono, humor e treinos com mais regularidade ajuda o Signals a detectar padrões reais.",
     };
   }
 

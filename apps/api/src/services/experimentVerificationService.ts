@@ -27,6 +27,9 @@ export interface VerificationRuleInfo {
   metric: string; // ExperimentMetricKey correspondente, para sugerir a métrica principal coerente
 }
 
+/** Regras ainda oferecidas no assistente (focus_minimum saiu junto com o módulo Foco). */
+export const activeVerificationRules = () => Object.values(VERIFICATION_RULES).filter((r) => r.key !== "focus_minimum");
+
 export const VERIFICATION_RULES: Record<VerificationRule, VerificationRuleInfo> = {
   sleep_before: { key: "sleep_before", label: "Dormir antes de um horário", configLabel: "Horário limite", configUnit: "hh:mm", metric: "sleep_duration" },
   water_target: { key: "water_target", label: "Beber uma meta de água por dia", configLabel: "Meta diária", configUnit: "ml", metric: "water_ml" },

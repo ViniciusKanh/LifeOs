@@ -1,7 +1,9 @@
-import { Dumbbell, Droplets, Edit2, Moon, Smile, Trash2, X } from "lucide-react";
+import { Droplets, Edit2, Moon, Smile, Trash2, X } from "lucide-react";
 import type React from "react";
 import type { MoodEntry, SleepEntry, WaterEntry, Workout } from "@/types";
 import { fmtDateTime, formatHM } from "./healthUtils";
+import { WorkoutHistoryItem } from "./WorkoutCard";
+import { sortWorkoutsDesc } from "@/utils/workoutStats";
 
 export type HealthHistoryKind = "water" | "sleep" | "workouts" | "mood";
 
@@ -80,19 +82,16 @@ export function HealthHistoryModal({
           />
         )}
 
-        {kind === "workouts" && (
-          <HistoryList
-            empty="Nenhum exercicio registrado ainda."
-            items={workouts.map((entry) => ({
-              id: entry.id,
-              icon: <Dumbbell size={14} className="text-cat-green" />,
-              title: `${entry.kind}${entry.duration_minutes ? ` · ${entry.duration_minutes}min` : ""}${entry.distance_km ? ` · ${entry.distance_km}km` : ""}`,
-              meta: fmtDateTime(entry.performed_at),
-              onEdit: () => onEdit({ kind: "workouts", entry }),
-              onDelete: () => onDelete("workouts", entry.id),
-            }))}
-          />
-        )}
+        {kind === "workouts" &&
+          (workouts.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-paper-border px-3 py-4 text-xs text-slate dark:border-ink-border">Nenhum exercício registrado ainda.</p>
+          ) : (
+            <ul className="space-y-2">
+              {sortWorkoutsDesc(workouts).map((entry) => (
+                <WorkoutHistoryItem key={entry.id} workout={entry} onEdit={() => onEdit({ kind: "workouts", entry })} onDelete={() => onDelete("workouts", entry.id)} />
+              ))}
+            </ul>
+          ))}
 
         {kind === "mood" && (
           <HistoryList

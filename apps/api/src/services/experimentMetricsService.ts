@@ -55,8 +55,8 @@ export const METRIC_CATALOG: Record<ExperimentMetricKey, MetricDefinition> = {
   mood: { key: "mood", label: "Humor", unit: "/5", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
   stress: { key: "stress", label: "Estresse", unit: "/5", inverse: true, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: false, minDaysForBaseline: 3 },
   water_ml: { key: "water_ml", label: "Água", unit: "ml", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  focus_minutes: { key: "focus_minutes", label: "Foco (minutos)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/foco", sourceLabel: "Foco", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
-  focus_sessions: { key: "focus_sessions", label: "Sessões de Foco", unit: null, inverse: false, requiresHabit: false, sourcePath: "/foco", sourceLabel: "Foco", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  focus_minutes: { key: "focus_minutes", label: "Foco (minutos, histórico)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/hoje", sourceLabel: "Histórico", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
+  focus_sessions: { key: "focus_sessions", label: "Sessões de Foco (histórico)", unit: null, inverse: false, requiresHabit: false, sourcePath: "/hoje", sourceLabel: "Histórico", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
   exercise_minutes: { key: "exercise_minutes", label: "Exercício (minutos)", unit: "min", inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
   exercise_sessions: { key: "exercise_sessions", label: "Atividades físicas", unit: null, inverse: false, requiresHabit: false, sourcePath: "/saude", sourceLabel: "Saúde", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
   reading_pages: { key: "reading_pages", label: "Páginas lidas", unit: "pág.", inverse: false, requiresHabit: false, sourcePath: "/biblioteca", sourceLabel: "Biblioteca", fillZeroOnMissingDay: true, minDaysForBaseline: 3 },
@@ -67,6 +67,10 @@ export const METRIC_CATALOG: Record<ExperimentMetricKey, MetricDefinition> = {
 };
 
 export const METRIC_KEYS = Object.keys(METRIC_CATALOG) as ExperimentMetricKey[];
+/** Métricas do módulo Foco, que saiu do LifeOS: experimentos antigos seguem legíveis, mas elas não são mais oferecidas. */
+export const RETIRED_METRICS = new Set<ExperimentMetricKey>(["focus_minutes", "focus_sessions"]);
+/** Métricas oferecidas ao usuário e à IA (sem as aposentadas). */
+export const ACTIVE_METRIC_KEYS = METRIC_KEYS.filter((k) => !RETIRED_METRICS.has(k));
 
 /** Todas as datas YYYY-MM-DD no intervalo [from, to], inclusive. */
 function dateRange(from: string, to: string): string[] {

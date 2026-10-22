@@ -11,7 +11,7 @@ const SRC_ICON: Record<string, LucideIcon> = {
   humor: Smile,
   agua: Droplets,
   exercicios: Dumbbell,
-  foco: Flame,
+  treino: Dumbbell,
   educacao: GraduationCap,
   leitura: BookOpen,
   journal: NotebookPen,
@@ -74,7 +74,7 @@ export function GrimoirePanel({ grimoire, onRefresh, refreshing }: { grimoire: I
     >
       {!grimoire ? (
         <div className="py-3 space-y-3">
-          <p className="text-sm text-rpg-muted">O grimório reúne seus registros de Tarefas, Hábitos, Saúde, Foco, Educação, Leitura, Journal e Metas. Atualize para ver o que já pode ser aprendido.</p>
+          <p className="text-sm text-rpg-muted">O grimório reúne seus registros de Tarefas, Hábitos, Saúde, Educação, Leitura, Journal e Metas. Atualize para ver o que já pode ser aprendido.</p>
           <RPGButton variant="secondary" onClick={onRefresh} disabled={refreshing}>
             {refreshing ? "Lendo registros…" : "Abrir o grimório"}
           </RPGButton>

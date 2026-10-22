@@ -229,7 +229,7 @@ export function MetasPage() {
                 <IconBadge icon={<Trophy size={18} />} tone="amber" />
                 <div className="min-w-0">
                   <p className="text-lg sm:text-xl font-semibold leading-tight">{diasLabel(stats?.daysInFocus ?? 0)}</p>
-                  <p className="text-xs text-slate leading-tight">Dias em foco</p>
+                  <p className="text-xs text-slate leading-tight">Dias ativos</p>
                 </div>
               </div>
               <p className="text-[11px] text-slate mt-2">seguindo suas metas</p>

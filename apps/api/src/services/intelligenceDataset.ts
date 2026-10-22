@@ -4,7 +4,7 @@ import type { Row } from "./mlEngine.js";
 
 /**
  * Grimório (dataset) da Forja da Inteligência. Monta uma linha por dia a
- * partir das fontes ORIGINAIS dos módulos (Saúde, Foco, Tarefas, Hábitos,
+ * partir das fontes ORIGINAIS dos módulos (Saúde, Tarefas, Hábitos,
  * Educação, Biblioteca) — nada é copiado para tabelas paralelas. Só roda
  * quando o usuário pede (forjar/atualizar), para não gastar leituras a cada visita.
  *
@@ -13,16 +13,16 @@ import type { Row } from "./mlEngine.js";
  */
 
 type SeriesKey = ExperimentMetricKey | "habits_done";
-const SERIES: SeriesKey[] = ["sleep_duration", "sleep_quality", "energy", "mood", "stress", "water_ml", "focus_minutes", "exercise_minutes", "study_minutes", "reading_pages", "tasks_completed", "habits_done"];
+const SERIES: SeriesKey[] = ["sleep_duration", "sleep_quality", "energy", "mood", "stress", "water_ml", "exercise_minutes", "study_minutes", "reading_pages", "tasks_completed", "habits_done"];
 /** Séries de contagem (0 = não aconteceu). As demais: ausência = não registrou. */
-const COUNT_SERIES = new Set<SeriesKey>(["water_ml", "focus_minutes", "exercise_minutes", "study_minutes", "reading_pages", "tasks_completed", "habits_done"]);
+const COUNT_SERIES = new Set<SeriesKey>(["water_ml", "exercise_minutes", "study_minutes", "reading_pages", "tasks_completed", "habits_done"]);
 
 export interface DayData {
   date: string;
   v: Record<SeriesKey, number | null>;
 }
 
-export type FeatureSource = "saude" | "foco" | "tarefas" | "habitos" | "educacao" | "leitura" | "calendario";
+export type FeatureSource = "saude" | "tarefas" | "habitos" | "educacao" | "leitura" | "calendario";
 export interface FeatureDef {
   key: string;
   label: string;
@@ -41,7 +41,6 @@ export const FEATURES: FeatureDef[] = [
   { key: "stress", label: "Estresse da véspera", source: "saude", value: lag("stress") },
   { key: "water_ml", label: "Água da véspera", source: "saude", value: lag("water_ml") },
   { key: "exercise_minutes", label: "Exercício recente", source: "saude", value: lag("exercise_minutes") },
-  { key: "focus_minutes", label: "Foco da véspera", source: "foco", value: lag("focus_minutes") },
   { key: "study_minutes", label: "Horas de estudo", source: "educacao", value: lag("study_minutes") },
   { key: "reading_pages", label: "Páginas lidas", source: "leitura", value: lag("reading_pages") },
   { key: "tasks_completed", label: "Missões concluídas na véspera", source: "tarefas", value: lag("tasks_completed") },
@@ -66,7 +65,33 @@ export const FEATURES: FeatureDef[] = [
   },
 ];
 
-export type ObjectiveKey = "productivity" | "habits" | "focus" | "energy" | "study";
+export type ObjectiveKey = "productivity" | "habits" | "training" | "energy" | "study";
+
+/**
+ * Ordem das runas usada pelos artefatos forjados antes de o módulo Foco sair
+ * do LifeOS. Esses modelos esperam 14 colunas; a runa de foco passa a ser lida
+ * como ausente (null), que o motor já trata como "sem registro".
+ */
+const LEGACY_FEATURE_KEYS = [
+  "sleep_duration", "sleep_quality", "energy", "mood", "stress", "water_ml", "exercise_minutes", "focus_minutes",
+  "study_minutes", "reading_pages", "tasks_completed", "tasks_7d", "habits_done", "weekend",
+];
+
+/** Adapta a linha de runas atual ao formato que o modelo salvo espera. */
+export function rowForModel(model: { prep: { mean: number[] } }, row: Row): Row {
+  if (model.prep.mean.length === FEATURES.length) return row;
+  const byKey = new Map(FEATURES.map((f, j) => [f.key, row[j]]));
+  return LEGACY_FEATURE_KEYS.map((k) => byKey.get(k) ?? null);
+}
+
+/** Converte efeitos calculados na ordem do modelo de volta para as runas atuais. */
+export function effectsForFeatures(model: { prep: { mean: number[] } }, effects: number[]): number[] {
+  if (model.prep.mean.length === FEATURES.length) return effects;
+  return FEATURES.map((f) => effects[LEGACY_FEATURE_KEYS.indexOf(f.key)] ?? 0);
+}
+
+/** Objetivos que existiam e saíram do LifeOS (seus artefatos ficam guardados, mas fora da Forja). */
+export const RETIRED_OBJECTIVES = ["focus"];
 export interface ObjectiveDef {
   key: ObjectiveKey;
   name: string;
@@ -125,14 +150,14 @@ export const OBJECTIVES: ObjectiveDef[] = [
     thresholdText: (t) => `${t}+ hábitos cumpridos no dia (seu limiar pessoal)`,
   },
   {
-    key: "focus",
-    name: "Chama do Foco",
-    description: "Prevê dias de foco profundo a partir do seu ritmo recente.",
-    targetLabel: "Dia de foco profundo",
+    key: "training",
+    name: "Chama do Treino",
+    description: "Prevê os dias em que você tende a treinar (academia, luta, corrida…), para proteger esses horários.",
+    targetLabel: "Dia de treino",
     icon: "flame",
-    threshold: (days) => balancedThreshold(days.map((d) => d.v.focus_minutes ?? 0), 25),
-    label: countLabel("focus_minutes"),
-    thresholdText: (t) => `${t}+ minutos de foco no dia`,
+    threshold: (days) => balancedThreshold(days.map((d) => d.v.exercise_minutes ?? 0), 20),
+    label: countLabel("exercise_minutes"),
+    thresholdText: (t) => `${t}+ minutos de exercício registrados em Saúde`,
   },
   {
     key: "energy",
@@ -238,9 +263,9 @@ export interface Readiness {
 }
 
 const UNLOCK_HINT: Record<ObjectiveKey, { pos: string; neg: string; sample: string }> = {
-  productivity: { pos: "dias em que você bata o limiar de missões concluídas", neg: "dias mais leves (abaixo do limiar)", sample: "dias com registros (tarefas, sono, foco…)" },
+  productivity: { pos: "dias em que você bata o limiar de missões concluídas", neg: "dias mais leves (abaixo do limiar)", sample: "dias com registros (tarefas, sono, hábitos…)" },
   habits: { pos: "dias com seus hábitos cumpridos", neg: "dias com menos hábitos", sample: "dias com check-in de hábitos" },
-  focus: { pos: "dias com sessões de Foco de 25+ min", neg: "dias sem foco profundo", sample: "dias com registros" },
+  training: { pos: "dias com treino registrado em Saúde", neg: "dias de descanso (sem treino)", sample: "dias com registros" },
   energy: { pos: "registros de energia alta (4–5)", neg: "registros de energia baixa ou média (1–3)", sample: "dias com energia registrada em Saúde" },
   study: { pos: "dias com sessão de estudo registrada em Educação", neg: "dias sem estudo", sample: "dias com registros" },
 };
@@ -276,7 +301,6 @@ const SOURCE_COUNTS: Array<{ key: string; label: string; sql: string }> = [
   { key: "humor", label: "Humor e energia", sql: "SELECT COUNT(*) AS n FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?)" },
   { key: "agua", label: "Água", sql: "SELECT COUNT(*) AS n FROM water_entries WHERE owner_id = ? AND recorded_at >= date(?)" },
   { key: "exercicios", label: "Exercícios", sql: "SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? AND performed_at >= date(?)" },
-  { key: "foco", label: "Foco", sql: "SELECT COUNT(*) AS n FROM focus_sessions WHERE owner_id = ? AND started_at >= date(?)" },
   { key: "educacao", label: "Educação", sql: "SELECT COUNT(*) AS n FROM study_sessions WHERE owner_id = ? AND occurred_at >= date(?)" },
   { key: "leitura", label: "Leitura", sql: "SELECT COUNT(*) AS n FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?)" },
   { key: "journal", label: "Journal", sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ? AND entry_date >= ?" },
@@ -333,7 +357,7 @@ export async function summarizeGrimoire(db: Client, ownerId: string, days: DayDa
     ["habitos", "Hábitos", count((d) => (d.v.habits_done ?? 0) > 0)],
     ["saude", "Saúde", count((d) => d.v.sleep_duration !== null || (d.v.water_ml ?? 0) > 0 || (d.v.exercise_minutes ?? 0) > 0)],
     ["educacao", "Educação", count((d) => (d.v.study_minutes ?? 0) > 0)],
-    ["foco", "Foco", count((d) => (d.v.focus_minutes ?? 0) > 0)],
+    ["treino", "Treino", count((d) => (d.v.exercise_minutes ?? 0) > 0)],
     ["energia", "Energia", count((d) => d.v.energy !== null)],
   ];
   const areas = areaDays.map(([key, label, n]) => ({ key, label, days: n, active: n >= AREA_MIN_DAYS }));

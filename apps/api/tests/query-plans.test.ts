@@ -36,7 +36,8 @@ describe("Equivalência dos filtros reescritos", () => {
     await agent.post("/api/health/water").send({ amountMl: 200, recordedAt: "2026-10-08T00:00:00.000Z" });
     await agent.post("/api/health/water").send({ amountMl: 999, recordedAt: "2026-10-09T00:00:00.000Z" });
     await agent.post("/api/health/water").send({ amountMl: 999, recordedAt: "2026-10-07T23:59:59.000Z" });
-    const r = await agent.get("/api/health/water?date=2026-10-08");
+    // tz=0 explícito: sem ele a API usa o fuso do perfil (America/Sao_Paulo), não UTC.
+    const r = await agent.get("/api/health/water?date=2026-10-08&tz=0");
     expect(r.status).toBe(200);
     expect((r.body as Array<{ amount_ml: number }>).map((x) => x.amount_ml).sort()).toEqual([200, 300]);
   });

@@ -854,13 +854,14 @@ export function getRecommendedAction(ctx: Ctx, cand: Candidate): RecommendedActi
       const unblocked = wouldUnblock(ctx, new Set([t.id]));
       const expected = unblocked.length ? `Desbloquear ${plural(unblocked.length, "tarefa", "tarefas")}` : rem && rem <= minutes ? "Concluir a missão" : "Avançar na missão";
       if (!slot)
-        return { ...base, type: "OPEN_CAPACITY_PLANNER", label: "Abrir espaço no Capacity Planner", reason: `Não há janela livre de ${minutes} min nos próximos ${F.searchDays} dias para avançar em “${t.title}”.`, estimatedMinutes: minutes, link: "/capacity-planner", confidence: "medium", expected };
+        return { ...base, type: "OPEN_CAPACITY_PLANNER", label: "Abrir espaço no Capacity Planner", reason: `Sua agenda não tem ${minutes} min livres seguidos nos próximos ${F.searchDays} dias para avançar em “${t.title}”. Libere um espaço no Capacity Planner.`, estimatedMinutes: minutes, link: "/capacity-planner", confidence: "medium", expected };
       const when = slot.date === ctx.input.today ? "hoje" : daysBetween(ctx.input.today, slot.date) === 1 ? "amanhã" : `em ${slot.date.slice(8, 10)}/${slot.date.slice(5, 7)}`;
       const period = toMin(slot.start) < 12 * 60 ? "pela manhã" : toMin(slot.start) < 18 * 60 ? "à tarde" : "à noite";
       return {
         type: "SCHEDULE_FOCUS",
-        label: "Criar sessão Focus",
-        reason: `Reserve uma sessão Focus de ${minutes} minutos ${when} ${period} para avançar em “${t.title}”.`,
+        // O tipo mantém o nome histórico; a ação reserva um bloco de trabalho na agenda planejada.
+        label: "Reservar horário na agenda",
+        reason: `Reserve ${minutes} minutos ${when} ${period} na sua agenda para avançar em “${t.title}”.`,
         estimatedMinutes: minutes,
         targetId: t.id,
         link: null,

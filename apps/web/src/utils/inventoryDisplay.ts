@@ -45,7 +45,7 @@ export const ORIGIN_LABEL: Record<string, string> = {
   achievement: "Conquista",
   codex: "Códex",
   treasure: "Tesouro",
-  focus_count: "Foco",
+  focus_count: "Cronômetro",
   journal_count: "Diário",
   set: "Conjunto",
   profile: "Perfil",

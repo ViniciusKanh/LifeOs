@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { PROTOCOL_CATEGORIES, TRIGGER_METRICS, ACTION_LABEL, ACTION_MODE, OPEN_SCREEN_PATHS } from "../config/protocols.js";
+import { PROTOCOL_CATEGORIES, TRIGGER_METRICS, ACTION_LABEL, ACTION_MODE, LEGACY_ACTION_TYPES, OPEN_SCREEN_PATHS } from "../config/protocols.js";
 import {
   ProtocolError,
   cancelRun,
@@ -48,7 +48,8 @@ protocolsRouter.get("/", async (req, res) => {
     catalog: {
       categories: PROTOCOL_CATEGORIES,
       metrics: TRIGGER_METRICS,
-      actions: Object.keys(ACTION_LABEL).map((k) => ({ id: k, label: ACTION_LABEL[k as keyof typeof ACTION_LABEL], mode: ACTION_MODE[k as keyof typeof ACTION_MODE] })),
+      // offered=false: tipo legado, só para exibir protocolos antigos (não aparece no assistente de criação).
+      actions: (Object.keys(ACTION_LABEL) as Array<keyof typeof ACTION_LABEL>).map((k) => ({ id: k, label: ACTION_LABEL[k], mode: ACTION_MODE[k], offered: !LEGACY_ACTION_TYPES.includes(k) })),
       screens: OPEN_SCREEN_PATHS,
     },
   });

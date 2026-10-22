@@ -271,10 +271,10 @@ export function TarefasPage() {
         />
       )}
 
-      {/* Resumo: foco + filtros rápidos clicáveis */}
+      {/* Resumo: missão principal + filtros rápidos clicáveis */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-3 mb-4">
         {isRpg ? (
-          <RPGPanel title="Missão em destaque" icon={<Sparkles size={14} />} variant="quest" className="h-full" actions={<span className="font-pixel text-[11px] uppercase tracking-wider text-rpg-gold">Foque nisso agora</span>}>
+          <RPGPanel title="Missão em destaque" icon={<Sparkles size={14} />} variant="quest" className="h-full" actions={<span className="font-pixel text-[11px] uppercase tracking-wider text-rpg-gold">Prioridade agora</span>}>
             <RPGQuestCard
               label={focusTask?.status ?? "Missão em destaque"}
               badges={
@@ -318,7 +318,7 @@ export function TarefasPage() {
             <div className="relative flex items-start gap-3">
               <div className="flex-1 min-w-0">
                 <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/80">
-                  <Sparkles size={12} /> Foque nisso agora
+                  <Sparkles size={12} /> Prioridade agora
                 </p>
                 {focusTask ? (
                   <>

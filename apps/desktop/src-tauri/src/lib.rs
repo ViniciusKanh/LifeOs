@@ -130,6 +130,10 @@ pub fn run() {
                 .min_inner_size(960.0, 640.0)
                 .center()
                 .initialization_script(&boot_config)
+                // Sem isso o WebView2 entrega o arrastar ao Tauri (arquivos soltos na
+                // janela) e o drag-and-drop HTML5 do site para de funcionar — era o que
+                // travava o arrastar dos cards do Kanban de Missões no Desktop.
+                .disable_drag_drop_handler()
                 .on_navigation(|url| {
                     if is_allowed_navigation(url) {
                         return true;

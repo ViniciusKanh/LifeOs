@@ -332,7 +332,7 @@ export function RpgProfileView({
         <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr] items-start">
           <div className="min-w-0 space-y-4"><PriorityRewardsPanel /><DifficultyRewardsPanel /></div>
           <RPGPanel title="Regras fixas da jornada" icon={<Settings2 size={16} />}>
-            <p className="-mt-1 mb-2 text-xs text-rpg-muted">Estas recompensas são iguais para todos e vêm do servidor (hábitos, foco, revisões, conquistas, laboratório).</p>
+            <p className="-mt-1 mb-2 text-xs text-rpg-muted">Estas recompensas são iguais para todos e vêm do servidor (hábitos, cronômetro de missões, revisões, conquistas, laboratório).</p>
             <FixedRules />
             <Link to="/contratos" className={rpgButtonClass("secondary", "mt-3")}>Gestão de contratos →</Link>
           </RPGPanel>
@@ -443,7 +443,7 @@ function FixedRules() {
   if (!r) return <p className="text-sm text-rpg-muted">Carregando regras…</p>;
   const rows: Array<[string, { xp: number; coins: number }]> = [
     ["Hábito cumprido no dia", r.habit],
-    [`Foco (${r.focus.blockMinutes} min)`, { xp: r.focus.xpPerBlock, coins: r.focus.coinsPerBlock }],
+    [`Cronômetro de missão (${r.focus.blockMinutes} min)`, { xp: r.focus.xpPerBlock, coins: r.focus.coinsPerBlock }],
     ["Projeto concluído", r.project],
     ["Primeira crônica do dia", r.journal],
     ["Revisão semanal", r.review.weekly],

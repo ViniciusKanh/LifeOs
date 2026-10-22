@@ -12,12 +12,13 @@ const viewAll = (onClick: () => void, label = "Ver todos") => (
   </button>
 );
 
-/** Visão geral: top 5 por score (ordem determinística vinda do servidor). */
+/** Ranking: top 5 pela nota de trava (ordem determinística vinda do servidor). */
 export function BottleneckRanking({ ranking, selectedKey, onSelect, onViewAll }: { ranking: Candidate[]; selectedKey: string | null; onSelect: (c: Candidate) => void; onViewAll: () => void }) {
   return (
-    <RPGPanel title="Visão geral dos gargalos" icon={<ListOrdered size={15} />} variant="gold" actions={viewAll(onViewAll)} className="h-full">
+    <RPGPanel title="O que mais trava" icon={<ListOrdered size={15} />} variant="gold" actions={viewAll(onViewAll)} className="h-full">
+      <p className="mb-2 text-[11px] text-rpg-text/75">Nota de 0 a 100: quanto maior, mais coisas da sua rotina dependem daquele item. Toque em um para entender o motivo.</p>
       {ranking.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Nenhum item acima do limite de atenção.</p>
+        <p className="text-sm text-rpg-muted">Nenhum item trava sua rotina de forma relevante agora.</p>
       ) : (
         <ol className="space-y-1.5">
           {ranking.map((c, i) => {
@@ -28,7 +29,7 @@ export function BottleneckRanking({ ranking, selectedKey, onSelect, onViewAll }:
                   type="button"
                   onClick={() => onSelect(c)}
                   className={clsx(
-                    "grid w-full grid-cols-[32px_minmax(0,1fr)_minmax(64px,38%)] items-center gap-2.5 border px-2 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold",
+                    "grid w-full grid-cols-[32px_minmax(0,1fr)_minmax(56px,26%)] items-center gap-2.5 border px-2 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold",
                     selectedKey === c.key ? "border-rpg-purple bg-rpg-purple/10" : "border-rpg-border/60 bg-rpg-bg-2/50 hover:border-rpg-gold/60",
                   )}
                   style={{ borderRadius: 3 }}
@@ -39,10 +40,10 @@ export function BottleneckRanking({ ranking, selectedKey, onSelect, onViewAll }:
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-rpg-text">{c.title}</span>
                     <span className="block text-[11px] text-rpg-muted">
-                      {TYPE_UI[c.type].label} · {c.score}% impacto
+                      {TYPE_UI[c.type].label} · nota {c.score} · {level.badge.toLowerCase()}
                     </span>
                   </span>
-                  <RPGProgressBar value={c.score} tone={level.tone} label={`${c.title}: ${c.score}% (${level.label})`} showLabel={false} />
+                  <RPGProgressBar value={c.score} tone={level.tone} label={`${c.title}: nota ${c.score} de 100 (${level.label})`} showLabel={false} />
                 </button>
               </li>
             );
@@ -53,12 +54,13 @@ export function BottleneckRanking({ ranking, selectedKey, onSelect, onViewAll }:
   );
 }
 
-/** Causas com evidência e confiança — sem evidência, sem causa. */
+/** Motivos com evidência e grau de certeza — sem evidência, sem motivo. */
 export function BottleneckCauseList({ causes }: { causes: Cause[] }) {
   return (
-    <RPGPanel title="Principais causas" icon={<Search size={15} />} variant="gold" className="h-full">
+    <RPGPanel title="Por que está travado" icon={<Search size={15} />} variant="gold" className="h-full">
+      {causes.length > 0 && <p className="mb-2 text-[11px] text-rpg-text/75">Motivos encontrados nos seus registros. Toque em um para ver a prova.</p>}
       {causes.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Não há evidência suficiente para determinar a causa principal.</p>
+        <p className="text-sm text-rpg-muted">Ainda não há registros suficientes para apontar o motivo. Estimar o tempo das tarefas e registrar o progresso ajuda.</p>
       ) : (
         <ul className="space-y-1.5">
           {causes.map((c) => {
@@ -75,7 +77,7 @@ export function BottleneckCauseList({ causes }: { causes: Cause[] }) {
                   </summary>
                   <div className="border-t border-rpg-border/50 px-2.5 py-2 text-xs text-rpg-text/85">
                     <p>
-                      <strong className="text-rpg-gold-light">Evidência:</strong> {c.evidence}
+                      <strong className="text-rpg-gold-light">Como sabemos:</strong> {c.evidence}
                     </p>
                     <RPGBadge tone={conf.tone} className="mt-1.5">
                       {conf.label}
@@ -94,9 +96,10 @@ export function BottleneckCauseList({ causes }: { causes: Cause[] }) {
 /** Itens ligados diretamente ao gargalo principal (≠ ranking, que lista gargalos independentes). */
 export function BottleneckRelatedList({ related }: { related: BottleneckDetail["related"] }) {
   return (
-    <RPGPanel title="Gargalos relacionados" icon={<Link2 size={15} />} variant="gold">
+    <RPGPanel title="Ligados a este item" icon={<Link2 size={15} />} variant="gold">
+      {related.length > 0 && <p className="mb-2 text-[11px] text-rpg-text/75">Coisas que andam junto com ele — resolvendo um, estes também se mexem.</p>}
       {related.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Nenhum item ligado diretamente a este gargalo.</p>
+        <p className="text-sm text-rpg-muted">Nada da sua rotina está ligado diretamente a este item.</p>
       ) : (
         <ul className="space-y-1.5">
           {related.map((r) => {
@@ -126,9 +129,10 @@ const POTENTIAL_TONES = ["red", "orange", "gold"] as const;
 /** Abaixo do limite: tendência de risco, ainda não críticos. */
 export function BottleneckPotentialList({ potential, onSelect, onViewAll }: { potential: Candidate[]; onSelect: (c: Candidate) => void; onViewAll: () => void }) {
   return (
-    <RPGPanel title="Outros gargalos potenciais" icon={<Radar size={15} />} variant="gold" actions={viewAll(onViewAll)}>
+    <RPGPanel title="Próximos riscos" icon={<Radar size={15} />} variant="gold" actions={viewAll(onViewAll)}>
+      {potential.length > 0 && <p className="mb-2 text-[11px] text-rpg-text/75">Ainda não travam, mas estão começando a acumular atraso.</p>}
       {potential.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Nenhum risco emergente no momento.</p>
+        <p className="text-sm text-rpg-muted">Nenhum outro item dando sinais de atraso agora.</p>
       ) : (
         <ol className="space-y-1.5">
           {potential.map((c, i) => (
@@ -139,9 +143,11 @@ export function BottleneckPotentialList({ potential, onSelect, onViewAll }: { po
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-xs text-rpg-text">{c.title}</span>
-                  <span className="block text-[10px] text-rpg-muted">{TYPE_UI[c.type].label}</span>
+                  <span className="block text-[10px] text-rpg-muted">
+                    {TYPE_UI[c.type].label} · nota {c.score}
+                  </span>
                 </span>
-                <RPGProgressBar value={c.score} tone={POTENTIAL_TONES[i] ?? "gold"} label={`Risco de ${c.title}: ${c.score}%`} showLabel={false} />
+                <RPGProgressBar value={c.score} tone={POTENTIAL_TONES[i] ?? "gold"} label={`Risco de ${c.title}: nota ${c.score} de 100`} showLabel={false} />
               </button>
             </li>
           ))}

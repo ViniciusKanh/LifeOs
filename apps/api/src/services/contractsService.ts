@@ -20,6 +20,8 @@ export interface ContractTaskInput {
   priority?: Priority;
   difficulty?: DifficultyKey | null;
   dueDate?: string | null;
+  /** Início planejado (cronograma do contrato). */
+  startDate?: string | null;
   estimateMinutes?: number | null;
 }
 
@@ -42,6 +44,16 @@ export interface ContractInput {
   objective?: string | null;
   difficulty: DifficultyKey;
   dueDate?: string | null;
+  /** Início da vigência (padrão: hoje). */
+  startDate?: string | null;
+  /** Horas por semana que o usuário se compromete a dedicar. */
+  weeklyHours?: number | null;
+  /** "Considerando que…": por que este contrato importa. */
+  why?: string | null;
+  /** Recompensa pessoal combinada ao cumprir (além do XP). */
+  rewardText?: string | null;
+  /** Consequência/compromisso combinado se não cumprir. */
+  stakes?: string | null;
   aiGenerated?: boolean;
   tasks?: ContractTaskInput[];
   /** Meta já existente (do próprio usuário) a vincular. Ignorado se `newGoal` vier junto. */
@@ -68,6 +80,11 @@ export interface ContractView {
   difficulty: DifficultyKey;
   status: ContractStatus;
   dueDate: string | null;
+  startDate: string | null;
+  weeklyHours: number | null;
+  why: string | null;
+  rewardText: string | null;
+  stakes: string | null;
   aiGenerated: boolean;
   completedAt: string | null;
   createdAt: string;
@@ -113,6 +130,11 @@ function mapContract(row: Record<string, unknown>, rewards: Awaited<ReturnType<t
     difficulty,
     status: String(row.status) as ContractStatus,
     dueDate: row.due_date == null ? null : String(row.due_date),
+    startDate: row.start_date == null ? null : String(row.start_date),
+    weeklyHours: row.weekly_hours == null ? null : Number(row.weekly_hours),
+    why: row.why == null ? null : String(row.why),
+    rewardText: row.reward_text == null ? null : String(row.reward_text),
+    stakes: row.stakes == null ? null : String(row.stakes),
     aiGenerated: Number(row.ai_generated) === 1,
     completedAt: row.completed_at == null ? null : String(row.completed_at),
     createdAt: String(row.created_at),
@@ -173,7 +195,7 @@ const PRIORITY_BY_DIFFICULTY: Record<DifficultyKey, Priority> = { facil: "Baixa"
 export function withTaskDefaults(
   t: ContractTaskInput,
   contract: { title: string; objective: string | null; difficulty: DifficultyKey; dueDate: string | null },
-): Required<Pick<ContractTaskInput, "title">> & { description: string; priority: Priority; difficulty: DifficultyKey; dueDate: string | null; estimateMinutes: number } {
+): Required<Pick<ContractTaskInput, "title">> & { description: string; priority: Priority; difficulty: DifficultyKey; dueDate: string | null; startDate: string | null; estimateMinutes: number } {
   const difficulty = t.difficulty ?? contract.difficulty;
   const description =
     t.description?.trim() ||
@@ -184,15 +206,16 @@ export function withTaskDefaults(
     priority: t.priority ?? PRIORITY_BY_DIFFICULTY[difficulty],
     difficulty,
     dueDate: t.dueDate ?? contract.dueDate ?? null,
+    startDate: t.startDate ?? null,
     estimateMinutes: t.estimateMinutes ?? DEFAULT_ESTIMATE[difficulty],
   };
 }
 
 function taskInsert(ownerId: string, contractId: string, t: ReturnType<typeof withTaskDefaults>) {
   return {
-    sql: `INSERT INTO tasks (id, owner_id, contract_id, title, description, status, priority, difficulty, due_date, estimate_minutes)
-          VALUES (?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?)`,
-    args: [nanoid(), ownerId, contractId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.estimateMinutes],
+    sql: `INSERT INTO tasks (id, owner_id, contract_id, title, description, status, priority, difficulty, due_date, start_date, estimate_minutes)
+          VALUES (?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?, ?)`,
+    args: [nanoid(), ownerId, contractId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.startDate, t.estimateMinutes],
   };
 }
 
@@ -248,9 +271,13 @@ export async function createContract(db: Client, ownerId: string, input: Contrac
   const statements = [
     ...extraStatements,
     {
-      sql: `INSERT INTO contracts (id, owner_id, title, description, objective, difficulty, due_date, ai_generated, goal_id, project_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [id, ownerId, input.title.trim(), input.description ?? null, input.objective ?? null, input.difficulty, input.dueDate ?? null, input.aiGenerated ? 1 : 0, goalId, projectId],
+      sql: `INSERT INTO contracts (id, owner_id, title, description, objective, difficulty, due_date, ai_generated, goal_id, project_id,
+                                   start_date, weekly_hours, why, reward_text, stakes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id, ownerId, input.title.trim(), input.description ?? null, input.objective ?? null, input.difficulty, input.dueDate ?? null, input.aiGenerated ? 1 : 0, goalId, projectId,
+        input.startDate ?? (await todayKeyFor(db, ownerId)), input.weeklyHours ?? null, input.why ?? null, input.rewardText ?? null, input.stakes ?? null,
+      ],
     },
     ...(input.tasks ?? []).map((t) =>
       taskInsert(ownerId, id, withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null })),
@@ -264,7 +291,9 @@ export async function updateContract(
   db: Client,
   ownerId: string,
   id: string,
-  input: Partial<Pick<ContractInput, "title" | "description" | "objective" | "difficulty" | "dueDate" | "goalId" | "projectId">> & { status?: "ativo" | "arquivado" },
+  input: Partial<Pick<ContractInput, "title" | "description" | "objective" | "difficulty" | "dueDate" | "goalId" | "projectId" | "startDate" | "weeklyHours" | "why" | "rewardText" | "stakes">> & {
+    status?: "ativo" | "arquivado";
+  },
 ): Promise<ContractView> {
   const current = await getContract(db, ownerId, id);
   if (input.goalId) await assertOwned(db, "goals", ownerId, input.goalId, "Meta inválida.");
@@ -277,13 +306,18 @@ export async function updateContract(
     dueDate: "due_date",
     goalId: "goal_id",
     projectId: "project_id",
+    startDate: "start_date",
+    weeklyHours: "weekly_hours",
+    why: "why",
+    rewardText: "reward_text",
+    stakes: "stakes",
   };
   const sets: string[] = [];
-  const args: Array<string | null> = [];
+  const args: Array<string | number | null> = [];
   for (const [key, col] of Object.entries(map)) {
     if (key in input) {
       sets.push(`${col} = ?`);
-      args.push(((input as Record<string, string | null | undefined>)[key] ?? null) as string | null);
+      args.push(((input as Record<string, string | number | null | undefined>)[key] ?? null) as string | number | null);
     }
   }
   // Arquivar/reativar: "concluido" só é definido pelo próprio motor (todas as tarefas feitas).
@@ -351,8 +385,17 @@ export interface ContractProposal {
   description: string | null;
   objective: string | null;
   difficulty: DifficultyKey;
+  /** Início da vigência, em dias a partir de hoje (0 = hoje). */
+  startInDays: number;
   dueInDays: number | null;
-  tasks: Array<Required<Pick<ContractTaskInput, "title">> & { description: string | null; priority: Priority; difficulty: DifficultyKey; dueInDays: number | null; estimateMinutes: number | null }>;
+  weeklyHours: number | null;
+  /** Cláusulas do documento: motivação, recompensa pessoal e consequência — sugestões editáveis. */
+  why: string | null;
+  rewardText: string | null;
+  stakes: string | null;
+  tasks: Array<
+    Required<Pick<ContractTaskInput, "title">> & { description: string | null; priority: Priority; difficulty: DifficultyKey; startInDays: number | null; dueInDays: number | null; estimateMinutes: number | null }
+  >;
   /** Presente só quando a IA achou que o objetivo é amplo o bastante pra também virar uma Meta. */
   goal: SuggestedGoal | null;
   /** Idem, para um Projeto (objetivo com várias frentes/etapas distintas). */
@@ -369,12 +412,15 @@ export function sanitizeTasks(raw: unknown, fallbackDifficulty: DifficultyKey, m
       const title = str(o.title, 200);
       if (!title) return null;
       const due = typeof o.dueInDays === "number" && Number.isFinite(o.dueInDays) ? Math.min(365, Math.max(0, Math.round(o.dueInDays))) : null;
+      const startRaw = typeof o.startInDays === "number" && Number.isFinite(o.startInDays) ? Math.min(365, Math.max(0, Math.round(o.startInDays))) : null;
+      const start = startRaw !== null && due !== null ? Math.min(startRaw, due) : startRaw;
       const est = typeof o.estimateMinutes === "number" && Number.isFinite(o.estimateMinutes) ? Math.min(480, Math.max(5, Math.round(o.estimateMinutes))) : null;
       return {
         title,
         description: str(o.description, 600),
         priority: PRIORITIES.includes(o.priority as Priority) ? (o.priority as Priority) : "Média",
         difficulty: isDifficulty(o.difficulty) ? o.difficulty : fallbackDifficulty,
+        startInDays: start,
         dueInDays: due,
         estimateMinutes: est,
       };
@@ -391,13 +437,14 @@ const TASK_SCHEMA = {
     description: { type: "STRING" },
     priority: { type: "STRING", enum: ["Baixa", "Média", "Alta"] },
     difficulty: { type: "STRING", enum: ["facil", "medio", "dificil", "epico"] },
+    startInDays: { type: "INTEGER" },
     dueInDays: { type: "INTEGER" },
     estimateMinutes: { type: "INTEGER" },
   },
-  required: ["title", "description", "priority", "difficulty", "dueInDays", "estimateMinutes"],
+  required: ["title", "description", "priority", "difficulty", "startInDays", "dueInDays", "estimateMinutes"],
 } as const;
 const TASK_RULES =
-  "Cada tarefa DEVE ter: título com verbo no infinitivo; descrição de 1 a 2 frases dizendo o que fazer e como saber que terminou (critério de pronto); prioridade; dificuldade; dueInDays (dias a partir de hoje, dentro do prazo do contrato); estimateMinutes realista.";
+  "Cada tarefa DEVE ter: título com verbo no infinitivo; descrição de 1 a 2 frases dizendo o que fazer e como saber que terminou (critério de pronto); prioridade; dificuldade; startInDays e dueInDays (dias a partir de HOJE, dentro da vigência do contrato, startInDays <= dueInDays, em sequência lógica — uma etapa começa quando a anterior termina ou em paralelo quando fizer sentido); estimateMinutes realista.";
 const AI_OPTS = { timeoutMs: 40_000, retries: 1, maxOutputTokens: 4096 };
 
 /**
@@ -463,31 +510,114 @@ type AiResult<T> = { ok: true; data: T } | { ok: false; message: string };
 
 const NO_AI = "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini.";
 
+/** Parâmetros que o usuário passa para a IA montar o contrato. */
+export interface ProposeContractInput {
+  goal: string;
+  /** Por que isso importa (vira a cláusula "Considerando que…"). */
+  why?: string;
+  /** Área da vida (estudos, trabalho, saúde, finanças…). */
+  area?: string;
+  difficulty?: DifficultyKey;
+  /** Início da vigência em dias a partir de hoje (padrão 0). */
+  startInDays?: number;
+  deadlineDays?: number;
+  /** Horas por semana que o usuário pode dedicar — a IA dimensiona as tarefas por isso. */
+  weeklyHours?: number;
+  taskCount?: "enxuto" | "equilibrado" | "detalhado";
+  /** Meta/Projeto já existentes aos quais o contrato vai se ligar (contexto para as datas). */
+  goalId?: string;
+  projectId?: string;
+  suggestGoalProject?: boolean;
+}
+
+const TASK_COUNT: Record<NonNullable<ProposeContractInput["taskCount"]>, [number, number]> = { enxuto: [3, 4], equilibrado: [5, 6], detalhado: [7, 8] };
+const WEEKDAYS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+const addDaysKey = (key: string, n: number) => {
+  const d = new Date(`${key}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const daysBetweenKeys = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00Z`).getTime() - new Date(`${a}T12:00:00Z`).getTime()) / 86_400_000);
+const weekday = (key: string) => WEEKDAYS[new Date(`${key}T12:00:00Z`).getUTCDay()];
+const br = (key: string) => key.split("-").reverse().join("/");
+
+/** Meta/Projeto existentes como contexto (sempre do próprio usuário). */
+async function linkContext(db: Client, ownerId: string, input: ProposeContractInput, today: string) {
+  const [g, p] = await Promise.all([
+    input.goalId ? db.execute({ sql: "SELECT title, due_date FROM goals WHERE id = ? AND owner_id = ?", args: [input.goalId, ownerId] }) : null,
+    input.projectId ? db.execute({ sql: "SELECT name, start_date, due_date FROM projects WHERE id = ? AND owner_id = ?", args: [input.projectId, ownerId] }) : null,
+  ]);
+  const lines: string[] = [];
+  let limitDays: number | null = null;
+  const goal = g?.rows[0];
+  if (input.goalId && !goal) throw new ContractError("Meta inválida.", 404);
+  if (goal) {
+    const due = goal.due_date ? String(goal.due_date).slice(0, 10) : null;
+    lines.push(`O contrato faz parte da Meta já existente "${String(goal.title)}"${due ? ` (prazo ${br(due)})` : ""}.`);
+    if (due && due > today) limitDays = daysBetweenKeys(today, due);
+  }
+  const project = p?.rows[0];
+  if (input.projectId && !project) throw new ContractError("Projeto inválido.", 404);
+  if (project) {
+    const due = project.due_date ? String(project.due_date).slice(0, 10) : null;
+    lines.push(`O contrato é uma frente do Projeto já existente "${String(project.name)}"${due ? ` (entrega ${br(due)})` : ""}.`);
+    if (due && due > today) limitDays = Math.min(limitDays ?? Infinity, daysBetweenKeys(today, due));
+  }
+  if (lines.length) lines.push("A vigência e as tarefas do contrato devem caber dentro desses prazos.");
+  return { text: lines.join(" "), limitDays };
+}
+
 /**
- * Gemini propõe um contrato completo a partir do objetivo descrito. Nada é
- * salvo. `suggestGoalProject` (true por padrão) é o parâmetro que liga/desliga
- * a sugestão de Meta/Projeto — o usuário decide na tela se quer que a IA
- * pense nisso ou só nas tarefas.
+ * Gemini redige um contrato completo a partir do objetivo e dos parâmetros
+ * do usuário (vigência, dedicação semanal, tamanho, vínculos). Nada é salvo.
+ * As datas são calculadas pela IA em dias a partir de HOJE (data do usuário);
+ * a tela converte em datas reais e o usuário revisa tudo antes de firmar.
  */
-export async function proposeContract(
-  db: Client,
-  ownerId: string,
-  input: { goal: string; difficulty?: DifficultyKey; deadlineDays?: number; suggestGoalProject?: boolean },
-): Promise<AiResult<ContractProposal>> {
+export async function proposeContract(db: Client, ownerId: string, input: ProposeContractInput): Promise<AiResult<ContractProposal>> {
   const config = await getGeminiConfig();
   if (!config) return { ok: false, message: NO_AI };
   const today = await todayKeyFor(db, ownerId);
-  const wantsGoalProject = input.suggestGoalProject !== false;
-  const prompt = `Você é o LifeOS Copilot e ajuda a montar um "contrato": um pacto pessoal sério, com objetivo concreto e tarefas executáveis — não é uma lista de tarefas qualquer, é um compromisso que o usuário está assumindo consigo mesmo.
-Hoje é ${today}. ${await userContextLine(db, ownerId)}
-Objetivo descrito pelo usuário: """${input.goal.slice(0, 1200)}"""
-${input.difficulty ? `Dificuldade desejada para o contrato: ${input.difficulty}.` : ""}
-${input.deadlineDays ? `Prazo desejado: ${input.deadlineDays} dias a partir de hoje.` : ""}
+  const links = await linkContext(db, ownerId, input, today);
+  const wantsGoalProject = input.suggestGoalProject !== false && !(input.goalId && input.projectId);
+  const startIn = Math.max(0, input.startInDays ?? 0);
+  const start = addDaysKey(today, startIn);
+  const deadline = input.deadlineDays ?? (links.limitDays !== null ? links.limitDays : null);
+  const end = deadline ? addDaysKey(today, deadline) : null;
+  const [minTasks, maxTasks] = TASK_COUNT[input.taskCount ?? "equilibrado"];
+  const weeks = end ? Math.max(1, Math.ceil(daysBetweenKeys(start, end) / 7)) : null;
+  const budget = input.weeklyHours && weeks ? input.weeklyHours * weeks * 60 : null;
+
+  const prompt = `Você é o LifeOS Copilot e redige CONTRATOS pessoais: um pacto sério e verificável que o usuário firma consigo mesmo, com vigência, obrigações (tarefas) e critério de cumprimento — não é uma lista de tarefas qualquer.
+
+DADOS REAIS (use exatamente, não invente outros):
+- Hoje é ${weekday(today)}, ${br(today)} (${today}). Todas as datas da resposta são em DIAS A PARTIR DE HOJE.
+- ${await userContextLine(db, ownerId)}
+${links.text ? `- ${links.text}
+` : ""}
+PEDIDO DO USUÁRIO:
+- Objetivo: """${input.goal.slice(0, 1200)}"""
+${input.why ? `- Por que importa: """${input.why.slice(0, 600)}"""
+` : ""}${input.area ? `- Área da vida: ${input.area}
+` : ""}- Vigência: começa em ${br(start)} (startInDays=${startIn})${end ? ` e termina em ${br(end)} (dueInDays=${deadline})` : "; o prazo final fica a seu critério — estime um prazo realista e informe em dueInDays"}.
+${input.weeklyHours ? `- Dedicação disponível: ${input.weeklyHours} h por semana${budget ? ` (≈ ${Math.round(budget / 60)} h no total da vigência). A soma de estimateMinutes das tarefas NÃO pode passar de ${budget} minutos` : ""}.
+` : ""}${input.difficulty ? `- Dificuldade desejada: ${input.difficulty}.
+` : ""}- Quantidade de tarefas: entre ${minTasks} e ${maxTasks}.
+
 ${DIFFICULTY_GUIDE}
-Regras: entre 3 e 8 tarefas específicas e mensuráveis, em ordem de execução; não invente dados sobre o usuário; sem promessas de resultado; tom direto e sério (é um contrato, não um bate-papo motivacional genérico).
+
+COMO REDIGIR:
+1. title: soa como um pacto (ex.: "Concluir o capítulo 2 da dissertação até 15/11"), nunca como nome de tarefa.
+2. description: 1 a 3 frases dizendo o que está sendo pactuado (o objeto do contrato).
+3. objective: o critério de cumprimento — algo verificável ("capítulo enviado ao orientador", "5 treinos por semana por 4 semanas").
+4. why: 1 frase "Considerando que…" com a motivação. Use o que o usuário escreveu; se ele não disse, escreva algo neutro a partir do objetivo, sem inventar fatos da vida dele.
+5. rewardText: uma recompensa pessoal saudável e proporcional para quando cumprir (ex.: "uma noite livre com um filme"). Nada de comida como prêmio nem gastos altos.
+6. stakes: uma consequência construtiva se não cumprir no prazo (ex.: "revisar o plano na revisão semanal e refazer o cronograma"). Nunca punições, humilhação ou algo que prejudique saúde/dinheiro.
+7. startInDays/dueInDays do contrato: a vigência acima. weeklyHours: as horas informadas (ou uma estimativa realista se não informadas).
+8. tasks: ${minTasks} a ${maxTasks} obrigações em ordem de execução, distribuídas ao longo da vigência (não concentre tudo no último dia; deixe folga de 1 a 2 dias antes do prazo final para revisão).
 ${TASK_RULES}
-O título do contrato deve soar como um pacto/compromisso real (ex.: "Dominar os fundamentos de X até dezembro"), não um nome de tarefa solta. description: 1 a 3 frases explicando o que está sendo pactuado. objective: o resultado esperado, verificável (como saber que o contrato foi cumprido).
-${wantsGoalProject ? GOAL_PROJECT_RULES : 'Não sugira Meta nem Projeto desta vez: retorne goal.include=false e project.include=false.'}`;
+Tom: direto, sério e motivador sem exageros. Sem promessas de resultado. Português do Brasil.
+${wantsGoalProject ? GOAL_PROJECT_RULES : "Não sugira Meta nem Projeto novos: retorne goal.include=false e project.include=false."}`;
+
   const result = await generateText(prompt, config, {
     ...AI_OPTS,
     responseSchema: {
@@ -496,23 +626,48 @@ ${wantsGoalProject ? GOAL_PROJECT_RULES : 'Não sugira Meta nem Projeto desta ve
         title: { type: "STRING" },
         description: { type: "STRING" },
         objective: { type: "STRING" },
+        why: { type: "STRING" },
+        rewardText: { type: "STRING" },
+        stakes: { type: "STRING" },
         difficulty: { type: "STRING", enum: ["facil", "medio", "dificil", "epico"] },
+        startInDays: { type: "INTEGER" },
         dueInDays: { type: "INTEGER" },
+        weeklyHours: { type: "INTEGER" },
         tasks: { type: "ARRAY", items: TASK_SCHEMA },
         goal: GOAL_SCHEMA,
         project: PROJECT_SCHEMA,
       },
-      required: ["title", "description", "objective", "difficulty", "dueInDays", "tasks", "goal", "project"],
+      required: ["title", "description", "objective", "why", "rewardText", "stakes", "difficulty", "startInDays", "dueInDays", "weeklyHours", "tasks", "goal", "project"],
     },
   });
   if (!result.ok) return { ok: false, message: result.message };
   const json = extractJson(result.text) as Record<string, unknown> | null;
+  return sanitizeProposal(json, input, { startIn, deadline, maxTasks, wantsGoalProject });
+}
+
+/**
+ * Normaliza a proposta da IA: respeita a vigência pedida pelo usuário (a IA
+ * não pode mudar início/fim informados), mantém as tarefas dentro dela e
+ * limita textos. Exportada para teste.
+ */
+export function sanitizeProposal(
+  json: Record<string, unknown> | null,
+  input: Pick<ProposeContractInput, "difficulty" | "weeklyHours">,
+  opts: { startIn: number; deadline: number | null; maxTasks: number; wantsGoalProject: boolean },
+): AiResult<ContractProposal> {
   const title = json ? str(json.title, 160) : null;
   if (!json || !title) return { ok: false, message: "A IA não devolveu um contrato válido. Tente descrever o objetivo de outra forma." };
   const difficulty = isDifficulty(json.difficulty) ? json.difficulty : input.difficulty ?? "medio";
-  const tasks = sanitizeTasks(json.tasks, difficulty, 8);
+  const aiDue = typeof json.dueInDays === "number" && Number.isFinite(json.dueInDays) ? Math.min(365, Math.max(1, Math.round(json.dueInDays))) : null;
+  const dueInDays = opts.deadline ?? aiDue;
+  const startInDays = Math.min(opts.startIn, dueInDays ?? opts.startIn);
+  const tasks = sanitizeTasks(json.tasks, difficulty, opts.maxTasks).map((t) => {
+    const due = t.dueInDays === null ? dueInDays : Math.max(startInDays, dueInDays === null ? t.dueInDays : Math.min(t.dueInDays, dueInDays));
+    const startT = t.startInDays === null ? null : Math.max(startInDays, Math.min(t.startInDays, due ?? t.startInDays));
+    return { ...t, startInDays: startT, dueInDays: due };
+  });
   if (tasks.length === 0) return { ok: false, message: "A IA não sugeriu tarefas utilizáveis. Tente novamente." };
-  const dueInDays = typeof json.dueInDays === "number" && Number.isFinite(json.dueInDays) ? Math.min(365, Math.max(1, Math.round(json.dueInDays))) : input.deadlineDays ?? null;
+  const hours = typeof json.weeklyHours === "number" && Number.isFinite(json.weeklyHours) ? Math.min(80, Math.max(1, Math.round(json.weeklyHours))) : null;
   return {
     ok: true,
     data: {
@@ -520,10 +675,15 @@ ${wantsGoalProject ? GOAL_PROJECT_RULES : 'Não sugira Meta nem Projeto desta ve
       description: str(json.description, 600),
       objective: str(json.objective, 400),
       difficulty,
+      startInDays,
       dueInDays,
+      weeklyHours: input.weeklyHours ?? hours,
+      why: str(json.why, 400),
+      rewardText: str(json.rewardText, 200),
+      stakes: str(json.stakes, 200),
       tasks,
-      goal: wantsGoalProject ? sanitizeGoal(json.goal) : null,
-      project: wantsGoalProject ? sanitizeProject(json.project) : null,
+      goal: opts.wantsGoalProject ? sanitizeGoal(json.goal) : null,
+      project: opts.wantsGoalProject ? sanitizeProject(json.project) : null,
     },
   };
 }

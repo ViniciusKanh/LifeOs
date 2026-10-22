@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Dumbbell, Droplets, Moon, Save, Smile, X } from "lucide-react";
 import { Button, Field, IconBadge } from "@/components/ui/primitives";
 import type { MoodEntryInput, SleepEntryInput, WaterEntryInput, WorkoutInput } from "@/services/healthService";
-import { dateTimeLocalToIso, nullableNumber, optionalText, toDateTimeLocal } from "./healthUtils";
+import { dateTimeLocalToIso, optionalText, toDateTimeLocal } from "./healthUtils";
+import { WorkoutForm } from "./WorkoutForm";
 import type { HealthEditTarget } from "./HealthHistoryModal";
 
 export type HealthUpdatePatch =
@@ -13,16 +14,8 @@ export type HealthUpdatePatch =
 
 type WaterEditForm = { amountMl: string; recordedAt: string };
 type SleepEditForm = { wentToBedAt: string; wokeUpAt: string; quality: number; notes: string };
-type WorkoutEditForm = {
-  kind: string;
-  durationMinutes: string;
-  distanceKm: string;
-  intensity: "leve" | "moderada" | "intensa";
-  notes: string;
-  performedAt: string;
-};
 type MoodEditForm = { mood: number; energy: number; stress: number; note: string; recordedAt: string };
-type HealthEditForm = WaterEditForm | SleepEditForm | WorkoutEditForm | MoodEditForm;
+type HealthEditForm = WaterEditForm | SleepEditForm | MoodEditForm | null;
 
 export function HealthEditModal({
   target,
@@ -51,16 +44,8 @@ export function HealthEditModal({
         notes: target.entry.notes ?? "",
       };
     }
-    if (target.kind === "workouts") {
-      return {
-        kind: target.entry.kind,
-        durationMinutes: String(target.entry.duration_minutes ?? ""),
-        distanceKm: target.entry.distance_km === null ? "" : String(target.entry.distance_km),
-        intensity: target.entry.intensity ?? "moderada",
-        notes: target.entry.notes ?? "",
-        performedAt: toDateTimeLocal(target.entry.performed_at),
-      };
-    }
+    // Exercício tem formulário próprio (WorkoutForm), adaptado ao tipo.
+    if (target.kind === "workouts") return null;
     return {
       mood: target.entry.mood,
       energy: target.entry.energy,
@@ -103,13 +88,13 @@ export function HealthEditModal({
       : target.kind === "sleep"
         ? "Editar sono"
         : target.kind === "workouts"
-          ? "Editar exercicio"
+          ? "Editar exercício"
           : "Editar humor";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 px-4 py-8 overflow-y-auto" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-2xl border border-paper-border bg-paper-raised p-5 shadow-card-dark dark:border-ink-border dark:bg-ink-raised my-auto"
+        className={`w-full ${target.kind === "workouts" ? "max-w-xl" : "max-w-lg"} rounded-2xl border border-paper-border bg-paper-raised p-5 shadow-card-dark dark:border-ink-border dark:bg-ink-raised my-auto`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -125,14 +110,14 @@ export function HealthEditModal({
           </button>
         </div>
 
-        {target.kind === "water" && "amountMl" in form && (
+        {target.kind === "water" && form && "amountMl" in form && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Quantidade (ml)" type="number" min={1} value={form.amountMl} onChange={(event) => setForm({ ...form, amountMl: event.target.value })} />
             <Field label="Quando" type="datetime-local" value={form.recordedAt} onChange={(event) => setForm({ ...form, recordedAt: event.target.value })} />
           </div>
         )}
 
-        {target.kind === "sleep" && "wentToBedAt" in form && (
+        {target.kind === "sleep" && form && "wentToBedAt" in form && (
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Dormiu as" type="datetime-local" value={form.wentToBedAt} onChange={(event) => setForm({ ...form, wentToBedAt: event.target.value })} />
@@ -143,20 +128,20 @@ export function HealthEditModal({
           </div>
         )}
 
-        {target.kind === "workouts" && "kind" in form && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Tipo" value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })} />
-              <Field label="Duracao (min)" type="number" min={1} value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} />
-              <Field label="Distancia (km)" type="number" min={0} step="0.1" value={form.distanceKm} onChange={(event) => setForm({ ...form, distanceKm: event.target.value })} />
-              <SelectIntensity value={form.intensity} onChange={(value) => setForm({ ...form, intensity: value })} />
-              <Field label="Quando" type="datetime-local" value={form.performedAt} onChange={(event) => setForm({ ...form, performedAt: event.target.value })} />
-            </div>
-            <TextArea label="Notas" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
-          </div>
+        {target.kind === "workouts" && (
+          <WorkoutForm
+            initial={target.entry}
+            defaultWhen=""
+            submitLabel="Salvar"
+            onCancel={onClose}
+            onSubmit={async (input) => {
+              await onSave(target, input);
+              onClose();
+            }}
+          />
         )}
 
-        {target.kind === "mood" && "mood" in form && (
+        {target.kind === "mood" && form && "mood" in form && (
           <div className="space-y-3">
             <Slider label="Humor" value={form.mood} onChange={(value) => setForm({ ...form, mood: value })} />
             <Slider label="Energia" value={form.energy} onChange={(value) => setForm({ ...form, energy: value })} />
@@ -166,6 +151,9 @@ export function HealthEditModal({
           </div>
         )}
 
+        {/* Exercício salva pelo próprio WorkoutForm (botões e erros inclusos). */}
+        {target.kind !== "workouts" && (
+          <>
         {error && <p className="mt-4 rounded-xl bg-drop/10 px-3 py-2 text-xs text-drop">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
@@ -176,20 +164,22 @@ export function HealthEditModal({
             <Save size={14} /> {isSaving ? "Salvando..." : "Salvar"}
           </Button>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 function buildPatch(kind: HealthEditTarget["kind"], form: HealthEditForm): HealthUpdatePatch {
-  if (kind === "water" && "amountMl" in form) {
+  if (kind === "water" && form && "amountMl" in form) {
     const amountMl = Number(form.amountMl);
     if (!Number.isFinite(amountMl) || amountMl <= 0) throw new Error("Informe uma quantidade de agua maior que zero.");
     if (!form.recordedAt) throw new Error("Informe quando voce bebeu agua.");
     return { amountMl, recordedAt: dateTimeLocalToIso(form.recordedAt) };
   }
 
-  if (kind === "sleep" && "wentToBedAt" in form) {
+  if (kind === "sleep" && form && "wentToBedAt" in form) {
     if (!form.wentToBedAt || !form.wokeUpAt) throw new Error("Informe quando dormiu e quando acordou.");
     if (new Date(form.wokeUpAt).getTime() <= new Date(form.wentToBedAt).getTime()) {
       throw new Error("O horario de acordar precisa ser depois do horario em que voce dormiu.");
@@ -202,22 +192,7 @@ function buildPatch(kind: HealthEditTarget["kind"], form: HealthEditForm): Healt
     };
   }
 
-  if (kind === "workouts" && "kind" in form) {
-    const durationMinutes = Number(form.durationMinutes);
-    if (!form.kind.trim()) throw new Error("Informe o tipo de exercicio.");
-    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) throw new Error("Informe a duracao do exercicio.");
-    if (!form.performedAt) throw new Error("Informe quando o exercicio aconteceu.");
-    return {
-      kind: form.kind.trim(),
-      durationMinutes,
-      distanceKm: nullableNumber(form.distanceKm),
-      intensity: form.intensity,
-      notes: optionalText(form.notes) ?? null,
-      performedAt: dateTimeLocalToIso(form.performedAt),
-    };
-  }
-
-  if (kind === "mood" && "mood" in form) {
+  if (kind === "mood" && form && "mood" in form) {
     if (!form.recordedAt) throw new Error("Informe quando este registro aconteceu.");
     return {
       mood: form.mood,
@@ -253,23 +228,6 @@ function TextArea({ label, value, onChange }: { label: string; value: string; on
         rows={3}
         className="mt-1.5 w-full resize-none rounded-xl border border-paper-border bg-paper px-3 py-2.5 text-sm outline-none transition-colors focus:border-brand-500 dark:border-ink-border dark:bg-ink"
       />
-    </div>
-  );
-}
-
-function SelectIntensity({ value, onChange }: { value: "leve" | "moderada" | "intensa"; onChange: (value: "leve" | "moderada" | "intensa") => void }) {
-  return (
-    <div>
-      <label className="text-xs text-slate">Intensidade</label>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as "leve" | "moderada" | "intensa")}
-        className="mt-1.5 w-full rounded-xl border border-paper-border bg-paper px-3 py-2.5 text-sm outline-none transition-colors focus:border-brand-500 dark:border-ink-border dark:bg-ink"
-      >
-        <option value="leve">Leve</option>
-        <option value="moderada">Moderada</option>
-        <option value="intensa">Intensa</option>
-      </select>
     </div>
   );
 }

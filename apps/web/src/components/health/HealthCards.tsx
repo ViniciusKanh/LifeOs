@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Dumbbell, Droplets, Edit2, HeartPulse, LineChart as LineChartIcon, Moon, Sparkles, Sun, Trash2, Wand2 } from "lucide-react";
+import { Droplets, Edit2, HeartPulse, LineChart as LineChartIcon, Moon, Sparkles, Sun, Trash2, Wand2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
-import type { HealthCorrelation, MoodEntry, SleepEntry, WaterEntry, Workout } from "@/types";
-import type { MoodEntryInput, SleepEntryInput, WorkoutInput } from "@/services/healthService";
+import type { HealthCorrelation, MoodEntry, SleepEntry, WaterEntry } from "@/types";
+import type { MoodEntryInput, SleepEntryInput } from "@/services/healthService";
 import { WaterRing } from "./HealthStatCard";
 import { rpgAvatar } from "@/components/rpg/rpgAssets";
 import {
@@ -14,17 +14,15 @@ import {
   SLEEP_GOAL_MINUTES,
   dateTimeLocalToIso,
   defaultEntryDateTimeLocal,
+  entryInstantIso,
   fmtDateTime,
   formatHM,
-  optionalNumber,
   optionalText,
   parseHealthDate,
   todayKey,
   toDateTimeLocal,
 } from "./healthUtils";
 import type { HealthEditTarget } from "./HealthHistoryModal";
-
-const WORKOUT_TYPES = ["Caminhada", "Corrida", "Musculacao", "Luta", "Crossfit", "Funcional", "Ciclismo", "Natacao", "Alongamento", "Yoga", "Pilates", "HIIT", "Outro"];
 
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
@@ -71,13 +69,17 @@ export function WaterCard({
   // registrar), sem que o registro do dia a dia normal mude de jeito nenhum:
   // some sozinho pro horário certo sempre que o dia selecionado na tela muda.
   const [whenLocal, setWhenLocal] = useState(() => defaultEntryDateTimeLocal(selectedDate));
-  useEffect(() => setWhenLocal(defaultEntryDateTimeLocal(selectedDate)), [selectedDate]);
+  const [whenTouched, setWhenTouched] = useState(false);
+  useEffect(() => {
+    setWhenLocal(defaultEntryDateTimeLocal(selectedDate));
+    setWhenTouched(false);
+  }, [selectedDate]);
 
   async function add(amountMl: number) {
     setMessage(null);
     setSavingMl(amountMl);
     try {
-      await onQuickAdd(amountMl, dateTimeLocalToIso(whenLocal));
+      await onQuickAdd(amountMl, entryInstantIso(whenLocal, whenTouched, selectedDate));
       setMessage(`+${amountMl} ml registrados`);
     } catch (err) {
       setMessage(errorMessage(err, "Nao foi possivel registrar sua agua."));
@@ -88,11 +90,11 @@ export function WaterCard({
 
   return (
     <Card className="p-5 md:p-6">
-      <CardHeader
+      <HealthCardHeader
         tone="blue"
         icon={<Droplets size={16} />}
         title="Agua"
-        subtitle="Hidratacao para mais energia e foco."
+        subtitle="Hidratação para mais energia e disposição."
         onOpenHistory={onOpenHistory}
       />
 
@@ -115,7 +117,10 @@ export function WaterCard({
           <input
             type="datetime-local"
             value={whenLocal}
-            onChange={(event) => setWhenLocal(event.target.value)}
+            onChange={(event) => {
+              setWhenTouched(true);
+              setWhenLocal(event.target.value);
+            }}
             className="mt-0.5 block rounded-lg border border-paper-border bg-paper px-2 py-1 text-xs outline-none focus:border-brand-500 dark:border-ink-border dark:bg-ink"
           />
         </label>
@@ -167,7 +172,7 @@ export function WaterCard({
         <Droplets size={14} className="mt-0.5 shrink-0 text-cat-blue" />
         <div>
           <p className="text-xs font-semibold">Dica de hoje</p>
-          <p className="mt-0.5 text-[11px] text-slate">Manter-se hidratado ajuda sua rotina de foco e energia ao longo do dia.</p>
+          <p className="mt-0.5 text-[11px] text-slate">Manter-se hidratado ajuda sua energia e disposição ao longo do dia.</p>
         </div>
       </div>
     </Card>
@@ -239,7 +244,7 @@ export function SleepCard({
 
   return (
     <Card className="p-5 md:p-6">
-      <CardHeader
+      <HealthCardHeader
         tone="purple"
         icon={<Moon size={16} />}
         title="Sono"
@@ -313,163 +318,6 @@ export function SleepCard({
   );
 }
 
-export function WorkoutCard({
-  workouts,
-  workoutsWeekly,
-  workoutsThisWeekMinutes,
-  selectedDate,
-  onAddWorkout,
-  onDelete,
-  onEdit,
-  onOpenHistory,
-}: {
-  workouts: Workout[];
-  workoutsWeekly: Array<{ label: string; value: number }>;
-  workoutsThisWeekMinutes: number;
-  selectedDate: string;
-  onAddWorkout: (input: WorkoutInput) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onEdit: (target: HealthEditTarget) => void;
-  onOpenHistory: () => void;
-}) {
-  const defaultWhen = useMemo(() => defaultEntryDateTimeLocal(selectedDate), [selectedDate]);
-  const [form, setForm] = useState({
-    kind: "Caminhada",
-    durationMinutes: "",
-    distanceKm: "",
-    intensity: "moderada" as const,
-    notes: "",
-    performedAt: defaultWhen,
-  });
-  useEffect(() => setForm((f) => ({ ...f, performedAt: defaultWhen })), [defaultWhen]);
-  const [message, setMessage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  async function submit() {
-    setMessage(null);
-    const durationMinutes = Number(form.durationMinutes);
-    if (!form.kind.trim()) {
-      setMessage("Informe o tipo de exercicio.");
-      return;
-    }
-    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-      setMessage("Informe uma duracao maior que zero.");
-      return;
-    }
-    try {
-      setIsSaving(true);
-      await onAddWorkout({
-        kind: form.kind.trim(),
-        durationMinutes,
-        distanceKm: optionalNumber(form.distanceKm),
-        intensity: form.intensity,
-        notes: optionalText(form.notes),
-        performedAt: form.performedAt ? dateTimeLocalToIso(form.performedAt) : undefined,
-      });
-      setForm({ kind: "Caminhada", durationMinutes: "", distanceKm: "", intensity: "moderada", notes: "", performedAt: defaultWhen });
-      setMessage("Exercicio registrado.");
-    } catch (err) {
-      setMessage(errorMessage(err, "Nao foi possivel registrar o exercicio."));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  const workoutsThisWeek = workoutsWeekly.reduce((sum, day) => sum + day.value, 0);
-
-  return (
-    <Card className="p-5 md:p-6">
-      <CardHeader
-        tone="green"
-        icon={<Dumbbell size={16} />}
-        title="Exercicios"
-        subtitle="Movimento e vida."
-        onOpenHistory={onOpenHistory}
-      />
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div>
-          <label className="text-xs text-slate">Tipo</label>
-          <select
-            value={form.kind}
-            onChange={(event) => setForm({ ...form, kind: event.target.value })}
-            className="mt-1.5 w-full rounded-xl border border-paper-border bg-paper px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-ink-border dark:bg-ink"
-          >
-            {WORKOUT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Field label="Duracao (min)" type="number" min={1} value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} />
-        <Field label="Distancia (km)" type="number" min={0} step="0.1" value={form.distanceKm} onChange={(event) => setForm({ ...form, distanceKm: event.target.value })} />
-        <div>
-          <label className="text-xs text-slate">Intensidade</label>
-          <select
-            value={form.intensity}
-            onChange={(event) => setForm({ ...form, intensity: event.target.value as typeof form.intensity })}
-            className="mt-1.5 w-full rounded-xl border border-paper-border bg-paper px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-ink-border dark:bg-ink"
-          >
-            <option value="leve">Leve</option>
-            <option value="moderada">Moderada</option>
-            <option value="intensa">Intensa</option>
-          </select>
-        </div>
-        <Field
-          label="Quando"
-          type="datetime-local"
-          value={form.performedAt}
-          onChange={(event) => setForm({ ...form, performedAt: event.target.value })}
-        />
-      </div>
-      <RetroactiveHint whenLocal={form.performedAt} />
-      <textarea
-        value={form.notes}
-        onChange={(event) => setForm({ ...form, notes: event.target.value })}
-        placeholder="Observacao opcional"
-        rows={2}
-        className="mt-2 w-full resize-none rounded-xl border border-paper-border bg-paper px-3 py-2.5 text-sm outline-none focus:border-brand-500 dark:border-ink-border dark:bg-ink"
-      />
-      <Button className="mt-2 w-full" onClick={submit} disabled={isSaving}>
-        <Dumbbell size={14} /> {isSaving ? "Registrando..." : "Registrar exercicio"}
-      </Button>
-      {message && <p className="mt-3 rounded-xl bg-cat-green/5 px-3 py-2 text-xs text-slate">{message}</p>}
-
-      <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-growth/15 bg-growth/5 p-3 sm:grid-cols-[0.85fr_1.15fr]">
-        <div>
-          <p className="text-[11px] text-slate">Esta semana</p>
-          <p className="font-display text-xl font-bold">{workoutsThisWeek} atividades</p>
-          <p className="text-[10px] text-slate">{formatHM(workoutsThisWeekMinutes)} no total</p>
-        </div>
-        <div className="h-24 min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={workoutsWeekly} margin={{ top: 8, right: 4, bottom: 0, left: -24 }}>
-              <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
-              <YAxis hide allowDecimals={false} />
-              <Tooltip contentStyle={chartTooltipStyle()} formatter={(value) => [`${value}`, "Atividades"]} />
-              <Bar dataKey="value" fill="#22B573" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <LatestList
-        title="Ultimos registros"
-        empty="Nenhum exercicio registrado ainda."
-        items={workouts.slice(0, 4).map((entry) => ({
-          id: entry.id,
-          icon: <Dumbbell size={12} className="text-cat-green" />,
-          title: `${entry.kind}${entry.duration_minutes ? ` · ${entry.duration_minutes}min` : ""}${entry.distance_km ? ` · ${entry.distance_km}km` : ""}`,
-          meta: fmtDateTime(entry.performed_at),
-          onEdit: () => onEdit({ kind: "workouts", entry }),
-          onDelete: () => onDelete(entry.id),
-        }))}
-      />
-    </Card>
-  );
-}
-
 export function MoodCard({
   mood,
   selectedDate,
@@ -487,7 +335,11 @@ export function MoodCard({
 }) {
   const defaultWhen = useMemo(() => defaultEntryDateTimeLocal(selectedDate), [selectedDate]);
   const [form, setForm] = useState({ mood: 3, energy: 3, stress: 3, note: "", recordedAt: defaultWhen });
-  useEffect(() => setForm((f) => ({ ...f, recordedAt: defaultWhen })), [defaultWhen]);
+  const [whenTouched, setWhenTouched] = useState(false);
+  useEffect(() => {
+    setForm((f) => ({ ...f, recordedAt: defaultWhen }));
+    setWhenTouched(false);
+  }, [defaultWhen]);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -514,9 +366,10 @@ export function MoodCard({
         energy: form.energy,
         stress: form.stress,
         note: optionalText(form.note),
-        recordedAt: form.recordedAt ? dateTimeLocalToIso(form.recordedAt) : undefined,
+        recordedAt: form.recordedAt ? entryInstantIso(form.recordedAt, whenTouched, selectedDate) : undefined,
       });
       setForm({ mood: 3, energy: 3, stress: 3, note: "", recordedAt: defaultWhen });
+      setWhenTouched(false);
       setMessage("Check-in de bem-estar salvo.");
     } catch (err) {
       setMessage(errorMessage(err, "Nao foi possivel salvar o check-in."));
@@ -527,7 +380,7 @@ export function MoodCard({
 
   return (
     <Card className="p-5 md:p-6">
-      <CardHeader
+      <HealthCardHeader
         tone="amber"
         icon={<Sun size={16} />}
         title="Humor e energia"
@@ -549,7 +402,10 @@ export function MoodCard({
         label="Quando"
         type="datetime-local"
         value={form.recordedAt}
-        onChange={(event) => setForm({ ...form, recordedAt: event.target.value })}
+        onChange={(event) => {
+          setWhenTouched(true);
+          setForm({ ...form, recordedAt: event.target.value });
+        }}
       />
       <RetroactiveHint whenLocal={form.recordedAt} />
       <Button className="mt-2 w-full" onClick={submit} disabled={isSaving}>
@@ -729,7 +585,8 @@ export function HealthCorrelationsCard({ correlations, isLoading }: { correlatio
   );
 }
 
-function CardHeader({
+/** Cabeçalho padrão dos cards de Saúde (reaproveitado pelo WorkoutCard). */
+export function HealthCardHeader({
   tone,
   icon,
   title,
@@ -752,7 +609,7 @@ function CardHeader({
         </div>
       </div>
       <button onClick={onOpenHistory} className="shrink-0 text-xs font-medium text-brand-600 dark:text-brand-500 rpg:text-rpg-purple rpg:font-semibold hover:underline">
-        Ver historico
+        Ver histórico
       </button>
     </div>
   );

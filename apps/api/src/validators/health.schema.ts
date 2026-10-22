@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FIGHT_MODALITIES, WORKOUT_CATEGORIES } from "../services/healthService.js";
 
 /**
  * Validação da área de Saúde e Bem-estar. Propositalmente sem
@@ -55,23 +56,56 @@ export const sleepEntryUpdateSchema = z
     path: ["wokeUpAt"],
   });
 
-export const workoutSchema = z.object({
-  kind: z.string().trim().min(1, "Informe o tipo de exercício.").max(80),
-  durationMinutes: positiveInt("Informe uma duração maior que zero.", 600),
-  distanceKm: z.number().positive().max(500).optional(),
-  calories: z.number().int().positive().max(5000).optional(),
-  intensity: z.enum(["leve", "moderada", "intensa"]).optional(),
-  notes: noteSchema.optional(),
-  performedAt: dateTimeSchema.optional(),
+/* Exercícios — campos opcionais por tipo (musculação, luta, cardio). Tudo
+ * opcional além de tipo e duração, para não travar o registro rápido. */
+const workoutSetSchema = z.object({
+  exercise: z.string().trim().min(1, "Informe o nome do exercício.").max(80),
+  sets: z.number().int().positive().max(50).nullable().optional(),
+  reps: z.number().int().positive().max(500).nullable().optional(),
+  loadKg: z.number().min(0).max(1000).nullable().optional(),
 });
+
+const workoutDetailFields = {
+  category: z.enum(WORKOUT_CATEGORIES, { errorMap: () => ({ message: "Tipo de exercício inválido." }) }),
+  modality: z.enum(FIGHT_MODALITIES, { errorMap: () => ({ message: "Modalidade inválida." }) }).nullable().optional(),
+  rpe: z.number().int().min(1, "Esforço vai de 1 a 10.").max(10, "Esforço vai de 1 a 10.").nullable().optional(),
+  muscleGroups: z.string().trim().max(120).nullable().optional(),
+  rounds: z.number().int().positive().max(100).nullable().optional(),
+  roundMinutes: z.number().positive().max(60).nullable().optional(),
+  sets: z.array(workoutSetSchema).max(40, "No máximo 40 exercícios por treino.").optional(),
+};
+
+export const workoutSchema = z.object({
+  kind: z.string().trim().min(1, "Informe o tipo de exercício.").max(80).optional(),
+  category: workoutDetailFields.category.optional(),
+  modality: workoutDetailFields.modality,
+  durationMinutes: positiveInt("Informe uma duração maior que zero.", 600),
+  distanceKm: z.number().positive().max(500).nullable().optional(),
+  calories: z.number().int().positive().max(5000).nullable().optional(),
+  intensity: z.enum(["leve", "moderada", "intensa"]).nullable().optional(),
+  rpe: workoutDetailFields.rpe,
+  muscleGroups: workoutDetailFields.muscleGroups,
+  rounds: workoutDetailFields.rounds,
+  roundMinutes: workoutDetailFields.roundMinutes,
+  sets: workoutDetailFields.sets,
+  notes: noteSchema.nullable().optional(),
+  performedAt: dateTimeSchema.optional(),
+}).refine((value) => Boolean(value.kind || value.category), { message: "Informe o tipo de exercício.", path: ["category"] });
 
 export const workoutUpdateSchema = z
   .object({
     kind: z.string().trim().min(1, "Informe o tipo de exercício.").max(80).optional(),
+    category: workoutDetailFields.category.optional(),
+    modality: workoutDetailFields.modality,
     durationMinutes: positiveInt("Informe uma duração maior que zero.", 600).optional(),
     distanceKm: z.number().positive().max(500).nullable().optional(),
     calories: z.number().int().positive().max(5000).nullable().optional(),
     intensity: z.enum(["leve", "moderada", "intensa"]).nullable().optional(),
+    rpe: workoutDetailFields.rpe,
+    muscleGroups: workoutDetailFields.muscleGroups,
+    rounds: workoutDetailFields.rounds,
+    roundMinutes: workoutDetailFields.roundMinutes,
+    sets: workoutDetailFields.sets,
     notes: noteSchema.nullable().optional(),
     performedAt: dateTimeSchema.optional(),
   })

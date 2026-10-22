@@ -484,6 +484,42 @@ export interface Workout {
   intensity: "leve" | "moderada" | "intensa" | null;
   notes: string | null;
   performed_at: string;
+  /** Campos detalhados (migration 0066) — null em registros antigos. */
+  category?: WorkoutCategory | null;
+  modality?: FightModality | null;
+  rpe?: number | null;
+  muscle_groups?: string | null;
+  rounds?: number | null;
+  round_minutes?: number | null;
+  sets?: WorkoutSet[];
+}
+
+export type WorkoutCategory =
+  | "musculacao"
+  | "luta"
+  | "corrida"
+  | "caminhada"
+  | "bike"
+  | "natacao"
+  | "crossfit"
+  | "funcional"
+  | "hiit"
+  | "pilates"
+  | "yoga"
+  | "alongamento"
+  | "esporte_coletivo"
+  | "outro";
+
+export type FightModality = "muay_thai" | "jiu_jitsu" | "boxe" | "mma" | "judo" | "kickboxing" | "karate" | "wrestling" | "outra";
+
+export interface WorkoutSet {
+  id: string;
+  workout_id: string;
+  position: number;
+  exercise: string;
+  sets: number | null;
+  reps: number | null;
+  load_kg: number | null;
 }
 
 export interface MoodEntry {
