@@ -12,6 +12,17 @@ export const contractTaskSchema = z.object({
   estimateMinutes: z.number().int().min(1).max(24 * 60).optional().nullable(),
 });
 
+const newGoalSchema = z.object({
+  title: z.string().trim().min(2, "Dê um título à meta.").max(200),
+  dueDate: dateOnly.optional().nullable(),
+});
+
+const newProjectSchema = z.object({
+  name: z.string().trim().min(2, "Dê um nome ao projeto.").max(200),
+  startDate: dateOnly.optional().nullable(),
+  dueDate: dateOnly.optional().nullable(),
+});
+
 export const createContractSchema = z.object({
   title: z.string().trim().min(2, "Dê um nome ao contrato.").max(160),
   description: z.string().trim().max(2000).optional().nullable(),
@@ -20,6 +31,12 @@ export const createContractSchema = z.object({
   dueDate: dateOnly.optional().nullable(),
   aiGenerated: z.boolean().optional(),
   tasks: z.array(contractTaskSchema).max(30).optional(),
+  // Vínculo com Meta/Projeto: um já existente (por id) ou um novo a criar
+  // junto (ex.: sugestão da IA aceita pelo usuário). "new*" tem prioridade.
+  goalId: z.string().trim().min(1).optional().nullable(),
+  projectId: z.string().trim().min(1).optional().nullable(),
+  newGoal: newGoalSchema.optional().nullable(),
+  newProject: newProjectSchema.optional().nullable(),
 });
 
 export const updateContractSchema = z.object({
@@ -29,6 +46,9 @@ export const updateContractSchema = z.object({
   difficulty: z.enum(DIFFICULTIES).optional(),
   dueDate: dateOnly.optional().nullable(),
   status: z.enum(["ativo", "arquivado"]).optional(),
+  // null desvincula; omitido não mexe no vínculo atual.
+  goalId: z.string().trim().min(1).optional().nullable(),
+  projectId: z.string().trim().min(1).optional().nullable(),
 });
 
 export const addTasksSchema = z.object({ tasks: z.array(contractTaskSchema).min(1).max(30) });
@@ -39,6 +59,8 @@ export const proposeContractSchema = z.object({
   goal: z.string().trim().min(8, "Descreva o objetivo com um pouco mais de detalhe.").max(1200),
   difficulty: z.enum(DIFFICULTIES).optional(),
   deadlineDays: z.number().int().min(1).max(365).optional(),
+  // Liga/desliga a sugestão de Meta/Projeto pela IA (true por padrão).
+  suggestGoalProject: z.boolean().optional(),
 });
 
 export const proposeTasksSchema = z.object({ hint: z.string().trim().max(600).optional() });

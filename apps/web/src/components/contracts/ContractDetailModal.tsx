@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Archive, ArchiveRestore, CheckSquare, Plus, Sparkles, Square, Trash2, Wand2 } from "lucide-react";
+import { Archive, ArchiveRestore, CheckSquare, FolderKanban, Plus, Sparkles, Square, Target, Trash2, Wand2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { RPGBadge, RPGButton, RPGProgressBar } from "@/components/rpg";
+import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
 import { useContractAI, useContractDetail, useContractRefresh, useContracts } from "@/hooks/useContracts";
 import { taskService } from "@/services/taskService";
 import { DIFFICULTIES, difficultyLabel } from "@/services/gamificationService";
@@ -98,25 +98,30 @@ export function ContractDetailModal({ id, onClose, onToast }: { id: string; onCl
       {isError && <p className="text-sm text-rpg-red py-6" role="alert">Não foi possível carregar o contrato.</p>}
       {c && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <RPGBadge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</RPGBadge>
-            {c.aiGenerated && <RPGBadge tone="purple" icon={<Sparkles size={9} aria-hidden />}>Criado com IA</RPGBadge>}
-            {c.dueDate && <span className="text-xs text-rpg-muted">Prazo: {fmtDate(c.dueDate)}</span>}
-            <label className="ml-auto text-[11px] text-rpg-muted flex items-center gap-1.5">
-              Dificuldade
-              <select
-                value={c.difficulty}
-                disabled={c.status !== "ativo" || update.isPending}
-                onChange={(e) => update.mutate({ id, input: { difficulty: e.target.value as Difficulty } })}
-                className={`${rpgField} !w-auto !py-1`}
-                style={{ borderRadius: 3 }}
-              >
-                {DIFFICULTIES.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-              </select>
-            </label>
-          </div>
-          {c.objective && <p className="text-sm text-rpg-text">🎯 {c.objective}</p>}
-          {c.description && <p className="text-sm text-rpg-muted whitespace-pre-line">{c.description}</p>}
+          {/* Pergaminho do contrato: cabeçalho, objetivo e vínculos ganham a textura de contrato real. */}
+          <RPGPanel variant="parchment" bodyClassName="space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <RPGBadge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</RPGBadge>
+              {c.aiGenerated && <RPGBadge tone="purple" icon={<Sparkles size={9} aria-hidden />}>Criado com IA</RPGBadge>}
+              {c.goalTitle && <RPGBadge tone="blue" icon={<Target size={9} aria-hidden />}>{c.goalTitle}</RPGBadge>}
+              {c.projectName && <RPGBadge tone="cyan" icon={<FolderKanban size={9} aria-hidden />}>{c.projectName}</RPGBadge>}
+              {c.dueDate && <span className="text-xs text-rpg-ink/80">Prazo: {fmtDate(c.dueDate)}</span>}
+              <label className="ml-auto text-[11px] text-rpg-ink/80 flex items-center gap-1.5">
+                Dificuldade
+                <select
+                  value={c.difficulty}
+                  disabled={c.status !== "ativo" || update.isPending}
+                  onChange={(e) => update.mutate({ id, input: { difficulty: e.target.value as Difficulty } })}
+                  className={`${rpgField} !w-auto !py-1 !text-rpg-ink`}
+                  style={{ borderRadius: 3 }}
+                >
+                  {DIFFICULTIES.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+                </select>
+              </label>
+            </div>
+            {c.objective && <p className="text-sm text-rpg-ink font-semibold">🎯 {c.objective}</p>}
+            {c.description && <p className="text-sm text-rpg-ink/80 whitespace-pre-line">{c.description}</p>}
+          </RPGPanel>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
             <div className="rpg-panel p-2"><p className="font-pixel text-lg text-rpg-gold-light">+{c.reward.xp} XP</p><p className="text-[10px] text-rpg-muted">bônus ao cumprir</p></div>

@@ -31,11 +31,20 @@ export interface MoodEntryInput {
   recordedAt?: string;
 }
 
+/** Monta "?date=...&tz=..." — tz e o offset de Date.prototype.getTimezoneOffset()
+ * de quem esta usando o app, pra o backend filtrar "hoje"/"o dia X" no fuso
+ * certo em vez do fuso do servidor (ver localDayBoundsUtc no health.routes.ts). */
+function dateQuery(date?: string, tzOffsetMinutes?: number) {
+  if (!date) return "";
+  const tz = tzOffsetMinutes ?? new Date().getTimezoneOffset();
+  return `?date=${date}&tz=${tz}`;
+}
+
 export const healthService = {
-  summary: (date?: string) => api.get<HealthSummary>(`/health/summary${date ? `?date=${date}` : ""}`),
+  summary: (date?: string, tzOffsetMinutes?: number) => api.get<HealthSummary>(`/health/summary${dateQuery(date, tzOffsetMinutes)}`),
   correlations: () => api.get<HealthCorrelation[]>("/health/correlations"),
 
-  listWater: (date?: string) => api.get<WaterEntry[]>(`/health/water${date ? `?date=${date}` : ""}`),
+  listWater: (date?: string, tzOffsetMinutes?: number) => api.get<WaterEntry[]>(`/health/water${dateQuery(date, tzOffsetMinutes)}`),
   addWater: (input: number | WaterEntryInput) =>
     api.post<WaterEntry>("/health/water", typeof input === "number" ? { amountMl: input } : input),
   updateWater: (id: string, patch: Partial<WaterEntryInput>) => api.patch<WaterEntry>(`/health/water/${id}`, patch),

@@ -70,7 +70,11 @@ export function TaskCard({
       draggable={dragProps.draggable}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
-        dragProps.onDragStart();
+        // Adia a mudanca de estado (que altera a opacidade do card) para depois
+        // que o navegador ja capturou a imagem de arraste: mudar o DOM de forma
+        // sincrona dentro do "dragstart" cancela o drag nativo em alguns
+        // navegadores (Chrome/Edge), o que fazia o arrastar parar de funcionar.
+        setTimeout(() => dragProps.onDragStart(), 0);
       }}
       onDragEnd={dragProps.onDragEnd}
       className={`group relative w-full rounded-xl bg-paper-raised dark:bg-ink-raised border shadow-card cursor-grab active:cursor-grabbing transition-all hover:-translate-y-px hover:shadow-md rpg:border-2 rpg:bg-rpg-panel rpg:shadow-rpg rpg:hover:bg-rpg-panel-hover ${

@@ -14,6 +14,10 @@ export function useContracts(enabled = true) {
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: KEY });
     void qc.invalidateQueries({ queryKey: ["tasks"] });
+    // Um contrato pode criar/anexar Meta ou Projeto novo: garante que essas telas
+    // reflitam o resultado sem precisar de refresh manual do usuario.
+    void qc.invalidateQueries({ queryKey: ["goals"] });
+    void qc.invalidateQueries({ queryKey: ["projects"] });
   };
 
   const create = useMutation({ mutationFn: (input: ContractInput) => contractsService.create(input), onSuccess: invalidate });

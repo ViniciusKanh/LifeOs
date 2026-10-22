@@ -10,9 +10,24 @@ const KEYS = {
   correlations: ["health", "correlations"],
 };
 
+/** Chave "hoje" (YYYY-MM-DD) no fuso do navegador de quem esta usando o app. */
+function localTodayKey() {
+  const d = new Date();
+  const month = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
 /** Reaproveitado por Dashboard, Hoje e a própria tela de Saúde. */
 export function useHealthSummary() {
-  const query = useQuery({ queryKey: KEYS.summary, queryFn: () => healthService.summary() });
+  // Sempre manda a data e o fuso de quem esta usando o app: sem isso, o
+  // backend caia pro fuso do servidor e "hoje" podia virar um dia errado
+  // perto da meia-noite (ver localDayBoundsUtc em health.routes.ts).
+  const today = localTodayKey();
+  const query = useQuery({
+    queryKey: [...KEYS.summary, today],
+    queryFn: () => healthService.summary(today, new Date().getTimezoneOffset()),
+  });
   return { summary: query.data ?? null, isLoading: query.isLoading };
 }
 

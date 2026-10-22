@@ -1,4 +1,4 @@
-import { CalendarClock, ScrollText, Sparkles } from "lucide-react";
+import { CalendarClock, FolderKanban, ScrollText, Sparkles, Target } from "lucide-react";
 import { RPGBadge, RPGProgressBar } from "@/components/rpg";
 import { difficultyLabel } from "@/services/gamificationService";
 import type { Contract } from "@/services/contractsService";
@@ -25,6 +25,8 @@ export function ContractCard({ contract: c, onOpen }: { contract: Contract; onOp
             <RPGBadge tone={DIFFICULTY_TONE[c.difficulty]}>{difficultyLabel(c.difficulty)}</RPGBadge>
             <RPGBadge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</RPGBadge>
             {c.aiGenerated && <RPGBadge tone="purple" icon={<Sparkles size={9} aria-hidden />}>IA</RPGBadge>}
+            {c.goalTitle && <RPGBadge tone="blue" icon={<Target size={9} aria-hidden />}>Meta</RPGBadge>}
+            {c.projectName && <RPGBadge tone="cyan" icon={<FolderKanban size={9} aria-hidden />}>Projeto</RPGBadge>}
           </div>
         </div>
       </div>

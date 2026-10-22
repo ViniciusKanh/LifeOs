@@ -23,6 +23,29 @@ function minutesBetween(a: string, b: string) {
   return diff > 0 ? Math.round(diff / 60000) : null;
 }
 
+/**
+ * Limites (em UTC) do "dia" YYYY-MM-DD no fuso do usuario.
+ *
+ * O banco guarda tudo em UTC e o SQLite `date()` so entende UTC, entao
+ * filtrar com `date(recorded_at)` compara o dia em UTC - nao no fuso de
+ * quem esta usando o app (ex.: Brasil, UTC-3). Isso fazia registros do
+ * fim da noite "sumirem" do dia certo (o dia virava antes da hora local).
+ *
+ * `tzOffsetMinutes` usa a mesma convencao de `Date.prototype.getTimezoneOffset()`
+ * (positivo para fusos atras de UTC, ex.: +180 no Brasil). O front sempre
+ * envia o proprio offset, entao o calculo vale para qualquer usuario/fuso.
+ */
+function localDayBoundsUtc(dateStr: string, tzOffsetMinutes: number) {
+  const localMidnightAsUtcMs = Date.parse(`${dateStr}T00:00:00.000Z`);
+  const startMs = localMidnightAsUtcMs + tzOffsetMinutes * 60_000;
+  return { start: new Date(startMs).toISOString(), end: new Date(startMs + 86_400_000).toISOString() };
+}
+
+/** "Hoje" (YYYY-MM-DD) no fuso informado, sem depender do fuso do servidor. */
+function todayInTz(tzOffsetMinutes: number) {
+  return new Date(Date.now() - tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
 function firstValidationMessage(error: { issues: Array<{ message: string }> }) {
   return error.issues[0]?.message ?? "Dados inválidos.";
 }
@@ -31,14 +54,16 @@ function firstValidationMessage(error: { issues: Array<{ message: string }> }) {
 
 /** GET /api/health/water?date=YYYY-MM-DD */
 healthRouter.get("/water", async (req, res) => {
-  const { date } = req.query as { date?: string };
+  const { date, tz } = req.query as { date?: string; tz?: string };
   const db = getDb();
   const args: Array<string> = [req.user!.id];
   let sql = "SELECT * FROM water_entries WHERE owner_id = ?";
   if (date) {
-    // Intervalo do dia (usa o índice owner_id + recorded_at em vez de varrer o histórico).
-    sql += " AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')";
-    args.push(date, date);
+    // Intervalo do dia no fuso de quem pediu (ver localDayBoundsUtc) — usa o
+    // índice owner_id + recorded_at em vez de varrer o histórico.
+    const { start, end } = localDayBoundsUtc(date, Number(tz ?? 0) || 0);
+    sql += " AND recorded_at >= ? AND recorded_at < ?";
+    args.push(start, end);
   }
   sql += " ORDER BY recorded_at DESC";
   const result = await db.execute({ sql, args });
@@ -413,22 +438,26 @@ healthRouter.get("/correlations", async (req, res) => {
 
 /** GET /api/health/summary?date=YYYY-MM-DD — usado no Dashboard e na tela Hoje */
 healthRouter.get("/summary", async (req, res) => {
-  const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+  const tzOffsetMinutes = Number(req.query.tz ?? 0) || 0;
+  // Sem "date" explicito, usa "hoje" no fuso de quem pediu (nao o fuso do
+  // servidor) — o front sempre deveria mandar os dois, isto e so um fallback.
+  const date = (req.query.date as string) || todayInTz(tzOffsetMinutes);
+  const { start, end } = localDayBoundsUtc(date, tzOffsetMinutes);
   const db = getDb();
   const ownerId = req.user!.id;
 
   const [waterToday, lastSleep, workoutsToday, latestMood] = await Promise.all([
     db.execute({
-      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
-      args: [ownerId, date],
+      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND (recorded_at >= ?2 AND recorded_at < ?3)",
+      args: [ownerId, start, end],
     }),
     db.execute({
       sql: "SELECT duration_minutes, quality FROM sleep_entries WHERE owner_id = ? ORDER BY went_to_bed_at DESC LIMIT 1",
       args: [ownerId],
     }),
     db.execute({
-      sql: "SELECT COUNT(*) AS total, COALESCE(SUM(duration_minutes), 0) AS minutes FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
-      args: [ownerId, date],
+      sql: "SELECT COUNT(*) AS total, COALESCE(SUM(duration_minutes), 0) AS minutes FROM workouts WHERE owner_id = ? AND (performed_at >= ?2 AND performed_at < ?3)",
+      args: [ownerId, start, end],
     }),
     db.execute({
       sql: "SELECT mood, energy, stress FROM mood_entries WHERE owner_id = ? ORDER BY recorded_at DESC LIMIT 1",

@@ -175,10 +175,12 @@ tasksRouter.get("/", async (req, res) => {
 
 /**
  * GET /api/tasks/focus?limit=5 — Priorização automática ("Foque
- * nisso agora"): as N tarefas em aberto do usuário com maior score
- * de foco (prazo + prioridade + impacto/urgência/esforço, com
- * penalidade para tarefas bloqueadas por dependência). Precisa vir
- * ANTES de "/:id" nesta rota, senão "focus" seria capturado como id.
+ * nisso agora" / Missão Principal): as N tarefas em aberto do usuário
+ * mais urgentes, em camadas simples (atrasada > vence hoje > vence essa
+ * semana > sem urgência de prazo; prioridade decide empate dentro de
+ * cada camada; bloqueada por dependência sempre por último) — ver
+ * priorityService.ts para a ordem completa. Precisa vir ANTES de "/:id"
+ * nesta rota, senão "focus" seria capturado como id.
  */
 tasksRouter.get("/focus", async (req, res) => {
   const db = getDb();

@@ -24,7 +24,7 @@ import {
 } from "./healthUtils";
 import type { HealthEditTarget } from "./HealthHistoryModal";
 
-const WORKOUT_TYPES = ["Caminhada", "Corrida", "Musculacao", "Ciclismo", "Natacao", "Alongamento", "Yoga", "Outro"];
+const WORKOUT_TYPES = ["Caminhada", "Corrida", "Musculacao", "Luta", "Crossfit", "Funcional", "Ciclismo", "Natacao", "Alongamento", "Yoga", "Pilates", "HIIT", "Outro"];
 
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;

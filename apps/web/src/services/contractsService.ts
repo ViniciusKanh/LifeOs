@@ -20,6 +20,11 @@ export interface Contract {
   progressPct: number;
   reward: { xp: number; coins: number };
   earned: { xp: number; coins: number };
+  /** Meta/Projeto anexados a este contrato (muitos contratos representam um objetivo maior). */
+  goalId: string | null;
+  goalTitle: string | null;
+  projectId: string | null;
+  projectName: string | null;
 }
 
 export interface ContractTaskInput {
@@ -31,6 +36,19 @@ export interface ContractTaskInput {
   estimateMinutes?: number | null;
 }
 
+/** Dados para criar uma Meta nova diretamente a partir do contrato. */
+export interface NewGoalInput {
+  title: string;
+  dueDate?: string | null;
+}
+
+/** Dados para criar um Projeto novo diretamente a partir do contrato. */
+export interface NewProjectInput {
+  name: string;
+  startDate?: string | null;
+  dueDate?: string | null;
+}
+
 export interface ContractInput {
   title: string;
   description?: string | null;
@@ -39,6 +57,11 @@ export interface ContractInput {
   dueDate?: string | null;
   aiGenerated?: boolean;
   tasks?: ContractTaskInput[];
+  /** Meta/Projeto existente a anexar, ou dados para criar um novo. */
+  goalId?: string | null;
+  projectId?: string | null;
+  newGoal?: NewGoalInput | null;
+  newProject?: NewProjectInput | null;
 }
 
 /** Tarefa sugerida pela IA (ainda não salva). */
@@ -51,6 +74,19 @@ export interface ProposedTask {
   estimateMinutes: number | null;
 }
 
+/** Meta sugerida pela IA junto com o contrato (quando fizer sentido). */
+export interface SuggestedGoal {
+  title: string;
+  dueInDays: number | null;
+}
+
+/** Projeto sugerido pela IA junto com o contrato (quando fizer sentido). */
+export interface SuggestedProject {
+  name: string;
+  startInDays: number;
+  dueInDays: number | null;
+}
+
 export interface ContractProposal {
   title: string;
   description: string | null;
@@ -58,6 +94,8 @@ export interface ContractProposal {
   difficulty: Difficulty;
   dueInDays: number | null;
   tasks: ProposedTask[];
+  goal: SuggestedGoal | null;
+  project: SuggestedProject | null;
 }
 
 export const contractsService = {
@@ -69,7 +107,7 @@ export const contractsService = {
   remove: (id: string, deleteOpenTasks: boolean) => api.delete<void>(`/contracts/${id}${deleteOpenTasks ? "?tasks=open" : ""}`),
   addTasks: (id: string, tasks: ContractTaskInput[]) => api.post<Task[]>(`/contracts/${id}/tasks`, { tasks }),
   link: (id: string, taskId: string, linked: boolean) => api.post<void>(`/contracts/${id}/link`, { taskId, linked }),
-  propose: (input: { goal: string; difficulty?: Difficulty; deadlineDays?: number }) =>
+  propose: (input: { goal: string; difficulty?: Difficulty; deadlineDays?: number; suggestGoalProject?: boolean }) =>
     api.post<{ proposal: ContractProposal }>("/contracts/ai/propose", input),
   proposeTasks: (id: string, hint?: string) => api.post<{ tasks: ProposedTask[] }>(`/contracts/${id}/ai/tasks`, { hint }),
 };

@@ -23,6 +23,19 @@ export interface ContractTaskInput {
   estimateMinutes?: number | null;
 }
 
+/** Meta nova a criar junto do contrato (quando o usuário não escolheu uma já existente). */
+export interface NewGoalInput {
+  title: string;
+  dueDate?: string | null;
+}
+
+/** Projeto novo a criar junto do contrato (idem, para objetivos com várias frentes). */
+export interface NewProjectInput {
+  name: string;
+  startDate?: string | null;
+  dueDate?: string | null;
+}
+
 export interface ContractInput {
   title: string;
   description?: string | null;
@@ -31,6 +44,14 @@ export interface ContractInput {
   dueDate?: string | null;
   aiGenerated?: boolean;
   tasks?: ContractTaskInput[];
+  /** Meta já existente (do próprio usuário) a vincular. Ignorado se `newGoal` vier junto. */
+  goalId?: string | null;
+  /** Projeto já existente (do próprio usuário) a vincular. Ignorado se `newProject` vier junto. */
+  projectId?: string | null;
+  /** Cria a Meta junto com o contrato e já vincula (ex.: sugestão da IA aceita pelo usuário). */
+  newGoal?: NewGoalInput | null;
+  /** Cria o Projeto junto com o contrato e já vincula. */
+  newProject?: NewProjectInput | null;
 }
 
 export class ContractError extends Error {
@@ -57,9 +78,17 @@ export interface ContractView {
   reward: { xp: number; coins: number };
   /** XP/moedas já recebidos pelas tarefas e pelo bônus deste contrato. */
   earned: { xp: number; coins: number };
+  /** Meta vinculada (muitos contratos representam um objetivo maior que também vale acompanhar como Meta). */
+  goalId: string | null;
+  goalTitle: string | null;
+  /** Projeto vinculado — mesma ideia, para objetivos com várias frentes. */
+  projectId: string | null;
+  projectName: string | null;
 }
 
 const CONTRACT_SELECT = `SELECT c.*,
+    g.title AS goal_title,
+    p.name AS project_name,
     (SELECT COUNT(*) FROM tasks t WHERE t.contract_id = c.id AND t.owner_id = c.owner_id) AS total_tasks,
     (SELECT COUNT(*) FROM tasks t WHERE t.contract_id = c.id AND t.owner_id = c.owner_id AND t.status = 'Concluído') AS done_tasks,
     (SELECT COALESCE(SUM(x.xp), 0) FROM xp_events x WHERE x.owner_id = c.owner_id AND (
@@ -68,7 +97,9 @@ const CONTRACT_SELECT = `SELECT c.*,
     (SELECT COALESCE(SUM(l.amount), 0) FROM coin_ledger l WHERE l.owner_id = c.owner_id AND l.amount > 0 AND (
         (l.source_type = 'contract' AND l.source_id = c.id) OR
         (l.source_type = 'task' AND l.source_id IN (SELECT id FROM tasks t WHERE t.contract_id = c.id AND t.owner_id = c.owner_id)))) AS earned_coins
-  FROM contracts c`;
+  FROM contracts c
+  LEFT JOIN goals g ON g.id = c.goal_id
+  LEFT JOIN projects p ON p.id = c.project_id`;
 
 function mapContract(row: Record<string, unknown>, rewards: Awaited<ReturnType<typeof getDifficultyRewards>>): ContractView {
   const difficulty = isDifficulty(row.difficulty) ? row.difficulty : "medio";
@@ -90,6 +121,10 @@ function mapContract(row: Record<string, unknown>, rewards: Awaited<ReturnType<t
     progressPct: total === 0 ? 0 : Math.round((done / total) * 100),
     reward: { xp: rewards[difficulty].contractXp, coins: rewards[difficulty].contractCoins },
     earned: { xp: Number(row.earned_xp ?? 0), coins: Number(row.earned_coins ?? 0) },
+    goalId: row.goal_id == null ? null : String(row.goal_id),
+    goalTitle: row.goal_title == null ? null : String(row.goal_title),
+    projectId: row.project_id == null ? null : String(row.project_id),
+    projectName: row.project_name == null ? null : String(row.project_name),
   };
 }
 
@@ -161,13 +196,61 @@ function taskInsert(ownerId: string, contractId: string, t: ReturnType<typeof wi
   };
 }
 
+/** Confere que o id pertence ao próprio usuário antes de vincular (nunca confia em id vindo do cliente sem checar). */
+async function assertOwned(db: Client, table: "goals" | "projects", ownerId: string, id: string, notFoundMessage: string): Promise<void> {
+  const r = await db.execute({ sql: `SELECT id FROM ${table} WHERE id = ? AND owner_id = ?`, args: [id, ownerId] });
+  if (r.rows.length === 0) throw new ContractError(notFoundMessage, 404);
+}
+
+/**
+ * Resolve o vínculo de Meta/Projeto do contrato: usa o id existente informado
+ * (após validar que é do próprio usuário) ou cria um registro novo (ex.: a
+ * sugestão da IA que o usuário aceitou), com a data estipulada a partir de
+ * hoje. Sem nenhum dos dois, o contrato simplesmente não fica vinculado.
+ */
+async function resolveGoalProjectLinks(
+  db: Client,
+  ownerId: string,
+  input: Pick<ContractInput, "goalId" | "projectId" | "newGoal" | "newProject">,
+): Promise<{ goalId: string | null; projectId: string | null; extraStatements: Array<{ sql: string; args: Array<string | null> }> }> {
+  const extraStatements: Array<{ sql: string; args: Array<string | null> }> = [];
+  let goalId: string | null = null;
+  let projectId: string | null = null;
+
+  if (input.newGoal?.title?.trim()) {
+    goalId = nanoid();
+    extraStatements.push({
+      sql: `INSERT INTO goals (id, owner_id, title, due_date) VALUES (?, ?, ?, ?)`,
+      args: [goalId, ownerId, input.newGoal.title.trim().slice(0, 200), input.newGoal.dueDate ?? null],
+    });
+  } else if (input.goalId) {
+    await assertOwned(db, "goals", ownerId, input.goalId, "Meta inválida.");
+    goalId = input.goalId;
+  }
+
+  if (input.newProject?.name?.trim()) {
+    projectId = nanoid();
+    extraStatements.push({
+      sql: `INSERT INTO projects (id, owner_id, name, start_date, due_date) VALUES (?, ?, ?, ?, ?)`,
+      args: [projectId, ownerId, input.newProject.name.trim().slice(0, 200), input.newProject.startDate ?? null, input.newProject.dueDate ?? null],
+    });
+  } else if (input.projectId) {
+    await assertOwned(db, "projects", ownerId, input.projectId, "Projeto inválido.");
+    projectId = input.projectId;
+  }
+
+  return { goalId, projectId, extraStatements };
+}
+
 export async function createContract(db: Client, ownerId: string, input: ContractInput): Promise<ContractView> {
   const id = nanoid();
+  const { goalId, projectId, extraStatements } = await resolveGoalProjectLinks(db, ownerId, input);
   const statements = [
+    ...extraStatements,
     {
-      sql: `INSERT INTO contracts (id, owner_id, title, description, objective, difficulty, due_date, ai_generated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [id, ownerId, input.title.trim(), input.description ?? null, input.objective ?? null, input.difficulty, input.dueDate ?? null, input.aiGenerated ? 1 : 0],
+      sql: `INSERT INTO contracts (id, owner_id, title, description, objective, difficulty, due_date, ai_generated, goal_id, project_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [id, ownerId, input.title.trim(), input.description ?? null, input.objective ?? null, input.difficulty, input.dueDate ?? null, input.aiGenerated ? 1 : 0, goalId, projectId],
     },
     ...(input.tasks ?? []).map((t) =>
       taskInsert(ownerId, id, withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null })),
@@ -181,10 +264,20 @@ export async function updateContract(
   db: Client,
   ownerId: string,
   id: string,
-  input: Partial<Pick<ContractInput, "title" | "description" | "objective" | "difficulty" | "dueDate">> & { status?: "ativo" | "arquivado" },
+  input: Partial<Pick<ContractInput, "title" | "description" | "objective" | "difficulty" | "dueDate" | "goalId" | "projectId">> & { status?: "ativo" | "arquivado" },
 ): Promise<ContractView> {
   const current = await getContract(db, ownerId, id);
-  const map: Record<string, string> = { title: "title", description: "description", objective: "objective", difficulty: "difficulty", dueDate: "due_date" };
+  if (input.goalId) await assertOwned(db, "goals", ownerId, input.goalId, "Meta inválida.");
+  if (input.projectId) await assertOwned(db, "projects", ownerId, input.projectId, "Projeto inválido.");
+  const map: Record<string, string> = {
+    title: "title",
+    description: "description",
+    objective: "objective",
+    difficulty: "difficulty",
+    dueDate: "due_date",
+    goalId: "goal_id",
+    projectId: "project_id",
+  };
   const sets: string[] = [];
   const args: Array<string | null> = [];
   for (const [key, col] of Object.entries(map)) {
@@ -240,6 +333,19 @@ export async function linkTask(db: Client, ownerId: string, contractId: string |
 
 /* ------------------------------- IA (Gemini) ------------------------------- */
 
+/** Meta sugerida pela IA pra acompanhar o objetivo do contrato — null quando a IA achou que não vale a pena. */
+export interface SuggestedGoal {
+  title: string;
+  dueInDays: number | null;
+}
+
+/** Projeto sugerido pela IA — mesma ideia, pra objetivos com várias frentes. */
+export interface SuggestedProject {
+  name: string;
+  startInDays: number;
+  dueInDays: number | null;
+}
+
 export interface ContractProposal {
   title: string;
   description: string | null;
@@ -247,6 +353,10 @@ export interface ContractProposal {
   difficulty: DifficultyKey;
   dueInDays: number | null;
   tasks: Array<Required<Pick<ContractTaskInput, "title">> & { description: string | null; priority: Priority; difficulty: DifficultyKey; dueInDays: number | null; estimateMinutes: number | null }>;
+  /** Presente só quando a IA achou que o objetivo é amplo o bastante pra também virar uma Meta. */
+  goal: SuggestedGoal | null;
+  /** Idem, para um Projeto (objetivo com várias frentes/etapas distintas). */
+  project: SuggestedProject | null;
 }
 
 const PRIORITIES: Priority[] = ["Baixa", "Média", "Alta"];
@@ -290,6 +400,55 @@ const TASK_RULES =
   "Cada tarefa DEVE ter: título com verbo no infinitivo; descrição de 1 a 2 frases dizendo o que fazer e como saber que terminou (critério de pronto); prioridade; dificuldade; dueInDays (dias a partir de hoje, dentro do prazo do contrato); estimateMinutes realista.";
 const AI_OPTS = { timeoutMs: 40_000, retries: 1, maxOutputTokens: 4096 };
 
+/**
+ * Schema de Meta/Projeto sugeridos: sempre tem "include" porque a saída
+ * estruturada do Gemini não lida bem com campos opcionais/nulos no topo —
+ * é mais confiável pedir um objeto sempre presente e deixar a IA marcar
+ * include=false quando não fizer sentido (objetivo pontual, de uma tarefa só).
+ */
+const GOAL_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    include: { type: "BOOLEAN" },
+    title: { type: "STRING" },
+    dueInDays: { type: "INTEGER" },
+  },
+  required: ["include", "title", "dueInDays"],
+} as const;
+const PROJECT_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    include: { type: "BOOLEAN" },
+    name: { type: "STRING" },
+    startInDays: { type: "INTEGER" },
+    dueInDays: { type: "INTEGER" },
+  },
+  required: ["include", "name", "startInDays", "dueInDays"],
+} as const;
+const GOAL_PROJECT_RULES = `Decida também se esse objetivo é amplo o bastante pra também virar uma Meta pessoal e/ou um Projeto do LifeOS (não apenas uma lista pontual de tarefas):
+- goal.include=true quando o objetivo é algo que vale acompanhar como Meta de longo prazo (ex.: "aprender espanhol", "perder peso"), com title curto e dueInDays estimado a partir de HOJE (coerente com o prazo do contrato, nunca invente um prazo maior que o do contrato quando ele existir).
+- project.include=true quando o objetivo tem várias frentes/etapas distintas que merecem virar um Projeto (ex.: "lançar meu site pessoal"), com name curto, startInDays (normalmente 0, hoje) e dueInDays, ambos a partir de HOJE.
+- Se o objetivo for pontual (uma tarefa ou um contrato simples), retorne include=false nos dois — não force Meta/Projeto onde não faz sentido.`;
+
+function sanitizeGoal(raw: unknown): SuggestedGoal | null {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  if (o.include !== true) return null;
+  const title = str(o.title, 200);
+  if (!title) return null;
+  const due = typeof o.dueInDays === "number" && Number.isFinite(o.dueInDays) ? Math.min(730, Math.max(1, Math.round(o.dueInDays))) : null;
+  return { title, dueInDays: due };
+}
+
+function sanitizeProject(raw: unknown): SuggestedProject | null {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  if (o.include !== true) return null;
+  const name = str(o.name, 200);
+  if (!name) return null;
+  const start = typeof o.startInDays === "number" && Number.isFinite(o.startInDays) ? Math.min(365, Math.max(0, Math.round(o.startInDays))) : 0;
+  const due = typeof o.dueInDays === "number" && Number.isFinite(o.dueInDays) ? Math.min(730, Math.max(start + 1, Math.round(o.dueInDays))) : null;
+  return { name, startInDays: start, dueInDays: due };
+}
+
 export const DIFFICULTY_GUIDE = `Dificuldades válidas: "facil" (tarefas curtas, < 30 min), "medio" (1 a 2 h), "dificil" (meio dia, exige foco), "epico" (vários dias de esforço).`;
 
 async function userContextLine(db: Client, ownerId: string): Promise<string> {
@@ -304,20 +463,31 @@ type AiResult<T> = { ok: true; data: T } | { ok: false; message: string };
 
 const NO_AI = "A IA do LifeOS Copilot ainda não foi configurada. Peça a um administrador para cadastrar a API Key do Gemini.";
 
-/** Gemini propõe um contrato completo a partir do objetivo descrito. Nada é salvo. */
-export async function proposeContract(db: Client, ownerId: string, input: { goal: string; difficulty?: DifficultyKey; deadlineDays?: number }): Promise<AiResult<ContractProposal>> {
+/**
+ * Gemini propõe um contrato completo a partir do objetivo descrito. Nada é
+ * salvo. `suggestGoalProject` (true por padrão) é o parâmetro que liga/desliga
+ * a sugestão de Meta/Projeto — o usuário decide na tela se quer que a IA
+ * pense nisso ou só nas tarefas.
+ */
+export async function proposeContract(
+  db: Client,
+  ownerId: string,
+  input: { goal: string; difficulty?: DifficultyKey; deadlineDays?: number; suggestGoalProject?: boolean },
+): Promise<AiResult<ContractProposal>> {
   const config = await getGeminiConfig();
   if (!config) return { ok: false, message: NO_AI };
   const today = await todayKeyFor(db, ownerId);
-  const prompt = `Você é o LifeOS Copilot e ajuda a montar um "contrato": um objetivo pessoal concreto dividido em tarefas executáveis.
+  const wantsGoalProject = input.suggestGoalProject !== false;
+  const prompt = `Você é o LifeOS Copilot e ajuda a montar um "contrato": um pacto pessoal sério, com objetivo concreto e tarefas executáveis — não é uma lista de tarefas qualquer, é um compromisso que o usuário está assumindo consigo mesmo.
 Hoje é ${today}. ${await userContextLine(db, ownerId)}
 Objetivo descrito pelo usuário: """${input.goal.slice(0, 1200)}"""
 ${input.difficulty ? `Dificuldade desejada para o contrato: ${input.difficulty}.` : ""}
 ${input.deadlineDays ? `Prazo desejado: ${input.deadlineDays} dias a partir de hoje.` : ""}
 ${DIFFICULTY_GUIDE}
-Regras: entre 3 e 8 tarefas específicas e mensuráveis, em ordem de execução; não invente dados sobre o usuário; sem promessas de resultado.
+Regras: entre 3 e 8 tarefas específicas e mensuráveis, em ordem de execução; não invente dados sobre o usuário; sem promessas de resultado; tom direto e sério (é um contrato, não um bate-papo motivacional genérico).
 ${TASK_RULES}
-O contrato também precisa de description (1 a 3 frases) e objective (resultado esperado verificável).`;
+O título do contrato deve soar como um pacto/compromisso real (ex.: "Dominar os fundamentos de X até dezembro"), não um nome de tarefa solta. description: 1 a 3 frases explicando o que está sendo pactuado. objective: o resultado esperado, verificável (como saber que o contrato foi cumprido).
+${wantsGoalProject ? GOAL_PROJECT_RULES : 'Não sugira Meta nem Projeto desta vez: retorne goal.include=false e project.include=false.'}`;
   const result = await generateText(prompt, config, {
     ...AI_OPTS,
     responseSchema: {
@@ -329,8 +499,10 @@ O contrato também precisa de description (1 a 3 frases) e objective (resultado 
         difficulty: { type: "STRING", enum: ["facil", "medio", "dificil", "epico"] },
         dueInDays: { type: "INTEGER" },
         tasks: { type: "ARRAY", items: TASK_SCHEMA },
+        goal: GOAL_SCHEMA,
+        project: PROJECT_SCHEMA,
       },
-      required: ["title", "description", "objective", "difficulty", "dueInDays", "tasks"],
+      required: ["title", "description", "objective", "difficulty", "dueInDays", "tasks", "goal", "project"],
     },
   });
   if (!result.ok) return { ok: false, message: result.message };
@@ -343,7 +515,16 @@ O contrato também precisa de description (1 a 3 frases) e objective (resultado 
   const dueInDays = typeof json.dueInDays === "number" && Number.isFinite(json.dueInDays) ? Math.min(365, Math.max(1, Math.round(json.dueInDays))) : input.deadlineDays ?? null;
   return {
     ok: true,
-    data: { title, description: str(json.description, 600), objective: str(json.objective, 400), difficulty, dueInDays, tasks },
+    data: {
+      title,
+      description: str(json.description, 600),
+      objective: str(json.objective, 400),
+      difficulty,
+      dueInDays,
+      tasks,
+      goal: wantsGoalProject ? sanitizeGoal(json.goal) : null,
+      project: wantsGoalProject ? sanitizeProject(json.project) : null,
+    },
   };
 }
 
