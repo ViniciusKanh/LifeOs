@@ -15,7 +15,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest";
 
 export interface XpGrant {
   sourceType: XpSourceType;

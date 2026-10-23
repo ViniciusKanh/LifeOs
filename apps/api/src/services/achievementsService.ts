@@ -1,7 +1,8 @@
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
-import { awardUnlockedAchievements } from "./gamificationService.js";
+import { awardUnlockedAchievements, userTimezone } from "./gamificationService.js";
+import { localDayOfStored } from "./localDayService.js";
 
 type Db = ReturnType<typeof getDb>;
 type MetricMap = Record<string, number>;
@@ -51,39 +52,57 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
     );
   };
 
+  // Métricas "por dia" sobre timestamps UTC: o agrupamento é feito no dia
+  // local do usuário (GROUP BY date(...) no SQLite usaria o dia UTC e juntaria
+  // um treino das 22h com os do dia seguinte). A query devolve { at, v }.
+  let tzPromise: Promise<string> | null = null;
+  const addLocalDay = (key: string, sql: string, mode: "sum" | "count" | "days") => {
+    if (!requested.has(key)) return;
+    tzPromise ??= userTimezone(db, ownerId);
+    jobs.push(
+      Promise.all([tzPromise, db.execute({ sql, args: [ownerId] })]).then(([tz, result]) => {
+        const byDay = new Map<string, number>();
+        for (const row of result.rows as unknown as Array<{ at: unknown; v?: unknown }>) {
+          if (row.at == null) continue;
+          const day = localDayOfStored(String(row.at), tz);
+          byDay.set(day, (byDay.get(day) ?? 0) + (mode === "sum" ? Number(row.v ?? 0) : 1));
+        }
+        let best = 0;
+        for (const v of byDay.values()) if (v > best) best = v;
+        metrics[key] = mode === "days" ? byDay.size : best;
+      })
+    );
+  };
+
   addScalar("tasks_completed_total", "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído'");
   addScalar("books_completed_total", "SELECT COUNT(*) FROM books WHERE owner_id = ? AND status = 'Concluído'");
   addScalar("focus_minutes_total", "SELECT COALESCE(SUM(actual_minutes), 0) FROM focus_sessions WHERE owner_id = ? AND actual_minutes IS NOT NULL");
   addScalar("weekly_reviews_total", "SELECT COUNT(*) FROM weekly_reviews WHERE owner_id = ?");
   addScalar("goals_completed_total", "SELECT COUNT(*) FROM goals WHERE owner_id = ? AND status = 'done'");
   addScalar("workouts_total", "SELECT COUNT(*) FROM workouts WHERE owner_id = ?");
-  addScalar("water_days_total", "SELECT COUNT(DISTINCT date(recorded_at)) FROM water_entries WHERE owner_id = ?");
+  addLocalDay("water_days_total", "SELECT recorded_at AS at FROM water_entries WHERE owner_id = ?", "days");
   addScalar("study_minutes_total", "SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE owner_id = ?");
   addScalar("experiments_completed_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status = 'completed'");
 
   // Métricas "por dia" usadas por troféus customizados. O valor é o
   // melhor dia real do histórico do usuário, calculado só quando algum
   // troféu realmente precisa daquela métrica.
-  addScalar(
+  addLocalDay(
     "tasks_completed_in_day",
-    "SELECT COALESCE(MAX(n), 0) FROM (SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at IS NOT NULL GROUP BY date(completed_at))"
+    "SELECT completed_at AS at FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at IS NOT NULL",
+    "count"
   );
-  addScalar(
+  addLocalDay(
     "focus_minutes_in_day",
-    "SELECT COALESCE(MAX(n), 0) FROM (SELECT SUM(actual_minutes) AS n FROM focus_sessions WHERE owner_id = ? AND actual_minutes IS NOT NULL GROUP BY date(started_at))"
+    "SELECT started_at AS at, actual_minutes AS v FROM focus_sessions WHERE owner_id = ? AND actual_minutes IS NOT NULL",
+    "sum"
   );
   addScalar(
     "habit_checks_in_day",
     "SELECT COALESCE(MAX(n), 0) FROM (SELECT COUNT(DISTINCT habit_id) AS n FROM habit_entries WHERE owner_id = ? GROUP BY entry_date)"
   );
-  addScalar(
-    "water_ml_in_day",
-    "SELECT COALESCE(MAX(n), 0) FROM (SELECT SUM(amount_ml) AS n FROM water_entries WHERE owner_id = ? GROUP BY date(recorded_at))"
-  );
-  addScalar(
-    "workouts_in_day",
-    "SELECT COALESCE(MAX(n), 0) FROM (SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? GROUP BY date(performed_at))"
-  );
+  addLocalDay("water_ml_in_day", "SELECT recorded_at AS at, amount_ml AS v FROM water_entries WHERE owner_id = ?", "sum");
+  addLocalDay("workouts_in_day", "SELECT performed_at AS at FROM workouts WHERE owner_id = ?", "count");
 
   if (requested.has("habit_best_streak")) {
     jobs.push(

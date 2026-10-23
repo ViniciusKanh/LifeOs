@@ -60,14 +60,25 @@ function legacyLocal(userId: string): Partial<RpgPreferences> {
   }
 }
 
-function resolve(user: CurrentUser | null): RpgPreferences {
+/**
+ * Combina padrão + valores legados do navegador + o que veio do servidor e
+ * sanitiza (função pura, testável). Ordem de prioridade: servidor > legado > padrão.
+ */
+export function resolveRpgPreferences(
+  user: Pick<CurrentUser, "rpg_prefs" | "rpg_avatar_image"> | null,
+  legacy: Partial<RpgPreferences> = {},
+): RpgPreferences {
   if (!user) return DEFAULT_RPG_PREFERENCES;
-  const merged = { ...DEFAULT_RPG_PREFERENCES, ...legacyLocal(user.id), ...(user.rpg_prefs ?? {}) } as RpgPreferences;
+  const merged = { ...DEFAULT_RPG_PREFERENCES, ...legacy, ...(user.rpg_prefs ?? {}) } as RpgPreferences;
   // Nunca confia cegamente no salvo: banner/personagem desconhecidos voltam ao padrão.
   if (!(merged.banner in RPG_BANNERS)) merged.banner = DEFAULT_RPG_PREFERENCES.banner;
   if (!RPG_AVATARS.some((a) => a.id === merged.avatarId)) merged.avatarId = DEFAULT_RPG_AVATAR;
   if (merged.avatarMode === "custom" && !user.rpg_avatar_image) merged.avatarMode = "rpg";
   return merged;
+}
+
+function resolve(user: CurrentUser | null): RpgPreferences {
+  return resolveRpgPreferences(user, user ? legacyLocal(user.id) : {});
 }
 
 export function useRpgPreferences() {

@@ -1,6 +1,9 @@
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
 import { getDb } from "../db/client.js";
+import { todayKeyFor, userTimezone } from "./gamificationService.js";
+import { normalizeStoredUtc } from "./healthService.js";
+import { localDayOfStored, localDaysWhere, shiftDayKey } from "./localDayService.js";
 import { pickDailyWisdom, type DailyWisdom } from "../config/dailyWisdom.js";
 
 const JOURNAL_PIN_SALT_ROUNDS = 12;
@@ -190,9 +193,8 @@ export async function getJournalInsights(db: Db, ownerId: string): Promise<Journ
   }
 
   let currentStreak = 0;
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const cursor = new Date(today);
+  // "Hoje" no fuso do usuário: às 22h em São Paulo o dia UTC já virou.
+  const cursor = new Date(`${await todayKeyFor(db, ownerId)}T00:00:00Z`);
   if (!dates.has(cursor.toISOString().slice(0, 10))) {
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
@@ -219,14 +221,22 @@ export async function getJournalInsights(db: Db, ownerId: string): Promise<Journ
   // Correlação real com humor (Saúde): agrupa mood_entries por dia (pode
   // haver mais de um registro no mesmo dia) e separa em "dias que escrevi
   // no Diário" vs "dias que não escrevi", comparando a média de humor.
-  const moodByDay = await db.execute({
-    sql: `SELECT date(recorded_at) AS d, AVG(mood) AS avg_mood FROM mood_entries WHERE owner_id = ? GROUP BY d`,
-    args: [ownerId],
-  });
+  const [moodRows, tz] = await Promise.all([
+    db.execute({ sql: "SELECT recorded_at, mood FROM mood_entries WHERE owner_id = ?", args: [ownerId] }),
+    userTimezone(db, ownerId),
+  ]);
+  const moodAcc = new Map<string, { sum: number; n: number }>();
+  for (const row of moodRows.rows as unknown as Array<{ recorded_at: string; mood: number }>) {
+    const d = localDayOfStored(String(row.recorded_at), tz);
+    const acc = moodAcc.get(d) ?? { sum: 0, n: 0 };
+    acc.sum += Number(row.mood);
+    acc.n += 1;
+    moodAcc.set(d, acc);
+  }
   const writingMoods: number[] = [];
   const otherMoods: number[] = [];
-  for (const row of moodByDay.rows as unknown as Array<{ d: string; avg_mood: number }>) {
-    (dates.has(row.d) ? writingMoods : otherMoods).push(Number(row.avg_mood));
+  for (const [d, acc] of moodAcc) {
+    (dates.has(d) ? writingMoods : otherMoods).push(acc.sum / acc.n);
   }
   const MIN_SAMPLE = 5;
   const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
@@ -396,20 +406,23 @@ async function enrichEntrySummaries(db: Db, ownerId: string, page: Array<Record<
   const photosByEntry = new Map<string, string[]>();
   if (page.length > 0) {
     const dates = page.map((r) => String(r.entry_date));
-    const placeholders = dates.map(() => "?").join(",");
+    const wanted = new Set(dates);
+    const sortedDates = [...wanted].sort();
+    // Um registro de humor por dia local (o mais recente). O recorte é feito
+    // em JS no fuso do usuário; o SQL só traz a janela com 1 dia de folga.
+    const tz = await userTimezone(db, ownerId);
     const moodRes = await db.execute({
-      // Um registro de humor por dia (o mais recente) — window function em
-      // vez de GROUP BY, pra não depender de comportamento implícito do SQLite.
-      sql: `SELECT d, mood, energy FROM (
-              SELECT date(recorded_at) AS d, mood, energy,
-                     ROW_NUMBER() OVER (PARTITION BY date(recorded_at) ORDER BY recorded_at DESC) AS rn
-              FROM mood_entries
-              WHERE owner_id = ? AND date(recorded_at) IN (${placeholders})
-            ) WHERE rn = 1`,
-      args: [ownerId, ...dates],
+      sql: "SELECT recorded_at, mood, energy FROM mood_entries WHERE owner_id = ? AND recorded_at >= ? AND recorded_at < ?",
+      args: [ownerId, shiftDayKey(sortedDates[0], -1), shiftDayKey(sortedDates[sortedDates.length - 1], 2)],
     });
-    for (const r of moodRes.rows as unknown as Array<{ d: string; mood: number; energy: number }>) {
-      moodByDate.set(r.d, { mood: r.mood, energy: r.energy });
+    const latestAt = new Map<string, number>();
+    for (const r of moodRes.rows as unknown as Array<{ recorded_at: string; mood: number; energy: number }>) {
+      const d = localDayOfStored(String(r.recorded_at), tz);
+      if (!wanted.has(d)) continue;
+      const at = Date.parse(normalizeStoredUtc(String(r.recorded_at)));
+      if ((latestAt.get(d) ?? -Infinity) >= at) continue;
+      latestAt.set(d, at);
+      moodByDate.set(d, { mood: r.mood, energy: r.energy });
     }
 
     const entryIds = page.map((r) => String(r.id));
@@ -531,6 +544,14 @@ export async function getJournalCalendarMonth(db: Db, ownerId: string, month: st
 }
 
 export async function getJournalAutoData(db: Db, ownerId: string, date: string): Promise<JournalAutoData> {
+  // Registros com timestamp UTC são lidos pelo dia local `date` (fuso do perfil).
+  const tz = await userTimezone(db, ownerId);
+  const inDay = (column: string) => localDaysWhere(column, date, date, tz);
+  const moodF = inDay("recorded_at");
+  const sleepF = inDay("woke_up_at");
+  const waterF = inDay("recorded_at");
+  const workoutF = inDay("performed_at");
+  const readingF = inDay("started_at");
   const [
     moodRes,
     sleepRes,
@@ -546,12 +567,12 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
     bestStreakRes,
   ] = await Promise.all([
     db.execute({
-      sql: "SELECT mood, energy, stress FROM mood_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day')) ORDER BY recorded_at DESC LIMIT 1",
-      args: [ownerId, date],
+      sql: `SELECT mood, energy, stress FROM mood_entries WHERE owner_id = ? AND ${moodF.sql} ORDER BY datetime(recorded_at) DESC LIMIT 1`,
+      args: [ownerId, ...moodF.args],
     }),
     db.execute({
-      sql: "SELECT duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND (woke_up_at >= date(?2) AND woke_up_at < date(?2, '+1 day')) ORDER BY woke_up_at DESC LIMIT 1",
-      args: [ownerId, date],
+      sql: `SELECT duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND ${sleepF.sql} ORDER BY datetime(woke_up_at) DESC LIMIT 1`,
+      args: [ownerId, ...sleepF.args],
     }),
     db.execute({
       sql: "SELECT text FROM daily_insights WHERE owner_id = ? AND insight_date = ? LIMIT 1",
@@ -584,16 +605,16 @@ export async function getJournalAutoData(db: Db, ownerId: string, date: string):
       args: [ownerId],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
-      args: [ownerId, date],
+      sql: `SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND ${waterF.sql}`,
+      args: [ownerId, ...waterF.args],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(duration_minutes), 0) AS total FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
-      args: [ownerId, date],
+      sql: `SELECT COALESCE(SUM(duration_minutes), 0) AS total FROM workouts WHERE owner_id = ? AND ${workoutF.sql}`,
+      args: [ownerId, ...workoutF.args],
     }),
     db.execute({
-      sql: "SELECT COALESCE(SUM(pages_read), 0) AS pages, COALESCE(SUM(duration_minutes), 0) AS minutes FROM reading_sessions WHERE owner_id = ? AND (started_at >= date(?2) AND started_at < date(?2, '+1 day'))",
-      args: [ownerId, date],
+      sql: `SELECT COALESCE(SUM(pages_read), 0) AS pages, COALESCE(SUM(duration_minutes), 0) AS minutes FROM reading_sessions WHERE owner_id = ? AND ${readingF.sql}`,
+      args: [ownerId, ...readingF.args],
     }),
     db.execute({
       sql: `SELECT h.name AS name, COUNT(*) AS streak FROM habit_entries he JOIN habits h ON h.id = he.habit_id

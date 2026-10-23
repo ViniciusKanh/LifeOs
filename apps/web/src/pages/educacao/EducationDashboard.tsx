@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
+  BookOpenText,
   Calendar,
   Check,
   ChevronDown,
@@ -343,6 +344,15 @@ export function EducationDashboard({ educationId, onBack }: { educationId: strin
                       <span className="text-[10px] text-slate shrink-0 w-8 text-right">{s.progress_pct}%</span>
                     </div>
                   </div>
+                  {/* Atalho para o Grimório: abre o baralho da disciplina (ou cria um, já vinculado). */}
+                  <Link
+                    to={`/grimorio?disciplina=${encodeURIComponent(s.id)}&curso=${encodeURIComponent(s.course_id)}&nome=${encodeURIComponent(s.name)}`}
+                    className="shrink-0 p-2 rounded-lg text-slate hover:text-brand-600 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] rpg:hover:text-rpg-gold-light"
+                    aria-label={`Baralho de memorização da disciplina ${s.name}`}
+                    title="Baralho no Grimório"
+                  >
+                    <BookOpenText size={14} aria-hidden />
+                  </Link>
                 </div>
               ))}
             </div>

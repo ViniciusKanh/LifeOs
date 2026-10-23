@@ -32,6 +32,8 @@ import { HabitTaskGeneratorModal } from "@/components/habits/HabitTaskGeneratorM
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RPGButton, RPGIconSlot, RPGPageHeader, RPGStatCard } from "@/components/rpg";
 import { RpgHabitsPanel } from "@/components/habits/RpgHabitsPanel";
+import { HabitAutoBadges } from "@/components/habits/HabitAutoBadges";
+import type { HabitAutoInput, HabitAutoSource, HabitAutoSourceInfo, HabitWithAuto } from "@/services/habitService";
 
 /* ------------------------------------------------------------------ */
 /* Categorias predefinidas de hábito — mesmo padrão visual (ícone +    */
@@ -96,10 +98,10 @@ function currentWeekDates() {
 type FilterTab = "Todos" | "Hoje" | "Concluidos" | "EmRisco";
 
 export function HabitosPage() {
-  const { habits, summaryByHabitId, stats, createHabit, updateHabit, removeHabit, checkIn, generateTasks, isGeneratingTasks } = useHabits();
+  const { habits, autoSources, summaryByHabitId, stats, createHabit, updateHabit, removeHabit, checkIn, generateTasks, isGeneratingTasks } = useHabits();
   const insight = useHabitsInsight();
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [editingHabit, setEditingHabit] = useState<HabitWithAuto | null>(null);
   const [filterTab, setFilterTab] = useState<FilterTab>("Todos");
   const [toast, setToast] = useState<string | null>(null);
 
@@ -137,6 +139,7 @@ export function HabitosPage() {
   const today = todayStr();
   const week = useMemo(() => currentWeekDates(), []);
   const entriesByHabitId = useHabitEntriesRange(habits, week[0].iso, week[6].iso);
+  const habitNamesById = useMemo(() => new Map(habits.map((h) => [h.id, h.name])), [habits]);
 
   const habitsWithStatus = useMemo(
     () =>
@@ -392,7 +395,16 @@ export function HabitosPage() {
           </>
           )}
 
-          {isRpg && <RpgHabitsPanel items={habitsWithStatus} today={today} onFulfill={fulfillContract} onEdit={(h) => setEditingHabit(h)} pendingId={fulfillingId} />}
+          {isRpg && (
+            <RpgHabitsPanel
+              items={habitsWithStatus}
+              today={today}
+              onFulfill={fulfillContract}
+              onEdit={(h) => setEditingHabit(h)}
+              pendingId={fulfillingId}
+              renderExtra={(h) => <HabitAutoBadges habit={h} namesById={habitNamesById} sources={autoSources} />}
+            />
+          )}
 
           <div id="historico-habitos" className="grid lg:grid-cols-[1fr_320px] gap-4 items-start scroll-mt-4">
             {/* Coluna principal: tabela de hábitos + categorias + horários */}
@@ -453,6 +465,7 @@ export function HabitosPage() {
                                   )}
                                 </div>
                                 <p className="text-[11px] text-slate truncate">{meta.label}</p>
+                                <HabitAutoBadges habit={habit} namesById={habitNamesById} sources={autoSources} />
                               </div>
                             </div>
                             {week.map((d) => {
@@ -478,7 +491,7 @@ export function HabitosPage() {
                               <span className="rpg:font-pixel">{diasLabel(summary?.currentStreak ?? 0)}</span>
                             </div>
                             <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => setEditingHabit(habit)} className="text-slate hover:text-inherit">
+                              <button onClick={() => setEditingHabit(habit)} className="text-slate hover:text-inherit" aria-label={`Editar hábito ${habit.name}`}>
                                 <Pencil size={13} />
                               </button>
                               <button onClick={() => removeHabit(habit.id)} className="text-slate hover:text-drop">
@@ -652,6 +665,8 @@ export function HabitosPage() {
 
       {modalOpen && (
         <HabitoModal
+          habits={habits}
+          autoSources={autoSources}
           onClose={() => setModalOpen(false)}
           onSubmit={async (input) => {
             await createHabit(input);
@@ -661,6 +676,8 @@ export function HabitosPage() {
       {editingHabit && (
         <HabitoModal
           habit={editingHabit}
+          habits={habits}
+          autoSources={autoSources}
           onClose={() => setEditingHabit(null)}
           onSubmit={async (input) => {
             await updateHabit({ id: editingHabit.id, patch: input });
@@ -683,25 +700,50 @@ export function HabitosPage() {
 
 function HabitoModal({
   habit,
+  habits,
+  autoSources,
   onClose,
   onSubmit,
 }: {
-  habit?: Habit;
+  habit?: HabitWithAuto;
+  habits: HabitWithAuto[];
+  autoSources: HabitAutoSourceInfo[];
   onClose: () => void;
-  onSubmit: (input: { name: string; icon?: string; category?: string; targetCount?: number }) => Promise<unknown>;
+  onSubmit: (input: { name: string; icon?: string; category?: string; targetCount?: number } & HabitAutoInput) => Promise<unknown>;
 }) {
   const [name, setName] = useState(habit?.name ?? "");
   const [icon, setIcon] = useState(habit?.icon ?? "");
   const [category, setCategory] = useState(habit?.category ?? "");
   const [targetCount, setTargetCount] = useState(String(habit?.target_count ?? 1));
+  const [autoSource, setAutoSource] = useState<HabitAutoSource | "">(habit?.auto_source ?? "");
+  const [autoThreshold, setAutoThreshold] = useState(habit?.auto_threshold != null ? String(habit.auto_threshold) : "");
+  const [afterHabitId, setAfterHabitId] = useState(habit?.after_habit_id ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const sourceInfo = autoSources.find((s) => s.key === autoSource);
+  // Não pode vir depois de si mesmo; o backend ainda barra ciclos maiores.
+  const chainOptions = habits.filter((h) => h.id !== habit?.id);
+  const thresholdNumber = autoThreshold.trim() === "" ? null : Number(autoThreshold.replace(",", "."));
+  const thresholdInvalid = thresholdNumber !== null && (!Number.isFinite(thresholdNumber) || thresholdNumber <= 0);
 
   const submit = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || thresholdInvalid) return;
     setSaving(true);
+    setError(null);
     try {
-      await onSubmit({ name: name.trim(), icon: icon.trim() || undefined, category: category || undefined, targetCount: Number(targetCount) || 1 });
+      await onSubmit({
+        name: name.trim(),
+        icon: icon.trim() || undefined,
+        category: category || undefined,
+        targetCount: Number(targetCount) || 1,
+        autoSource: autoSource || null,
+        autoThreshold: autoSource && sourceInfo?.thresholdLabel ? thresholdNumber : null,
+        afterHabitId: afterHabitId || null,
+      });
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar o hábito.");
     } finally {
       setSaving(false);
     }
@@ -738,7 +780,64 @@ function HabitoModal({
             </select>
           </div>
           <Field label="Meta por dia" type="number" min={1} value={targetCount} onChange={(e) => setTargetCount(e.target.value)} />
-          <Button onClick={submit} disabled={saving || !name.trim()} className="w-full">
+          <div>
+            <label htmlFor="habit-auto-source" className="text-xs text-slate">Marcar automaticamente quando...</label>
+            <select
+              id="habit-auto-source"
+              value={autoSource}
+              onChange={(e) => setAutoSource(e.target.value as HabitAutoSource | "")}
+              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            >
+              <option value="">Nunca (eu marco manualmente)</option>
+              {autoSources.map((s) => (
+                <option key={s.key} value={s.key} disabled={!s.available}>
+                  {s.label}
+                  {s.available ? "" : " (indisponível)"}
+                </option>
+              ))}
+            </select>
+            {autoSource && (
+              <p className="text-[11px] text-slate mt-1">O check-in do dia é feito sozinho a partir do seu registro real — e desfeito se o registro for excluído.</p>
+            )}
+          </div>
+          {autoSource && sourceInfo?.thresholdLabel && (
+            <div>
+              <Field
+                label={`${sourceInfo.thresholdLabel} (opcional)`}
+                type="number"
+                min={1}
+                inputMode="decimal"
+                placeholder="Basta um registro"
+                value={autoThreshold}
+                onChange={(e) => setAutoThreshold(e.target.value)}
+                aria-invalid={thresholdInvalid}
+              />
+              {thresholdInvalid && <p className="text-[11px] text-drop mt-1">Informe um número maior que zero.</p>}
+            </div>
+          )}
+          <div>
+            <label htmlFor="habit-after" className="text-xs text-slate">Fazer depois de... (opcional)</label>
+            <select
+              id="habit-after"
+              value={afterHabitId}
+              onChange={(e) => setAfterHabitId(e.target.value)}
+              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            >
+              <option value="">Sem encadeamento</option>
+              {chainOptions.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.icon ? `${h.icon} ` : ""}
+                  {h.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {error && (
+            <p role="alert" className="text-xs text-drop bg-drop/10 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+          <Button onClick={submit} disabled={saving || !name.trim() || thresholdInvalid} className="w-full">
             {saving ? "Salvando..." : habit ? "Salvar alterações" : "Criar hábito"}
           </Button>
         </div>

@@ -13,6 +13,7 @@ import { BottleneckOraclePanel } from "@/components/bottlenecks/BottleneckOracle
 import { BottleneckAllModal, BottleneckDetailModal, BottleneckMapModal } from "@/components/bottlenecks/BottleneckDetailModal";
 import { useBottlenecks } from "@/hooks/useBottlenecks";
 import { useWide } from "@/hooks/useWide";
+import { HeroRhythmPanel } from "@/components/rhythm/HeroRhythmPanel";
 import type { AnalysisPeriod, BottleneckAnalysis, FocusInput, RecommendedAction } from "@/services/bottlenecksService";
 
 const HOW_IT_WORKS: HowItWorksStep[] = [
@@ -203,6 +204,9 @@ export function DetectorGargalosPage() {
       ) : (
         body(data)
       )}
+
+      {/* Ritmo do herói: quando o progresso real acontece (independe do período da análise). */}
+      <HeroRhythmPanel />
 
       {data && (
         <>

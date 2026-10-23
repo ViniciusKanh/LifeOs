@@ -5,8 +5,9 @@ import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
-import { awardFocusSession, awardHabitCheckIn, awardTaskCompletion, maybeCompleteContract, syncContractStatus } from "../services/gamificationService.js";
-import { computeNextOccurrence, parseRecurrenceRule } from "../services/recurrenceService.js";
+import { awardFocusSession, awardTaskCompletion, syncContractStatus } from "../services/gamificationService.js";
+import { insertTask, maybeCheckInLinkedHabit, maybeSpawnNextOccurrence, moveTaskStatus, recomputePriorityScore } from "../services/taskWriteService.js";
+import { syncAutoHabitsAfterWrite } from "../services/habitAutoService.js";
 import { taskAttachmentCreateSchema, taskAttachmentUpdateSchema } from "../validators/attachment.schema.js";
 import {
   addTaskAttachment,
@@ -22,131 +23,6 @@ export const tasksRouter = Router();
 // de verdade sobre "de quem" são os dados. NUNCA aceitar um owner_id
 // vindo do corpo da requisição.
 tasksRouter.use(requireAuth);
-
-/**
- * Recalcula priority_score (impacto*urgência/esforço) direto no SQL,
- * a partir dos valores já salvos na linha — funciona tanto quando os
- * três campos chegam juntos (criação) quanto quando só um muda depois
- * (edição), sem precisar buscar a linha primeiro pra decidir.
- */
-async function recomputePriorityScore(db: ReturnType<typeof getDb>, taskId: string, ownerId: string) {
-  await db.execute({
-    sql: `UPDATE tasks SET priority_score =
-            CASE WHEN impact IS NOT NULL AND urgency IS NOT NULL AND effort IS NOT NULL AND effort > 0
-              THEN (impact * 1.0 * urgency) / effort
-              ELSE NULL
-            END
-          WHERE id = ? AND owner_id = ?`,
-    args: [taskId, ownerId],
-  });
-}
-
-/**
- * Recorrência: quando uma tarefa com recurrence_rule é marcada
- * "Concluído", gera a próxima ocorrência como uma tarefa nova (a
- * atual fica concluída de verdade, preservando o histórico — não
- * "volta" pro Backlog). A data de referência é o due_date da tarefa
- * concluída, ou hoje se ela não tinha prazo. Silenciosamente não faz
- * nada se a regra estiver vazia/inválida (não deveria acontecer, já
- * que o schema valida na entrada, mas nunca falha a resposta por
- * causa disso — a tarefa já foi concluída, isso é só um efeito extra).
- */
-async function maybeSpawnNextOccurrence(db: ReturnType<typeof getDb>, taskId: string, ownerId: string) {
-  const result = await db.execute({
-    sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [taskId, ownerId],
-  });
-  const task = result.rows[0] as unknown as
-    | {
-        recurrence_rule: string | null;
-        status: string;
-        project_id: string | null;
-        goal_id: string | null;
-        title: string;
-        description: string | null;
-        priority: string;
-        due_date: string | null;
-        start_date: string | null;
-        estimate_minutes: number | null;
-        impact: number | null;
-        urgency: number | null;
-        effort: number | null;
-      }
-    | undefined;
-  if (!task || task.status !== "Concluído" || !task.recurrence_rule) return;
-
-  const rule = parseRecurrenceRule(task.recurrence_rule);
-  if (!rule) return;
-
-  const fromIso = task.due_date ?? new Date().toISOString().slice(0, 10);
-  const nextDue = computeNextOccurrence(rule, fromIso);
-  // Prazo original mantido como deslocamento pra data de início, se havia um intervalo entre eles.
-  const nextStart =
-    task.start_date && task.due_date
-      ? (() => {
-          const spanDays = Math.round(
-            (new Date(`${task.due_date!.slice(0, 10)}T00:00:00Z`).getTime() - new Date(`${task.start_date!.slice(0, 10)}T00:00:00Z`).getTime()) /
-              86_400_000
-          );
-          const d = new Date(`${nextDue}T00:00:00Z`);
-          d.setUTCDate(d.getUTCDate() - Math.max(spanDays, 0));
-          return d.toISOString().slice(0, 10);
-        })()
-      : null;
-
-  const newId = nanoid();
-  await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, goal_id, title, description, status, priority, due_date, start_date, estimate_minutes, impact, urgency, effort, recurrence_rule)
-          VALUES (?, ?, ?, ?, ?, ?, 'Backlog', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      newId,
-      ownerId,
-      task.project_id,
-      task.goal_id,
-      task.title,
-      task.description,
-      task.priority,
-      nextDue,
-      nextStart,
-      task.estimate_minutes,
-      task.impact,
-      task.urgency,
-      task.effort,
-      task.recurrence_rule,
-    ],
-  });
-  await recomputePriorityScore(db, newId, ownerId);
-}
-
-/**
- * Integração hábito → tarefa → hábito: uma tarefa gerada a partir de um
- * hábito (habit_id preenchido, ver POST /api/habits/generate-tasks) que é
- * marcada "Concluído" faz o check-in automático daquele hábito no dia do
- * due_date da tarefa (ou hoje, se a tarefa não tinha prazo) — mesmo upsert
- * usado por POST /api/habits/:id/check-in, então marcar de novo não duplica
- * nada. Só ADICIONA o check-in ao completar; desmarcar a tarefa depois não
- * remove o check-in (evita apagar um registro de hábito sem confirmação).
- */
-async function maybeCheckInLinkedHabit(db: ReturnType<typeof getDb>, taskId: string, ownerId: string) {
-  const result = await db.execute({
-    sql: "SELECT habit_id, due_date, status FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [taskId, ownerId],
-  });
-  const task = result.rows[0] as unknown as { habit_id: string | null; due_date: string | null; status: string } | undefined;
-  if (!task || !task.habit_id || task.status !== "Concluído") return;
-
-  const habitRes = await db.execute({ sql: "SELECT target_count FROM habits WHERE id = ? AND owner_id = ?", args: [task.habit_id, ownerId] });
-  const targetCount = Number((habitRes.rows[0] as unknown as { target_count: number } | undefined)?.target_count ?? 1);
-  const entryDate = (task.due_date ?? new Date().toISOString()).slice(0, 10);
-
-  await db.execute({
-    sql: `INSERT INTO habit_entries (id, habit_id, owner_id, entry_date, count)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = MAX(habit_entries.count, excluded.count)`,
-    args: [nanoid(), task.habit_id, ownerId, entryDate, targetCount],
-  });
-  await awardHabitCheckIn(db, ownerId, task.habit_id, entryDate);
-}
 
 /** GET /api/tasks?status=&projectId= */
 tasksRouter.get("/", async (req, res) => {
@@ -267,43 +143,8 @@ tasksRouter.post("/", async (req, res) => {
   const db = getDb();
   const linkError = await validateTaskLinks(db, req.user!.id, d);
   if (linkError) return res.status(400).json({ error: linkError });
-  const id = nanoid();
-
-  const status = d.status ?? "Backlog";
-
-  await db.execute({
-    sql: `INSERT INTO tasks (id, owner_id, project_id, goal_id, title, description, status, priority, due_date, start_date, estimate_minutes, completed_at, impact, urgency, effort, recurrence_rule, difficulty, contract_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      id,
-      req.user!.id,
-      d.projectId ?? null,
-      d.goalId ?? null,
-      d.title,
-      d.description ?? null,
-      status,
-      d.priority,
-      d.dueDate ?? null,
-      d.startDate ?? null,
-      d.estimateMinutes ?? null,
-      status === "Concluído" ? new Date().toISOString() : null,
-      d.impact ?? null,
-      d.urgency ?? null,
-      d.effort ?? null,
-      d.recurrenceRule ?? null,
-      d.difficulty ?? null,
-      d.contractId ?? null,
-    ],
-  });
-  await recomputePriorityScore(db, id, req.user!.id);
-  if (d.contractId) await syncContractStatus(db, req.user!.id, d.contractId);
-
-  const created = await db.execute({
-    sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [id, req.user!.id],
-  });
-
-  return res.status(201).json(created.rows[0]);
+  const created = await insertTask(db, req.user!.id, d);
+  return res.status(201).json(created);
 });
 
 /** PATCH /api/tasks/:id */
@@ -372,6 +213,8 @@ tasksRouter.patch("/:id", async (req, res) => {
     await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
     await awardTaskCompletion(db, req.user!.id, req.params.id);
   }
+  // Hábito automático "concluir N tarefas" acompanha conclusão e reabertura.
+  if ("status" in dataForUpdate) await syncAutoHabitsAfterWrite(db, req.user!.id);
   // Contrato acompanha reabertura/troca de vínculo (o bônus pago nunca se repete).
   if ("contractId" in parsed.data && previousContract && previousContract !== parsed.data.contractId) {
     await syncContractStatus(db, req.user!.id, previousContract);
@@ -393,27 +236,9 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: "Status inválido." });
   }
-  const db = getDb();
-  const result = await db.execute({
-    sql: `UPDATE tasks
-          SET status = ?,
-              completed_at = CASE
-                WHEN ? = 'Concluído' THEN COALESCE(completed_at, datetime('now'))
-                ELSE NULL
-              END,
-              updated_at = datetime('now')
-          WHERE id = ? AND owner_id = ?`,
-    args: [parsed.data.status, parsed.data.status, req.params.id, req.user!.id],
-  });
-  if (result.rowsAffected === 0) {
+  const moved = await moveTaskStatus(getDb(), req.user!.id, req.params.id, parsed.data.status);
+  if (!moved) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
-  }
-  if (parsed.data.status === "Concluído") {
-    await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
-    await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
-    await awardTaskCompletion(db, req.user!.id, req.params.id);
-  } else {
-    await maybeCompleteContract(db, req.user!.id, req.params.id);
   }
   return res.status(204).send();
 });

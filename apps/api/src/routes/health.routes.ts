@@ -14,14 +14,18 @@ import {
   healthMetricEntrySchema,
 } from "../validators/health.schema.js";
 import { computeHealthCorrelations } from "../services/correlationService.js";
+import { syncAutoHabitsAfterWrite } from "../services/habitAutoService.js";
 import { getStrengthReport } from "../services/strengthService.js";
 import {
-  WORKOUT_CATEGORY_LABELS,
   attachWorkoutSets,
-  inferWorkoutCategory,
-  intensityFromRpe,
+  insertMoodEntry,
+  insertSleepEntry,
+  insertWaterEntry,
+  insertWorkout,
   isDateKey,
   localDayBoundsUtc,
+  minutesBetween,
+  normalizeWorkoutPayload,
   nowIso,
   replaceWorkoutSetsStatements,
   resolveTzOffset,
@@ -31,11 +35,6 @@ import {
 
 export const healthRouter = Router();
 healthRouter.use(requireAuth);
-
-function minutesBetween(a: string, b: string) {
-  const diff = new Date(b).getTime() - new Date(a).getTime();
-  return diff > 0 ? Math.round(diff / 60000) : null;
-}
 
 function firstValidationMessage(error: { issues: Array<{ message: string }> }) {
   return error.issues[0]?.message ?? "Dados inválidos.";
@@ -69,15 +68,8 @@ healthRouter.post("/water", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
-  const db = getDb();
-  const id = nanoid();
-  await db.execute({
-    sql: `INSERT INTO water_entries (id, owner_id, amount_ml, recorded_at)
-          VALUES (?, ?, ?, ?)`,
-    args: [id, req.user!.id, parsed.data.amountMl, parsed.data.recordedAt ?? nowIso()],
-  });
-  const created = await db.execute({ sql: "SELECT * FROM water_entries WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await insertWaterEntry(getDb(), req.user!.id, parsed.data);
+  return res.status(201).json(created);
 });
 
 /** PATCH /api/health/water/:id */
@@ -111,16 +103,19 @@ healthRouter.patch("/water/:id", async (req, res) => {
   if (result.rowsAffected === 0) return res.status(404).json({ error: "Registro de água não encontrado." });
 
   const updated = await db.execute({ sql: "SELECT * FROM water_entries WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  await syncAutoHabitsAfterWrite(db, req.user!.id, updated.rows[0] ? String(updated.rows[0].recorded_at) : null);
   return res.json(updated.rows[0]);
 });
 
 /** DELETE /api/health/water/:id */
 healthRouter.delete("/water/:id", async (req, res) => {
   const db = getDb();
+  const before = await db.execute({ sql: "SELECT recorded_at FROM water_entries WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
   await db.execute({
     sql: "DELETE FROM water_entries WHERE id = ? AND owner_id = ?",
     args: [req.params.id, req.user!.id],
   });
+  await syncAutoHabitsAfterWrite(db, req.user!.id, before.rows[0] ? String(before.rows[0].recorded_at) : null);
   return res.status(204).send();
 });
 
@@ -143,20 +138,11 @@ healthRouter.post("/sleep", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
-  const d = parsed.data;
-  const db = getDb();
-  const id = nanoid();
-  const duration = minutesBetween(d.wentToBedAt, d.wokeUpAt);
-  if (duration === null) {
+  const created = await insertSleepEntry(getDb(), req.user!.id, parsed.data);
+  if (!created) {
     return res.status(400).json({ error: "O horário de acordar precisa ser depois do horário em que você dormiu." });
   }
-  await db.execute({
-    sql: `INSERT INTO sleep_entries (id, owner_id, went_to_bed_at, woke_up_at, duration_minutes, quality, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, req.user!.id, d.wentToBedAt, d.wokeUpAt, duration, d.quality ?? null, d.notes ?? null],
-  });
-  const created = await db.execute({ sql: "SELECT * FROM sleep_entries WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  return res.status(201).json(created);
 });
 
 /** PATCH /api/health/sleep/:id */
@@ -221,40 +207,6 @@ healthRouter.delete("/sleep/:id", async (req, res) => {
 
 /* -------------------------- Exercícios -------------------------- */
 
-type WorkoutPayload = {
-  kind?: string;
-  category?: keyof typeof WORKOUT_CATEGORY_LABELS;
-  modality?: string | null;
-  intensity?: "leve" | "moderada" | "intensa" | null;
-  rpe?: number | null;
-  muscleGroups?: string | null;
-  rounds?: number | null;
-  roundMinutes?: number | null;
-};
-
-/**
- * Regras de coerência entre tipo e campos: `kind` sempre recebe o rótulo do
- * tipo (compatibilidade com quem lê essa coluna), campos de luta só valem
- * para luta e o RPE alimenta a intensidade legada.
- */
-function normalizeWorkoutPayload(d: WorkoutPayload) {
-  const category = d.category ?? (d.kind ? inferWorkoutCategory(d.kind) : undefined);
-  const kind = d.category ? WORKOUT_CATEGORY_LABELS[d.category] : d.kind;
-  // Tipo conhecido e diferente de luta/musculação → zera os campos que não se aplicam.
-  const notFight = category !== undefined && category !== "luta";
-  const notStrength = category !== undefined && category !== "musculacao";
-  const intensity = d.rpe ? intensityFromRpe(d.rpe) : d.intensity;
-  return {
-    category,
-    kind,
-    intensity,
-    modality: notFight ? null : d.modality,
-    rounds: notFight ? null : d.rounds,
-    roundMinutes: notFight ? null : d.roundMinutes,
-    muscleGroups: notStrength ? null : d.muscleGroups,
-  };
-}
-
 async function loadWorkout(ownerId: string, id: string) {
   const db = getDb();
   const result = await db.execute({ sql: "SELECT * FROM workouts WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
@@ -281,40 +233,8 @@ healthRouter.post("/workouts", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
-  const d = parsed.data;
-  const n = normalizeWorkoutPayload(d);
   const ownerId = req.user!.id;
-  const db = getDb();
-  const id = nanoid();
-  await db.batch(
-    [
-      {
-        sql: `INSERT INTO workouts (id, owner_id, kind, category, modality, duration_minutes, distance_km, calories, intensity, rpe,
-                                    muscle_groups, rounds, round_minutes, notes, performed_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          id,
-          ownerId,
-          n.kind ?? "Outro",
-          n.category ?? null,
-          n.modality ?? null,
-          d.durationMinutes,
-          d.distanceKm ?? null,
-          d.calories ?? null,
-          n.intensity ?? null,
-          d.rpe ?? null,
-          n.muscleGroups ?? null,
-          n.rounds ?? null,
-          n.roundMinutes ?? null,
-          d.notes ?? null,
-          d.performedAt ?? nowIso(),
-        ],
-      },
-      // Séries só fazem sentido em musculação; nos demais tipos são ignoradas.
-      ...(d.sets && n.category === "musculacao" ? replaceWorkoutSetsStatements(ownerId, id, d.sets).slice(1) : []),
-    ],
-    "write"
-  );
+  const id = await insertWorkout(getDb(), ownerId, parsed.data);
   return res.status(201).json(await loadWorkout(ownerId, id));
 });
 
@@ -366,6 +286,8 @@ healthRouter.patch("/workouts/:id", async (req, res) => {
     statements.push(...replaceWorkoutSetsStatements(ownerId, req.params.id, nextSets));
   }
   if (statements.length > 0) await db.batch(statements, "write");
+  const moved = await db.execute({ sql: "SELECT performed_at FROM workouts WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
+  await syncAutoHabitsAfterWrite(db, ownerId, moved.rows[0] ? String(moved.rows[0].performed_at) : null);
 
   return res.json(await loadWorkout(ownerId, req.params.id));
 });
@@ -374,6 +296,7 @@ healthRouter.patch("/workouts/:id", async (req, res) => {
 healthRouter.delete("/workouts/:id", async (req, res) => {
   const db = getDb();
   const ownerId = req.user!.id;
+  const before = await db.execute({ sql: "SELECT performed_at FROM workouts WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
   // Séries apagadas explicitamente: não depende de PRAGMA foreign_keys estar ligado.
   await db.batch(
     [
@@ -382,6 +305,7 @@ healthRouter.delete("/workouts/:id", async (req, res) => {
     ],
     "write"
   );
+  await syncAutoHabitsAfterWrite(db, ownerId, before.rows[0] ? String(before.rows[0].performed_at) : null);
   return res.status(204).send();
 });
 
@@ -404,16 +328,8 @@ healthRouter.post("/mood", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
-  const d = parsed.data;
-  const db = getDb();
-  const id = nanoid();
-  await db.execute({
-    sql: `INSERT INTO mood_entries (id, owner_id, mood, energy, stress, note, recorded_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, req.user!.id, d.mood, d.energy, d.stress ?? null, d.note ?? null, d.recordedAt ?? nowIso()],
-  });
-  const created = await db.execute({ sql: "SELECT * FROM mood_entries WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await insertMoodEntry(getDb(), req.user!.id, parsed.data);
+  return res.status(201).json(created);
 });
 
 /** PATCH /api/health/mood/:id */

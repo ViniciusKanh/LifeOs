@@ -1,4 +1,6 @@
 import type { getDb } from "../db/client.js";
+import { todayKeyFor } from "./gamificationService.js";
+import { shiftDayKey } from "./localDayService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { getExperimentDetail } from "./experimentService.js";
 import { ACTIVE_METRIC_KEYS, METRIC_CATALOG, getDailySeries, aggregateSeries, type ExperimentMetricKey } from "./experimentMetricsService.js";
@@ -73,8 +75,8 @@ export async function analyzeExperiment(db: Db, ownerId: string, experimentId: s
 /* ---------------------------- Sugestão de novo experimento ---------------------------- */
 
 async function scalarAvg(db: Db, metric: ExperimentMetricKey, ownerId: string, days: number): Promise<number | null> {
-  const to = new Date().toISOString().slice(0, 10);
-  const from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const to = await todayKeyFor(db, ownerId);
+  const from = shiftDayKey(to, -days);
   const series = await getDailySeries(db, ownerId, metric, from, to, null);
   const { avg } = aggregateSeries(series);
   return avg;

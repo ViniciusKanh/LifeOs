@@ -3,7 +3,8 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { awardHabitCheckIn } from "../services/gamificationService.js";
+import { awardHabitCheckIn, todayKeyFor } from "../services/gamificationService.js";
+import { AUTO_SOURCES, HabitChainError, listAutoSources, syncAutoHabits, validateHabitChain } from "../services/habitAutoService.js";
 
 export const habitsRouter = Router();
 habitsRouter.use(requireAuth);
@@ -14,6 +15,11 @@ const createHabitSchema = z.object({
   category: z.string().trim().max(60).optional(),
   frequency: z.enum(["daily", "specific_days", "times_per_week", "weekly", "monthly"]).default("daily"),
   targetCount: z.number().int().positive().default(1),
+  /** Hábito automático: marcado sozinho a partir do registro real de outro módulo. */
+  autoSource: z.enum(AUTO_SOURCES).nullable().optional(),
+  autoThreshold: z.number().positive().max(100000).nullable().optional(),
+  /** Encadeamento: "depois de X, faço este". */
+  afterHabitId: z.string().min(1).nullable().optional(),
 });
 
 const updateHabitSchema = z.object({
@@ -22,7 +28,26 @@ const updateHabitSchema = z.object({
   category: z.string().trim().max(60).optional().nullable(),
   frequency: z.enum(["daily", "specific_days", "times_per_week", "weekly", "monthly"]).optional(),
   targetCount: z.number().int().positive().optional(),
+  autoSource: z.enum(AUTO_SOURCES).nullable().optional(),
+  autoThreshold: z.number().positive().max(100000).nullable().optional(),
+  afterHabitId: z.string().min(1).nullable().optional(),
 });
+
+/** Fonte automática só é aceita se existir neste banco (flashcards depende de outro módulo). */
+async function assertAutoSourceAvailable(db: ReturnType<typeof getDb>, source: string | null | undefined): Promise<string | null> {
+  if (!source) return null;
+  const info = (await listAutoSources(db)).find((s) => s.key === source);
+  return info?.available ? null : "Essa fonte automática ainda não está disponível.";
+}
+
+/** Sincronização preguiçosa: ao listar, os hábitos automáticos de hoje refletem as fontes reais. */
+async function lazySyncToday(db: ReturnType<typeof getDb>, ownerId: string): Promise<void> {
+  try {
+    await syncAutoHabits(db, ownerId, await todayKeyFor(db, ownerId));
+  } catch (err) {
+    console.warn("[hábitos automáticos] falha na sincronização ao listar:", err instanceof Error ? err.message : "erro desconhecido");
+  }
+}
 
 const checkInSchema = z.object({
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato YYYY-MM-DD"),
@@ -66,6 +91,7 @@ function computeStreaks(entryDates: string[]): { current: number; best: number }
 /** GET /api/habits */
 habitsRouter.get("/", async (req, res) => {
   const db = getDb();
+  await lazySyncToday(db, req.user!.id);
   const result = await db.execute({
     sql: "SELECT * FROM habits WHERE owner_id = ? AND archived_at IS NULL ORDER BY created_at ASC",
     args: [req.user!.id],
@@ -80,22 +106,49 @@ habitsRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
   const db = getDb();
+  const ownerId = req.user!.id;
+  const sourceError = await assertAutoSourceAvailable(db, parsed.data.autoSource);
+  if (sourceError) return res.status(400).json({ error: sourceError });
+  try {
+    await validateHabitChain(db, ownerId, null, parsed.data.afterHabitId ?? null);
+  } catch (err) {
+    if (err instanceof HabitChainError) return res.status(400).json({ error: err.message });
+    throw err;
+  }
   const id = nanoid();
+  const autoSource = parsed.data.autoSource ?? null;
   await db.execute({
-    sql: `INSERT INTO habits (id, owner_id, name, icon, category, frequency, target_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO habits (id, owner_id, name, icon, category, frequency, target_count, auto_source, auto_threshold, after_habit_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
-      req.user!.id,
+      ownerId,
       parsed.data.name,
       parsed.data.icon ?? null,
       parsed.data.category ?? null,
       parsed.data.frequency,
       parsed.data.targetCount,
+      autoSource,
+      autoSource ? parsed.data.autoThreshold ?? null : null,
+      parsed.data.afterHabitId ?? null,
     ],
   });
-  const created = await db.execute({ sql: "SELECT * FROM habits WHERE id = ?", args: [id] });
+  // Hábito automático criado depois do registro do dia já nasce marcado.
+  if (autoSource) await lazySyncToday(db, ownerId);
+  const created = await db.execute({ sql: "SELECT * FROM habits WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
   return res.status(201).json(created.rows[0]);
+});
+
+/** GET /api/habits/auto-sources — fontes de marcação automática disponíveis neste banco. */
+habitsRouter.get("/auto-sources", async (_req, res) => {
+  return res.json(await listAutoSources(getDb()));
+});
+
+/** POST /api/habits/sync-auto — força a sincronização dos hábitos automáticos de hoje. */
+habitsRouter.post("/sync-auto", async (req, res) => {
+  const db = getDb();
+  const ownerId = req.user!.id;
+  return res.json(await syncAutoHabits(db, ownerId, await todayKeyFor(db, ownerId)));
 });
 
 const ISO_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato YYYY-MM-DD");
@@ -275,9 +328,10 @@ habitsRouter.post("/:id/check-in", async (req, res) => {
   }
 
   await db.execute({
+    // Check-in manual "assume" o dia: source volta a NULL e a sincronização automática não o desfaz.
     sql: `INSERT INTO habit_entries (id, habit_id, owner_id, entry_date, count)
           VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = excluded.count`,
+          ON CONFLICT (habit_id, entry_date) DO UPDATE SET count = excluded.count, source = NULL`,
     args: [nanoid(), req.params.id, req.user!.id, parsed.data.entryDate, parsed.data.count],
   });
   await awardHabitCheckIn(db, req.user!.id, req.params.id, parsed.data.entryDate);
@@ -297,6 +351,18 @@ habitsRouter.patch("/:id", async (req, res) => {
     args: [req.params.id, req.user!.id],
   });
   if (existing.rows.length === 0) return res.status(404).json({ error: "Hábito não encontrado." });
+  const sourceError = await assertAutoSourceAvailable(db, parsed.data.autoSource);
+  if (sourceError) return res.status(400).json({ error: sourceError });
+  if (parsed.data.afterHabitId !== undefined) {
+    try {
+      await validateHabitChain(db, req.user!.id, req.params.id, parsed.data.afterHabitId);
+    } catch (err) {
+      if (err instanceof HabitChainError) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+  }
+  // Sem fonte automática não faz sentido manter limite.
+  if (parsed.data.autoSource === null) parsed.data.autoThreshold = null;
 
   const fieldMap: Record<string, string> = {
     name: "name",
@@ -304,6 +370,9 @@ habitsRouter.patch("/:id", async (req, res) => {
     category: "category",
     frequency: "frequency",
     targetCount: "target_count",
+    autoSource: "auto_source",
+    autoThreshold: "auto_threshold",
+    afterHabitId: "after_habit_id",
   };
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
@@ -318,7 +387,10 @@ habitsRouter.patch("/:id", async (req, res) => {
     args.push(req.params.id, req.user!.id);
     await db.execute({ sql: `UPDATE habits SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
   }
-  const updated = await db.execute({ sql: "SELECT * FROM habits WHERE id = ?", args: [req.params.id] });
+  if (parsed.data.autoSource !== undefined || parsed.data.autoThreshold !== undefined || parsed.data.targetCount !== undefined) {
+    await lazySyncToday(db, req.user!.id);
+  }
+  const updated = await db.execute({ sql: "SELECT * FROM habits WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
   return res.json(updated.rows[0]);
 });
 
@@ -335,6 +407,7 @@ habitsRouter.delete("/:id", async (req, res) => {
 /** GET /api/habits/summary — sequência atual, recorde e % de cumprimento dos últimos 30 dias, por hábito */
 habitsRouter.get("/summary", async (req, res) => {
   const db = getDb();
+  await lazySyncToday(db, req.user!.id);
   const habits = await db.execute({
     sql: "SELECT * FROM habits WHERE owner_id = ? AND archived_at IS NULL ORDER BY created_at ASC",
     args: [req.user!.id],

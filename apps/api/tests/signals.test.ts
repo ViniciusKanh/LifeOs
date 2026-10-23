@@ -90,10 +90,10 @@ describe("Signals", () => {
   });
 
   it("GET /api/signals/trend devolve série normalizada 0-100 por sinal", async () => {
-    const { agent, userId } = await createAuthenticatedAgent();
-    const today = new Date();
-    await insertFocusSession(userId, today, 60);
-    const res = await agent.get("/api/signals/trend?period=7d&signal=focus");
+    // "focus" não é um sinal de tendência (a API cai em "sleep"); usa humor, que é.
+    const { agent } = await createAuthenticatedAgent();
+    await agent.post("/api/health/mood").send({ mood: 4, energy: 4, stress: 2 });
+    const res = await agent.get("/api/signals/trend?period=7d&signal=mood");
     expect(res.status).toBe(200);
     expect(res.body.series.length).toBeGreaterThan(0);
     for (const point of res.body.series) {

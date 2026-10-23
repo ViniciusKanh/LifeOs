@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
 import type { ProjectDetailsInput } from "../validators/project.schema.js";
 
@@ -237,4 +238,22 @@ export async function listProjectDocuments(db: Db, ownerId: string, projectId: s
     caption: (r.caption as string | null) ?? null,
     createdAt: r.created_at as string,
   }));
+}
+
+/**
+ * Insere um projeto já validado por createProjectSchema — extraído de
+ * POST /api/projects para o Copilot gravar do mesmo jeito. A posse do
+ * projeto pai e da meta vinculada é validada por quem chama.
+ */
+export async function insertProject(db: Db, ownerId: string, d: ProjectDetailsInput & { name: string; parentId?: string | null }) {
+  const id = nanoid();
+  const pairs = buildProjectColumnValues(d);
+  const columns = ["id", "owner_id", "parent_id", ...pairs.map(([c]) => c)];
+  const values = [id, ownerId, d.parentId ?? null, ...pairs.map(([, v]) => v)];
+
+  await db.execute({
+    sql: `INSERT INTO projects (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+    args: values,
+  });
+  return getOwnedProject(db, ownerId, id);
 }

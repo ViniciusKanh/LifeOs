@@ -9,7 +9,7 @@ import {
   getOrGenerateDailyInsight,
   regenerateDailyInsight,
 } from "../services/copilotService.js";
-import { proposeAction, confirmAction } from "../services/copilotActionsService.js";
+import { proposeAction, confirmAction, previewLocalCommand } from "../services/copilotActionsService.js";
 
 export const copilotRouter = Router();
 
@@ -22,7 +22,8 @@ copilotRouter.use(requireAuth);
  * Sem rate limit próprio: no pior caso gera uma vez por usuário por
  * dia — o rate limit de verdade continua em POST /insight (regenerar).
  */
-copilotRouter.get("/daily-insight", async (req, res) => {
+// Usa cache diário, mas a 1ª chamada do dia vai ao Gemini: limite folgado por usuário.
+copilotRouter.get("/daily-insight", rateLimit({ windowMs: 10 * 60 * 1000, max: 30 }), async (req, res) => {
   const result = await getOrGenerateDailyInsight(req.user!.id);
   if (!result.ok) {
     return res.status(400).json({ error: result.message });
@@ -113,7 +114,7 @@ copilotRouter.post("/analytics-insight", rateLimit({ windowMs: 10 * 60 * 1000, m
  * texto. O frontend mostra a proposta e só chama /assist/confirm se
  * o usuário confirmar explicitamente.
  */
-copilotRouter.post("/assist", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), async (req, res) => {
+copilotRouter.post("/assist", rateLimit({ windowMs: 10 * 60 * 1000, max: 20, key: (req) => req.user!.id }), async (req, res) => {
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   if (!message) {
     return res.status(400).json({ error: "Mensagem vazia." });
@@ -138,7 +139,7 @@ copilotRouter.post("/assist", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), 
  * `ownerId`/id de outro usuário: toda ação é revalidada contra
  * req.user!.id dentro de confirmAction.
  */
-copilotRouter.post("/assist/confirm", rateLimit({ windowMs: 10 * 60 * 1000, max: 30 }), async (req, res) => {
+copilotRouter.post("/assist/confirm", rateLimit({ windowMs: 10 * 60 * 1000, max: 30, key: (req) => req.user!.id }), async (req, res) => {
   const action = typeof req.body?.action === "string" ? req.body.action : "";
   const args = req.body?.args && typeof req.body.args === "object" ? req.body.args : {};
   if (!action) {
@@ -148,5 +149,28 @@ copilotRouter.post("/assist/confirm", rateLimit({ windowMs: 10 * 60 * 1000, max:
   if (!result.ok) {
     return res.status(400).json({ error: result.message });
   }
-  return res.json({ message: result.message });
+  return res.json({ message: result.message, link: result.link ?? null });
+});
+
+/**
+ * POST /api/copilot/parse — prévia instantânea para a paleta (Ctrl/Cmd+K)
+ * enquanto o usuário digita: SÓ o parser local determinístico, sem IA e
+ * sem gravar nada. { kind: "none" } quando não há comando reconhecido
+ * (a paleta oferece então "Perguntar ao Copilot", que usa /assist).
+ */
+copilotRouter.post("/parse", rateLimit({ windowMs: 60 * 1000, max: 120, key: (req) => req.user!.id }), async (req, res) => {
+  const message = typeof req.body?.message === "string" ? req.body.message.trim().slice(0, 500) : "";
+  if (!message) return res.json({ kind: "none" });
+  const result = await previewLocalCommand(req.user!.id, message);
+  if (!result) return res.json({ kind: "none" });
+  switch (result.type) {
+    case "proposal":
+      return res.json({ kind: "proposal", proposal: result.proposal });
+    case "clarify":
+      return res.json({ kind: "clarify", message: result.message });
+    case "reply":
+      return res.json({ kind: "reply", text: result.text });
+    case "error":
+      return res.json({ kind: "clarify", message: result.message });
+  }
 });

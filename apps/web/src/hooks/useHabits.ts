@@ -18,6 +18,8 @@ export function useHabits() {
 
   const habitsQuery = useQuery({ queryKey: HABITS_KEY, queryFn: habitService.list });
   const summaryQuery = useQuery({ queryKey: SUMMARY_KEY, queryFn: habitService.summary });
+  // Lista fixa por banco (muda só quando um módulo novo cria sua tabela).
+  const autoSourcesQuery = useQuery({ queryKey: ["habits", "auto-sources"], queryFn: habitService.autoSources, staleTime: 30 * 60_000 });
   const statsQuery = useQuery({ queryKey: STATS_KEY, queryFn: () => habitService.stats(30) });
 
   const createHabit = useMutation({ mutationFn: habitService.create, onSuccess: invalidate });
@@ -50,6 +52,7 @@ export function useHabits() {
 
   return {
     habits: habitsQuery.data ?? [],
+    autoSources: autoSourcesQuery.data ?? [],
     summaryByHabitId,
     stats: statsQuery.data ?? null,
     isLoading: habitsQuery.isLoading,

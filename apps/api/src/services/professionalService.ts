@@ -1,5 +1,7 @@
 import type { getDb } from "../db/client.js";
 import { DONE_STATUS, getProjectWorkload, shiftDays, type WorkloadSummary } from "./workloadService.js";
+import { userTimezone } from "./gamificationService.js";
+import { groupRowsByLocalDay, localDayOfStored } from "./localDayService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -99,44 +101,45 @@ function compare(
 
 export async function getProfessionalOverview(db: Db, ownerId: string, today: string): Promise<ProfessionalOverview> {
   const from = shiftDays(today, -WINDOW_DAYS);
+  // Timestamps UTC: o SQL só faz um pré-filtro com 1 dia de folga (`coarseFrom`)
+  // e o agrupamento por dia acontece em JS, no fuso do usuário.
+  const tz = await userTimezone(db, ownerId);
+  const coarseFrom = shiftDays(from, -1);
   const proTask = `t.project_id IN (SELECT id FROM projects WHERE owner_id = ? AND kind = 'professional')`;
 
   const [doneRes, timeRes, focusRes, sleepRes, moodRes, workoutRes, habitsRes, notesRes, firstRes, upcomingRes, goalsRes, journalCountRes, journalRecentRes, workload] =
     await Promise.all([
       db.execute({
-        sql: `SELECT date(COALESCE(t.completed_at, t.updated_at)) AS day, COUNT(*) AS v FROM tasks t
-              WHERE t.owner_id = ? AND t.status = ? AND ${proTask} AND date(COALESCE(t.completed_at, t.updated_at)) > date(?)
-              GROUP BY day`,
-        args: [ownerId, DONE_STATUS, ownerId, from],
+        sql: `SELECT COALESCE(t.completed_at, t.updated_at) AS at FROM tasks t
+              WHERE t.owner_id = ? AND t.status = ? AND ${proTask} AND COALESCE(t.completed_at, t.updated_at) >= ?`,
+        args: [ownerId, DONE_STATUS, ownerId, coarseFrom],
       }),
       db.execute({
-        sql: `SELECT date(e.started_at) AS day, SUM(COALESCE(e.duration_minutes, 0)) AS v FROM time_entries e
+        sql: `SELECT e.started_at AS at, COALESCE(e.duration_minutes, 0) AS v FROM time_entries e
               JOIN tasks t ON t.id = e.task_id AND t.owner_id = e.owner_id
-              WHERE e.owner_id = ? AND e.ended_at IS NOT NULL AND ${proTask} AND e.started_at >= date(?, '+1 day')
-              GROUP BY day`,
-        args: [ownerId, ownerId, from],
+              WHERE e.owner_id = ? AND e.ended_at IS NOT NULL AND ${proTask} AND e.started_at >= ?`,
+        args: [ownerId, ownerId, coarseFrom],
       }),
       db.execute({
-        sql: `SELECT date(f.started_at) AS day, SUM(COALESCE(f.actual_minutes, 0)) AS v FROM focus_sessions f
+        sql: `SELECT f.started_at AS at, COALESCE(f.actual_minutes, 0) AS v FROM focus_sessions f
               LEFT JOIN tasks t ON t.id = f.task_id AND t.owner_id = f.owner_id
-              WHERE f.owner_id = ? AND f.started_at >= date(?, '+1 day')
-                AND COALESCE(f.project_id, t.project_id) IN (SELECT id FROM projects WHERE owner_id = ? AND kind = 'professional')
-              GROUP BY day`,
-        args: [ownerId, from, ownerId],
+              WHERE f.owner_id = ? AND f.started_at >= ?
+                AND COALESCE(f.project_id, t.project_id) IN (SELECT id FROM projects WHERE owner_id = ? AND kind = 'professional')`,
+        args: [ownerId, coarseFrom, ownerId],
       }),
       // Sono atribuído ao dia em que a pessoa acordou (a noite "antes" do dia de trabalho).
       db.execute({
-        sql: `SELECT date(woke_up_at) AS day, SUM(duration_minutes) / 60.0 AS v FROM sleep_entries
-              WHERE owner_id = ? AND duration_minutes IS NOT NULL AND woke_up_at >= date(?, '+1 day') GROUP BY day`,
-        args: [ownerId, from],
+        sql: `SELECT woke_up_at AS at, duration_minutes / 60.0 AS v FROM sleep_entries
+              WHERE owner_id = ? AND duration_minutes IS NOT NULL AND woke_up_at >= ?`,
+        args: [ownerId, coarseFrom],
       }),
       db.execute({
-        sql: `SELECT date(recorded_at) AS day, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?, '+1 day') GROUP BY day`,
-        args: [ownerId, from],
+        sql: `SELECT recorded_at AS at, energy AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= ?`,
+        args: [ownerId, coarseFrom],
       }),
       db.execute({
-        sql: `SELECT date(performed_at) AS day, COUNT(*) AS v FROM workouts WHERE owner_id = ? AND performed_at >= date(?, '+1 day') GROUP BY day`,
-        args: [ownerId, from],
+        sql: `SELECT performed_at AS at FROM workouts WHERE owner_id = ? AND performed_at >= ?`,
+        args: [ownerId, coarseFrom],
       }),
       db.execute({
         sql: `SELECT he.entry_date AS day, COUNT(*) AS v FROM habit_entries he JOIN habits h ON h.id = he.habit_id
@@ -149,7 +152,7 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       }),
       // Primeiro dia com trabalho profissional cadastrado: dias anteriores não entram nas comparações.
       db.execute({
-        sql: `SELECT MIN(date(t.created_at)) AS first FROM tasks t WHERE t.owner_id = ? AND ${proTask}`,
+        sql: `SELECT MIN(datetime(t.created_at)) AS first FROM tasks t WHERE t.owner_id = ? AND ${proTask}`,
         args: [ownerId, ownerId],
       }),
       db.execute({
@@ -182,12 +185,12 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       getProjectWorkload(db, ownerId, { today, days: 30, kind: "professional" }),
     ]);
 
-  const doneMap = toMap(doneRes.rows as unknown[]);
-  const loggedMap = toMap(timeRes.rows as unknown[]);
-  for (const [day, v] of toMap(focusRes.rows as unknown[])) loggedMap.set(day, (loggedMap.get(day) ?? 0) + v);
-  const sleepMap = toMap(sleepRes.rows as unknown[]);
-  const energyMap = toMap(moodRes.rows as unknown[]);
-  const workoutMap = toMap(workoutRes.rows as unknown[]);
+  const doneMap = groupRowsByLocalDay(doneRes.rows, tz, "count");
+  const loggedMap = groupRowsByLocalDay(timeRes.rows, tz, "sum");
+  for (const [day, v] of groupRowsByLocalDay(focusRes.rows, tz, "sum")) loggedMap.set(day, (loggedMap.get(day) ?? 0) + v);
+  const sleepMap = groupRowsByLocalDay(sleepRes.rows, tz, "sum");
+  const energyMap = groupRowsByLocalDay(moodRes.rows, tz, "avg");
+  const workoutMap = groupRowsByLocalDay(workoutRes.rows, tz, "count");
   const habitsMap = toMap(habitsRes.rows as unknown[]);
   const notesMap = toMap(notesRes.rows as unknown[]);
 
@@ -208,7 +211,8 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
   const n = days.length;
 
   // Janela das comparações: a partir do primeiro trabalho profissional (e só até ontem — o dia de hoje está incompleto).
-  const first = String((firstRes.rows[0] as unknown as { first: string | null })?.first ?? today);
+  const firstAt = (firstRes.rows[0] as unknown as { first: string | null })?.first;
+  const first = firstAt ? localDayOfStored(String(firstAt), tz) : today;
   const sample = days.filter((d) => d.day >= first && d.day < today);
   const habitCounts = sample.map((d) => habitsMap.get(d.day) ?? 0).sort((a, b) => a - b);
   const habitMedian = habitCounts.length ? habitCounts[Math.floor(habitCounts.length / 2)] : 0;

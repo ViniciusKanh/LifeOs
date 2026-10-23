@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "../db/client.js";
 import { isDailyReadingGoal, pagesReadOn } from "./dailyReadingGoalService.js";
+import { dayKeyIn, userTimezone } from "./gamificationService.js";
+import { utcRangeFilter } from "./healthService.js";
+import { localDayOfStored, localDayRangeUtc } from "./localDayService.js";
 
 /**
  * Cálculo do Life Score e das métricas agregadas (Analytics, Hoje,
@@ -14,6 +17,14 @@ type Db = ReturnType<typeof getDb>;
 function clamp(value: number, min = 0, max = 100) {
   if (Number.isNaN(value) || !Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+/**
+ * Filtro "coluna (timestamp UTC) dentro dos dias locais [fromDay, toDayExclusive)"
+ * no fuso do usuário — `date(coluna)` compararia o dia UTC e erraria à noite.
+ */
+function localDaysFilter(column: string, fromDay: string, toDayExclusive: string, tz: string) {
+  return utcRangeFilter(column, localDayRangeUtc(fromDay, tz).start, localDayRangeUtc(toDayExclusive, tz).start);
 }
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -78,19 +89,19 @@ async function professionalScore(db: Db, ownerId: string): Promise<DimensionScor
 }
 
 /** Saúde diária: quatro registros verificáveis, com os mesmos alvos exibidos na tela. */
-async function healthScore(db: Db, ownerId: string, date: string): Promise<number> {
-  const waterMl = await scalar(
-    db,
-    "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
-    [ownerId, date]
-  );
+async function healthScore(db: Db, ownerId: string, date: string, tz: string): Promise<number> {
+  const next = isoDate(addDays(date, 1));
+  const waterF = localDaysFilter("recorded_at", date, next, tz);
+  const waterMl = await scalar(db, `SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND ${waterF.sql}`, [ownerId, ...waterF.args]);
   const waterScore = clamp((waterMl / 2500) * 100);
 
+  // Noite que termina no dia: deitou entre o início do dia anterior e o fim do dia.
+  const sleepF = localDaysFilter("went_to_bed_at", isoDate(addDays(date, -1)), next, tz);
   const sleepRow = await db.execute({
     sql: `SELECT quality, duration_minutes FROM sleep_entries
-          WHERE owner_id = ? AND went_to_bed_at >= date(?, '-1 day') AND went_to_bed_at < date(?, '+1 day')
-          ORDER BY went_to_bed_at DESC LIMIT 1`,
-    args: [ownerId, date, date],
+          WHERE owner_id = ? AND ${sleepF.sql}
+          ORDER BY datetime(went_to_bed_at) DESC LIMIT 1`,
+    args: [ownerId, ...sleepF.args],
   });
   const sleep = sleepRow.rows[0] as { quality?: number; duration_minutes?: number } | undefined;
   const sleepScore = sleep ? Math.max(
@@ -98,17 +109,11 @@ async function healthScore(db: Db, ownerId: string, date: string): Promise<numbe
     clamp(Number(sleep.quality ?? 0) * 20)
   ) : 0;
 
-  const workouts = await scalar(
-    db,
-    "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND (performed_at >= date(?2) AND performed_at < date(?2, '+1 day'))",
-    [ownerId, date]
-  );
+  const workoutF = localDaysFilter("performed_at", date, next, tz);
+  const workouts = await scalar(db, `SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND ${workoutF.sql}`, [ownerId, ...workoutF.args]);
   const workoutScore = workouts > 0 ? 100 : 0;
-  const moodCheckIns = await scalar(
-    db,
-    "SELECT COUNT(*) FROM mood_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))",
-    [ownerId, date]
-  );
+  const moodF = localDaysFilter("recorded_at", date, next, tz);
+  const moodCheckIns = await scalar(db, `SELECT COUNT(*) FROM mood_entries WHERE owner_id = ? AND ${moodF.sql}`, [ownerId, ...moodF.args]);
   const moodScore = moodCheckIns > 0 ? 100 : 0;
 
   return clamp((waterScore + sleepScore + workoutScore + moodScore) / 4);
@@ -313,11 +318,14 @@ export interface LifeScoreBreakdown {
   goals: number;
 }
 
-export async function computeLifeScore(ownerId: string, date = new Date().toISOString().slice(0, 10)): Promise<LifeScoreBreakdown> {
+export async function computeLifeScore(ownerId: string, dateArg?: string): Promise<LifeScoreBreakdown> {
   const db = getDb();
+  const tz = await userTimezone(db, ownerId);
+  // Sem data explícita, "hoje" é o dia no fuso do usuário (nunca o dia UTC).
+  const date = dateArg ?? dayKeyIn(new Date(), tz);
   const [productivity, health, education, reading, habits, professional, goals] = await Promise.all([
     productivityScore(db, ownerId),
-    healthScore(db, ownerId, date).then(toHealthDimension),
+    healthScore(db, ownerId, date, tz).then(toHealthDimension),
     educationScore(db, ownerId),
     readingScore(db, ownerId, date),
     habitsScore(db, ownerId, date),
@@ -393,45 +401,28 @@ export interface RangeMetrics {
 /** Métricas somadas num intervalo [from, to) — usadas em Analytics e Weekly Review. */
 export async function computeRangeMetrics(ownerId: string, from: string, to: string): Promise<RangeMetrics> {
   const db = getDb();
+  const tz = await userTimezone(db, ownerId);
+  const f = (column: string) => localDaysFilter(column, from, to, tz);
+  const done = f("updated_at");
+  const created = f("created_at");
+  const reading = f("started_at");
+  const workout = f("performed_at");
 
   const [tasksCompleted, tasksPlanned, pagesRead, workouts, readingMinutes, workoutMinutes, habitsTotal, habitsDone] = await Promise.all([
-    scalar(
-      db,
-      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?) AND updated_at < date(?)",
-      [ownerId, from, to]
-    ),
+    scalar(db, `SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND ${done.sql}`, [ownerId, ...done.args]),
     // "Planejadas": todas as tarefas criadas no período, concluídas ou não —
     // o denominador real de "48 de 100 planejadas", nunca uma meta inventada.
-    scalar(
-      db,
-      "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND created_at >= date(?) AND created_at < date(?)",
-      [ownerId, from, to]
-    ),
-    scalar(
-      db,
-      "SELECT COALESCE(SUM(pages_read), 0) FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?)",
-      [ownerId, from, to]
-    ),
-    scalar(
-      db,
-      "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?)",
-      [ownerId, from, to]
-    ),
-    scalar(
-      db,
-      "SELECT COALESCE(SUM(duration_minutes), 0) FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?)",
-      [ownerId, from, to]
-    ),
-    scalar(
-      db,
-      "SELECT COALESCE(SUM(duration_minutes), 0) FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?)",
-      [ownerId, from, to]
-    ),
+    scalar(db, `SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND ${created.sql}`, [ownerId, ...created.args]),
+    scalar(db, `SELECT COALESCE(SUM(pages_read), 0) FROM reading_sessions WHERE owner_id = ? AND ${reading.sql}`, [ownerId, ...reading.args]),
+    scalar(db, `SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND ${workout.sql}`, [ownerId, ...workout.args]),
+    scalar(db, `SELECT COALESCE(SUM(duration_minutes), 0) FROM reading_sessions WHERE owner_id = ? AND ${reading.sql}`, [ownerId, ...reading.args]),
+    scalar(db, `SELECT COALESCE(SUM(duration_minutes), 0) FROM workouts WHERE owner_id = ? AND ${workout.sql}`, [ownerId, ...workout.args]),
     scalar(
       db,
       "SELECT COUNT(*) * CAST(julianday(?) - julianday(?) AS INTEGER) FROM habits WHERE owner_id = ? AND archived_at IS NULL",
       [to, from, ownerId]
     ),
+    // entry_date já é o dia local do check-in.
     scalar(
       db,
       `SELECT COUNT(*) FROM habit_entries he JOIN habits h ON h.id = he.habit_id
@@ -506,24 +497,38 @@ export async function computeInsights(ownerId: string, from: string, to: string)
   const db = getDb();
 
   // 1) Sono (minutos, por noite) vs. tarefas concluídas no dia seguinte.
-  const [sleepByNight, tasksByDay] = await Promise.all([
+  // Agrupamento por dia local feito aqui (o `date()` do SQLite daria o dia UTC).
+  const tz = await userTimezone(db, ownerId);
+  const toExcl = isoDate(addDays(to, 1));
+  const sleepF = localDaysFilter("went_to_bed_at", from, toExcl, tz);
+  const tasksF = localDaysFilter("updated_at", from, toExcl, tz);
+  const [sleepRows, taskRows] = await Promise.all([
     db.execute({
-      sql: `SELECT date(went_to_bed_at) AS d, AVG(duration_minutes) AS minutes FROM sleep_entries
-            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?, '+1 day')
-            GROUP BY d`,
-      args: [ownerId, from, to],
+      sql: `SELECT went_to_bed_at AS at, duration_minutes AS minutes FROM sleep_entries
+            WHERE owner_id = ? AND duration_minutes IS NOT NULL AND ${sleepF.sql}`,
+      args: [ownerId, ...sleepF.args],
     }),
     db.execute({
-      sql: `SELECT date(updated_at) AS d, COUNT(*) AS total FROM tasks
-            WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?) AND updated_at < date(?, '+1 day')
-            GROUP BY d`,
-      args: [ownerId, from, to],
+      sql: `SELECT updated_at AS at FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND ${tasksF.sql}`,
+      args: [ownerId, ...tasksF.args],
     }),
   ]);
 
   type Row = Record<string, unknown>;
-  const sleepMap = new Map((sleepByNight.rows as unknown as Row[]).map((r) => [String(r.d), Number(r.minutes)]));
-  const tasksMap = new Map((tasksByDay.rows as unknown as Row[]).map((r) => [String(r.d), Number(r.total)]));
+  const sleepAcc = new Map<string, { sum: number; n: number }>();
+  for (const r of sleepRows.rows as unknown as Row[]) {
+    const day = localDayOfStored(String(r.at), tz);
+    const acc = sleepAcc.get(day) ?? { sum: 0, n: 0 };
+    acc.sum += Number(r.minutes);
+    acc.n += 1;
+    sleepAcc.set(day, acc);
+  }
+  const sleepMap = new Map([...sleepAcc].map(([d, a]) => [d, a.sum / a.n]));
+  const tasksMap = new Map<string, number>();
+  for (const r of taskRows.rows as unknown as Row[]) {
+    const day = localDayOfStored(String(r.at), tz);
+    tasksMap.set(day, (tasksMap.get(day) ?? 0) + 1);
+  }
 
   // Sono da noite de D vs. tarefas concluídas em D+1.
   const sleepPairsX: number[] = [];

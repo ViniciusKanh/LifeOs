@@ -14,6 +14,8 @@
  */
 import type { getDb } from "../db/client.js";
 import { computeHealthCorrelations, type CorrelationResult } from "./correlationService.js";
+import { userTimezone } from "./gamificationService.js";
+import { localDailyAggregate } from "./localDayService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -30,18 +32,6 @@ export interface DetectedPattern {
 const MIN_TREND_DAYS = 7;
 const MIN_ASSOCIATION_N = 10;
 
-interface DailyNumberRow {
-  d: string;
-  v: number | null;
-}
-
-function toMap(rows: DailyNumberRow[]): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const r of rows) {
-    if (r.v != null) m.set(r.d, Number(r.v));
-  }
-  return m;
-}
 
 function avg(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -126,19 +116,12 @@ export async function detectPatterns(db: Db, ownerId: string, from: string, to: 
   const dates = isoRange(from, to);
   const patterns: DetectedPattern[] = [];
 
-  const [sleepRows, moodRows] = await Promise.all([
-    db.execute({
-      sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day') AND duration_minutes IS NOT NULL GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
+  // Séries agrupadas pelo dia local do usuário (o date() do SQLite usaria o dia UTC).
+  const timeZone = await userTimezone(db, ownerId);
+  const [sleepSeries, energySeries] = await Promise.all([
+    localDailyAggregate(db, ownerId, { table: "sleep_entries", column: "woke_up_at", valueExpr: "duration_minutes", agg: "avg", fromDay: from, toDay: to, timeZone }),
+    localDailyAggregate(db, ownerId, { table: "mood_entries", column: "recorded_at", valueExpr: "energy", agg: "avg", fromDay: from, toDay: to, timeZone }),
   ]);
-
-  const sleepSeries = toMap(sleepRows.rows as unknown as DailyNumberRow[]);
-  const energySeries = toMap(moodRows.rows as unknown as DailyNumberRow[]);
 
   const sleepTrend = trendFor(sleepSeries, dates, MIN_TREND_DAYS, "Sono", "sleep", "min", true);
   if (sleepTrend) patterns.push(sleepTrend);

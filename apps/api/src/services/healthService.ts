@@ -1,5 +1,6 @@
 import type { Client, InStatement } from "@libsql/client";
 import { nanoid } from "nanoid";
+import { syncAutoHabitsAfterWrite } from "./habitAutoService.js";
 
 /* ============================================================
  * Saúde — regras de data local e de exercícios.
@@ -235,4 +236,142 @@ export function inferWorkoutCategory(kind: string): WorkoutCategory {
     ["esporte_coletivo", /futebol|volei|basquete|handebol|esporte|futsal/],
   ];
   return rules.find(([, re]) => re.test(k))?.[0] ?? "outro";
+}
+
+/* ---------------------- Escrita (rotas + Copilot) ----------------------
+ * Inserções extraídas de health.routes.ts para que o Copilot e as rotas
+ * gravem exatamente do mesmo jeito (Timeline/Analytics/Conquistas leem
+ * essas tabelas direto). Recebem dados JÁ validados pelos schemas zod de
+ * validators/health.schema.ts e sempre gravam com o owner_id informado.
+ * ---------------------------------------------------------------------- */
+
+/** Minutos entre dois instantes ISO; null se o fim não for depois do início. */
+export function minutesBetween(a: string, b: string) {
+  const diff = new Date(b).getTime() - new Date(a).getTime();
+  return diff > 0 ? Math.round(diff / 60000) : null;
+}
+
+export type WorkoutPayload = {
+  kind?: string;
+  category?: WorkoutCategory;
+  modality?: string | null;
+  intensity?: "leve" | "moderada" | "intensa" | null;
+  rpe?: number | null;
+  muscleGroups?: string | null;
+  rounds?: number | null;
+  roundMinutes?: number | null;
+};
+
+/**
+ * Regras de coerência entre tipo e campos: `kind` sempre recebe o rótulo do
+ * tipo (compatibilidade com quem lê essa coluna), campos de luta só valem
+ * para luta e o RPE alimenta a intensidade legada.
+ */
+export function normalizeWorkoutPayload(d: WorkoutPayload) {
+  const category = d.category ?? (d.kind ? inferWorkoutCategory(d.kind) : undefined);
+  const kind = d.category ? WORKOUT_CATEGORY_LABELS[d.category] : d.kind;
+  // Tipo conhecido e diferente de luta/musculação → zera os campos que não se aplicam.
+  const notFight = category !== undefined && category !== "luta";
+  const notStrength = category !== undefined && category !== "musculacao";
+  const intensity = d.rpe ? intensityFromRpe(d.rpe) : d.intensity;
+  return {
+    category,
+    kind,
+    intensity,
+    modality: notFight ? null : d.modality,
+    rounds: notFight ? null : d.rounds,
+    roundMinutes: notFight ? null : d.roundMinutes,
+    muscleGroups: notStrength ? null : d.muscleGroups,
+  };
+}
+
+export async function insertWaterEntry(db: Client, ownerId: string, d: { amountMl: number; recordedAt?: string }) {
+  const id = nanoid();
+  await db.execute({
+    sql: `INSERT INTO water_entries (id, owner_id, amount_ml, recorded_at)
+          VALUES (?, ?, ?, ?)`,
+    args: [id, ownerId, d.amountMl, d.recordedAt ?? nowIso()],
+  });
+  await syncAutoHabitsAfterWrite(db, ownerId, d.recordedAt ?? null);
+  const created = await db.execute({ sql: "SELECT * FROM water_entries WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
+  return created.rows[0];
+}
+
+/** Devolve null quando o horário de acordar não é depois do de dormir. */
+export async function insertSleepEntry(
+  db: Client,
+  ownerId: string,
+  d: { wentToBedAt: string; wokeUpAt: string; quality?: number; notes?: string }
+) {
+  const duration = minutesBetween(d.wentToBedAt, d.wokeUpAt);
+  if (duration === null) return null;
+  const id = nanoid();
+  await db.execute({
+    sql: `INSERT INTO sleep_entries (id, owner_id, went_to_bed_at, woke_up_at, duration_minutes, quality, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, ownerId, d.wentToBedAt, d.wokeUpAt, duration, d.quality ?? null, d.notes ?? null],
+  });
+  const created = await db.execute({ sql: "SELECT * FROM sleep_entries WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
+  return created.rows[0];
+}
+
+export async function insertMoodEntry(
+  db: Client,
+  ownerId: string,
+  d: { mood: number; energy: number; stress?: number; note?: string; recordedAt?: string }
+) {
+  const id = nanoid();
+  await db.execute({
+    sql: `INSERT INTO mood_entries (id, owner_id, mood, energy, stress, note, recorded_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, ownerId, d.mood, d.energy, d.stress ?? null, d.note ?? null, d.recordedAt ?? nowIso()],
+  });
+  const created = await db.execute({ sql: "SELECT * FROM mood_entries WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
+  return created.rows[0];
+}
+
+export type WorkoutInsert = WorkoutPayload & {
+  durationMinutes: number;
+  distanceKm?: number | null;
+  calories?: number | null;
+  notes?: string | null;
+  performedAt?: string;
+  sets?: WorkoutSetInput[];
+};
+
+/** Grava o treino (e as séries, só em musculação) e devolve o id criado. */
+export async function insertWorkout(db: Client, ownerId: string, d: WorkoutInsert): Promise<string> {
+  const n = normalizeWorkoutPayload(d);
+  const id = nanoid();
+  await db.batch(
+    [
+      {
+        sql: `INSERT INTO workouts (id, owner_id, kind, category, modality, duration_minutes, distance_km, calories, intensity, rpe,
+                                    muscle_groups, rounds, round_minutes, notes, performed_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          id,
+          ownerId,
+          n.kind ?? "Outro",
+          n.category ?? null,
+          n.modality ?? null,
+          d.durationMinutes,
+          d.distanceKm ?? null,
+          d.calories ?? null,
+          n.intensity ?? null,
+          d.rpe ?? null,
+          n.muscleGroups ?? null,
+          n.rounds ?? null,
+          n.roundMinutes ?? null,
+          d.notes ?? null,
+          d.performedAt ?? nowIso(),
+        ],
+      },
+      // Séries só fazem sentido em musculação; nos demais tipos são ignoradas.
+      ...(d.sets && n.category === "musculacao" ? replaceWorkoutSetsStatements(ownerId, id, d.sets).slice(1) : []),
+    ],
+    "write"
+  );
+  await syncAutoHabitsAfterWrite(db, ownerId, d.performedAt ?? null);
+  return id;
 }

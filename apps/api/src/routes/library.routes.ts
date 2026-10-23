@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { lookupIsbn } from "../services/bookLookupService.js";
+import { insertReadingSession } from "../services/readingSessionService.js";
 import {
   createBookSchema,
   updateBookSchema,
@@ -238,24 +239,6 @@ libraryRouter.post("/books/:id/sessions", async (req, res) => {
   const book = await getOwnedBook(req.params.id, req.user!.id);
   if (!book) return res.status(404).json({ error: "Livro não encontrado." });
 
-  const d = parsed.data;
-  const db = getDb();
-  const id = nanoid();
-  await db.execute({
-    sql: `INSERT INTO reading_sessions (id, book_id, owner_id, started_at, ended_at, duration_minutes, pages_read)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, req.params.id, req.user!.id, d.startedAt, d.endedAt ?? null, d.durationMinutes ?? null, d.pagesRead ?? 0],
-  });
-
-  // Atualiza o progresso de páginas do livro somando as páginas lidas
-  // na sessão — mesma lógica de "estado avança conforme o registro real".
-  if (d.pagesRead) {
-    await db.execute({
-      sql: `UPDATE books SET current_page = current_page + ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`,
-      args: [d.pagesRead, req.params.id, req.user!.id],
-    });
-  }
-
-  const created = await db.execute({ sql: "SELECT * FROM reading_sessions WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await insertReadingSession(getDb(), req.user!.id, req.params.id, parsed.data);
+  return res.status(201).json(created);
 });

@@ -36,6 +36,7 @@ import {
   getJournalDaysByLocation,
 } from "../services/journalService.js";
 import { awardJournalEntry } from "../services/gamificationService.js";
+import { syncAutoHabitsAfterWrite } from "../services/habitAutoService.js";
 
 export const journalRouter = Router();
 journalRouter.use(requireAuth);
@@ -401,6 +402,7 @@ journalRouter.delete("/:date", async (req, res) => {
   if (!isValidDate(date)) return res.status(400).json({ error: "Data inválida. Use o formato YYYY-MM-DD." });
   const db = getDb();
   await deleteJournalEntry(db, req.user!.id, date);
+  await syncAutoHabitsAfterWrite(db, req.user!.id, date);
   return res.status(204).end();
 });
 
@@ -650,6 +652,7 @@ journalRouter.put("/:date", async (req, res) => {
   // Texto puro (sem tags HTML do editor) decide se a crônica "conta".
   const plainText = (values.thoughts ?? "").replace(/<[^>]*>/g, "").trim();
   await awardJournalEntry(db, ownerId, date, plainText.length > 0);
+  await syncAutoHabitsAfterWrite(db, ownerId, date);
 
   return res.json(await buildJournalResponse(db, ownerId, date));
 });

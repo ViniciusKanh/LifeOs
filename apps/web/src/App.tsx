@@ -82,6 +82,10 @@ const ProtocolosPage = lazy(() => import("@/pages/protocolos/ProtocolosPage").th
 const DetectorGargalosPage = lazy(() => import("@/pages/detector-gargalos/DetectorGargalosPage").then((m) => ({ default: m.DetectorGargalosPage })));
 const TavernaPage = lazy(() => import("@/pages/taverna/TavernaPage").then((m) => ({ default: m.TavernaPage })));
 const MapaMundoPage = lazy(() => import("@/pages/mapa/MapaMundoPage").then((m) => ({ default: m.MapaMundoPage })));
+const QuestsPage = lazy(() => import("@/pages/quests/QuestsPage").then((m) => ({ default: m.QuestsPage })));
+const GuildaPage = lazy(() => import("@/pages/guilda/GuildaPage").then((m) => ({ default: m.GuildaPage })));
+const GrimorioPage = lazy(() => import("@/pages/grimorio/GrimorioPage").then((m) => ({ default: m.GrimorioPage })));
+const ConselhoPage = lazy(() => import("@/pages/conselho/ConselhoPage").then((m) => ({ default: m.ConselhoPage })));
 const ForjaInteligenciaPage = lazy(() => import("@/pages/forja-inteligencia/ForjaInteligenciaPage").then((m) => ({ default: m.ForjaInteligenciaPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
@@ -181,6 +185,10 @@ export default function App() {
           <Route path="/codex" element={<CodexPage />} />
           <Route path="/mapa" element={<MapaMundoPage />} />
           <Route path="/taverna" element={<TavernaPage />} />
+          <Route path="/quests" element={<QuestsPage />} />
+          <Route path="/guilda" element={<GuildaPage />} />
+          <Route path="/grimorio" element={<GrimorioPage />} />
+          <Route path="/conselho" element={<ConselhoPage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
           <Route path="/life-map" element={<Navigate to="/metas" replace />} />
           <Route path="/data-health" element={<Navigate to="/dashboard" replace />} />

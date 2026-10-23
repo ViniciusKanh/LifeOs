@@ -19,6 +19,8 @@ import { Button, Card, EmptyState, Field, IconBadge, PageHeader } from "@/compon
 import type { BookCreateInput } from "@/services/libraryService";
 import type { Book, BookLookupResult, BookStatus } from "@/types";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
+import { ReadingYearGoalCard } from "@/components/biblioteca/ReadingYearGoalCard";
+import { QuoteWall } from "@/components/biblioteca/QuoteWall";
 
 const STATUS_TABS: Array<{ value: BookStatus | "Todos"; label: string }> = [
   { value: "Todos", label: "Todos" },
@@ -301,6 +303,7 @@ export function BibliotecaPage() {
         </div>
 
         <div className="space-y-4">
+          <ReadingYearGoalCard />
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -391,6 +394,8 @@ export function BibliotecaPage() {
           </Card>
         </div>
       </div>
+
+      <QuoteWall books={allBooks} />
 
       {modal === "isbn" && <IsbnModal onClose={() => setModal("none")} onCreate={createBook} />}
       {modal === "manual" && <ManualBookModal onClose={() => setModal("none")} onCreate={createBook} />}

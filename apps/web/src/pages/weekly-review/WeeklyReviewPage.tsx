@@ -21,8 +21,8 @@ import {
 import { useWeeklyReview, mondayOf } from "@/hooks/useReviews";
 import { Button, Card, IconBadge } from "@/components/ui/primitives";
 import { useTheme } from "@/hooks/useTheme";
-import { useNavigate } from "react-router-dom";
-import { Feather } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { CalendarRange, Feather } from "lucide-react";
 import { RPGAvatar, RPGBadge, RPGButton, RPGPanel, RPGPageHeader, RPGTabs, RPG_SECTION_TITLE } from "@/components/rpg";
 import { useProjects } from "@/hooks/useProjects";
 import { RpgCycleSeal } from "@/components/reviews/RpgReviewParts";
@@ -331,6 +331,22 @@ export function WeeklyReviewPage() {
     </div>
   );
 
+  // Par "para frente" da revisão: abre o Conselho de Guerra já na semana seguinte
+  // (semanas que já passaram não se planejam — aí vai para a semana sugerida).
+  const nextWeekStart = (() => {
+    const d = new Date(`${weekStartDate}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
+  const planNextLink = (
+    <Link
+      to={nextWeekStart >= currentMonday ? `/conselho?semana=${nextWeekStart}` : "/conselho"}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-paper-border dark:border-ink-border px-3 py-1.5 text-xs font-semibold text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 rpg:rounded-[3px] rpg:border-rpg-gold/70 rpg:text-rpg-gold-light rpg:hover:bg-rpg-gold/10"
+    >
+      <CalendarRange size={13} aria-hidden /> Planejar a próxima semana
+    </Link>
+  );
+
   // Tema RPG: "Relatório da jornada" semanal (mesmo estado/handlers da tela clássica).
   if (isRpg) {
     const reflections = [
@@ -351,7 +367,7 @@ export function WeeklyReviewPage() {
           eyebrow="Relatório da jornada"
           title="Revisões"
           subtitle="Feche o ciclo, aprenda com a jornada e planeje o próximo desafio."
-          aside={<div className="m-1.5 bg-rpg-bg/85">{weekNav}</div>}
+          aside={<div className="m-1.5 bg-rpg-bg/85 flex flex-col items-end gap-1.5">{weekNav}{planNextLink}</div>}
         />
         <RPGTabs
           label="Tipo de revisão"
@@ -517,7 +533,7 @@ export function WeeklyReviewPage() {
           eyebrow="Relatório da jornada"
           title="Revisão semanal"
           subtitle="Pare, olhe para trás e planeje a próxima semana com clareza."
-          aside={<div className="m-1.5 bg-rpg-bg/85">{weekNav}</div>}
+          aside={<div className="m-1.5 bg-rpg-bg/85 flex flex-col items-end gap-1.5">{weekNav}{planNextLink}</div>}
         />
       ) : (
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -525,7 +541,10 @@ export function WeeklyReviewPage() {
           <p className="font-display font-semibold text-2xl">Weekly Review</p>
           <p className="text-sm text-slate mt-1">Pare, olhe para trás e planeje a próxima semana com clareza.</p>
         </div>
-        {weekNav}
+        <div className="flex items-center gap-2 flex-wrap">
+          {weekNav}
+          {planNextLink}
+        </div>
       </div>
       )}
 

@@ -15,6 +15,7 @@ import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
+import { CommandPalette } from "@/components/command/CommandPalette";
 import { QuickCaptureButton } from "./QuickCaptureButton";
 import { Sidebar, NavGroups, useSidebarCollapsed } from "./Sidebar";
 import { AppFooter } from "./AppFooter";
@@ -27,6 +28,7 @@ import { HubTabs } from "./HubTabs";
 import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
 import { IS_DESKTOP } from "@/platform";
+import { useDesktopNotifications } from "@/hooks/useDesktopNotifications";
 
 // Aviso de nova versão do app nativo — só existe (e só é baixado) no LifeOS Desktop.
 const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop/DesktopUpdatePrompt")) : null;
@@ -97,6 +99,7 @@ export function AppShell() {
   const { isAdmin } = useAuth();
   const location = useLocation();
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
+  useDesktopNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const current = findNavItem(location.pathname);
@@ -207,6 +210,7 @@ export function AppShell() {
         <GamificationFeedback />
         <OnboardingFlow />
         <CopilotAssistant />
+        <CommandPalette />
         <QuickCaptureButton />
       </div>
     </div>

@@ -2,7 +2,8 @@ import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
 import { DONE_STATUS } from "./workloadService.js";
 import { loadDirectionGoals, type DirectionGoal } from "./directionService.js";
-import { reviewRewardStatus, todayKeyFor } from "./gamificationService.js";
+import { reviewRewardStatus, todayKeyFor, userTimezone } from "./gamificationService.js";
+import { localDaysWhere } from "./localDayService.js";
 
 /**
  * Revisões mensal, trimestral e anual (a semanal continua em weekly_reviews).
@@ -92,9 +93,16 @@ const nn = (rows: unknown[], key: string) => {
 export async function computePeriodMetrics(db: Db, ownerId: string, kind: PeriodicKind, key: string): Promise<PeriodMetrics> {
   const { from, to, label } = periodRange(kind, key);
   const a = [ownerId, from, to];
+  // Timestamps UTC filtrados pelos dias locais do período (fuso do perfil).
+  const tz = await userTimezone(db, ownerId);
+  const w = (column: string) => localDaysWhere(column, from, to, tz);
+  const q = (sqlHead: string, column: string) => {
+    const f = w(column);
+    return db.execute({ sql: `${sqlHead} AND ${f.sql}`, args: [ownerId, ...f.args] });
+  };
   const [tasks, goalsDone, habits, journal, pages, workouts, mood, sleep, admin, wheel, goals] = await Promise.all([
-    db.execute({ sql: `SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = '${DONE_STATUS}' AND date(COALESCE(completed_at, updated_at)) BETWEEN ? AND ?`, args: a }),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM goals WHERE owner_id = ? AND status = 'done' AND completed_at >= date(?) AND completed_at < date(?, '+1 day')", args: a }),
+    q(`SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = '${DONE_STATUS}'`, "COALESCE(completed_at, updated_at)"),
+    q("SELECT COUNT(*) AS n FROM goals WHERE owner_id = ? AND status = 'done'", "completed_at"),
     db.execute({
       sql: `SELECT COUNT(*) AS n FROM habit_entries he JOIN habits h ON h.id = he.habit_id
             WHERE he.owner_id = ? AND he.entry_date BETWEEN ? AND ? AND he.count >= h.target_count`,
@@ -104,10 +112,10 @@ export async function computePeriodMetrics(db: Db, ownerId: string, kind: Period
       sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ? AND entry_date BETWEEN ? AND ? AND COALESCE(thoughts, '') != ''",
       args: a,
     }),
-    db.execute({ sql: "SELECT COALESCE(SUM(pages_read), 0) AS n FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day')", args: a }),
-    db.execute({ sql: "SELECT COUNT(*) AS n, COALESCE(SUM(duration_minutes), 0) AS m FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day')", args: a }),
-    db.execute({ sql: "SELECT AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')", args: a }),
-    db.execute({ sql: "SELECT AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND went_to_bed_at >= date(?) AND went_to_bed_at < date(?, '+1 day')", args: a }),
+    q("SELECT COALESCE(SUM(pages_read), 0) AS n FROM reading_sessions WHERE owner_id = ?", "started_at"),
+    q("SELECT COUNT(*) AS n, COALESCE(SUM(duration_minutes), 0) AS m FROM workouts WHERE owner_id = ?", "performed_at"),
+    q("SELECT AVG(mood) AS v FROM mood_entries WHERE owner_id = ?", "recorded_at"),
+    q("SELECT AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ?", "went_to_bed_at"),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM life_admin_history WHERE owner_id = ? AND done_at BETWEEN ? AND ?", args: a }),
     db.execute({
       // Média da avaliação mais recente da roda dentro do período.

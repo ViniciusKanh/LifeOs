@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createInboxItemSchema, processInboxItemSchema } from "../validators/inbox.schema.js";
+import { insertInboxItem } from "../services/inboxService.js";
 
 /**
  * Inbox / Notas rápidas — captura única estilo GTD (Getting Things
@@ -60,16 +61,8 @@ inboxRouter.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
-  const db = getDb();
-  const id = nanoid();
-
-  await db.execute({
-    sql: "INSERT INTO inbox_items (id, owner_id, content) VALUES (?, ?, ?)",
-    args: [id, req.user!.id, parsed.data.content],
-  });
-
-  const created = await db.execute({ sql: "SELECT * FROM inbox_items WHERE id = ? AND owner_id = ?", args: [id, req.user!.id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await insertInboxItem(getDb(), req.user!.id, parsed.data.content);
+  return res.status(201).json(created);
 });
 
 /**

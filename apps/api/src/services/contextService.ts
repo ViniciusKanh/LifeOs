@@ -15,6 +15,8 @@ import { getContextLocation, type ContextLocation } from "./contextLocationServi
 import { mapWeatherCode, classifyUV, classifyAQI, classifyThermalComfort } from "./weatherCodeUtils.js";
 import { computeContextPatterns, type RoutineImpact, type ContextInsight } from "./contextAnalyticsService.js";
 import type { SignalStatus } from "./signalsService.js";
+import { dayKeyIn, userTimezone } from "./gamificationService.js";
+import { localDaysWhere, shiftDayKey } from "./localDayService.js";
 
 type Db = ReturnType<typeof getDb>;
 export type ContextPeriod = "today" | "7d" | "30d";
@@ -23,9 +25,6 @@ function periodDays(period: ContextPeriod): number {
   return period === "today" ? 1 : period === "7d" ? 7 : 30;
 }
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 function findHourly(snapshot: WeatherSnapshot, dateStr: string, hour: number) {
   const target = `${dateStr}T${String(hour).padStart(2, "0")}:00`;
@@ -95,22 +94,22 @@ function buildAgendaRecomendada(rainByPeriod: Record<string, number | null>): Ar
 
 async function computeComparativo(db: Db, ownerId: string, lat: number, lon: number, timezone: string, period: ContextPeriod) {
   const days = Math.max(periodDays(period), 7);
-  const to = new Date();
-  const from = new Date(to);
-  from.setUTCDate(from.getUTCDate() - (days - 1));
-  const prevTo = new Date(from);
-  prevTo.setUTCDate(prevTo.getUTCDate() - 1);
-  const prevFrom = new Date(prevTo);
-  prevFrom.setUTCDate(prevFrom.getUTCDate() - (days - 1));
+  // Janelas em dias locais do usuário; os registros (UTC) são filtrados no fuso do perfil.
+  const userTz = await userTimezone(db, ownerId);
+  const to = dayKeyIn(new Date(), userTz);
+  const from = shiftDayKey(to, -(days - 1));
+  const prevTo = shiftDayKey(from, -1);
+  const prevFrom = shiftDayKey(prevTo, -(days - 1));
 
-  async function aggregateWindow(fromD: Date, toD: Date) {
-    const fromStr = isoDate(fromD);
-    const toStr = isoDate(toD);
+  async function aggregateWindow(fromStr: string, toStr: string) {
+    const focusF = localDaysWhere("started_at", fromStr, toStr, userTz);
+    const moodF = localDaysWhere("recorded_at", fromStr, toStr, userTz);
+    const walkF = localDaysWhere("performed_at", fromStr, toStr, userTz);
     const [weather, focusRes, moodRes, walkRes] = await Promise.all([
       OpenMeteoWeatherProvider.getHistoricalWeather(lat, lon, timezone, fromStr, toStr),
-      db.execute({ sql: `SELECT SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day')`, args: [ownerId, fromStr, toStr] }),
-      db.execute({ sql: `SELECT AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')`, args: [ownerId, fromStr, toStr] }),
-      db.execute({ sql: `SELECT SUM(distance_km) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND performed_at >= date(?) AND performed_at < date(?, '+1 day')`, args: [ownerId, fromStr, toStr] }),
+      db.execute({ sql: `SELECT SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND ${focusF.sql}`, args: [ownerId, ...focusF.args] }),
+      db.execute({ sql: `SELECT AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND ${moodF.sql}`, args: [ownerId, ...moodF.args] }),
+      db.execute({ sql: `SELECT SUM(distance_km) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND ${walkF.sql}`, args: [ownerId, ...walkF.args] }),
     ]);
     const temps = weather.map((w) => w.temperatureMean).filter((v): v is number => v != null);
     const rainyDays = weather.filter((w) => w.precipitationSum != null && w.precipitationSum > 0).length;
@@ -146,7 +145,8 @@ export async function getContextDashboard(db: Db, ownerId: string, period: Conte
     location.showAirQuality ? OpenMeteoWeatherProvider.getAirQuality(location.latitude, location.longitude) : Promise.resolve<AirQualityCurrent | null>(null),
   ]);
 
-  const today = isoDate(new Date());
+  // "Hoje" da previsão é o dia no fuso do local (a Open-Meteo responde nesse fuso).
+  const today = dayKeyIn(new Date(), timezone);
   const todayDaily = snapshot.daily.find((d) => d.date === today) ?? snapshot.daily[0];
   const tomorrowDaily = snapshot.daily[1] ?? null;
 
@@ -189,10 +189,9 @@ export async function getContextDashboard(db: Db, ownerId: string, period: Conte
 
   // Histórico para padrões/comparativo — só busca se o período pedido justificar (regra 77: evitar chamadas redundantes).
   const days = Math.max(periodDays(period), 14);
-  const histTo = new Date();
-  const histFrom = new Date(histTo);
-  histFrom.setUTCDate(histFrom.getUTCDate() - (days - 1));
-  const historicalWeather = await OpenMeteoWeatherProvider.getHistoricalWeather(location.latitude, location.longitude, timezone, isoDate(histFrom), isoDate(histTo));
+  const histTo = today;
+  const histFrom = shiftDayKey(histTo, -(days - 1));
+  const historicalWeather = await OpenMeteoWeatherProvider.getHistoricalWeather(location.latitude, location.longitude, timezone, histFrom, histTo);
   const { impacts, insights, disclaimer } = await computeContextPatterns(db, ownerId, historicalWeather);
   const comparativo = await computeComparativo(db, ownerId, location.latitude, location.longitude, timezone, period);
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { CheckCircle2, Circle, Coins, Flame, MoreHorizontal, ScrollText, Search, Sparkles } from "lucide-react";
 import { RPGBadge, RPGPanel, RPGTabs } from "@/components/rpg";
@@ -37,12 +37,15 @@ export function RpgHabitsPanel({
   onFulfill,
   onEdit,
   pendingId,
+  renderExtra,
 }: {
   items: Item[];
   today: string;
   onFulfill: (habit: Habit) => void;
   onEdit?: (habit: Habit) => void;
   pendingId: string | null;
+  /** Conteúdo extra sob o nome (ex.: selos de hábito automático/encadeado). */
+  renderExtra?: (habit: Habit) => ReactNode;
 }) {
   const reduce = useReducedMotion();
   const { data: rules } = useGamificationRules();
@@ -107,6 +110,7 @@ export function RpgHabitsPanel({
                     {FREQUENCY_LABEL[habit.frequency]} · {habit.category?.trim() || "Geral"}
                   </p>
                   {habit.target_count > 1 && <p className="text-[11px] text-rpg-text/80 mt-0.5">Meta: {habit.target_count}× no dia</p>}
+                  {renderExtra?.(habit)}
                 </div>
                 {onEdit && (
                   <button type="button" onClick={() => onEdit(habit)} className="shrink-0 w-8 h-8 -mr-1 flex items-center justify-center text-rpg-muted hover:text-rpg-gold-light" aria-label={`Editar hábito ${habit.name}`}>

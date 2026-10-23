@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
+import { localDaysWhere, userDayContext } from "./localDayService.js";
 import { computeLifeScore, computeRangeMetrics, computeInsights, changePct } from "./metricsService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { dispatchTriggerNotification } from "./notificationTriggersService.js";
@@ -22,8 +23,10 @@ async function scalar(db: Db, sql: string, args: Array<string | number>): Promis
 
 async function buildContext(ownerId: string) {
   const db = getDb();
-  const today = new Date().toISOString().slice(0, 10);
+  // "Hoje" no fuso do usuário (o dia UTC vira às 21h em São Paulo).
+  const { tz, today } = await userDayContext(db, ownerId);
   const score = await computeLifeScore(ownerId, today);
+  const waterToday = localDaysWhere("recorded_at", today, today, tz);
 
   const [tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, currentBook, nextMilestone] = await Promise.all([
     scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído'", [ownerId]),
@@ -39,10 +42,7 @@ async function buildContext(ownerId: string) {
        WHERE he.owner_id = ? AND he.entry_date = ? AND h.archived_at IS NULL AND he.count >= h.target_count`,
       [ownerId, today]
     ),
-    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))", [
-      ownerId,
-      today,
-    ]),
+    scalar(db, `SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND ${waterToday.sql}`, [ownerId, ...waterToday.args]),
     db.execute({
       sql: "SELECT title, current_page, total_pages FROM books WHERE owner_id = ? AND status = 'Lendo' ORDER BY updated_at DESC LIMIT 1",
       args: [ownerId],
@@ -111,13 +111,11 @@ const WATER_GOAL_ML = 2500;
 
 async function buildHealthContext(ownerId: string) {
   const db = getDb();
-  const today = new Date().toISOString().slice(0, 10);
+  const { tz, today } = await userDayContext(db, ownerId);
+  const waterToday = localDaysWhere("recorded_at", today, today, tz);
 
   const [waterTodayMl, sleepRows, workoutsWeekRows, moodRows] = await Promise.all([
-    scalar(db, "SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND (recorded_at >= date(?2) AND recorded_at < date(?2, '+1 day'))", [
-      ownerId,
-      today,
-    ]),
+    scalar(db, `SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries WHERE owner_id = ? AND ${waterToday.sql}`, [ownerId, ...waterToday.args]),
     db.execute({
       sql: `SELECT duration_minutes, quality, went_to_bed_at FROM sleep_entries
             WHERE owner_id = ? AND went_to_bed_at >= datetime(?, '-7 days')

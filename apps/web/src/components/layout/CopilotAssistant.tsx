@@ -10,6 +10,21 @@ type ChatEntry =
   | { role: "assistant-proposal"; proposal: CopilotActionProposal; status: "pending" | "confirmed" | "cancelled" }
   | { role: "assistant-error"; text: string };
 
+/** Prévia campo a campo do que a ação vai gravar (vem pronta do backend). */
+export function ProposalDetails({ proposal }: { proposal: CopilotActionProposal }) {
+  if (!proposal.details?.length) return null;
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+      {proposal.details.map((d) => (
+        <div key={d.label} className="contents">
+          <dt className="text-slate rpg:text-rpg-muted">{d.label}</dt>
+          <dd className="font-medium break-words">{d.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /**
  * Copilot com ações reais — o próximo passo depois do Copilot que só
  * escrevia texto (insight do dia). Aqui o usuário pode pedir "cria
@@ -101,7 +116,8 @@ export function CopilotAssistant() {
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
               {history.length === 0 && (
                 <div className="text-xs text-slate space-y-2">
-                  <p>Peça pra eu fazer algo: criar uma tarefa, concluir uma tarefa, marcar um hábito, mover uma tarefa ou criar um evento.</p>
+                  <p>Peça pra eu fazer algo: criar tarefa, meta ou projeto, concluir ou mover uma tarefa, marcar um hábito, criar um evento, guardar uma nota na Inbox ou registrar água, treino, leitura, sono e humor.</p>
+                  <p>Comandos rápidos funcionam até sem IA: “bebi 500ml”, “treino corrida 30min”, “li 20 páginas de Duna”, “tarefa revisar relatório sexta alta”.</p>
                   <p className="italic">Eu sempre mostro o que vou fazer antes de gravar qualquer coisa — nada acontece sem você confirmar.</p>
                 </div>
               )}
@@ -139,6 +155,7 @@ export function CopilotAssistant() {
                     <div className="max-w-[90%] w-full rounded-2xl rounded-tl-sm border border-brand-500/30 bg-gradient-to-br from-brand-50 to-transparent dark:from-brand-700/15 p-3 space-y-2.5">
                       <p className="text-[11px] font-semibold text-brand-700 dark:text-brand-100">Proposta de ação</p>
                       <p className="text-sm">{entry.proposal.summary}</p>
+                      <ProposalDetails proposal={entry.proposal} />
                       {entry.status === "pending" && (
                         <div className="flex gap-2 pt-1">
                           <Button onClick={() => handleConfirm(i, entry.proposal)} disabled={isConfirming} className="!py-1.5 !px-3 text-xs">

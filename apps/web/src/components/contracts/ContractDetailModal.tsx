@@ -12,6 +12,7 @@ import { ContractTaskEditor, draftsToInput, emptyDraft, type TaskDraft } from ".
 import { ContractDocument } from "./ContractDocument";
 import { ContractBossBar } from "./ContractBossBar";
 import { useAuth } from "@/hooks/useAuth";
+import { GuildPartnersPanel } from "@/components/guild/GuildPartnersPanel";
 
 const DONE = "Concluído";
 
@@ -212,6 +213,9 @@ export function ContractDetailModal({ id, onClose, onToast }: { id: string; onCl
               </div>
             </section>
           )}
+
+          {/* Guilda: parceiros de compromisso (veem só o resumo, nunca as obrigações). */}
+          <GuildPartnersPanel entityType="contract" entityId={id} look="rpg" onToast={onToast} />
 
           <footer className="flex flex-wrap gap-2 border-t border-rpg-border/60 pt-3">
             {c.status === "arquivado" ? (

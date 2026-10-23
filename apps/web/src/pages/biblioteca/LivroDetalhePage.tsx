@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BookOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, BookOpenText, Plus, Trash2 } from "lucide-react";
 import { useBook, useBooks } from "@/hooks/useBooks";
 import { Button, Card, Field } from "@/components/ui/primitives";
-import type { BookStatus } from "@/types";
+import type { BookNote, BookStatus } from "@/types";
+import { QuoteToCardModal, type QuoteForCard } from "@/components/grimorio/QuoteToCardModal";
+import { InlineToast } from "@/components/grimorio/grimoireUi";
+import { todayKey } from "@/utils/localDate";
+
+const NOTE_KINDS: Array<{ value: BookNote["kind"]; label: string }> = [
+  { value: "note", label: "Nota" },
+  { value: "quote", label: "Citação" },
+  { value: "insight", label: "Insight" },
+];
 
 const STATUS_OPTIONS: BookStatus[] = ["Quero Ler", "Lendo", "Pausado", "Concluído", "Abandonado"];
 
@@ -14,6 +23,10 @@ export function LivroDetalhePage() {
   const { updateBook, removeBook } = useBooks();
 
   const [noteContent, setNoteContent] = useState("");
+  const [noteKind, setNoteKind] = useState<BookNote["kind"]>("note");
+  const [notePage, setNotePage] = useState("");
+  const [toCard, setToCard] = useState<QuoteForCard | null>(null);
+  const [toast, setToast] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [sessionPages, setSessionPages] = useState("");
   const [sessionMinutes, setSessionMinutes] = useState("");
 
@@ -25,8 +38,10 @@ export function LivroDetalhePage() {
 
   const handleAddNote = async () => {
     if (!noteContent.trim()) return;
-    await addNote({ content: noteContent.trim(), kind: "note" });
+    const page = Number(notePage);
+    await addNote({ content: noteContent.trim(), kind: noteKind, page: Number.isInteger(page) && page > 0 ? page : null });
     setNoteContent("");
+    setNotePage("");
   };
 
   const handleAddSession = async () => {
@@ -65,7 +80,12 @@ export function LivroDetalhePage() {
           <div className="flex items-center gap-2 mt-4 flex-wrap">
             <select
               value={book.status}
-              onChange={(e) => updateBook({ id: book.id, patch: { status: e.target.value as BookStatus } })}
+              aria-label="Status do livro"
+              onChange={(e) => {
+                const status = e.target.value as BookStatus;
+                // Concluir registra a data (dia local) — base da meta anual de leitura.
+                updateBook({ id: book.id, patch: status === "Concluído" && !book.finished_at ? { status, finishedAt: todayKey() } : { status } });
+              }}
               className="text-xs rounded-lg px-3 py-2 bg-transparent border border-paper-border dark:border-ink-border"
             >
               {STATUS_OPTIONS.map((s) => (
@@ -137,14 +157,37 @@ export function LivroDetalhePage() {
 
         <Card className="p-4">
           <p className="text-sm font-semibold mb-3">Notas e insights</p>
-          <div className="flex gap-2 mb-3">
+          <div className="flex flex-wrap gap-2 mb-3">
             <input
               value={noteContent}
               onChange={(e) => setNoteContent(e.target.value)}
+              aria-label="Texto da nota"
               placeholder="Escreva uma nota, citação ou insight..."
-              className="flex-1 rounded-lg px-3 py-2 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+              className="basis-full sm:basis-0 flex-1 min-w-0 rounded-lg px-3 py-2 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
             />
-            <Button onClick={handleAddNote}>
+            <select
+              value={noteKind}
+              onChange={(e) => setNoteKind(e.target.value as BookNote["kind"])}
+              aria-label="Tipo da nota"
+              className="text-xs rounded-lg px-2 py-2 bg-transparent border border-paper-border dark:border-ink-border"
+            >
+              {NOTE_KINDS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={notePage}
+              onChange={(e) => setNotePage(e.target.value)}
+              aria-label="Página (opcional)"
+              placeholder="Pág."
+              className="w-20 rounded-lg px-2 py-2 text-sm bg-transparent outline-none border border-paper-border dark:border-ink-border"
+            />
+            <Button onClick={handleAddNote} aria-label="Adicionar nota">
               <Plus size={14} />
             </Button>
           </div>
@@ -152,13 +195,25 @@ export function LivroDetalhePage() {
             {notes.length === 0 && <p className="text-xs text-slate">Nenhuma nota ainda.</p>}
             {notes.map((n) => (
               <div key={n.id} className="text-sm rounded-lg p-2.5 bg-paper dark:bg-ink border border-paper-border dark:border-ink-border">
+                {n.kind !== "note" && <span className="text-[10px] font-semibold uppercase tracking-wide text-slate mr-1.5">{NOTE_KINDS.find((k) => k.value === n.kind)?.label ?? n.kind}</span>}
                 {n.content}
                 {n.page && <span className="text-xs text-slate"> · p. {n.page}</span>}
+                {(n.kind === "quote" || n.kind === "insight") && (
+                  <button
+                    type="button"
+                    onClick={() => setToCard({ id: n.id, bookId: book.id, bookTitle: book.title, bookAuthor: book.author, content: n.content, page: n.page })}
+                    className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 rpg:text-rpg-gold-light"
+                  >
+                    <BookOpenText size={12} aria-hidden /> Virar cartão
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </Card>
       </div>
+      <QuoteToCardModal quote={toCard} onClose={() => setToCard(null)} onDone={(text, tone = "success") => setToast({ text, tone })} />
+      <InlineToast message={toast?.text ?? null} tone={toast?.tone} onClose={() => setToast(null)} />
     </div>
   );
 }

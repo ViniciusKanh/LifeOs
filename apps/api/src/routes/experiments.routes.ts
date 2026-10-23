@@ -157,7 +157,7 @@ experimentsRouter.get("/insights", async (req, res) => {
 });
 
 /** GET /api/experiments/suggestions/ai — sugestão de experimento via IA (nunca cria nada sozinho). */
-experimentsRouter.get("/suggestions/ai", async (req, res) => {
+experimentsRouter.get("/suggestions/ai", aiLimit, async (req, res) => {
   const db = getDb();
   const result = await suggestExperiment(db, req.user!.id);
   if (!result.ok) return res.status(422).json({ error: result.message });
@@ -322,7 +322,7 @@ experimentsRouter.post("/:id/logs", async (req, res) => {
 });
 
 /** POST /api/experiments/:id/analyze — análise do LifeOS Copilot sobre o experimento. */
-experimentsRouter.post("/:id/analyze", async (req, res) => {
+experimentsRouter.post("/:id/analyze", aiLimit, async (req, res) => {
   const parsed = analyzeSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: "Dados inválidos." });
   try {

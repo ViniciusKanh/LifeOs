@@ -2,9 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { aiRateLimit } from "../middleware/rateLimit.js";
 import { getSignalsDashboard, type SignalPeriod } from "../services/signalsService.js";
 import { complementWithAI, buildRecommendation } from "../services/signalsRecommendationService.js";
 import { detectPatterns } from "../services/signalsPatternService.js";
+import { localDailyAggregate, shiftDayKey, userDayContext } from "../services/localDayService.js";
 
 export const signalsRouter = Router();
 
@@ -18,35 +20,50 @@ const periodSchema = z.enum(["today", "7d", "30d"]).catch("7d");
 const TREND_SIGNALS = ["sleep", "mood", "energy", "exercise", "reading"] as const;
 type TrendSignal = (typeof TREND_SIGNALS)[number];
 
-const TREND_QUERIES: Record<TrendSignal, { sql: string; scale: (v: number) => number }> = {
+type TrendQuery = Pick<Parameters<typeof localDailyAggregate>[2], "table" | "column" | "valueExpr" | "agg"> & { scale: (v: number) => number };
+
+const TREND_QUERIES: Record<TrendSignal, TrendQuery> = {
   sleep: {
-    sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day') GROUP BY d`,
+    table: "sleep_entries",
+    column: "woke_up_at",
+    valueExpr: "duration_minutes",
+    agg: "avg",
     scale: (v) => Math.max(0, Math.min(100, Math.round((v / 480) * 100))),
   },
   mood: {
-    sql: `SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
+    table: "mood_entries",
+    column: "recorded_at",
+    valueExpr: "mood",
+    agg: "avg",
     scale: (v) => Math.max(0, Math.min(100, Math.round(((v - 1) / 4) * 100))),
   },
   energy: {
-    sql: `SELECT date(recorded_at) AS d, AVG(energy) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
+    table: "mood_entries",
+    column: "recorded_at",
+    valueExpr: "energy",
+    agg: "avg",
     scale: (v) => Math.max(0, Math.min(100, Math.round(((v - 1) / 4) * 100))),
   },
   exercise: {
-    sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day') GROUP BY d`,
+    table: "workouts",
+    column: "performed_at",
+    valueExpr: "duration_minutes",
+    agg: "sum",
     scale: (v) => Math.max(0, Math.min(100, Math.round((v / 30) * 100))),
   },
   reading: {
-    sql: `SELECT date(started_at) AS d, SUM(pages_read) AS v FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d`,
+    table: "reading_sessions",
+    column: "started_at",
+    valueExpr: "pages_read",
+    agg: "sum",
     scale: (v) => Math.max(0, Math.min(100, Math.round((v / 20) * 100))),
   },
 };
 
-function periodBounds(period: SignalPeriod) {
-  const to = new Date().toISOString().slice(0, 10);
+/** Período em dias locais do usuário (o dia UTC já virou às 21h em São Paulo). */
+function periodBounds(period: SignalPeriod, today: string) {
   const days = period === "today" ? 1 : period === "7d" ? 7 : 30;
-  const fromDate = new Date();
-  fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
-  return { from: fromDate.toISOString().slice(0, 10), to };
+  return { from: shiftDayKey(today, -(days - 1)), to: today };
 }
 
 /** GET /api/signals?period=today|7d|30d — dashboard agregado (cards, radar, padrões, sugestão-base). */
@@ -62,17 +79,18 @@ signalsRouter.get("/trend", async (req, res) => {
   const period = periodSchema.parse(req.query.period);
   const signal = TREND_SIGNALS.includes(req.query.signal as TrendSignal) ? (req.query.signal as TrendSignal) : "sleep";
   const db = getDb();
-  const { from, to } = periodBounds(period);
-  const { sql, scale } = TREND_QUERIES[signal];
-  const result = await db.execute({ sql, args: [req.user!.id, from, to] });
-  const series = (result.rows as unknown as Array<{ d: string; v: number | null }>)
-    .filter((r) => r.v != null)
-    .map((r) => ({ date: r.d, value: scale(Number(r.v)) }));
+  const { tz, today } = await userDayContext(db, req.user!.id);
+  const { from, to } = periodBounds(period, today);
+  const { scale, ...query } = TREND_QUERIES[signal];
+  const byDay = await localDailyAggregate(db, req.user!.id, { ...query, fromDay: from, toDay: to, timeZone: tz });
+  const series = [...byDay]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, v]) => ({ date, value: scale(v) }));
   res.json({ signal, from, to, series });
 });
 
 /** POST /api/signals/suggestion/ai — complemento opcional do Gemini sobre a sugestão determinística (nunca bloqueia o dashboard principal). */
-signalsRouter.post("/suggestion/ai", async (req, res) => {
+signalsRouter.post("/suggestion/ai", aiRateLimit(20), async (req, res) => {
   const db = getDb();
   const period = periodSchema.parse(req.body?.period);
   const dashboard = await getSignalsDashboard(db, req.user!.id, period);

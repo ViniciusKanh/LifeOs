@@ -15,11 +15,15 @@ import {
   Trash2,
   Trophy,
   User,
+  Users,
   X,
 } from "lucide-react";
 import { useGoalDetail, useGoalForecast, useGoals } from "@/hooks/useGoals";
 import { Button, Card, Field, IconBadge, EmptyState, PageHeader } from "@/components/ui/primitives";
 import type { Goal, GoalKind, GoalPeriod } from "@/types";
+import { Modal } from "@/components/ui/Modal";
+import { RPGToast } from "@/components/rpg";
+import { GuildPartnersPanel } from "@/components/guild/GuildPartnersPanel";
 
 function goalProgressPct(goal: Goal): number {
   if (goal.status === "done") return 100;
@@ -124,6 +128,9 @@ export function MetasPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
+  // Guilda: meta cujos parceiros estão sendo gerenciados + aviso curto.
+  const [guildGoal, setGuildGoal] = useState<Goal | null>(null);
+  const [guildToast, setGuildToast] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [periodTab, setPeriodTab] = useState<GoalPeriod | "todas">("todas");
   const [statusTab, setStatusTab] = useState<"ativas" | "concluidas" | "todas">("ativas");
 
@@ -358,6 +365,9 @@ export function MetasPage() {
                                 <Repeat size={13} /> Renovar
                               </Button>
                             )}
+                            <button onClick={() => setGuildGoal(goal)} className="text-slate hover:text-inherit p-1" aria-label={`Chamar parceiro para ${goal.title}`} title="Chamar parceiro (Guilda)">
+                              <Users size={13} aria-hidden />
+                            </button>
                             <button onClick={() => setEditingGoal(goal)} className="text-slate hover:text-inherit p-1">
                               <Pencil size={13} />
                             </button>
@@ -507,6 +517,12 @@ export function MetasPage() {
           onSave={(value) => addProgress({ id: progressGoal.id, value })}
         />
       )}
+      {guildGoal && (
+        <Modal open size="md" onClose={() => setGuildGoal(null)} title={`Guilda — ${guildGoal.title}`}>
+          <GuildPartnersPanel entityType="goal" entityId={guildGoal.id} look="classic" startOpen onToast={(text, tone = "success") => setGuildToast({ text, tone })} />
+        </Modal>
+      )}
+      <RPGToast message={guildToast?.text ?? null} tone={guildToast?.tone} onClose={() => setGuildToast(null)} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   buildProjectColumnValues,
   getOwnedProject,
   getProjectOverview,
+  insertProject,
   listProjectDocuments,
   serializeProjectRow,
 } from "../services/projectDetailsService.js";
@@ -70,17 +71,7 @@ projectsRouter.post("/", async (req, res) => {
 
   if (!(await goalBelongsTo(db, ownerId, d.goalId))) return res.status(400).json({ error: "Meta inválida." });
 
-  const id = nanoid();
-  const pairs = buildProjectColumnValues(d);
-  const columns = ["id", "owner_id", "parent_id", ...pairs.map(([c]) => c)];
-  const values = [id, ownerId, d.parentId ?? null, ...pairs.map(([, v]) => v)];
-
-  await db.execute({
-    sql: `INSERT INTO projects (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-    args: values,
-  });
-
-  return res.status(201).json(await getOwnedProject(db, ownerId, id));
+  return res.status(201).json(await insertProject(db, ownerId, d));
 });
 
 /** GET /api/projects/:id — metadados completos do projeto. */

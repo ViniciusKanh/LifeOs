@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createEventSchema, updateEventSchema } from "../validators/event.schema.js";
+import { insertManualEvent } from "../services/eventWriteService.js";
 
 export const eventsRouter = Router();
 
@@ -132,18 +133,8 @@ eventsRouter.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
-  const d = parsed.data;
-  const db = getDb();
-  const id = nanoid();
-
-  await db.execute({
-    sql: `INSERT INTO events (id, owner_id, title, description, starts_at, ends_at, all_day, source_type)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')`,
-    args: [id, req.user!.id, d.title, d.description ?? null, d.startsAt, d.endsAt ?? null, d.allDay ? 1 : 0],
-  });
-
-  const created = await db.execute({ sql: "SELECT * FROM events WHERE id = ? AND owner_id = ?", args: [id, req.user!.id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await insertManualEvent(getDb(), req.user!.id, parsed.data);
+  return res.status(201).json(created);
 });
 
 /** PATCH /api/events/:id — só edita eventos manuais (os derivados de outras telas se editam na tela de origem) */

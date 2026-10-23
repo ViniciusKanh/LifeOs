@@ -30,6 +30,8 @@ import {
   Sun,
   Trophy,
   Users,
+  Swords,
+  BookOpenText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -94,6 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/calendario", label: "Agenda", icon: CalendarRange, quote: "Quem planeja o tempo, comanda o progresso." },
       { to: "/metas", label: "Metas", icon: Compass, quote: "Um objetivo sem plano é apenas um desejo." },
       { to: "/forja-campanhas", label: "Forja de Campanhas", icon: Hammer, quote: "Grandes conquistas nascem de muitas pequenas vitórias." },
+      { to: "/conselho", label: "Planejar semana", rpgLabel: "Conselho de Guerra", icon: Swords, quote: "Uma semana bem planejada vence metade das batalhas." },
     ],
   },
   {
@@ -112,7 +115,9 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/deadline-radar", label: "Prazos" },
         ],
       },
-      { to: "/contratos", label: "Contratos", icon: ScrollText, quote: "Um pacto cumprido vale mais que mil promessas." },
+      { to: "/quests", label: "Quadro de Quests", rpgLabel: "Quadro de Avisos", icon: ScrollText, quote: "Pequenos desafios diários constroem grandes jornadas." },
+      { to: "/contratos", label: "Contratos", icon: Scroll, quote: "Um pacto cumprido vale mais que mil promessas." },
+      { to: "/guilda", label: "Guilda", rpgLabel: "Salão da Guilda", icon: Users, quote: "Quem caminha acompanhado vai mais longe." },
       { to: "/projetos", label: "Projetos", icon: GanttChartSquare, quote: "Projetos claros avançam mais rápido." },
       { to: "/profissional", label: "Profissional", icon: Briefcase, quote: "Foco no que move os ponteiros." },
     ],
@@ -127,6 +132,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
       { to: "/educacao", label: "Educação", icon: GraduationCap, quote: "Estudo hoje, liberdade amanhã." },
+      { to: "/grimorio", label: "Memorização", rpgLabel: "Grimório", icon: BookOpenText, quote: "O que se revisa, não se esquece." },
       { to: "/administracao", label: "Administração", icon: FolderLock, quote: "O que é lembrado a tempo não vira problema." },
     ],
   },
@@ -154,23 +160,32 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { to: "/experimentos", label: "Experimentos", icon: FlaskConical, quote: "Teste pequeno, aprenda grande." },
       {
+        // Hub do personagem: telas de recompensa viraram abas (menos menu, mesmas rotas).
         to: "/conquistas",
-        label: "Conquistas",
+        label: "Conquistas e Coleção",
+        rpgLabel: "Perfil do Herói",
         icon: Trophy,
         quote: "Cada conquista começou com um hábito repetido.",
+        tabs: [
+          { to: "/conquistas", label: "Conquistas" },
+          { to: "/tesouro", label: "Tesouro" },
+          { to: "/inventario", label: "Coleção" },
+          { to: "/build", label: "Build" },
+        ],
       },
-      { to: "/tesouro", label: "Tesouro & Recompensas", icon: Coins, quote: "Pequenas recompensas sustentam grandes jornadas." },
-      { to: "/inventario", label: "Coleção / Inventário", icon: Backpack, quote: "Organize o que você conquistou — e use com propósito." },
-      { to: "/build", label: "Build do Personagem", icon: Dna, quote: "Conheça seus atributos para escolher o próximo passo." },
-      { to: "/protocolos", label: "Protocolos", icon: Scroll, quote: "Situações repetidas merecem respostas prontas." },
       {
-        to: "/detector-gargalos",
-        label: "Detector de Gargalos",
-        icon: Boxes,
-        quote: "Destrave o essencial e o resto anda.",
+        // Hub analítico: Inteligência, Protocolos e Gargalos.
+        to: "/forja-inteligencia",
+        label: "Forja da Inteligência",
+        icon: BrainCircuit,
+        quote: "Quem aprende com o próprio passado enxerga melhor o futuro.",
         searchPlaceholder: "Buscar projetos, missões, hábitos ou problemas…",
+        tabs: [
+          { to: "/forja-inteligencia", label: "Inteligência" },
+          { to: "/protocolos", label: "Protocolos" },
+          { to: "/detector-gargalos", label: "Gargalos" },
+        ],
       },
-      { to: "/forja-inteligencia", label: "Forja da Inteligência", icon: BrainCircuit, quote: "Quem aprende com o próprio passado enxerga melhor o futuro." },
     ],
   },
   {

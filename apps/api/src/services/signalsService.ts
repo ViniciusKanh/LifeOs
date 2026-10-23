@@ -12,6 +12,7 @@
  * DETECTAR (signalsPatternService) → SUGERIR (signalsRecommendationService).
  */
 import type { getDb } from "../db/client.js";
+import { localDaysWhere, shiftDayKey, userDayContext } from "./localDayService.js";
 import {
   scoreSleep,
   scoreFromFivePoint,
@@ -54,19 +55,12 @@ export interface SignalsDashboard {
   recommendation: SignalsRecommendation;
 }
 
-function periodRange(period: SignalPeriod): { from: string; to: string; priorFrom: string; priorTo: string; days: number } {
-  const to = new Date().toISOString().slice(0, 10);
+/** Janela atual e anterior em dias locais do usuário (`today` já no fuso do perfil). */
+function periodRange(period: SignalPeriod, today: string): { from: string; to: string; priorFrom: string; priorTo: string; days: number } {
   const days = period === "today" ? 1 : period === "7d" ? 7 : 30;
-  const fromDate = new Date();
-  fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
-  const from = fromDate.toISOString().slice(0, 10);
-
-  const priorToDate = new Date(fromDate);
-  priorToDate.setUTCDate(priorToDate.getUTCDate() - 1);
-  const priorFromDate = new Date(priorToDate);
-  priorFromDate.setUTCDate(priorFromDate.getUTCDate() - (days - 1));
-
-  return { from, to, priorFrom: priorFromDate.toISOString().slice(0, 10), priorTo: priorToDate.toISOString().slice(0, 10), days };
+  const from = shiftDayKey(today, -(days - 1));
+  const priorTo = shiftDayKey(from, -1);
+  return { from, to: today, priorFrom: shiftDayKey(priorTo, -(days - 1)), priorTo, days };
 }
 
 function pctChange(current: number | null, prior: number | null): number | null {
@@ -96,32 +90,19 @@ interface Aggregates {
   agendaEventsToday: number | null;
 }
 
-async function fetchAggregates(db: Db, ownerId: string, from: string, to: string, days: number): Promise<Aggregates> {
+async function fetchAggregates(db: Db, ownerId: string, from: string, to: string, days: number, tz: string): Promise<Aggregates> {
+  // Timestamps UTC filtrados pelos dias locais [from, to] no fuso do usuário.
+  const q = (sqlHead: string, column: string) => {
+    const f = localDaysWhere(column, from, to, tz);
+    return db.execute({ sql: `${sqlHead} AND ${f.sql}`, args: [ownerId, ...f.args] });
+  };
   const [sleep, mood, exercise, water, reading, tasks, agenda] = await Promise.all([
-    db.execute({
-      sql: `SELECT AVG(duration_minutes) AS mins, AVG(quality) AS qual FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day')`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT AVG(mood) AS mood, AVG(energy) AS energy, AVG(stress) AS stress FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT SUM(duration_minutes) AS mins FROM workouts WHERE owner_id = ? AND performed_at >= date(?) AND performed_at < date(?, '+1 day')`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT SUM(amount_ml) AS ml FROM water_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day')`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT SUM(duration_minutes) AS mins, SUM(pages_read) AS pages FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day')`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND updated_at >= date(?) AND updated_at < date(?, '+1 day')`,
-      args: [ownerId, from, to],
-    }),
+    q("SELECT AVG(duration_minutes) AS mins, AVG(quality) AS qual FROM sleep_entries WHERE owner_id = ?", "woke_up_at"),
+    q("SELECT AVG(mood) AS mood, AVG(energy) AS energy, AVG(stress) AS stress FROM mood_entries WHERE owner_id = ?", "recorded_at"),
+    q("SELECT SUM(duration_minutes) AS mins FROM workouts WHERE owner_id = ?", "performed_at"),
+    q("SELECT SUM(amount_ml) AS ml FROM water_entries WHERE owner_id = ?", "recorded_at"),
+    q("SELECT SUM(duration_minutes) AS mins, SUM(pages_read) AS pages FROM reading_sessions WHERE owner_id = ?", "started_at"),
+    q("SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído'", "updated_at"),
     db.execute({
       sql: `SELECT COUNT(*) AS n FROM events WHERE owner_id = ? AND starts_at >= date(?) AND starts_at < date(?, '+1 day')`,
       args: [ownerId, from, to],
@@ -225,11 +206,12 @@ function buildSignalCards(current: Aggregates, prior: Aggregates): SignalCard[] 
 }
 
 export async function getSignalsDashboard(db: Db, ownerId: string, period: SignalPeriod): Promise<SignalsDashboard> {
-  const { from, to, priorFrom, priorTo, days } = periodRange(period);
+  const { tz, today } = await userDayContext(db, ownerId);
+  const { from, to, priorFrom, priorTo, days } = periodRange(period, today);
 
   const [current, prior, patterns, weatherSignal] = await Promise.all([
-    fetchAggregates(db, ownerId, from, to, days),
-    fetchAggregates(db, ownerId, priorFrom, priorTo, days),
+    fetchAggregates(db, ownerId, from, to, days, tz),
+    fetchAggregates(db, ownerId, priorFrom, priorTo, days, tz),
     detectPatterns(db, ownerId, from, to),
     // Signals nunca chama a Open-Meteo direto — sempre via WeatherSignalProvider
     // do Contexto do Dia (fonte única de dado ambiental, regra 46 do briefing).

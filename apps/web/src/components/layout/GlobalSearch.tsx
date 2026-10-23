@@ -27,6 +27,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { inboxService } from "@/services/inboxService";
 import { api } from "@/services/api";
 import { allDestinations, findNavItem } from "./navConfig";
+import { openCommandPalette } from "@/hooks/useCommandPalette";
 import type { GlobalSearchResult } from "@/services/searchService";
 
 const TYPE_META: Record<GlobalSearchResult["type"], { icon: typeof Search; tone: string }> = {
@@ -234,18 +235,7 @@ export function DesktopGlobalSearch() {
   const { items, isSearching, toast } = usePaletteItems(query, close);
   const kb = usePaletteKeyboard(items.length, (i) => items[i]?.run());
 
-  // Atalho Ctrl/⌘ + K abre a paleta de qualquer tela.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-        setOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // Ctrl/⌘ + K agora abre a paleta de comandos global (components/command/CommandPalette).
 
   return (
     <div className="hidden md:flex flex-1 max-w-md relative">
@@ -269,9 +259,16 @@ export function DesktopGlobalSearch() {
         role="combobox"
         className="w-full rounded-full pl-10 pr-16 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 focus:shadow-glow-brand transition-all rpg:rounded-[4px] rpg:border-2 rpg:bg-rpg-bg rpg:border-rpg-border rpg:placeholder:text-rpg-muted rpg:focus:border-rpg-gold rpg:focus:shadow-none"
       />
-      <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center gap-0.5 rounded-md border border-paper-border dark:border-ink-border px-1.5 py-0.5 text-[10px] font-sans text-slate">
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => openCommandPalette({ text: query })}
+        aria-label="Abrir a paleta de comandos (Ctrl K)"
+        title="Paleta de comandos (Ctrl K)"
+        className="absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center gap-0.5 rounded-md border border-paper-border dark:border-ink-border px-1.5 py-0.5 text-[10px] font-sans text-slate hover:border-brand-500 hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 rpg:rounded-[3px] rpg:border-rpg-border rpg:hover:border-rpg-gold"
+      >
         Ctrl K
-      </kbd>
+      </button>
       {open && (
         <div className="absolute top-[calc(100%+6px)] left-0 right-0 min-w-[380px] rounded-2xl border border-paper-border dark:border-ink-border bg-paper-raised dark:bg-ink-raised shadow-card dark:shadow-card-dark overflow-hidden z-30">
           <PaletteList items={items} active={kb.active} setActive={kb.setActive} isSearching={isSearching} query={query} />

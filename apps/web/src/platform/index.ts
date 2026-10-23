@@ -8,7 +8,7 @@ export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__"
 
 /** Recursos que dependem do ambiente. */
 export const platformFeatures = {
-  // WebView2 não entrega Web Push; as notificações do Desktop serão nativas (Etapa 4).
+  // WebView2 não entrega Web Push; no Desktop as notificações são nativas (platform/desktopBridge.ts).
   webPush: !IS_DESKTOP,
   // O Google recusa OAuth dentro de webviews: na Web o fluxo é por redirect; no
   // Desktop o login abre no navegador do sistema e volta por deep link

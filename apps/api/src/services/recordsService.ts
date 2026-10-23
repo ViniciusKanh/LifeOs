@@ -1,6 +1,6 @@
 import type { Client } from "@libsql/client";
-import { dayKeyIn, todayKeyFor, userTimezone } from "./gamificationService.js";
-import { normalizeStoredUtc } from "./healthService.js";
+import { todayKeyFor, userTimezone } from "./gamificationService.js";
+import { collectDailyMetrics, type DailyMetric } from "./dailyMetricsService.js";
 
 /**
  * Placar pessoal: esta semana contra a anterior e contra o recorde de todas
@@ -8,7 +8,7 @@ import { normalizeStoredUtc } from "./healthService.js";
  * fuso do usuário. Tudo é derivado das fontes originais (nada é copiado).
  */
 
-export type RecordMetric = "missions" | "workouts" | "workoutMinutes" | "pages" | "habits" | "xp" | "journal";
+export type RecordMetric = Extract<DailyMetric, "missions" | "workouts" | "workoutMinutes" | "pages" | "habits" | "xp" | "journal">;
 
 export const RECORD_METRICS: Array<{ key: RecordMetric; label: string; unit: string | null }> = [
   { key: "missions", label: "Missões concluídas", unit: null },
@@ -87,41 +87,16 @@ export async function getWeeklyRecords(db: Client, ownerId: string) {
   const [today, tz] = await Promise.all([todayKeyFor(db, ownerId), userTimezone(db, ownerId)]);
   const currentWeek = weekStartOf(today);
   const from = addDays(currentWeek, -7 * HISTORY_WEEKS);
-  // Margem de 1 dia no filtro UTC: a conversão para o dia local é feita aqui.
-  const fromUtc = addDays(from, -1);
-  const [tasks, workouts, reading, habits, xp, journal] = await Promise.all([
-    db.execute({ sql: "SELECT completed_at AS t FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at >= ?", args: [ownerId, fromUtc] }),
-    db.execute({ sql: "SELECT performed_at AS t, COALESCE(duration_minutes, 0) AS v FROM workouts WHERE owner_id = ? AND performed_at >= ?", args: [ownerId, fromUtc] }),
-    db.execute({ sql: "SELECT started_at AS t, COALESCE(pages_read, 0) AS v FROM reading_sessions WHERE owner_id = ? AND started_at >= ?", args: [ownerId, fromUtc] }),
-    db.execute({
-      sql: `SELECT e.entry_date AS d, COUNT(*) AS v FROM habit_entries e JOIN habits h ON h.id = e.habit_id AND h.owner_id = e.owner_id
-            WHERE e.owner_id = ? AND e.entry_date >= ? AND e.count >= h.target_count GROUP BY e.entry_date`,
-      args: [ownerId, from],
-    }),
-    db.execute({ sql: "SELECT day_key AS d, SUM(xp) AS v FROM xp_events WHERE owner_id = ? AND day_key >= ? GROUP BY day_key", args: [ownerId, from] }),
-    db.execute({ sql: "SELECT entry_date AS d FROM journal_entries WHERE owner_id = ? AND entry_date >= ? AND (thoughts IS NOT NULL AND thoughts != '')", args: [ownerId, from] }),
-  ]);
+  // Fonte única com o Quadro de Quests: agregação diária no fuso do usuário.
+  const daily = await collectDailyMetrics(db, ownerId, { from, to: today, tz, metrics: RECORD_METRICS.map((m) => m.key) });
 
-  const empty = () => new Map<string, number>();
-  const byWeek = Object.fromEntries(RECORD_METRICS.map((m) => [m.key, empty()])) as Record<RecordMetric, Map<string, number>>;
-  const add = (metric: RecordMetric, day: string, v: number) => {
-    if (day < from || day > today) return;
-    const w = weekStartOf(day);
-    byWeek[metric].set(w, (byWeek[metric].get(w) ?? 0) + v);
-  };
-  const localDay = (stored: unknown) => dayKeyIn(new Date(normalizeStoredUtc(String(stored))), tz);
-
-  for (const r of tasks.rows) if (r.t) add("missions", localDay(r.t), 1);
-  for (const r of workouts.rows) {
-    if (!r.t) continue;
-    const d = localDay(r.t);
-    add("workouts", d, 1);
-    add("workoutMinutes", d, Number(r.v));
+  const byWeek = Object.fromEntries(RECORD_METRICS.map((m) => [m.key, new Map<string, number>()])) as Record<RecordMetric, Map<string, number>>;
+  for (const m of RECORD_METRICS) {
+    for (const [day, v] of daily[m.key]) {
+      const w = weekStartOf(day);
+      byWeek[m.key].set(w, (byWeek[m.key].get(w) ?? 0) + v);
+    }
   }
-  for (const r of reading.rows) if (r.t) add("pages", localDay(r.t), Number(r.v));
-  for (const r of habits.rows) add("habits", String(r.d), Number(r.v));
-  for (const r of xp.rows) add("xp", String(r.d), Number(r.v));
-  for (const r of journal.rows) add("journal", String(r.d), 1);
 
   const rows = buildRecords(byWeek, currentWeek);
   return {

@@ -58,6 +58,12 @@ import { buildRouter } from "./routes/build.routes.js";
 import { protocolsRouter } from "./routes/protocols.routes.js";
 import { bottlenecksRouter } from "./routes/bottlenecks.routes.js";
 import { intelligenceRouter } from "./routes/intelligence.routes.js";
+import { questsRouter } from "./routes/quests.routes.js";
+import { guildRouter } from "./routes/guild.routes.js";
+import { grimoireRouter } from "./routes/grimoire.routes.js";
+import { readingYearRouter } from "./routes/readingYear.routes.js";
+import { warCouncilRouter } from "./routes/war-council.routes.js";
+import { rhythmRouter } from "./routes/rhythm.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -169,6 +175,12 @@ app.use("/api/build", buildRouter);
 app.use("/api/protocols", protocolsRouter);
 app.use("/api/bottlenecks", bottlenecksRouter);
 app.use("/api/intelligence", intelligenceRouter);
+app.use("/api/quests", questsRouter);
+app.use("/api/guild", guildRouter);
+app.use("/api/grimoire", grimoireRouter);
+app.use("/api/reading", readingYearRouter);
+app.use("/api/war-council", warCouncilRouter);
+app.use("/api/rhythm", rhythmRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

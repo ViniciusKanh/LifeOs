@@ -40,6 +40,8 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
   if (main.sourceType === "review") return { title: "CICLO CONCLUÍDO", stamp: "mission", detail: main.label };
   if (main.sourceType === "focus") return { title: "TEMPO REGISTRADO", stamp: null, detail: main.label };
   if (main.sourceType === "journal") return { title: "CRÔNICA REGISTRADA", stamp: null, detail: null };
+  if (main.sourceType === "quest")
+    return { title: main.eventType === "all_daily" ? "QUADRO COMPLETO" : "QUEST CUMPRIDA", stamp: "contract", detail: main.label?.replace(/^Quest (diária|semanal): /, "") ?? null };
   return { title: "BÔNUS", stamp: null, detail: main.label };
 }
 

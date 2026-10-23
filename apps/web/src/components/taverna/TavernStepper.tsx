@@ -13,7 +13,20 @@ export interface TavernStepDef {
  * qualquer um); setas ←/→, Home e End movem entre eles. No celular só o
  * passo atual mostra o rótulo, para caber sem rolagem horizontal.
  */
-export function TavernStepper({ steps, current, visited, onSelect }: { steps: TavernStepDef[]; current: number; visited: Set<number>; onSelect: (i: number) => void }) {
+export function TavernStepper({
+  steps,
+  current,
+  visited,
+  onSelect,
+  label = "Passos do ritual de fim de dia",
+}: {
+  steps: TavernStepDef[];
+  current: number;
+  visited: Set<number>;
+  onSelect: (i: number) => void;
+  /** Rótulo acessível da trilha (reaproveitada pelo Conselho de Guerra). */
+  label?: string;
+}) {
   const onKey = (e: KeyboardEvent<HTMLOListElement>) => {
     const keys: Record<string, number> = { ArrowRight: current + 1, ArrowLeft: current - 1, Home: 0, End: steps.length - 1 };
     if (!(e.key in keys)) return;
@@ -24,7 +37,7 @@ export function TavernStepper({ steps, current, visited, onSelect }: { steps: Ta
     window.requestAnimationFrame(() => document.getElementById(`taverna-step-btn-${next}`)?.focus());
   };
   return (
-    <nav aria-label="Passos do ritual de fim de dia" className="rpg-panel px-2 py-2 sm:px-3">
+    <nav aria-label={label} className="rpg-panel px-2 py-2 sm:px-3">
       <ol className="grid gap-1" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} onKeyDown={onKey}>
         {steps.map((s, i) => {
           const active = i === current;

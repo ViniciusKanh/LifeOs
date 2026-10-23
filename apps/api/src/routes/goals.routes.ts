@@ -4,6 +4,8 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createGoalSchema, updateGoalSchema, goalProgressSchema } from "../validators/goals.schema.js";
 import { isDailyReadingGoal, pagesReadOn } from "../services/dailyReadingGoalService.js";
+import { insertGoal } from "../services/goalWriteService.js";
+import { todayKeyFor } from "../services/gamificationService.js";
 
 export const goalsRouter = Router();
 goalsRouter.use(requireAuth);
@@ -107,7 +109,7 @@ goalsRouter.get("/", async (req, res) => {
     args,
   });
   const rows = result.rows as unknown as Array<{ id: string; title: string; kind: string; unit: string | null; status: string; current_value: number; due_date: string | null }>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await todayKeyFor(db, req.user!.id);
   const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, req.user!.id, today) : 0;
   const taskLinks = await getGoalTaskLinks(db, req.user!.id);
   return res.json(
@@ -259,7 +261,7 @@ goalsRouter.get("/:id", async (req, res) => {
   ]);
 
   const dailyReading = isDailyReadingGoal(goal as unknown as { title: string; kind: string; unit: string | null; status: string });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await todayKeyFor(db, req.user!.id);
   const pagesToday = dailyReading ? await pagesReadOn(db, req.user!.id, today) : 0;
   const taskLinks = await getGoalTaskLinks(db, req.user!.id);
   const merged = withOverdue(
@@ -289,30 +291,8 @@ goalsRouter.post("/", async (req, res) => {
     if (!parent) return res.status(400).json({ error: "Meta superior inválida." });
   }
 
-  const id = nanoid();
-  await db.execute({
-    sql: `INSERT INTO goals (id, owner_id, parent_goal_id, title, description, category, kind, target_value, unit, due_date, period, next_action, next_action_due, life_area, cycle)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      id,
-      req.user!.id,
-      d.parentGoalId ?? null,
-      d.title,
-      d.description ?? null,
-      d.category ?? null,
-      d.kind,
-      d.targetValue ?? null,
-      d.unit ?? null,
-      d.dueDate ?? null,
-      d.period ?? null,
-      d.nextAction ?? null,
-      d.nextActionDue ?? null,
-      d.lifeArea ?? null,
-      d.cycle ?? null,
-    ],
-  });
-  const created = await db.execute({ sql: "SELECT * FROM goals WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
+  const created = await insertGoal(db, req.user!.id, d);
+  return res.status(201).json(created);
 });
 
 /** PATCH /api/goals/:id */
@@ -449,7 +429,7 @@ goalsRouter.post("/:id/renew", async (req, res) => {
   if (!goal) return res.status(404).json({ error: "Meta não encontrada." });
   if (!goal.period) return res.status(400).json({ error: "Só é possível renovar metas com período definido." });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await todayKeyFor(db, req.user!.id);
   const baseDate = goal.due_date && goal.due_date.slice(0, 10) >= today ? goal.due_date.slice(0, 10) : today;
   const nextDueDate = addPeriodCadence(baseDate, goal.period);
 

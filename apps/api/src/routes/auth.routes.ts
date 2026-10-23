@@ -750,7 +750,7 @@ authRouter.get("/google/status", async (_req, res) => {
  * desafio viaja assinado no state e o callback devolve ao app um código de
  * uso único em vez de criar a sessão neste navegador.
  */
-authRouter.get("/google/start", async (req, res) => {
+authRouter.get("/google/start", rateLimit(), async (req, res) => {
   const db = getDb();
   const config = await getGoogleOAuthConfig(db);
   if (!config) {
@@ -776,7 +776,7 @@ authRouter.get("/google/start", async (req, res) => {
  * nunca usa (pode definir uma de verdade depois via "Esqueci minha
  * senha", se quiser entrar também com e-mail/senha).
  */
-authRouter.get("/google/callback", async (req, res) => {
+authRouter.get("/google/callback", rateLimit(), async (req, res) => {
   // Alguns proxies/navegadores podem entregar code/state como array — normaliza defensivamente.
   const rawCode = req.query.code as string | string[] | undefined;
   const rawState = req.query.state as string | string[] | undefined;

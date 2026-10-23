@@ -27,7 +27,8 @@ describe("Busca global (GET /api/search)", () => {
     const hit = res.body.results.find((r: { type: string; title: string }) => r.type === "task");
     expect(hit).toBeDefined();
     expect(hit.title).toContain("contrato de aluguel");
-    expect(hit.link).toBe("/tarefas");
+    // Deep link para abrir a própria tarefa (contrato atual da busca).
+    expect(hit.link).toBe(`/tarefas?task=${created.body.id}`);
   });
 
   it("não retorna itens de outro usuário", async () => {

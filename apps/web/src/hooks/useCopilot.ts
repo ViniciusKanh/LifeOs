@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { copilotService } from "@/services/copilotService";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { copilotService, type CopilotActionName } from "@/services/copilotService";
 import { ApiError } from "@/services/api";
 import { triggerAchievementsCheck } from "@/services/achievementsService";
 
@@ -93,6 +93,36 @@ export function useAnalyticsInsight() {
  * componente de UI que decide quando isso acontece, sempre a partir
  * de um clique do usuário, nunca automaticamente.
  */
+/**
+ * Telas afetadas por cada ação do Copilot/paleta. Registros de Saúde e
+ * leitura também mexem em hábitos automáticos, XP e Analytics, por isso
+ * essas chaves entram sempre. Dispara a checagem de conquistas (mesmo
+ * gatilho usado nas outras telas).
+ */
+const ACTION_KEYS: Record<CopilotActionName, string[]> = {
+  criar_tarefa: ["tasks", "projects", "capacity", "deadline-radar"],
+  concluir_tarefa: ["tasks", "projects", "contracts", "goals"],
+  mover_tarefa: ["tasks", "projects", "contracts"],
+  marcar_habito: ["habits", "contracts"],
+  criar_evento: ["events"],
+  criar_meta: ["goals", "direction"],
+  criar_projeto: ["projects"],
+  capturar_inbox: ["inbox"],
+  registrar_agua: ["health"],
+  registrar_treino: ["health"],
+  registrar_sono: ["health"],
+  registrar_humor: ["health"],
+  registrar_leitura: ["books", "reading", "goals"],
+};
+
+export function invalidateAfterCopilotAction(queryClient: QueryClient, action: string) {
+  const keys = ACTION_KEYS[action as CopilotActionName] ?? ["tasks", "habits", "events"];
+  for (const key of [...keys, "habits", "analytics", "gamification", "search"]) {
+    queryClient.invalidateQueries({ queryKey: [key] });
+  }
+  triggerAchievementsCheck();
+}
+
 export function useCopilotAssistant() {
   const queryClient = useQueryClient();
 
@@ -100,16 +130,7 @@ export function useCopilotAssistant() {
   const confirm = useMutation({
     mutationFn: ({ action, args }: { action: string; args: Record<string, unknown> }) =>
       copilotService.confirmAssist(action, args),
-    onSuccess: () => {
-      // Uma ação confirmada pode ter mudado tarefas, hábitos ou
-      // eventos — invalida tudo que pode ter sido afetado em vez de
-      // adivinhar qual ação específica rodou, e também dispara a
-      // checagem de conquistas (mesmo gatilho usado em outras telas).
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["habits"] });
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-      triggerAchievementsCheck();
-    },
+    onSuccess: (_res, { action }) => invalidateAfterCopilotAction(queryClient, action),
   });
 
   return {

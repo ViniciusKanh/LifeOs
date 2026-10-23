@@ -15,6 +15,8 @@ import type { getDb } from "../db/client.js";
 import { pearson } from "./correlationService.js";
 import { isRainyDay, isSunnyDay } from "./weatherCodeUtils.js";
 import type { HistoricalDailyWeather } from "./openMeteoProvider.js";
+import { userTimezone } from "./gamificationService.js";
+import { localDailyAggregate } from "./localDayService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -36,16 +38,6 @@ export interface ContextInsight {
   text: string;
 }
 
-interface DailyRow {
-  d: string;
-  v: number | null;
-}
-
-function toMap(rows: DailyRow[]): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const r of rows) if (r.v != null) m.set(r.d, Number(r.v));
-  return m;
-}
 
 function avg(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -57,31 +49,17 @@ function pctDiff(a: number, b: number): number | null {
   return Math.round(((a - b) / b) * 100);
 }
 
+/** Séries diárias internas no dia local do usuário (fuso do perfil). */
 async function internalDailySeries(db: Db, ownerId: string, from: string, to: string) {
-  const [focusRows, walkRows, moodRows, sleepRows] = await Promise.all([
-    db.execute({
-      sql: `SELECT date(started_at) AS d, SUM(actual_minutes) AS v FROM focus_sessions WHERE owner_id = ? AND started_at >= date(?) AND started_at < date(?, '+1 day') GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT date(performed_at) AS d, SUM(duration_minutes) AS v FROM workouts WHERE owner_id = ? AND kind LIKE '%aminhada%' AND performed_at >= date(?) AND performed_at < date(?, '+1 day') GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT date(recorded_at) AS d, AVG(mood) AS v FROM mood_entries WHERE owner_id = ? AND recorded_at >= date(?) AND recorded_at < date(?, '+1 day') GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
-    db.execute({
-      sql: `SELECT date(woke_up_at) AS d, AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ? AND woke_up_at >= date(?) AND woke_up_at < date(?, '+1 day') GROUP BY d`,
-      args: [ownerId, from, to],
-    }),
+  const timeZone = await userTimezone(db, ownerId);
+  const base = { fromDay: from, toDay: to, timeZone };
+  const [focus, walk, mood, sleep] = await Promise.all([
+    localDailyAggregate(db, ownerId, { ...base, table: "focus_sessions", column: "started_at", valueExpr: "actual_minutes", agg: "sum" }),
+    localDailyAggregate(db, ownerId, { ...base, table: "workouts", column: "performed_at", valueExpr: "duration_minutes", agg: "sum", extraWhere: "kind LIKE '%aminhada%'" }),
+    localDailyAggregate(db, ownerId, { ...base, table: "mood_entries", column: "recorded_at", valueExpr: "mood", agg: "avg" }),
+    localDailyAggregate(db, ownerId, { ...base, table: "sleep_entries", column: "woke_up_at", valueExpr: "duration_minutes", agg: "avg" }),
   ]);
-  return {
-    focus: toMap(focusRows.rows as unknown as DailyRow[]),
-    walk: toMap(walkRows.rows as unknown as DailyRow[]),
-    mood: toMap(moodRows.rows as unknown as DailyRow[]),
-    sleep: toMap(sleepRows.rows as unknown as DailyRow[]),
-  };
+  return { focus, walk, mood, sleep };
 }
 
 function groupBy<T>(dates: string[], predicate: (d: string) => boolean | null): { yes: string[]; no: string[] } {

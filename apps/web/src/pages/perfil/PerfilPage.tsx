@@ -39,7 +39,7 @@ import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 import { AppearanceCard } from "@/components/profile/AppearanceCard";
-import { api } from "@/services/api";
+import { downloadMyData } from "@/services/exportService";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
 
@@ -60,6 +60,7 @@ export function PerfilPage() {
   const { user } = useAuth();
   const { mode, isRpg } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   /**
    * Exporta todos os dados reais do usuário (tarefas, hábitos, livros,
@@ -69,17 +70,12 @@ export function PerfilPage() {
    */
   const handleExportData = async () => {
     setIsExporting(true);
+    setExportStatus(null);
     try {
-      const payload = await api.get<unknown>("/export/me");
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `lifeos-export-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const { rows, tables } = await downloadMyData();
+      setExportStatus({ tone: "success", text: `Arquivo gerado: ${rows} registro${rows === 1 ? "" : "s"} em ${tables} tabelas.` });
+    } catch (err) {
+      setExportStatus({ tone: "error", text: err instanceof Error ? err.message : "Não foi possível exportar seus dados agora." });
     } finally {
       setIsExporting(false);
     }
@@ -301,6 +297,9 @@ export function PerfilPage() {
             <Button variant="secondary" className="w-full" onClick={handleExportData} disabled={isExporting}>
               <Download size={14} /> {isExporting ? "Gerando arquivo..." : "Baixar meus dados (.json)"}
             </Button>
+            <p role="status" aria-live="polite" className={`mt-2 text-xs ${exportStatus?.tone === "error" ? "text-drop" : "text-growth"}`}>
+              {exportStatus?.text ?? ""}
+            </p>
           </Card>
     </>
   );

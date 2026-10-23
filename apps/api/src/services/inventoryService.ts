@@ -4,6 +4,7 @@ import { RELICS, TITLES, type Rarity } from "../config/codex.js";
 import { EFFECT_RULES, FRAME_ITEMS, INVENTORY_RULES, ITEM_CATALOG, ITEM_SETS, itemDef, type ItemType, type TimedEffect } from "../config/items.js";
 import { isTitleUnlocked, syncCodexUnlocks } from "./codexService.js";
 import { getLevelHistory } from "./gamificationService.js";
+import { SEASON_TIERS, parseSeasonRewardKey, seasonRewardName, seasonTheme } from "./seasonRules.js";
 import { useRedemption } from "./rewardsService.js";
 import { listActiveEffects, sqlTime, sqlToIso, type ActiveEffectView } from "./itemEffectService.js";
 
@@ -202,7 +203,12 @@ export async function isEmblemUnlocked(db: Client, ownerId: string, setId: strin
   return r.rows.length > 0;
 }
 
-const ORIGIN_LINK: Record<string, string> = { campaign: "/forja-campanhas", milestone: "/forja-campanhas", achievement: "/conquistas", codex: "/codex", treasure: "/tesouro", level: "/perfil", set: "/inventario" };
+const ORIGIN_LINK: Record<string, string> = { campaign: "/forja-campanhas", milestone: "/forja-campanhas", achievement: "/conquistas", codex: "/codex", treasure: "/tesouro", level: "/perfil", set: "/inventario", season: "/quests" };
+
+function seasonItemName(key: string): string {
+  const p = parseSeasonRewardKey(key);
+  return p ? seasonRewardName(p.seasonKey, p.tier) : key;
+}
 
 export interface InventoryData {
   items: InventoryItemView[];
@@ -311,6 +317,14 @@ export async function getInventory(db: Client, ownerId: string): Promise<Invento
     const equipped = prefs.emblem === s.id;
     items.push({ key, name: s.emblem.name, description: `Bônus cosmético do ${s.name}.`, type: "cosmetic", rarity: s.emblem.rarity, art: "emblem", artSet: "items", quantity: 1, stackable: false, maxStack: 1, effectText: "Emblema no perfil — sem bônus", durationText: null, obtainedBy: `Completar o ${s.name}`, equipped, actions: [equipped ? "unequip" : "equip"], locked: false, ...base(key) });
   }
+  // Cosméticos da Temporada mensal (Quadro de Quests): só exibição, sem bônus.
+  for (const key of firstTx.keys()) {
+    const season = parseSeasonRewardKey(key);
+    if (!season) continue;
+    const tier = SEASON_TIERS.find((t) => t.tier === season.tier);
+    if (!tier) continue;
+    items.push({ key, name: seasonRewardName(season.seasonKey, season.tier), description: `Recompensa do tier ${season.tier} da ${seasonTheme(season.seasonKey).name} (${season.seasonKey}).`, type: "cosmetic", rarity: tier.rarity, art: "emblem", artSet: "items", quantity: 1, stackable: false, maxStack: 1, effectText: "Cosmético de temporada — sem bônus", durationText: "Permanente", obtainedBy: `Alcançar ${tier.xp} XP na temporada`, equipped: false, actions: [], locked: false, ...base(key) });
+  }
   for (const v of vouchers.rows) {
     const key = `voucher:${String(v.reward_id)}`;
     items.push({
@@ -360,8 +374,8 @@ export async function getInventory(db: Client, ownerId: string): Promise<Invento
 
   const collected = await collectedKeys(db, ownerId);
   const nameOf = (k: string) =>
-    k.startsWith("relic:") ? (RELICS.find((r) => `relic:${r.id}` === k)?.name ?? k) : k.startsWith("title:") ? (TITLES.find((t) => `title:${t.id}` === k)?.name ?? k) : (itemDef(k)?.name ?? k);
-  const artOf = (k: string) => (k.startsWith("relic:") ? `relic-${k.slice(6)}` : k.startsWith("title:") ? "title" : k.startsWith("frame:") ? `frame-${k.slice(6)}` : k.startsWith("emblem:") ? "emblem" : (itemDef(k)?.art ?? "crystal"));
+    k.startsWith("relic:") ? (RELICS.find((r) => `relic:${r.id}` === k)?.name ?? k) : k.startsWith("title:") ? (TITLES.find((t) => `title:${t.id}` === k)?.name ?? k) : k.startsWith("season:") ? seasonItemName(k) : (itemDef(k)?.name ?? k);
+  const artOf = (k: string) => (k.startsWith("relic:") ? `relic-${k.slice(6)}` : k.startsWith("title:") ? "title" : k.startsWith("frame:") ? `frame-${k.slice(6)}` : k.startsWith("emblem:") || k.startsWith("season:") ? "emblem" : (itemDef(k)?.art ?? "crystal"));
   const artSetOf = (k: string): "items" | "codex" => (k.startsWith("relic:") ? "codex" : "items");
   const sets = ITEM_SETS.map((s) => {
     const list = s.items.map((k) => ({ key: k, name: nameOf(k), art: artOf(k), artSet: artSetOf(k), owned: collected.has(k) }));
