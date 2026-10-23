@@ -10,6 +10,7 @@ import { GamificationFeedback } from "./GamificationFeedback";
 import { RPGPlayerHUD } from "@/components/rpg/RPGPlayerHUD";
 import { HeroClassChip } from "@/components/rpg/HeroClass";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
+import { AppUpdateWatcher } from "./AppUpdateWatcher";
 import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
@@ -166,6 +167,7 @@ export function AppShell() {
         </header>
 
         <OfflineStatus />
+        <AppUpdateWatcher />
         {DesktopUpdatePrompt && (
           <Suspense fallback={null}>
             <DesktopUpdatePrompt />
