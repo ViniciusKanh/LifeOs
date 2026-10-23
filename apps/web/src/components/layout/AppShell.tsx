@@ -9,6 +9,7 @@ import { AchievementToast } from "./AchievementToast";
 import { GamificationFeedback } from "./GamificationFeedback";
 import { RPGPlayerHUD } from "@/components/rpg/RPGPlayerHUD";
 import { HeroClassChip } from "@/components/rpg/HeroClass";
+import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
@@ -183,7 +184,9 @@ export function AppShell() {
         </div>
 
         <main id="conteudo" className="flex-1 min-w-0">
-          <Outlet />
+          <ScreenErrorBoundary resetKey={location.pathname}>
+            <Outlet />
+          </ScreenErrorBoundary>
         </main>
 
         <div className="pb-24 md:pb-0">

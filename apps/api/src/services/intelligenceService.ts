@@ -399,6 +399,15 @@ function buildAlerts(artifacts: ArtifactRow[]) {
   return alerts.sort((x, y) => order[x.severity] - order[y.severity]);
 }
 
+const CURRENT_AREAS = ["metas", "habitos", "saude", "educacao", "treino", "energia"];
+
+/** Snapshot com áreas ou objetivos de uma versão anterior do motor. Exportada para teste. */
+export function isStaleGrimoire(g: Pick<GrimoireSummary, "areas" | "readiness">): boolean {
+  const areas = new Set((g.areas ?? []).map((a) => a.key));
+  const objectives = new Set((g.readiness ?? []).map((r) => r.objective));
+  return CURRENT_AREAS.some((k) => !areas.has(k)) || OBJECTIVES.some((o) => !objectives.has(o.key)) || (g.readiness ?? []).some((r) => !OBJECTIVES.some((o) => o.key === r.objective));
+}
+
 export async function getOverview(db: Client, ownerId: string) {
   const today = await todayKeyFor(db, ownerId);
   const [rows, expCount, latestExp, snap] = await Promise.all([
@@ -415,7 +424,10 @@ export async function getOverview(db: Client, ownerId: string) {
   ]);
   const artifacts = rows.map(summarizeArtifact);
   const production = artifacts.filter((a) => a.status === "production");
-  const grimoire = snap.rows[0] ? { ...(JSON.parse(String(snap.rows[0].summary_json)) as GrimoireSummary), updatedAt: String(snap.rows[0].updated_at) } : null;
+  let grimoire = snap.rows[0] ? { ...(JSON.parse(String(snap.rows[0].summary_json)) as GrimoireSummary), updatedAt: String(snap.rows[0].updated_at) } : null;
+  // Grimório salvo antes de uma mudança de áreas/objetivos (ex.: saída do Foco):
+  // recalcula uma vez para a tela não receber chaves que não existem mais.
+  if (grimoire && isStaleGrimoire(grimoire)) grimoire = await refreshGrimoire(db, ownerId);
   const totalXp = artifacts.reduce((s, a) => s + a.xp, 0);
 
   // Profecia: Oráculo de Produtividade quando existir; senão o melhor artefato em produção.

@@ -159,3 +159,24 @@ describe("Forja sem o módulo Foco", () => {
     expect((await agent.post("/api/intelligence/forge").send({ objective: "focus" })).status).toBe(400);
   });
 });
+
+describe("Grimório salvo por versão anterior", () => {
+  it("snapshot com área/objetivo de Foco é recalculado ao abrir a Forja", async () => {
+    const { isStaleGrimoire } = await import("../src/services/intelligenceService.js");
+    expect(isStaleGrimoire({ areas: [{ key: "foco", label: "Foco", days: 0, active: false }], readiness: [] } as never)).toBe(true);
+
+    const { agent, userId } = await createAuthenticatedAgent();
+    const old = {
+      rangeFrom: null, rangeTo: "2026-10-01", records: 0, features: 14, daysObserved: 0, sources: [], qualityScore: null, missingRate: null, outlierRate: null,
+      areas: ["metas", "habitos", "saude", "educacao", "foco", "energia"].map((key) => ({ key, label: key, days: 0, active: false })),
+      corePower: 0, readiness: [{ objective: "focus" }], featureCoverage: [],
+    };
+    await getDb().execute({ sql: "INSERT INTO ml_grimoire_snapshots (owner_id, summary_json, updated_at) VALUES (?, ?, datetime('now'))", args: [userId, JSON.stringify(old)] });
+    const ov = await agent.get("/api/intelligence/overview");
+    expect(ov.status).toBe(200);
+    const keys = ov.body.core.areas.map((a: { key: string }) => a.key);
+    expect(keys).toContain("treino");
+    expect(keys).not.toContain("foco");
+    expect(ov.body.grimoire.readiness.map((r: { objective: string }) => r.objective)).not.toContain("focus");
+  });
+});

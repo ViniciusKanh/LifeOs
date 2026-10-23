@@ -14,11 +14,12 @@ const AREA_UI: Record<string, { icon: LucideIcon; tone: RpgTone }> = {
   treino: { icon: Dumbbell, tone: "red" },
   energia: { icon: Zap, tone: "cyan" },
 };
+const AREA_LABEL: Record<string, string> = { metas: "Metas", habitos: "Hábitos", saude: "Saúde", educacao: "Educação", treino: "Treino", energia: "Energia" };
 const LEFT = ["metas", "treino", "energia"];
 const RIGHT = ["habitos", "saude", "educacao"];
 
 function AreaNode({ area, side }: { area: IntelligenceOverview["core"]["areas"][number] | { key: string; label: string; days: number; active: boolean }; side: "left" | "right" }) {
-  const ui = AREA_UI[area.key];
+  const ui = AREA_UI[area.key] ?? { icon: Target, tone: "muted" as RpgTone };
   const Icon = ui.icon;
   return (
     <li className={clsx("flex flex-col items-center gap-1 text-center sm:gap-2", side === "left" ? "sm:flex-row-reverse sm:text-right" : "sm:flex-row sm:text-left")} title={`${area.days} dia(s) com registro nos últimos 90`}>
@@ -43,8 +44,9 @@ function AreaNode({ area, side }: { area: IntelligenceOverview["core"]["areas"][
  */
 export function IntelligenceCorePanel({ core, hasGrimoire }: { core: IntelligenceOverview["core"]; hasGrimoire: boolean }) {
   const reduce = useReducedMotion();
-  const areas = hasGrimoire ? core.areas : Object.keys(AREA_UI).map((key) => ({ key, label: { metas: "Metas", habitos: "Hábitos", saude: "Saúde", educacao: "Educação", treino: "Treino", energia: "Energia" }[key]!, days: 0, active: false }));
-  const by = (k: string) => areas.find((a) => a.key === k)!;
+  const areas = hasGrimoire ? core.areas.filter((a) => a.key in AREA_UI) : [];
+  // Área ausente (grimório antigo ou sem dados) aparece apagada, nunca quebra a tela.
+  const by = (k: string) => areas.find((a) => a.key === k) ?? { key: k, label: AREA_LABEL[k] ?? k, days: 0, active: false };
   const span = core.nextLevelXp - core.levelStartXp;
   return (
     <RPGPanel title="Núcleo de Inteligência" icon={<Cpu size={15} />} variant="gold" className="h-full">
@@ -59,7 +61,7 @@ export function IntelligenceCorePanel({ core, hasGrimoire }: { core: Intelligenc
         <p className="text-sm text-rpg-text/85 text-center">
           O núcleo aprende com sua rotina e alimenta os artefatos de previsão.
           <span className="block mt-1 text-xs text-rpg-muted">
-            {hasGrimoire ? `${areas.filter((a) => a.active).length} de ${areas.length} áreas conectadas.` : "Abra o Grimório e atualize para acender as áreas."}
+            {hasGrimoire ? `${areas.filter((a) => a.active).length} de ${Object.keys(AREA_UI).length} áreas conectadas.` : "Abra o Grimório e atualize para acender as áreas."}
           </span>
         </p>
       </div>
