@@ -10,6 +10,8 @@ const KEYS = {
   workouts: ["health", "workouts"],
   mood: ["health", "mood"],
   correlations: ["health", "correlations"],
+  // Entra em KEYS para ser invalidado junto com criar/editar/excluir treino.
+  strength: ["health", "strength"],
 };
 
 /** Reaproveitado por Dashboard, Hoje e a própria tela de Saúde. */
@@ -29,6 +31,15 @@ export function useHealthSummary() {
 export function useHealthCorrelations() {
   const query = useQuery({ queryKey: KEYS.correlations, queryFn: () => healthService.correlations() });
   return { correlations: query.data ?? [], isLoading: query.isLoading };
+}
+
+/** Atributo Força (musculação + luta) — ver strengthService.ts na API. */
+export function useHealthStrength(days = 180) {
+  const query = useQuery({
+    queryKey: [...KEYS.strength, days],
+    queryFn: () => healthService.strength(days, browserTzOffset()),
+  });
+  return { report: query.data ?? null, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch };
 }
 
 function invalidateHealth(queryClient: ReturnType<typeof useQueryClient>) {

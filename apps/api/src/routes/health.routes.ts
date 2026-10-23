@@ -14,6 +14,7 @@ import {
   healthMetricEntrySchema,
 } from "../validators/health.schema.js";
 import { computeHealthCorrelations } from "../services/correlationService.js";
+import { getStrengthReport } from "../services/strengthService.js";
 import {
   WORKOUT_CATEGORY_LABELS,
   attachWorkoutSets,
@@ -503,6 +504,23 @@ healthRouter.get("/correlations", async (req, res) => {
   const db = getDb();
   const results = await computeHealthCorrelations(db, req.user!.id);
   return res.json(results);
+});
+
+/**
+ * GET /api/health/strength?days=180&tz=180 — "Atributo Força": evolução por
+ * exercício de musculação (carga, 1RM Epley, volume, PRs), resumo de luta e
+ * nível de Força. Regras e fórmula em services/strengthService.ts.
+ */
+healthRouter.get("/strength", async (req, res) => {
+  const raw = req.query.days;
+  const parsedDays = raw === undefined ? 180 : Number(raw);
+  if (!Number.isInteger(parsedDays) || parsedDays < 7 || parsedDays > 730) {
+    return res.status(400).json({ error: "Período inválido (use days entre 7 e 730)." });
+  }
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const tzOffsetMinutes = await resolveTzOffset(db, ownerId, req.query.tz);
+  return res.json(await getStrengthReport(db, ownerId, parsedDays, tzOffsetMinutes));
 });
 
 /* ---------------------------- Resumo ---------------------------- */

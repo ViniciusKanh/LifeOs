@@ -553,3 +553,63 @@ export async function getMilestones(db: Client, ownerId: string) {
   return items.sort((a, b) => b.at.localeCompare(a.at));
 }
 
+/* ------------------------------ HUD do herói ------------------------------ */
+
+/** Conquistas que o usuário escolheu exibir (só as já desbloqueadas aparecem). */
+async function showcaseAchievements(db: Client, ownerId: string) {
+  const r = await db.execute({ sql: "SELECT rpg_prefs_json FROM users WHERE id = ?", args: [ownerId] });
+  let ids: string[] = [];
+  try {
+    const p = JSON.parse(String(r.rows[0]?.rpg_prefs_json ?? "{}")) as { showcase?: unknown };
+    if (Array.isArray(p.showcase)) ids = p.showcase.filter((x): x is string => typeof x === "string").slice(0, 3);
+  } catch {
+    ids = [];
+  }
+  if (!ids.length) return [];
+  const rows = await db.execute({
+    sql: `SELECT a.id, a.title, a.description, a.icon, a.tier, u.unlocked_at FROM achievements a
+          JOIN user_achievements u ON u.achievement_id = a.id AND u.owner_id = ?
+          WHERE a.id IN (${ids.map(() => "?").join(", ")})`,
+    args: [ownerId, ...ids],
+  });
+  const byId = new Map(rows.rows.map((x) => [String(x.id), x]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((x): x is NonNullable<typeof x> => !!x)
+    .map((x) => ({ id: String(x.id), title: String(x.title), description: x.description == null ? null : String(x.description), icon: x.icon == null ? null : String(x.icon), tier: String(x.tier), unlockedAt: String(x.unlocked_at) }));
+}
+
+/**
+ * HUD do cabeçalho: classe DINÂMICA (pelos atributos dos últimos 30 dias —
+ * muda conforme a rotina real), a classe de longo prazo e a "build" (3
+ * atributos mais fortes no período). Sem XP no período → classe null.
+ */
+export async function getHud(db: Client, ownerId: string) {
+  const [agg, showcase] = await Promise.all([aggregateAttributes(db, ownerId), showcaseAchievements(db, ownerId)]);
+  const recent = suggestClass(agg.last);
+  const longTerm = suggestClass(agg.xp);
+  const total = ATTRIBUTES.reduce((s, a) => s + agg.last[a], 0);
+  const build = [...ATTRIBUTES]
+    .sort((a, b) => agg.last[b] - agg.last[a])
+    .filter((a) => agg.last[a] > 0)
+    .slice(0, 3)
+    .map((key) => ({
+      key,
+      label: ATTRIBUTE_META[key].label,
+      level: calculateAttributeLevel(agg.xp[key]).level,
+      last30: agg.last[key],
+      sharePct: total > 0 ? Math.round((agg.last[key] / total) * 100) : 0,
+      trendPct: trendPct(agg.last[key], agg.prev[key]),
+    }));
+  const view = (c: ReturnType<typeof suggestClass>) =>
+    c ? { id: c.id, name: c.name, description: c.description, basedOn: c.basedOn.map((k) => ATTRIBUTE_META[k].label) } : null;
+  return {
+    windowDays: codexConfig.trendDays,
+    currentClass: view(recent),
+    longTermClass: view(longTerm),
+    /** A rotina recente puxa para outra classe que a histórica. */
+    shifting: !!recent && !!longTerm && recent.id !== longTerm.id,
+    build,
+    showcase,
+  };
+}

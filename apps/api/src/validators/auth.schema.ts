@@ -69,6 +69,10 @@ export const rpgPrefsSchema = z
     showXp: z.boolean(),
     showCoins: z.boolean(),
     animations: z.enum(["full", "reduced", "off"]),
+    /** Sons 8-bit de feedback (desligados por padrão). */
+    sound: z.boolean(),
+    /** Vitrine: até 3 conquistas escolhidas (o servidor só exibe as desbloqueadas). */
+    showcase: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)).max(3),
   })
   .partial()
   .strict();

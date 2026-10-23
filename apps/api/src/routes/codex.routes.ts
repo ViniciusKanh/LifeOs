@@ -2,7 +2,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { CodexError, buyKnowledge, getAttributeDetail, getCodex, getMilestones, getTitles, markSeen } from "../services/codexService.js";
+import { CodexError, buyKnowledge, getAttributeDetail, getCodex, getHud, getMilestones, getTitles, markSeen } from "../services/codexService.js";
 
 /** Códex da Jornada — leitura e desbloqueios cosméticos, sempre do próprio usuário. */
 export const codexRouter = Router();
@@ -17,6 +17,15 @@ function fail(res: Response, err: unknown) {
 codexRouter.get("/", async (req, res) => {
   try {
     return res.json(await getCodex(getDb(), req.user!.id));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+/** GET /api/codex/hud — classe dinâmica (últimos 30 dias), build e vitrine de troféus para o cabeçalho. */
+codexRouter.get("/hud", async (req, res) => {
+  try {
+    return res.json(await getHud(getDb(), req.user!.id));
   } catch (err) {
     return fail(res, err);
   }

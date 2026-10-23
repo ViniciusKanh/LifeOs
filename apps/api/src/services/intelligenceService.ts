@@ -509,3 +509,51 @@ export async function simulateArtifact(db: Client, ownerId: string, id: string, 
     baseRate: a.insights.baseRate ?? null,
   };
 }
+
+/**
+ * Profecia de AMANHÃ (Taverna). Mesma regra anti-vazamento da Forja — as
+ * runas de um dia só leem a véspera, a janela de 7 dias e o calendário do
+ * próprio dia —, mas aqui a véspera é HOJE: montamos os dias até amanhã com
+ * amanhã vazio (nenhuma runa lê o dia-alvo, só a data dele para o fim de
+ * semana). Hoje ainda está acontecendo, então as runas são parciais e a
+ * chance muda conforme o usuário registra mais. Nada é gravado
+ * (ml_predictions guarda só as profecias de hoje, que são conferidas depois).
+ */
+export async function tomorrowProphecies(db: Client, ownerId: string) {
+  const today = await todayKeyFor(db, ownerId);
+  const t = new Date(`${today}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + 1);
+  const tomorrow = t.toISOString().slice(0, 10);
+  const rows = await getArtifacts(db, ownerId);
+  if (!rows.length) return { today, tomorrow, prophecies: [] };
+
+  const [models, days] = await Promise.all([
+    db.execute({ sql: "SELECT id, model_json FROM ml_artifacts WHERE owner_id = ?", args: [ownerId] }),
+    // Hoje + 7 dias anteriores: véspera (hoje) e a janela da carga semanal.
+    loadDays(db, ownerId, today, 8),
+  ]);
+  const modelById = new Map(models.rows.map((r) => [String(r.id), JSON.parse(String(r.model_json)) as FittedModel]));
+  const last = days[days.length - 1];
+  const hasEve = !!last && last.date === today;
+  const empty = hasEve ? (Object.fromEntries(Object.keys(last.v).map((k) => [k, null])) as DayData["v"]) : null;
+  const series: DayData[] = hasEve && empty ? [...days, { date: tomorrow, v: empty }] : [];
+  const idx = series.length - 1;
+  const row = idx >= 1 ? featureRow(series, idx) : null;
+
+  const prophecies = rows.map((a) => {
+    const o = OBJECTIVES.find((x) => x.key === a.objective)!;
+    const base = { artifactId: a.id, artifactName: o.name, icon: o.icon, targetLabel: o.targetLabel, targetDate: tomorrow, confidence: a.metrics.confidence, status: a.status };
+    const model = modelById.get(a.id);
+    if (!model || !row) return { ...base, probability: null as number | null, factors: [] as Factor[], missing: [] as Array<{ key: string; label: string }>, reason: "Sem registros recentes para basear a profecia de amanhã." };
+    const local = localEffects(model, rowForModel(model, row));
+    const effects = effectsForFeatures(model, local.effects);
+    const factors: Factor[] = FEATURES.map((f, j) => ({ key: f.key, label: f.label, effect: Math.round(effects[j] * 100), value: row[j] }))
+      .filter((f) => f.effect !== 0)
+      .sort((x, y) => Math.abs(y.effect) - Math.abs(x.effect))
+      .slice(0, 5);
+    // Runas sem registro (ex.: o sono desta noite ainda não aconteceu) — o modelo as trata como ausentes.
+    const missing = FEATURES.filter((f, j) => row[j] === null).map((f) => ({ key: f.key, label: f.label }));
+    return { ...base, probability: local.p, factors, missing, reason: null as string | null };
+  });
+  return { today, tomorrow, prophecies };
+}

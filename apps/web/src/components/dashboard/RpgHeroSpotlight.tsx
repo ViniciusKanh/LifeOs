@@ -6,7 +6,9 @@ import { RPGPanel, RPGPortrait, RPGProgressBar, rpgButtonClass } from "@/compone
 import { useAuth } from "@/hooks/useAuth";
 import { useGamificationProfile } from "@/hooks/useGamification";
 import { useAchievements } from "@/hooks/useAchievements";
-import { useEquippedTitle } from "@/hooks/useCodex";
+import { useEquippedTitle, useHeroHud } from "@/hooks/useCodex";
+import { HeroBuild } from "@/components/rpg/HeroClass";
+import { TrophyShowcaseStrip } from "@/components/achievements/TrophyShowcase";
 
 /** Cores dos tokens RPG (sem hex solto). */
 const tok = (name: string) => `rgb(var(--rpg-${name}))`;
@@ -31,6 +33,7 @@ function Chip({ icon, label, value, tone }: { icon: ReactNode; label: string; va
 export function RpgLevelSpotlight({ dimensions }: { dimensions: Array<{ key: string; label: string; value: number }> }) {
   const { user } = useAuth();
   const title = useEquippedTitle();
+  const { data: hud } = useHeroHud();
   const { data: p, isLoading, isError } = useGamificationProfile();
   const { achievements } = useAchievements(false);
   const unlocked = achievements.filter((a) => a.unlockedAt).length;
@@ -54,7 +57,15 @@ export function RpgLevelSpotlight({ dimensions }: { dimensions: Array<{ key: str
 
         <div className="min-w-0 pt-4 lg:pt-0 text-center lg:text-left">
           <p className="font-pixel text-[11px] uppercase tracking-[0.18em] text-rpg-purple">{title}</p>
-          <h2 className="rpg-title text-3xl sm:text-4xl font-bold leading-tight">{user?.name?.split(" ")[0] ?? "Aventureiro"}</h2>
+          <h2 className="rpg-title text-3xl sm:text-4xl font-bold leading-tight inline-flex flex-wrap items-center justify-center lg:justify-start gap-3">
+            {user?.name?.split(" ")[0] ?? "Aventureiro"}
+            {hud && hud.showcase.length > 0 && (
+              <Link to="/perfil" title="Vitrine de troféus (Meu Perfil)">
+                <TrophyShowcaseStrip items={hud.showcase} />
+              </Link>
+            )}
+          </h2>
+          {hud && <HeroBuild hud={hud} className="mt-2 flex flex-col items-center lg:items-start" />}
           {isLoading && <div className="mt-3 h-4 rpg-bar animate-pulse" aria-label="Carregando progressão" />}
           {isError && <p className="mt-2 text-sm text-rpg-red">Não foi possível carregar a progressão.</p>}
           {p && (

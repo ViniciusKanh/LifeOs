@@ -28,6 +28,10 @@ export interface RpgPreferences {
   title: string | null;
   /** Classe da rotina escolhida no Códex (cosmética). */
   classId: string | null;
+  /** Sons 8-bit de feedback (desligados por padrão). */
+  sound: boolean;
+  /** Até 3 conquistas na vitrine (Perfil e HUD). */
+  showcase: string[];
 }
 
 export const DEFAULT_RPG_PREFERENCES: RpgPreferences = {
@@ -41,6 +45,8 @@ export const DEFAULT_RPG_PREFERENCES: RpgPreferences = {
   banner: "perfil",
   title: null,
   classId: null,
+  sound: false,
+  showcase: [],
 };
 
 /** Valores que existiam só no navegador (versão anterior) — usados até o primeiro salvamento. */

@@ -8,6 +8,7 @@ import { ProfileMenu } from "./ProfileMenu";
 import { AchievementToast } from "./AchievementToast";
 import { GamificationFeedback } from "./GamificationFeedback";
 import { RPGPlayerHUD } from "@/components/rpg/RPGPlayerHUD";
+import { HeroClassChip } from "@/components/rpg/HeroClass";
 import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
@@ -155,6 +156,7 @@ export function AppShell() {
             >
               <ThemeCycleIcon mode={mode} size={16} />
             </button>
+            {isRpg && <HeroClassChip />}
             {isRpg && <RPGPlayerHUD compact />}
             <AchievementHeaderPulse />
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />

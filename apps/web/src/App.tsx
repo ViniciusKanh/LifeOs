@@ -80,6 +80,8 @@ const InventarioPage = lazy(() => import("@/pages/inventario/InventarioPage").th
 const BuildPage = lazy(() => import("@/pages/character-build/BuildPage").then((m) => ({ default: m.BuildPage })));
 const ProtocolosPage = lazy(() => import("@/pages/protocolos/ProtocolosPage").then((m) => ({ default: m.ProtocolosPage })));
 const DetectorGargalosPage = lazy(() => import("@/pages/detector-gargalos/DetectorGargalosPage").then((m) => ({ default: m.DetectorGargalosPage })));
+const TavernaPage = lazy(() => import("@/pages/taverna/TavernaPage").then((m) => ({ default: m.TavernaPage })));
+const MapaMundoPage = lazy(() => import("@/pages/mapa/MapaMundoPage").then((m) => ({ default: m.MapaMundoPage })));
 const ForjaInteligenciaPage = lazy(() => import("@/pages/forja-inteligencia/ForjaInteligenciaPage").then((m) => ({ default: m.ForjaInteligenciaPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
@@ -177,6 +179,8 @@ export default function App() {
           <Route path="/goal-forecast" element={<Navigate to="/metas" replace />} />
           <Route path="/timeline" element={<Navigate to="/dashboard" replace />} />
           <Route path="/codex" element={<CodexPage />} />
+          <Route path="/mapa" element={<MapaMundoPage />} />
+          <Route path="/taverna" element={<TavernaPage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
           <Route path="/life-map" element={<Navigate to="/metas" replace />} />
           <Route path="/data-health" element={<Navigate to="/dashboard" replace />} />

@@ -76,8 +76,19 @@ export interface AttributeDetail extends CodexAttribute {
 
 export interface CodexMilestone { kind: string; title: string; detail: string | null; at: string; link: string | null }
 
+/** HUD do cabeçalho: classe pela rotina dos últimos 30 dias, build e vitrine. */
+export interface HeroHud {
+  windowDays: number;
+  currentClass: { id: string; name: string; description: string; basedOn: string[] } | null;
+  longTermClass: { id: string; name: string; description: string; basedOn: string[] } | null;
+  shifting: boolean;
+  build: Array<{ key: AttributeKey; label: string; level: number; last30: number; sharePct: number; trendPct: number | null }>;
+  showcase: Array<{ id: string; title: string; description: string | null; icon: string | null; tier: "bronze" | "silver" | "gold" | "platinum"; unlockedAt: string }>;
+}
+
 export const codexService = {
   get: () => api.get<Codex>("/codex"),
+  hud: () => api.get<HeroHud>("/codex/hud"),
   attribute: (key: AttributeKey) => api.get<AttributeDetail>(`/codex/attributes/${key}`),
   titles: () => api.get<Array<{ id: string; name: string; rarity: Rarity; description: string; unlocked: boolean }>>("/codex/titles"),
   milestones: () => api.get<CodexMilestone[]>("/codex/milestones"),

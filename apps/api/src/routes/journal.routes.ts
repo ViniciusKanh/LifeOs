@@ -588,7 +588,8 @@ journalRouter.put("/:date", async (req, res) => {
     self_care: JSON.stringify(data.selfCare ?? []),
     self_care_other: data.selfCareOther ?? null,
     night_takeaway: data.nightTakeaway ?? null,
-    focus_task_ids: JSON.stringify(data.focusTaskIds ?? []),
+    // Sem focusTaskIds no corpo, preserva a missão principal já fixada (ex.: pela Taverna) — o editor do Diário não envia esse campo.
+    focus_task_ids: data.focusTaskIds !== undefined ? JSON.stringify(data.focusTaskIds) : null,
     location_label: data.locationLabel ?? null,
     location_lat: data.locationLat ?? null,
     location_lng: data.locationLng ?? null,
@@ -601,7 +602,7 @@ journalRouter.put("/:date", async (req, res) => {
     await db.execute({
       sql: `UPDATE journal_entries SET
               thoughts = ?, gratitude = ?, self_care = ?, self_care_other = ?, night_takeaway = ?,
-              focus_task_ids = ?, location_label = ?, location_lat = ?, location_lng = ?, tags = ?,
+              focus_task_ids = COALESCE(?, focus_task_ids), location_label = ?, location_lat = ?, location_lng = ?, tags = ?,
               updated_at = datetime('now')
             WHERE id = ? AND owner_id = ?`,
       args: [
@@ -634,7 +635,7 @@ journalRouter.put("/:date", async (req, res) => {
         values.self_care,
         values.self_care_other,
         values.night_takeaway,
-        values.focus_task_ids,
+        values.focus_task_ids ?? "[]",
         values.location_label,
         values.location_lat,
         values.location_lng,

@@ -1,5 +1,7 @@
 import {
   Boxes,
+  Map as MapIcon,
+  Sunset,
   BrainCircuit,
   Dna,
   Scroll,
@@ -120,6 +122,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Registrar",
     items: [
       { to: "/diario", label: "Diário", icon: NotebookPen, quote: "Escrever é enxergar o próprio caminho." },
+      { to: "/taverna", label: "Taverna (fim do dia)", icon: Sunset, quote: "Todo herói descansa para lutar amanhã." },
       { to: "/habitos", label: "Hábitos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
@@ -132,6 +135,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Medir",
     items: [
       { to: "/codex", label: "Códex da Jornada", icon: BookMarked, quote: "Toda grande história começa com um registro." },
+      { to: "/mapa", label: "Mapa do Mundo", icon: MapIcon, quote: "Cada região da vida tem sua própria jornada." },
     ],
   },
   {

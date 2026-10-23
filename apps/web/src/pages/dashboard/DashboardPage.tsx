@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { BookOpen, Briefcase, CalendarClock, CalendarDays, CheckSquare, GraduationCap, Heart, ListChecks, Repeat, Target } from "lucide-react";
 import { RpgLevelSpotlight } from "@/components/dashboard/RpgHeroSpotlight";
+import { WeeklyRecordsBoard } from "@/components/dashboard/WeeklyRecordsBoard";
 import { RpgDashboardHero, RpgKpiStrip, RpgMainQuest, RpgRecentAchievements } from "@/components/dashboard/RpgDashboardSections";
 import {
   AttentionPanel,
@@ -158,6 +159,7 @@ export function DashboardPage() {
         <RpgLevelSpotlight dimensions={dimensions} />
         <RpgDashboardHero {...heroProps} quote={findNavItem("/dashboard")?.item.quote ?? DEFAULT_QUOTE} />
         <RpgKpiStrip items={kpis} />
+        <WeeklyRecordsBoard />
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
           <RpgMainQuest task={nextTask} estimateMinutes={nextTaskEstimate} onComplete={completeNext} isCompleting={completing} />
           <RpgRecentAchievements />

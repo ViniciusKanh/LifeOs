@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { WaterEntry, SleepEntry, Workout, MoodEntry, HealthSummary, HealthCorrelation, WorkoutCategory, FightModality } from "@/types";
+import type { WaterEntry, SleepEntry, Workout, MoodEntry, HealthSummary, HealthCorrelation, WorkoutCategory, FightModality, StrengthReport } from "@/types";
 import { browserTzOffset } from "@/utils/localDate";
 
 export interface WaterEntryInput {
@@ -59,6 +59,9 @@ function dateQuery(date?: string, tzOffsetMinutes?: number) {
 export const healthService = {
   summary: (date?: string, tzOffsetMinutes?: number) => api.get<HealthSummary>(`/health/summary${dateQuery(date, tzOffsetMinutes)}`),
   correlations: () => api.get<HealthCorrelation[]>("/health/correlations"),
+  /** Atributo Força: evolução por exercício, PRs, luta e nível (dia local via tz). */
+  strength: (days = 180, tzOffsetMinutes?: number) =>
+    api.get<StrengthReport>(`/health/strength?days=${days}&tz=${tzOffsetMinutes ?? browserTzOffset()}`),
 
   listWater: (date?: string, tzOffsetMinutes?: number) => api.get<WaterEntry[]>(`/health/water${dateQuery(date, tzOffsetMinutes)}`),
   addWater: (input: number | WaterEntryInput) =>

@@ -2277,3 +2277,64 @@ export interface NoteDetail extends NoteSummary {
   backlinks: Array<{ id: string; title: string; preview: string }>;
   unresolvedWikiLinks: string[];
 }
+
+/* ---------------- Saúde — Atributo Força (GET /api/health/strength) ---------------- */
+
+export interface StrengthSession {
+  /** Dia local (YYYY-MM-DD). */
+  date: string;
+  maxLoadKg: number;
+  repsAtMaxLoad: number;
+  volumeKg: number;
+  /** 1RM estimado por Epley: carga × (1 + reps/30). */
+  est1rmKg: number;
+}
+
+export interface StrengthPr {
+  value: number;
+  date: string;
+}
+
+export interface StrengthExercise {
+  key: string;
+  name: string;
+  sessions: StrengthSession[];
+  prLoad: StrengthPr;
+  pr1rm: StrengthPr;
+  prVolume: StrengthPr;
+  lastSession: StrengthSession & { newPrLoad: boolean; newPr1rm: boolean; newPrVolume: boolean };
+  prDates: string[];
+}
+
+export interface StrengthFightWeek {
+  weekStart: string;
+  sessions: number;
+  rounds: number;
+  minutes: number;
+}
+
+export interface StrengthLevel {
+  level: number;
+  points: number;
+  pointsIntoLevel: number;
+  pointsPerLevel: number;
+  windowDays: number;
+  strengthSessions: number;
+  fightSessions: number;
+  prs: number;
+  formula: string;
+}
+
+export interface StrengthReport {
+  days: number;
+  today: string;
+  level: StrengthLevel;
+  exercises: StrengthExercise[];
+  fight: {
+    weeks: StrengthFightWeek[];
+    totalSessions: number;
+    totalRounds: number;
+    totalMinutes: number;
+    biggestSession: { date: string; rounds: number | null; minutes: number; modality: FightModality | null } | null;
+  };
+}

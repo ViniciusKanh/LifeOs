@@ -23,8 +23,13 @@ import {
   Sparkles,
   Swords,
   Trophy,
+  Shield,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { HeroBuild } from "@/components/rpg/HeroClass";
+import { TrophyShowcasePanel } from "@/components/achievements/TrophyShowcase";
+import { useHeroHud } from "@/hooks/useCodex";
+import { playSfx } from "@/utils/sfx";
 import { Switch } from "@/components/ui/Switch";
 import { GoogleAccountCard } from "@/components/auth/GoogleAccountCard";
 import { platformFeatures } from "@/platform";
@@ -92,6 +97,7 @@ export function RpgProfileView({
   const [statsDays, setStatsDays] = useState(30);
   const { mode } = useTheme();
   const { prefs, update } = useRpgPreferences();
+  const { data: hud } = useHeroHud();
   const { updateProfile, isUpdatingProfile } = useProfile();
   const { data: p } = useGamificationProfile();
   const { data: xp30 } = useXpHistory(30);
@@ -206,6 +212,13 @@ export function RpgProfileView({
       {tab === "overview" && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start">
           <div className="space-y-4 min-w-0">
+            {hud && (
+              <RPGPanel title="Classe e build" icon={<Shield size={16} />}>
+                <HeroBuild hud={hud} />
+                <p className="mt-2 text-[11px] text-rpg-muted">Calculada pelo Códex com o XP real dos últimos {hud.windowDays} dias: muda conforme a sua rotina.</p>
+              </RPGPanel>
+            )}
+            <TrophyShowcasePanel hud={hud} />
             <RPGPanel title="Progressão" icon={<Crown size={16} />}>
               {p ? (
                 <>
@@ -424,6 +437,22 @@ export function RpgProfileView({
                 </div>
                 <p className="mt-1 text-[11px] text-rpg-muted">A configuração "reduzir movimento" do seu sistema é sempre respeitada.</p>
               </fieldset>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-rpg-text">
+                  Sons 8-bit
+                  <span className="block text-[11px] text-rpg-muted">Bipes curtos ao ganhar XP, subir de nível, bater recorde e causar dano em chefes.</span>
+                </span>
+                <Switch
+                  checked={prefs.sound}
+                  onChange={() => {
+                    const next = !prefs.sound;
+                    update({ sound: next });
+                    playSfx("xp", next);
+                  }}
+                  disabled={!prefs.gamification}
+                  label="Sons 8-bit"
+                />
+              </div>
             </div>
           </RPGPanel>
           <div className="xl:col-span-2">{helpCard}</div>

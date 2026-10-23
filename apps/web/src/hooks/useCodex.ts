@@ -54,3 +54,8 @@ export function useEquippedTitle(): string {
     return (unlocked.find((t) => t.id === prefs.title) ?? unlocked[unlocked.length - 1] ?? titles[0])?.name ?? "";
   }, [titles, prefs.title]);
 }
+
+/** HUD do herói (classe dinâmica + build + vitrine). Leve e compartilhado entre cabeçalho, painel e perfil. */
+export function useHeroHud(enabled = true) {
+  return useQuery({ queryKey: [...KEY, "hud"], queryFn: codexService.hud, enabled, staleTime: 5 * 60_000 });
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Archive, ArchiveRestore, CheckSquare, FolderKanban, Plus, Sparkles, Square, Target, Trash2, Wand2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { RPGBadge, RPGButton, RPGProgressBar } from "@/components/rpg";
+import { RPGBadge, RPGButton } from "@/components/rpg";
 import { useContractAI, useContractDetail, useContractRefresh, useContracts } from "@/hooks/useContracts";
 import { taskService } from "@/services/taskService";
 import { DIFFICULTIES, difficultyLabel } from "@/services/gamificationService";
@@ -10,6 +10,7 @@ import type { Difficulty } from "@/types";
 import { DIFFICULTY_TONE, STATUS_LABEL, STATUS_TONE, dateInDays, fmtDate, rpgField } from "./contractUi";
 import { ContractTaskEditor, draftsToInput, emptyDraft, type TaskDraft } from "./ContractTaskEditor";
 import { ContractDocument } from "./ContractDocument";
+import { ContractBossBar } from "./ContractBossBar";
 import { useAuth } from "@/hooks/useAuth";
 
 const DONE = "Concluído";
@@ -148,7 +149,7 @@ export function ContractDetailModal({ id, onClose, onToast }: { id: string; onCl
             <div className="rpg-panel p-2"><p className="font-pixel text-lg text-rpg-gold-light">+{c.reward.coins} 🪙</p><p className="text-[10px] text-rpg-muted">moedas do bônus</p></div>
             <div className="rpg-panel p-2"><p className="font-pixel text-lg text-rpg-green">{c.earned.xp} XP</p><p className="text-[10px] text-rpg-muted">já ganhos aqui (dado real)</p></div>
           </div>
-          <RPGProgressBar value={c.doneTasks} max={Math.max(1, c.totalTasks)} tone="gold" label="Progresso do contrato" valueLabel={`${c.doneTasks}/${c.totalTasks} tarefas`} />
+          <ContractBossBar title={c.title} difficulty={c.difficulty} total={c.totalTasks} done={c.doneTasks} />
 
           <section>
             <p className="font-rpg font-semibold text-rpg-text mb-2">Obrigações (tarefas do contrato)</p>

@@ -7,6 +7,8 @@ import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { useGamificationProfile } from "@/hooks/useGamification";
 import { GAMIFICATION_REFRESH_EVENT, type PlayerEvent } from "@/services/gamificationService";
 import { RPGButton } from "@/components/rpg";
+import { recentActionPoint, spawnBurst, trackActionPoints } from "@/utils/xpBurst";
+import { playSfx } from "@/utils/sfx";
 
 interface Burst {
   key: string;
@@ -60,11 +62,18 @@ export function GamificationFeedback() {
   const [burst, setBurst] = useState<Burst | null>(null);
   const [levelUp, setLevelUp] = useState<number | null>(null);
 
+  // Lembra onde o usuário tocou para o "+XP" sair do card certo.
+  useEffect(() => (isRpg ? trackActionPoints() : undefined), [isRpg]);
+
   useEffect(() => {
     if (!isRpg) return;
     const onRefresh = () => {
       // Pequeno atraso para cobrir hooks encadeados no backend (ex.: hábito vinculado).
-      window.setTimeout(() => qc.invalidateQueries({ queryKey: ["gamification"] }), 150);
+      window.setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ["gamification"] });
+        // Classe dinâmica/build mudam com o XP novo.
+        void qc.invalidateQueries({ queryKey: ["codex", "hud"] });
+      }, 150);
     };
     window.addEventListener(GAMIFICATION_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(GAMIFICATION_REFRESH_EVENT, onRefresh);
@@ -81,6 +90,11 @@ export function GamificationFeedback() {
     const fresh = data.recentEvents.filter((e) => !seen.current!.has(e.id));
     fresh.forEach((e) => seen.current!.add(e.id));
     if (fresh.length > 0 && !silent) {
+      const xp = fresh.reduce((a, e) => a + e.xp, 0);
+      // "+XP" sai do ponto da ação (só quando o XP veio de um clique recente).
+      const point = recentActionPoint();
+      if (point && xp > 0) spawnBurst(`+${xp} XP`, point, { reduced: reduce });
+      playSfx("xp", prefs.sound);
       setBurst({
         key: fresh[0].id,
         xp: fresh.reduce((a, e) => a + e.xp, 0),
@@ -88,7 +102,10 @@ export function GamificationFeedback() {
         ...describe(fresh),
       });
     }
-    if (lastLevel.current !== null && data.level > lastLevel.current && !silent) setLevelUp(data.level);
+    if (lastLevel.current !== null && data.level > lastLevel.current && !silent) {
+      setLevelUp(data.level);
+      playSfx("levelup", prefs.sound);
+    }
     lastLevel.current = data.level;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
