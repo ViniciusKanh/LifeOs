@@ -1,6 +1,18 @@
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
-import { BANK_PLANS, computeGain, computeNetPayout, getBankPlan } from "../config/bank.js";
+import {
+  BANK_PLANS,
+  LOAN_LATE_FEE_BPS,
+  LOAN_SCORE_MAX,
+  LOAN_SCORE_MIN,
+  LOAN_TERM_DAYS,
+  computeGain,
+  computeLateFee,
+  computeLoanTotalDue,
+  computeNetPayout,
+  getBankPlan,
+  loanTierForScore,
+} from "../config/bank.js";
 import { coinBalance } from "./gamificationService.js";
 
 /**
@@ -83,6 +95,183 @@ export async function listLedger(db: Client, ownerId: string, limit: number): Pr
   }));
 }
 
+export interface BankLoanRow {
+  id: string;
+  amount: number;
+  rateBps: number;
+  termDays: number;
+  totalDue: number;
+  lateFeeBps: number;
+  status: "active" | "repaid";
+  createdAt: string;
+  dueAt: string;
+  repaidAt: string | null;
+  repaidAmount: number | null;
+  overdue: boolean;
+}
+
+function mapLoanRow(row: Record<string, unknown>): BankLoanRow {
+  const dueAt = String(row.due_at);
+  const status = row.status === "repaid" ? "repaid" : "active";
+  return {
+    id: String(row.id),
+    amount: Number(row.amount),
+    rateBps: Number(row.rate_bps),
+    termDays: Number(row.term_days),
+    totalDue: Number(row.total_due),
+    lateFeeBps: Number(row.late_fee_bps ?? 0),
+    status,
+    createdAt: String(row.created_at),
+    dueAt,
+    repaidAt: row.repaid_at ? String(row.repaid_at) : null,
+    repaidAmount: row.repaid_amount == null ? null : Number(row.repaid_amount),
+    overdue: status === "active" && dueAt < new Date().toISOString(),
+  };
+}
+
+export async function listLoans(db: Client, ownerId: string): Promise<BankLoanRow[]> {
+  const r = await db.execute({ sql: `SELECT * FROM bank_loans WHERE owner_id = ? ORDER BY created_at DESC`, args: [ownerId] });
+  return (r.rows as unknown as Array<Record<string, unknown>>).map(mapLoanRow);
+}
+
+/**
+ * Score de crédito (300–850, como um score real) — SEMPRE derivado do
+ * histórico, nunca armazenado: investimento concluído soma pontos
+ * (hábito de poupar), empréstimo pago em dia soma mais, pago atrasado
+ * derruba, e ter um empréstimo vencido sem pagar pune enquanto durar.
+ */
+export async function getCreditScore(db: Client, ownerId: string): Promise<number> {
+  const [loanStats, depositCount] = await Promise.all([
+    db.execute({
+      sql: `SELECT
+              COALESCE(SUM(CASE WHEN status = 'repaid' AND repaid_at <= due_at THEN 1 ELSE 0 END), 0) AS on_time,
+              COALESCE(SUM(CASE WHEN status = 'repaid' AND repaid_at > due_at THEN 1 ELSE 0 END), 0) AS late,
+              COALESCE(SUM(CASE WHEN status = 'active' AND due_at < datetime('now') THEN 1 ELSE 0 END), 0) AS overdue_now
+            FROM bank_loans WHERE owner_id = ?`,
+      args: [ownerId],
+    }),
+    db.execute({ sql: `SELECT COUNT(*) AS n FROM bank_deposits WHERE owner_id = ? AND status = 'claimed'`, args: [ownerId] }),
+  ]);
+  const row = loanStats.rows[0] ?? {};
+  const onTime = Number(row.on_time ?? 0);
+  const late = Number(row.late ?? 0);
+  const overdueNow = Number(row.overdue_now ?? 0);
+  const claimedDeposits = Number(depositCount.rows[0]?.n ?? 0);
+
+  const score = 500 + onTime * 40 - late * 60 - overdueNow * 100 + Math.min(claimedDeposits * 10, 100);
+  return Math.max(LOAN_SCORE_MIN, Math.min(LOAN_SCORE_MAX, score));
+}
+
+export type LoanResult =
+  | { ok: true; loan: BankLoanRow; balance: number }
+  | { ok: false; code: "invalid_amount" | "active_exists" | "score_too_low"; message: string };
+
+export async function requestLoan(db: Client, ownerId: string, amount: number): Promise<LoanResult> {
+  const score = await getCreditScore(db, ownerId);
+  const tier = loanTierForScore(score);
+  if (tier.maxAmount <= 0) {
+    return { ok: false, code: "score_too_low", message: "Seu score de crédito ainda não libera empréstimos. Conclua investimentos no Banco para construir histórico." };
+  }
+  if (!Number.isInteger(amount) || amount <= 0 || amount > tier.maxAmount) {
+    return { ok: false, code: "invalid_amount", message: `Seu limite atual é de ${tier.maxAmount} moedas (${tier.label}).` };
+  }
+
+  const loanId = nanoid();
+  const totalDue = computeLoanTotalDue(amount, tier.rateBps);
+  const dueAt = new Date(Date.now() + LOAN_TERM_DAYS * 86_400_000).toISOString();
+
+  const results = await db.batch(
+    [
+      {
+        sql: `INSERT INTO bank_loans (id, owner_id, amount, rate_bps, term_days, total_due, late_fee_bps, due_at)
+              SELECT ?, ?, ?, ?, ?, ?, ?, ?
+              WHERE NOT EXISTS (SELECT 1 FROM bank_loans WHERE owner_id = ? AND status = 'active')`,
+        args: [loanId, ownerId, amount, tier.rateBps, LOAN_TERM_DAYS, totalDue, LOAN_LATE_FEE_BPS, dueAt, ownerId],
+      },
+      {
+        sql: `INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label)
+              SELECT ?, ?, ?, 'bank_loan', ?, 'disbursement', ?
+              WHERE EXISTS (SELECT 1 FROM bank_loans WHERE id = ?)`,
+        args: [nanoid(), ownerId, amount, loanId, `Empréstimo: ${tier.label}`, loanId],
+      },
+    ],
+    "write",
+  );
+
+  if (results[0].rowsAffected === 0) {
+    return { ok: false, code: "active_exists", message: "Você já tem um empréstimo ativo. Quite-o antes de pedir outro." };
+  }
+
+  const balance = await coinBalance(db, ownerId);
+  const row = await db.execute({ sql: "SELECT * FROM bank_loans WHERE id = ?", args: [loanId] });
+  return { ok: true, loan: mapLoanRow(row.rows[0] as unknown as Record<string, unknown>), balance };
+}
+
+export type RepayLoanResult =
+  | { ok: true; loan: BankLoanRow; paid: number; balance: number }
+  | { ok: false; code: "not_found" | "already_repaid" | "insufficient"; message: string; balance?: number };
+
+export async function repayLoan(db: Client, ownerId: string, loanId: string): Promise<RepayLoanResult> {
+  const existing = await db.execute({ sql: "SELECT * FROM bank_loans WHERE id = ? AND owner_id = ?", args: [loanId, ownerId] });
+  const row = existing.rows[0] as unknown as Record<string, unknown> | undefined;
+  if (!row) return { ok: false, code: "not_found", message: "Empréstimo não encontrado." };
+  const current = mapLoanRow(row);
+  if (current.status === "repaid") return { ok: false, code: "already_repaid", message: "Este empréstimo já foi quitado." };
+
+  const lateFee = current.overdue ? computeLateFee(current.totalDue, current.lateFeeBps) : 0;
+  const amountToPay = current.totalDue + lateFee;
+
+  const results = await db.batch(
+    [
+      {
+        sql: `INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label)
+              SELECT ?, ?, ?, 'bank_loan', ?, 'repayment', ?
+              WHERE (SELECT COALESCE(SUM(amount), 0) FROM coin_ledger WHERE owner_id = ?) >= ?
+                AND EXISTS (SELECT 1 FROM bank_loans WHERE id = ? AND owner_id = ? AND status = 'active')`,
+        args: [
+          nanoid(),
+          ownerId,
+          -amountToPay,
+          loanId,
+          lateFee > 0 ? "Quitação do empréstimo (com multa por atraso)" : "Quitação do empréstimo",
+          ownerId,
+          amountToPay,
+          loanId,
+          ownerId,
+        ],
+      },
+      {
+        sql: `UPDATE bank_loans SET status = 'repaid', repaid_at = datetime('now'), repaid_amount = ?
+              WHERE id = ? AND owner_id = ? AND status = 'active'
+              AND EXISTS (SELECT 1 FROM coin_ledger WHERE owner_id = ? AND source_type = 'bank_loan' AND source_id = ? AND event_type = 'repayment')`,
+        args: [amountToPay, loanId, ownerId, ownerId, loanId],
+      },
+    ],
+    "write",
+  );
+
+  if (results[0].rowsAffected === 0) {
+    const recheck = await db.execute({ sql: "SELECT * FROM bank_loans WHERE id = ?", args: [loanId] });
+    const nowStatus = mapLoanRow(recheck.rows[0] as unknown as Record<string, unknown>);
+    if (nowStatus.status === "repaid") return { ok: false, code: "already_repaid", message: "Este empréstimo já foi quitado." };
+    const balance = await coinBalance(db, ownerId);
+    return { ok: false, code: "insufficient", message: "Moedas insuficientes para quitar este empréstimo.", balance };
+  }
+
+  const balance = await coinBalance(db, ownerId);
+  const updated = await db.execute({ sql: "SELECT * FROM bank_loans WHERE id = ?", args: [loanId] });
+  return { ok: true, loan: mapLoanRow(updated.rows[0] as unknown as Record<string, unknown>), paid: amountToPay, balance };
+}
+
+export interface CreditInfo {
+  score: number;
+  scoreMin: number;
+  scoreMax: number;
+  tier: { label: string; maxAmount: number; rateBps: number };
+  termDays: number;
+  lateFeeBps: number;
+}
+
 export interface BankSummary {
   balance: number;
   plans: typeof BANK_PLANS;
@@ -90,10 +279,17 @@ export interface BankSummary {
   claimable: BankDepositRow[];
   history: BankDepositRow[];
   totals: { invested: number; earned: number; taxPaid: number; activeCount: number };
+  credit: CreditInfo;
+  loan: { active: BankLoanRow | null; history: BankLoanRow[] };
 }
 
 export async function getBankSummary(db: Client, ownerId: string): Promise<BankSummary> {
-  const [balance, deposits] = await Promise.all([coinBalance(db, ownerId), listDeposits(db, ownerId)]);
+  const [balance, deposits, loans, score] = await Promise.all([
+    coinBalance(db, ownerId),
+    listDeposits(db, ownerId),
+    listLoans(db, ownerId),
+    getCreditScore(db, ownerId),
+  ]);
   const now = new Date().toISOString();
   const active = deposits.filter((d) => d.status === "active" && d.maturesAt > now);
   const claimable = deposits.filter((d) => d.status === "active" && d.maturesAt <= now);
@@ -105,7 +301,20 @@ export async function getBankSummary(db: Client, ownerId: string): Promise<BankS
     taxPaid: history.reduce((sum, d) => sum + (d.payout - d.netPayout), 0),
     activeCount: active.length + claimable.length,
   };
-  return { balance, plans: BANK_PLANS, active, claimable, history, totals };
+  const tier = loanTierForScore(score);
+  const credit: CreditInfo = {
+    score,
+    scoreMin: LOAN_SCORE_MIN,
+    scoreMax: LOAN_SCORE_MAX,
+    tier: { label: tier.label, maxAmount: tier.maxAmount, rateBps: tier.rateBps },
+    termDays: LOAN_TERM_DAYS,
+    lateFeeBps: LOAN_LATE_FEE_BPS,
+  };
+  const loan = {
+    active: loans.find((l) => l.status === "active") ?? null,
+    history: loans.filter((l) => l.status === "repaid"),
+  };
+  return { balance, plans: BANK_PLANS, active, claimable, history, totals, credit, loan };
 }
 
 export type DepositResult =

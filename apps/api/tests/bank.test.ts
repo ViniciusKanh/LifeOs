@@ -18,6 +18,13 @@ async function forceMatured(depositId: string) {
   });
 }
 
+async function forceLoanDue(loanId: string, overdue: boolean) {
+  await getDb().execute({
+    sql: `UPDATE bank_loans SET due_at = datetime('now', ?) WHERE id = ?`,
+    args: [overdue ? "-1 minute" : "+1 day", loanId],
+  });
+}
+
 describe("Banco — investimentos de moedas", () => {
   it("lista os planos e o saldo mesmo sem nenhum depósito", async () => {
     const { agent } = await createAuthenticatedAgent();
@@ -106,6 +113,79 @@ describe("Banco — investimentos de moedas", () => {
     const dep = await a.agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 50 });
     await forceMatured(dep.body.deposit.id);
     const stolen = await b.agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
+    expect(stolen.status).toBe(404);
+  });
+});
+
+describe("Banco — crédito (empréstimos)", () => {
+  it("score inicial libera o limite do Escudeiro do Crédito e recusa valor acima dele", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const summary = await agent.get("/api/bank");
+    expect(summary.body.credit.score).toBe(500);
+    expect(summary.body.credit.tier.label).toBe("Escudeiro do Crédito");
+    expect(summary.body.credit.tier.maxAmount).toBe(300);
+
+    const tooMuch = await agent.post("/api/bank/loans").send({ amount: 500 });
+    expect(tooMuch.status).toBe(400);
+  });
+
+  it("pede, não permite um segundo empréstimo simultâneo, e paga em dia sem multa", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 200); // precisa ter moedas de sobra -- o empréstimo nunca deixa o saldo negativo.
+
+    const loan = await agent.post("/api/bank/loans").send({ amount: 100 });
+    expect(loan.status).toBe(201);
+    expect(loan.body.loan.totalDue).toBe(118); // 100 + 18% de juros (tier Escudeiro)
+    expect(loan.body.balance).toBe(300); // 200 de saldo + 100 do empréstimo
+
+    const second = await agent.post("/api/bank/loans").send({ amount: 50 });
+    expect(second.status).toBe(409);
+
+    const repay = await agent.post(`/api/bank/loans/${loan.body.loan.id}/repay`);
+    expect(repay.status).toBe(200);
+    expect(repay.body.paid).toBe(118); // sem multa, pagou em dia
+    expect(repay.body.balance).toBe(182); // 300 - 118
+
+    // Extrato mostra o empréstimo (ganho) e a quitação (gasto).
+    const ledger = await agent.get("/api/bank/ledger");
+    const labels = ledger.body.entries.map((e: { label: string }) => e.label);
+    expect(labels.some((l: string) => l.includes("Empréstimo"))).toBe(true);
+    expect(labels.some((l: string) => l.includes("Quitação"))).toBe(true);
+
+    // Agora pode pedir outro, já que o anterior foi quitado.
+    const another = await agent.post("/api/bank/loans").send({ amount: 10 });
+    expect(another.status).toBe(201);
+  });
+
+  it("cobra multa quando o pagamento é feito depois do vencimento, e isso derruba o score", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 100);
+
+    const loan = await agent.post("/api/bank/loans").send({ amount: 100 });
+    await forceLoanDue(loan.body.loan.id, true);
+    const repay = await agent.post(`/api/bank/loans/${loan.body.loan.id}/repay`);
+    expect(repay.status).toBe(200);
+    expect(repay.body.paid).toBe(130); // 118 + 10% de multa (12, arredondado pra cima)
+    expect(repay.body.balance).toBe(70); // (100 + 100 do empréstimo) - 130
+
+    const summary = await agent.get("/api/bank");
+    expect(summary.body.credit.score).toBe(440); // 500 - 60 por pagar atrasado
+  });
+
+  it("recusa a quitação sem moedas suficientes, sem mexer no empréstimo", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const loan = await agent.post("/api/bank/loans").send({ amount: 100 }); // balance = 100, precisa de 118
+    const repay = await agent.post(`/api/bank/loans/${loan.body.loan.id}/repay`);
+    expect(repay.status).toBe(402);
+    const summary = await agent.get("/api/bank");
+    expect(summary.body.loan.active.id).toBe(loan.body.loan.id);
+  });
+
+  it("isola empréstimos entre usuários diferentes", async () => {
+    const a = await createAuthenticatedAgent();
+    const b = await createAuthenticatedAgent();
+    const loan = await a.agent.post("/api/bank/loans").send({ amount: 50 });
+    const stolen = await b.agent.post(`/api/bank/loans/${loan.body.loan.id}/repay`);
     expect(stolen.status).toBe(404);
   });
 });

@@ -1,19 +1,34 @@
 import { useState } from "react";
-import { Coins, Landmark, Percent, PiggyBank, Receipt, Sparkles, TrendingDown, TrendingUp, Vault } from "lucide-react";
-import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPGTabs, RPGToast, RPGWallet } from "@/components/rpg";
+import {
+  AlertTriangle,
+  Calculator,
+  Coins,
+  CreditCard,
+  HandCoins,
+  Landmark,
+  Percent,
+  PiggyBank,
+  Receipt,
+  ShieldCheck,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Vault,
+} from "lucide-react";
+import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPGTabs, RPGToast, RPGWallet, type RpgTone } from "@/components/rpg";
 import { useBank, useBankLedger } from "@/hooks/useBank";
 import { formatWhen } from "@/utils/treasureDisplay";
-import type { BankDeposit, BankPlan, LedgerEntry } from "@/services/bankService";
+import type { BankDeposit, BankLoan, BankPlan, CreditInfo, LedgerEntry } from "@/services/bankService";
 
 /**
  * Banco: tela única e dedicada para administrar as moedas ganhas em
- * missões/contratos -- igual a um banco de verdade, mas gamificado: você
- * investe em planos de prazo fixo, o rendimento sofre imposto sobre o
- * ganho (tabela regressiva: quanto mais tempo deixa parado, menor a
- * alíquota) e o extrato mostra todo ganho e gasto de moedas, não só do
- * Banco. Nunca é dinheiro real -- é a mesma moeda gastável no Tesouro, só
- * que rendendo enquanto espera. Saldo, investimentos e extrato vêm sempre
- * do backend; a UI só atualiza depois que o servidor confirma.
+ * missões/contratos -- igual a um banco de verdade, mas gamificado:
+ * investimentos de prazo fixo com imposto sobre o ganho, EMPRÉSTIMOS com
+ * juros e multa por atraso (limite e taxa dependem do seu SCORE DE
+ * CRÉDITO, que sobe investindo e pagando em dia), um simulador antes de
+ * decidir, e um extrato com todo ganho e gasto de moedas. Nunca é dinheiro
+ * real. Saldo, investimentos, crédito e extrato vêm sempre do backend; a
+ * UI só atualiza depois que o servidor confirma.
  */
 
 function formatCoins(n: number) {
@@ -29,7 +44,12 @@ function daysLeft(iso: string) {
   return Math.max(0, Math.ceil(ms / 86_400_000));
 }
 
-// Mesma fórmula do backend (config/bank.ts): ganho e imposto arredondados sempre para baixo.
+function daysOverdue(iso: string) {
+  const ms = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.ceil(ms / 86_400_000));
+}
+
+// Mesmas fórmulas do backend (config/bank.ts): investimento arredonda pra baixo, dívida pra cima.
 function projectGross(amount: number, rateBps: number) {
   return amount + Math.floor((amount * rateBps) / 10_000);
 }
@@ -41,6 +61,19 @@ function projectTax(amount: number, rateBps: number, taxBps: number) {
 }
 function projectNet(amount: number, rateBps: number, taxBps: number) {
   return projectGross(amount, rateBps) - projectTax(amount, rateBps, taxBps);
+}
+function projectLoanTotal(amount: number, rateBps: number) {
+  return amount + Math.ceil((amount * rateBps) / 10_000);
+}
+function projectLateFee(totalDue: number, lateFeeBps: number) {
+  return Math.ceil((totalDue * lateFeeBps) / 10_000);
+}
+
+function tierTone(label: string): RpgTone {
+  if (label === "Lenda da Guilda") return "gold";
+  if (label === "Cavaleiro de Confiança") return "purple";
+  if (label === "Escudeiro do Crédito") return "blue";
+  return "muted";
 }
 
 function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: boolean; onInvest: (amount: number) => void }) {
@@ -186,12 +219,197 @@ function ExtratoView() {
   );
 }
 
+function SimuladorView({ plans }: { plans: BankPlan[] }) {
+  const [amount, setAmount] = useState("200");
+  const parsed = Number(amount);
+  const valid = Number.isInteger(parsed) && parsed > 0;
+
+  return (
+    <RPGPanel title="Simulador de investimento" icon={<Calculator size={16} />} className="mb-5">
+      <p className="text-xs text-rpg-muted mb-3">Compare os 3 planos para a mesma quantia antes de decidir onde investir — sem comprometer moeda nenhuma.</p>
+      <div className="flex items-center gap-2 mb-3 max-w-xs">
+        <label className="sr-only" htmlFor="sim-amount">Quantia para simular</label>
+        <input
+          id="sim-amount"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full border-2 border-rpg-border bg-rpg-bg px-2.5 py-2 text-sm text-rpg-text outline-none focus:border-rpg-gold"
+          style={{ borderRadius: 2 }}
+        />
+        <span className="text-xs text-rpg-muted shrink-0">moedas</span>
+      </div>
+      {valid ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {plans.map((plan) => {
+            const inRange = parsed >= plan.minAmount && parsed <= plan.maxAmount;
+            const net = projectNet(parsed, plan.rateBps, plan.taxBps);
+            const tax = projectTax(parsed, plan.rateBps, plan.taxBps);
+            return (
+              <div key={plan.id} className="rpg-panel p-3">
+                <p className="font-rpg font-semibold text-sm text-rpg-text mb-1 truncate">{plan.label}</p>
+                {inRange ? (
+                  <dl className="text-[11px] space-y-0.5">
+                    <div className="flex justify-between"><dt className="text-rpg-muted">Prazo</dt><dd>{plan.termDays} dia{plan.termDays > 1 ? "s" : ""}</dd></div>
+                    <div className="flex justify-between"><dt className="text-rpg-muted">Imposto</dt><dd className="text-rpg-red">−{formatCoins(tax)}</dd></div>
+                    <div className="flex justify-between font-semibold"><dt className="text-rpg-gold-light">Líquido</dt><dd className="text-rpg-gold-light">{formatCoins(net)}</dd></div>
+                  </dl>
+                ) : (
+                  <p className="text-[11px] text-rpg-muted">Fora da faixa ({formatCoins(plan.minAmount)}–{formatCoins(plan.maxAmount)}).</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-rpg-muted">Informe uma quantia maior que zero para simular.</p>
+      )}
+    </RPGPanel>
+  );
+}
+
+function CreditoView({
+  credit,
+  loan,
+  onRequest,
+  onRepay,
+  requesting,
+  repaying,
+}: {
+  credit: CreditInfo;
+  loan: { active: BankLoan | null; history: BankLoan[] };
+  onRequest: (amount: number) => void;
+  onRepay: (loanId: string) => void;
+  repaying: boolean;
+  requesting: boolean;
+}) {
+  const [amount, setAmount] = useState(String(Math.min(100, credit.tier.maxAmount || 100)));
+  const parsed = Number(amount);
+  const valid = Number.isInteger(parsed) && parsed > 0 && parsed <= credit.tier.maxAmount;
+  const total = valid ? projectLoanTotal(parsed, credit.tier.rateBps) : null;
+  const scorePct = ((credit.score - credit.scoreMin) / (credit.scoreMax - credit.scoreMin)) * 100;
+
+  return (
+    <>
+      <RPGPanel title="Score de crédito" icon={<ShieldCheck size={16} />} className="mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-pixel text-2xl font-bold text-rpg-text tabular-nums">{credit.score}</span>
+            <RPGBadge tone={tierTone(credit.tier.label)}>{credit.tier.label}</RPGBadge>
+          </div>
+          <p className="text-[11px] text-rpg-muted text-right">
+            Limite atual: <strong className="text-rpg-text">{formatCoins(credit.tier.maxAmount)} moedas</strong> · juros {formatPct(credit.tier.rateBps)}%
+          </p>
+        </div>
+        <RPGProgressBar tone={tierTone(credit.tier.label)} label="Score" value={scorePct} valueLabel={`${credit.scoreMin}–${credit.scoreMax}`} />
+        <p className="mt-2 text-[11px] text-rpg-muted">
+          Sobe quando você conclui investimentos e paga empréstimos em dia. Cai quando paga atrasado ou deixa um empréstimo vencer sem quitar.
+        </p>
+      </RPGPanel>
+
+      {loan.active ? (
+        <RPGPanel variant={loan.active.overdue ? "danger" : "quest"} title="Empréstimo ativo" icon={<HandCoins size={16} />} className="mb-5">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-sm text-rpg-text">Pegou emprestado</span>
+            <span className="font-pixel text-sm text-rpg-gold-light">{formatCoins(loan.active.amount)} moedas</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-sm text-rpg-text">Total a pagar</span>
+            <span className="font-pixel text-sm text-rpg-text">
+              {formatCoins(loan.active.overdue ? loan.active.totalDue + projectLateFee(loan.active.totalDue, loan.active.lateFeeBps) : loan.active.totalDue)}
+              {loan.active.overdue && (
+                <span className="text-rpg-red"> (com multa de {formatPct(loan.active.lateFeeBps)}%)</span>
+              )}
+            </span>
+          </div>
+          {loan.active.overdue ? (
+            <p className="flex items-center gap-1.5 text-xs text-rpg-red mb-3">
+              <AlertTriangle size={13} aria-hidden /> Atrasado há {daysOverdue(loan.active.dueAt)} dia(s) — pagar agora já evita mais queda no score.
+            </p>
+          ) : (
+            <p className="text-xs text-rpg-muted mb-3">Vence em {daysLeft(loan.active.dueAt)} dia(s).</p>
+          )}
+          <RPGButton type="button" variant={loan.active.overdue ? "danger" : "success"} className="w-full" disabled={repaying} onClick={() => onRepay(loan.active!.id)}>
+            {repaying ? "Quitando…" : "Quitar empréstimo"}
+          </RPGButton>
+        </RPGPanel>
+      ) : (
+        <RPGPanel variant="gold" title="Pedir empréstimo" icon={<CreditCard size={16} />} className="mb-5">
+          {credit.tier.maxAmount <= 0 ? (
+            <p className="text-sm text-rpg-muted">Seu score ainda não libera crédito. Conclua um investimento no Banco para começar a construir histórico.</p>
+          ) : (
+            <>
+              <form
+                className="flex items-center gap-2 mb-3 max-w-xs"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (valid) onRequest(parsed);
+                }}
+              >
+                <label className="sr-only" htmlFor="loan-amount">Quantia para pedir emprestado</label>
+                <input
+                  id="loan-amount"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={credit.tier.maxAmount}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full border-2 border-rpg-border bg-rpg-bg px-2.5 py-2 text-sm text-rpg-text outline-none focus:border-rpg-gold"
+                  style={{ borderRadius: 2 }}
+                />
+                <RPGButton type="submit" variant="gold" disabled={requesting || !valid}>
+                  Pedir
+                </RPGButton>
+              </form>
+              {valid && total != null && (
+                <dl className="text-[11px] space-y-1 border-t border-rpg-border/60 pt-2 max-w-xs">
+                  <div className="flex items-center justify-between">
+                    <dt className="text-rpg-muted">Juros ({formatPct(credit.tier.rateBps)}%)</dt>
+                    <dd className="font-pixel text-rpg-red">+{formatCoins(total - parsed)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <dt className="font-semibold text-rpg-gold-light">Total a pagar em {credit.termDays} dias</dt>
+                    <dd className="font-pixel font-semibold text-rpg-gold-light">{formatCoins(total)}</dd>
+                  </div>
+                </dl>
+              )}
+              <p className="mt-2 text-[11px] text-rpg-muted">Limite de {formatCoins(credit.tier.maxAmount)} moedas. Pagar atrasado soma multa de {formatPct(credit.lateFeeBps)}% e derruba o score.</p>
+            </>
+          )}
+        </RPGPanel>
+      )}
+
+      {loan.history.length > 0 && (
+        <RPGPanel title="Histórico de empréstimos" icon={<Coins size={16} />}>
+          <ul className="space-y-1.5">
+            {loan.history.slice(0, 10).map((l) => {
+              const late = !!l.repaidAt && l.repaidAt > l.dueAt;
+              return (
+                <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-1.5 text-rpg-text">
+                    {formatCoins(l.amount)} → {formatCoins(l.repaidAmount ?? l.totalDue)}
+                    <RPGBadge tone={late ? "red" : "green"}>{late ? "Atrasado" : "Em dia"}</RPGBadge>
+                  </span>
+                  <span className="font-pixel text-[11px] text-rpg-muted shrink-0">{l.repaidAt ? new Date(l.repaidAt).toLocaleDateString("pt-BR") : ""}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </RPGPanel>
+      )}
+    </>
+  );
+}
+
 export function BancoPage() {
-  const { summary, isLoading, deposit, claim } = useBank();
+  const { summary, isLoading, deposit, claim, requestLoan, repayLoan } = useBank();
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<"success" | "error">("success");
   const [pendingClaimId, setPendingClaimId] = useState<string | null>(null);
-  const [view, setView] = useState<"investir" | "extrato">("investir");
+  const [view, setView] = useState<"investir" | "credito" | "extrato">("investir");
 
   const handleInvest = (plan: BankPlan, amount: number) => {
     deposit.mutate(
@@ -224,6 +442,32 @@ export function BancoPage() {
     });
   };
 
+  const handleRequestLoan = (amount: number) => {
+    requestLoan.mutate(amount, {
+      onSuccess: () => {
+        setToastTone("success");
+        setToast(`Empréstimo liberado: +${formatCoins(amount)} moedas na sua conta.`);
+      },
+      onError: (err) => {
+        setToastTone("error");
+        setToast(err instanceof Error ? err.message : "Não foi possível pedir o empréstimo.");
+      },
+    });
+  };
+
+  const handleRepayLoan = (loanId: string) => {
+    repayLoan.mutate(loanId, {
+      onSuccess: (res) => {
+        setToastTone("success");
+        setToast(`Empréstimo quitado: −${formatCoins(res.paid)} moedas.`);
+      },
+      onError: (err) => {
+        setToastTone("error");
+        setToast(err instanceof Error ? err.message : "Não foi possível quitar o empréstimo.");
+      },
+    });
+  };
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full">
       <RPGPageHeader
@@ -231,12 +475,12 @@ export function BancoPage() {
         size="md"
         eyebrow="Economia da Guilda"
         title="Banco"
-        subtitle="Invista, acompanhe o rendimento com imposto sobre o ganho e veja o extrato completo de moedas — tudo numa tela só. Moeda do jogo, nunca dinheiro real."
+        subtitle="Invista com imposto sobre o ganho, peça crédito conforme seu score e veja o extrato completo — tudo numa tela só. Moeda do jogo, nunca dinheiro real."
         actions={<RPGWallet coins={summary?.balance} />}
         className="mb-5"
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
         <RPGStatCard icon={<Coins size={18} />} label="Saldo disponível" value={isLoading ? "…" : formatCoins(summary?.balance ?? 0)} tone="gold" />
         <RPGStatCard
           icon={<PiggyBank size={18} />}
@@ -264,6 +508,13 @@ export function BancoPage() {
           tone="red"
           caption="descontado do rendimento, nunca do principal"
         />
+        <RPGStatCard
+          icon={<ShieldCheck size={18} />}
+          label="Score de crédito"
+          value={isLoading ? "…" : String(summary?.credit.score ?? "—")}
+          tone={summary ? tierTone(summary.credit.tier.label) : "muted"}
+          caption={summary?.credit.tier.label}
+        />
       </div>
 
       <div className="mb-5">
@@ -273,13 +524,16 @@ export function BancoPage() {
           onChange={setView}
           tabs={[
             { value: "investir", label: "Investir", icon: <Landmark size={14} /> },
+            { value: "credito", label: "Crédito", icon: <CreditCard size={14} /> },
             { value: "extrato", label: "Extrato (gastos e ganhos)", icon: <Receipt size={14} /> },
           ]}
         />
       </div>
 
-      {view === "investir" ? (
+      {view === "investir" && (
         <>
+          <SimuladorView plans={summary?.plans ?? []} />
+
           {summary && summary.claimable.length > 0 && (
             <RPGPanel variant="success" title="Prontos para resgatar" icon={<Sparkles size={16} />} className="mb-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
@@ -330,9 +584,20 @@ export function BancoPage() {
             </RPGPanel>
           )}
         </>
-      ) : (
-        <ExtratoView />
       )}
+
+      {view === "credito" && summary && (
+        <CreditoView
+          credit={summary.credit}
+          loan={summary.loan}
+          onRequest={handleRequestLoan}
+          onRepay={handleRepayLoan}
+          requesting={requestLoan.isPending}
+          repaying={repayLoan.isPending}
+        />
+      )}
+
+      {view === "extrato" && <ExtratoView />}
 
       <RPGToast message={toast} tone={toastTone} onClose={() => setToast(null)} />
     </div>

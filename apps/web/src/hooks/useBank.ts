@@ -6,7 +6,7 @@ import { notifyGamification } from "@/services/gamificationService";
 const KEY = ["bank"] as const;
 const LEDGER_PAGE = 40;
 
-/** Tela Banco: saldo, planos, investimentos ativos/prontos para resgate e histórico. */
+/** Tela Banco: saldo, planos, investimentos, crédito/empréstimo e histórico. */
 export function useBank() {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: KEY, queryFn: bankService.summary, staleTime: 15_000 });
@@ -24,8 +24,16 @@ export function useBank() {
     mutationFn: (depositId: string) => bankService.claim(depositId),
     onSuccess: invalidate,
   });
+  const requestLoan = useMutation({
+    mutationFn: (amount: number) => bankService.requestLoan(amount),
+    onSuccess: invalidate,
+  });
+  const repayLoan = useMutation({
+    mutationFn: (loanId: string) => bankService.repayLoan(loanId),
+    onSuccess: invalidate,
+  });
 
-  return { ...query, summary: query.data ?? null, deposit, claim };
+  return { ...query, summary: query.data ?? null, deposit, claim, requestLoan, repayLoan };
 }
 
 /** Extrato do Banco: todo movimento real de moedas (ganhos e gastos), com "carregar mais". */

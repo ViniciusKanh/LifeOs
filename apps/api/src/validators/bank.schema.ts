@@ -12,3 +12,9 @@ export const ledgerQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional().default(40),
 });
 
+export const createLoanSchema = z.object({
+  amount: z.number().int("A quantia deve ser um número inteiro de moedas.").positive("Informe uma quantia maior que zero."),
+});
+
+export type CreateLoanInput = z.infer<typeof createLoanSchema>;
+

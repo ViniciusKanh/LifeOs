@@ -86,3 +86,57 @@ export function computeTax(amount: number, rateBps: number, taxBps: number): num
 export function computeNetPayout(amount: number, rateBps: number, taxBps: number): number {
   return computePayout(amount, rateBps) - computeTax(amount, rateBps, taxBps);
 }
+
+/**
+ * Crédito (empréstimo): o jogador pega moedas emprestadas e paga de volta
+ * com juros em alguns dias. O limite e a taxa dependem do SCORE DE CRÉDITO
+ * (bankService.getCreditScore, 300–850 como um score real), calculado a
+ * partir do histórico de investimentos concluídos e empréstimos pagos em
+ * dia ou com atraso — nunca armazenado, sempre derivado. Pagar atrasado
+ * soma uma multa e derruba o score; investir e quitar em dia sobe o score
+ * e libera limites melhores.
+ */
+export interface LoanTier {
+  /** Score mínimo (inclusive) para alcançar este nível de crédito. */
+  minScore: number;
+  label: string;
+  maxAmount: number;
+  /** Juros em pontos-base sobre o valor emprestado. */
+  rateBps: number;
+}
+
+export const LOAN_TERM_DAYS = 5;
+/** Multa (sobre o total devido) quando o pagamento acontece depois do vencimento. */
+export const LOAN_LATE_FEE_BPS = 1000; // +10%
+export const LOAN_SCORE_MIN = 300;
+export const LOAN_SCORE_MAX = 850;
+
+export const LOAN_TIERS: LoanTier[] = [
+  { minScore: 0, label: "Sem crédito liberado", maxAmount: 0, rateBps: 0 },
+  { minScore: 400, label: "Escudeiro do Crédito", maxAmount: 300, rateBps: 1800 },
+  { minScore: 650, label: "Cavaleiro de Confiança", maxAmount: 1000, rateBps: 1200 },
+  { minScore: 850, label: "Lenda da Guilda", maxAmount: 3000, rateBps: 700 },
+];
+
+/** Nível de crédito correspondente a um score (o maior minScore que o score alcança). */
+export function loanTierForScore(score: number): LoanTier {
+  let best = LOAN_TIERS[0];
+  for (const tier of LOAN_TIERS) {
+    if (score >= tier.minScore) best = tier;
+  }
+  return best;
+}
+
+/**
+ * Total a pagar (principal + juros), arredondado para CIMA — diferente do
+ * investimento (que arredonda para baixo): numa dívida, o banco nunca perde
+ * centavo no arredondamento.
+ */
+export function computeLoanTotalDue(amount: number, rateBps: number): number {
+  return amount + Math.ceil((amount * rateBps) / 10_000);
+}
+
+/** Multa por atraso sobre o total devido, também arredondada para cima. */
+export function computeLateFee(totalDue: number, lateFeeBps: number): number {
+  return Math.ceil((totalDue * lateFeeBps) / 10_000);
+}

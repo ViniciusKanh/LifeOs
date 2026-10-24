@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createDepositSchema, ledgerQuerySchema } from "../validators/bank.schema.js";
-import { claimDeposit, createDeposit, getBankSummary, listLedger } from "../services/bankService.js";
+import { createDepositSchema, createLoanSchema, ledgerQuerySchema } from "../validators/bank.schema.js";
+import { claimDeposit, createDeposit, getBankSummary, listLedger, repayLoan, requestLoan } from "../services/bankService.js";
 
 /**
  * Banco: investir moedas ganhas em missões em planos com prazo e bônus
@@ -18,6 +18,9 @@ const ERROR_STATUS: Record<string, number> = {
   insufficient: 402,
   not_matured: 409,
   already_claimed: 409,
+  active_exists: 409,
+  score_too_low: 403,
+  already_repaid: 409,
 };
 
 /** GET /api/bank — saldo, planos, investimentos ativos/prontos/histórico. */
@@ -55,4 +58,26 @@ bankRouter.get("/ledger", async (req, res) => {
   }
   const entries = await listLedger(getDb(), req.user!.id, parsed.data.limit);
   return res.json({ entries });
+});
+
+/** POST /api/bank/loans — pede um empréstimo dentro do limite liberado pelo score de crédito. */
+bankRouter.post("/loans", async (req, res) => {
+  const parsed = createLoanSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  }
+  const result = await requestLoan(getDb(), req.user!.id, parsed.data.amount);
+  if (!result.ok) {
+    return res.status(ERROR_STATUS[result.code] ?? 400).json({ error: result.message });
+  }
+  return res.status(201).json(result);
+});
+
+/** POST /api/bank/loans/:id/repay — quita um empréstimo (com multa se estiver atrasado). */
+bankRouter.post("/loans/:id/repay", async (req, res) => {
+  const result = await repayLoan(getDb(), req.user!.id, req.params.id);
+  if (!result.ok) {
+    return res.status(ERROR_STATUS[result.code] ?? 400).json({ error: result.message, balance: result.balance });
+  }
+  return res.json(result);
 });
