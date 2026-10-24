@@ -9,6 +9,7 @@ export interface BankPlan {
   minAmount: number;
   maxAmount: number;
   maxActive: number;
+  taxBps: number;
 }
 
 export interface BankDeposit {
@@ -18,7 +19,9 @@ export interface BankDeposit {
   amount: number;
   rateBps: number;
   termDays: number;
+  taxBps: number;
   payout: number;
+  netPayout: number;
   status: "active" | "claimed";
   createdAt: string;
   maturesAt: string;
@@ -31,7 +34,16 @@ export interface BankSummary {
   active: BankDeposit[];
   claimable: BankDeposit[];
   history: BankDeposit[];
-  totals: { invested: number; earned: number; activeCount: number };
+  totals: { invested: number; earned: number; taxPaid: number; activeCount: number };
+}
+
+export interface LedgerEntry {
+  id: string;
+  amount: number;
+  sourceType: string;
+  eventType: string;
+  label: string | null;
+  createdAt: string;
 }
 
 export interface DepositSuccess {
@@ -49,4 +61,5 @@ export const bankService = {
   summary: () => api.get<BankSummary>("/bank"),
   deposit: (planId: string, amount: number) => api.post<DepositSuccess>("/bank/deposits", { planId, amount }),
   claim: (depositId: string) => api.post<ClaimSuccess>(`/bank/deposits/${depositId}/claim`),
+  ledger: (limit = 40) => api.get<{ entries: LedgerEntry[] }>(`/bank/ledger?limit=${limit}`),
 };

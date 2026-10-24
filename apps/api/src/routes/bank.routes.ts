@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createDepositSchema } from "../validators/bank.schema.js";
-import { claimDeposit, createDeposit, getBankSummary } from "../services/bankService.js";
+import { createDepositSchema, ledgerQuerySchema } from "../validators/bank.schema.js";
+import { claimDeposit, createDeposit, getBankSummary, listLedger } from "../services/bankService.js";
 
 /**
  * Banco: investir moedas ganhas em missões em planos com prazo e bônus
@@ -45,4 +45,14 @@ bankRouter.post("/deposits/:id/claim", async (req, res) => {
     return res.status(ERROR_STATUS[result.code] ?? 400).json({ error: result.message });
   }
   return res.json(result);
+});
+
+/** GET /api/bank/ledger — extrato: todos os ganhos e gastos de moedas do jogador (não só o Banco). */
+bankRouter.get("/ledger", async (req, res) => {
+  const parsed = ledgerQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Parâmetros inválidos." });
+  }
+  const entries = await listLedger(getDb(), req.user!.id, parsed.data.limit);
+  return res.json({ entries });
 });

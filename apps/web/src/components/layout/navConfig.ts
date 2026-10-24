@@ -25,6 +25,7 @@ import {
   ScrollText,
   BookMarked,
   Coins,
+  Landmark,
   Backpack,
   Settings,
   Sun,
@@ -169,10 +170,15 @@ export const NAV_GROUPS: NavGroup[] = [
         tabs: [
           { to: "/conquistas", label: "Conquistas" },
           { to: "/tesouro", label: "Tesouro" },
-          { to: "/banco", label: "Banco" },
           { to: "/inventario", label: "Coleção" },
           { to: "/build", label: "Build" },
         ],
+      },
+      {
+        to: "/banco",
+        label: "Banco",
+        icon: Landmark,
+        quote: "Quem administra bem o pouco aprende a administrar bem o muito.",
       },
       {
         // Hub analítico: Inteligência, Protocolos e Gargalos.

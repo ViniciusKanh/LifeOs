@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { bankService } from "@/services/bankService";
 import { notifyGamification } from "@/services/gamificationService";
 
 const KEY = ["bank"] as const;
+const LEDGER_PAGE = 40;
 
 /** Tela Banco: saldo, planos, investimentos ativos/prontos para resgate e histórico. */
 export function useBank() {
@@ -10,6 +12,7 @@ export function useBank() {
   const query = useQuery({ queryKey: KEY, queryFn: bankService.summary, staleTime: 15_000 });
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: KEY });
+    qc.invalidateQueries({ queryKey: [...KEY, "ledger"] });
     notifyGamification(); // saldo de moedas mudou -- atualiza o HUD em qualquer tela.
   };
 
@@ -23,4 +26,17 @@ export function useBank() {
   });
 
   return { ...query, summary: query.data ?? null, deposit, claim };
+}
+
+/** Extrato do Banco: todo movimento real de moedas (ganhos e gastos), com "carregar mais". */
+export function useBankLedger() {
+  const [limit, setLimit] = useState(LEDGER_PAGE);
+  const query = useQuery({
+    queryKey: [...KEY, "ledger", limit],
+    queryFn: () => bankService.ledger(limit),
+    staleTime: 15_000,
+  });
+  const entries = query.data?.entries ?? [];
+  const hasMore = entries.length >= limit;
+  return { ...query, entries, hasMore, loadMore: () => setLimit((v) => v + LEDGER_PAGE) };
 }

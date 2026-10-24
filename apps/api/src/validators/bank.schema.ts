@@ -6,3 +6,9 @@ export const createDepositSchema = z.object({
 });
 
 export type CreateDepositInput = z.infer<typeof createDepositSchema>;
+
+/** GET /api/bank/ledger?limit= — quantas linhas do extrato trazer de uma vez. */
+export const ledgerQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional().default(40),
+});
+

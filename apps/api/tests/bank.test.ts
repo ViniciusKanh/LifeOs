@@ -44,13 +44,16 @@ describe("Banco — investimentos de moedas", () => {
     expect(res.status).toBe(400);
   });
 
-  it("investe, debita o saldo na hora e só libera o resgate depois do prazo", async () => {
+  it("investe, debita o saldo na hora e só libera o resgate depois do prazo (líquido, com imposto)", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
     await giveCoins(userId, 1000);
 
     const dep = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 100 });
     expect(dep.status).toBe(201);
-    expect(dep.body.deposit.payout).toBe(105); // +5%
+    // cofre-aventureiro: +5% bruto (105), imposto 22,5% sobre o ganho de 5 = 1 -> líquido 104.
+    expect(dep.body.deposit.payout).toBe(105);
+    expect(dep.body.deposit.taxBps).toBe(2250);
+    expect(dep.body.deposit.netPayout).toBe(104);
     expect(dep.body.balance).toBe(900);
 
     const summary = await agent.get("/api/bank");
@@ -64,15 +67,24 @@ describe("Banco — investimentos de moedas", () => {
     await forceMatured(dep.body.deposit.id);
     const claimed = await agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
     expect(claimed.status).toBe(200);
-    expect(claimed.body.payout).toBe(105);
-    expect(claimed.body.balance).toBe(1005); // 900 + 105
+    expect(claimed.body.payout).toBe(104); // líquido, já com o imposto descontado
+    expect(claimed.body.balance).toBe(1004); // 900 + 104
 
     // Resgatar de novo não credita outra vez (idempotente).
     const again = await agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
     expect(again.status).toBe(409);
     const final = await agent.get("/api/bank");
-    expect(final.body.balance).toBe(1005);
+    expect(final.body.balance).toBe(1004);
     expect(final.body.history).toHaveLength(1);
+    expect(final.body.totals.earned).toBe(4); // 104 líquido - 100 principal
+    expect(final.body.totals.taxPaid).toBe(1);
+
+    // Extrato mostra o depósito (gasto) e o resgate (ganho) na ordem certa.
+    const ledger = await agent.get("/api/bank/ledger");
+    expect(ledger.status).toBe(200);
+    const labels = ledger.body.entries.map((e: { label: string }) => e.label);
+    expect(labels.some((l: string) => l.includes("Investido"))).toBe(true);
+    expect(labels.some((l: string) => l.includes("Resgate"))).toBe(true);
   });
 
   it("respeita o limite de investimentos ativos por plano", async () => {
