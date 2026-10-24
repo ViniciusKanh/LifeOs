@@ -64,6 +64,7 @@ import { grimoireRouter } from "./routes/grimoire.routes.js";
 import { readingYearRouter } from "./routes/readingYear.routes.js";
 import { warCouncilRouter } from "./routes/war-council.routes.js";
 import { rhythmRouter } from "./routes/rhythm.routes.js";
+import { bankRouter } from "./routes/bank.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -181,6 +182,7 @@ app.use("/api/grimoire", grimoireRouter);
 app.use("/api/reading", readingYearRouter);
 app.use("/api/war-council", warCouncilRouter);
 app.use("/api/rhythm", rhythmRouter);
+app.use("/api/bank", bankRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

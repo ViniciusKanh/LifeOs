@@ -169,6 +169,7 @@ export const NAV_GROUPS: NavGroup[] = [
         tabs: [
           { to: "/conquistas", label: "Conquistas" },
           { to: "/tesouro", label: "Tesouro" },
+          { to: "/banco", label: "Banco" },
           { to: "/inventario", label: "Coleção" },
           { to: "/build", label: "Build" },
         ],

@@ -1,7 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from "react";
-import { AlertTriangle, BarChart3, Briefcase, CalendarClock, CheckCircle2, Clock, Flame, Grid3x3, Hourglass, NotebookPen, Plus, Sparkles, Target, Trash2, Users } from "lucide-react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { AlertTriangle, BarChart3, Briefcase, CalendarClock, CheckCircle2, Clock, Flame, FolderKanban, Grid3x3, Hourglass, NotebookPen, Plus, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useProfessionalTasks, useTasks } from "@/hooks/useTasks";
+import { useProjects } from "@/hooks/useProjects";
 import { useWorkNotes } from "@/hooks/useWorkNotes";
 import { useProfessionalOverview } from "@/hooks/useProfessional";
 import { Button, Card, EmptyState, Field, PageHeader, StatTile } from "@/components/ui/primitives";
@@ -10,7 +11,7 @@ import { RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPG_SECTION_TITLE
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { ComparisonGrid, DayMatrix, WeekdayBars } from "@/components/professional/ProfessionalInsights";
-import { formatMinutes } from "@/components/projects/projectMeta";
+import { formatMinutes, STATUS_META } from "@/components/projects/projectMeta";
 import type { Task } from "@/types";
 
 const COLUMNS = ["Backlog", "A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
@@ -57,6 +58,15 @@ export function ProfissionalPage() {
   const { overview, isLoading: overviewLoading } = useProfessionalOverview();
   const { isRpg } = useTheme();
   const { notes, isLoading: notesLoading, createNote, isCreating, removeNote } = useWorkNotes();
+  const { projects } = useProjects();
+  // Todo projeto Profissional aparece aqui assim que é criado -- mesmo sem
+  // tarefas ainda, diferente do board de carga (que só mostra quem tem tarefa).
+  const professionalProjects = useMemo(() => {
+    const weight = (s: string) => (s === "active" ? 0 : s === "planning" ? 1 : s === "paused" ? 2 : 3);
+    return projects
+      .filter((p) => p.kind === "professional" && p.status !== "cancelled")
+      .sort((a, b) => weight(a.status) - weight(b.status) || b.created_at.localeCompare(a.created_at));
+  }, [projects]);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [noteTitle, setNoteTitle] = useState("");
@@ -150,6 +160,52 @@ export function ProfissionalPage() {
         />
       </div>
       )}
+
+      <Section
+        className="mb-4"
+        icon={<FolderKanban size={16} className="text-cat-purple" />}
+        title="Projetos profissionais"
+        subtitle="Todo projeto do tipo Profissional aparece aqui assim que é criado, mesmo antes de ter tarefas."
+        action={
+          <Link to="/projetos" className="text-xs font-medium text-brand-600 dark:text-brand-100 hover:underline shrink-0">
+            + Novo projeto
+          </Link>
+        }
+      >
+        {professionalProjects.length === 0 ? (
+          <EmptyState
+            title="Nenhum projeto profissional ainda"
+            description="Crie um projeto em Projetos e marque o tipo como Profissional -- ele aparece aqui na hora."
+            ctaLabel="Ir para Projetos"
+            onCta={() => window.location.assign("/projetos")}
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+            {professionalProjects.map((p) => {
+              const status = STATUS_META[p.status] ?? STATUS_META.active;
+              const pct = p.task_count > 0 ? Math.round((p.done_count / p.task_count) * 100) : 0;
+              return (
+                <Link
+                  key={p.id}
+                  to={`/projetos/${p.id}`}
+                  className="flex items-center gap-2.5 rounded-xl p-3 border border-paper-border dark:border-ink-border hover:border-brand-500/40 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color ?? "#7C4DFF" }} aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium truncate">{p.name}</span>
+                    <span className="flex items-center gap-1.5 mt-1 text-[10.5px] text-slate">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold ${status.className}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} /> {status.label}
+                      </span>
+                      <span className="truncate">{p.task_count > 0 ? `${p.done_count}/${p.task_count} tarefas (${pct}%)` : "sem tarefas ainda"}</span>
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </Section>
 
       {overview && (
         <>

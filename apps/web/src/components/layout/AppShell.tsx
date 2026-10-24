@@ -69,7 +69,7 @@ function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () =
             transition={{ type: "spring", stiffness: 340, damping: 36 }}
             className="absolute inset-y-0 left-0 w-[86%] max-w-[320px] flex flex-col bg-paper-raised dark:bg-ink-raised shadow-2xl"
           >
-            <div className="flex items-center justify-between h-16 px-4 border-b border-paper-border dark:border-ink-border">
+            <div className="flex items-center justify-between h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] px-4 border-b border-paper-border dark:border-ink-border">
               <div className="flex items-center gap-2.5">
                 <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px] rpg:hidden">
                   <img src="/logo/icon-64.png" alt="" className="w-full h-full rounded-[10px] object-cover bg-white" />
@@ -113,6 +113,12 @@ export function AppShell() {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [location.pathname]);
 
+  // Qualquer troca de rota fecha a gaveta mobile -- nunca fica presa aberta
+  // esperando que o item clicado chame onNavigate.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="app-shell fixed inset-0 w-full flex overflow-hidden bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] rpg:rpg-backdrop rpg:text-rpg-text">
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] rounded-lg px-3 py-2 bg-brand-600 text-white text-sm">
@@ -122,7 +128,7 @@ export function AppShell() {
       <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} />
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
-        <header className="shrink-0 relative z-30 h-16 flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70 rpg:bg-rpg-bg-2 rpg:backdrop-blur-none rpg:border-b-2 rpg:border-rpg-border">
+        <header className="shrink-0 relative z-30 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70 rpg:bg-rpg-bg-2 rpg:backdrop-blur-none rpg:border-b-2 rpg:border-rpg-border">
           {/* Filete dourado sob o cabeçalho — só no tema RPG */}
           <div className="hidden rpg:block absolute inset-x-0 -bottom-[3px] rpg-ornament-line opacity-70" aria-hidden />
           <button
@@ -201,7 +207,7 @@ export function AppShell() {
         </div>
 
         {/* navegação inferior mobile (indicador "magic navigation") */}
-        <MobileMagicNav onOpenModules={() => setDrawerOpen(true)} modulesOpen={drawerOpen} />
+        <MobileMagicNav onOpenModules={() => setDrawerOpen((v) => !v)} modulesOpen={drawerOpen} />
 
         <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} />
 

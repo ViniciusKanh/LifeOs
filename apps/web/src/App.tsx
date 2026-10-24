@@ -88,6 +88,7 @@ const GrimorioPage = lazy(() => import("@/pages/grimorio/GrimorioPage").then((m)
 const ConselhoPage = lazy(() => import("@/pages/conselho/ConselhoPage").then((m) => ({ default: m.ConselhoPage })));
 const ForjaInteligenciaPage = lazy(() => import("@/pages/forja-inteligencia/ForjaInteligenciaPage").then((m) => ({ default: m.ForjaInteligenciaPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
+const BancoPage = lazy(() => import("@/pages/banco/BancoPage").then((m) => ({ default: m.BancoPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
 const RevisoesPage = lazy(() => import("@/pages/revisoes/RevisoesPage").then((m) => ({ default: m.RevisoesPage })));
@@ -170,6 +171,7 @@ export default function App() {
           <Route path="/contexto-do-dia" element={<Navigate to="/hoje" replace />} />
           <Route path="/conquistas" element={<ConquistasPage />} />
           <Route path="/tesouro" element={<TesouroPage />} />
+          <Route path="/banco" element={<BancoPage />} />
           <Route path="/inventario" element={<InventarioPage />} />
           <Route path="/build" element={<BuildPage />} />
           <Route path="/protocolos" element={<ProtocolosPage />} />
