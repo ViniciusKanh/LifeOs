@@ -29,6 +29,7 @@ export function RPGPanel({
   bodyClassName,
   children,
   as: Tag = "section",
+  id,
 }: {
   title?: string;
   icon?: ReactNode;
@@ -39,9 +40,11 @@ export function RPGPanel({
   bodyClassName?: string;
   children: ReactNode;
   as?: "section" | "div" | "article";
+  /** Âncora opcional pra rolar até o painel (ex.: atalho "Automático" do Banco). */
+  id?: string;
 }) {
   return (
-    <Tag className={clsx(VARIANT_CLASS[variant], "min-w-0", className)}>
+    <Tag id={id} className={clsx(VARIANT_CLASS[variant], "min-w-0", className)}>
       {title && <RPGSectionHeader icon={icon} title={title} actions={actions} parchment={variant === "parchment"} />}
       <div className={clsx(title ? "px-4 pb-4" : "p-4", bodyClassName)}>{children}</div>
       {footer && <div className="border-t border-rpg-border/70 px-4 py-2.5">{footer}</div>}

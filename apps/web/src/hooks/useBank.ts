@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { bankService, type AutoInvestRule } from "@/services/bankService";
+import { bankService, type AutoInvestRule, type DepositInput, type LedgerFilter } from "@/services/bankService";
 import { triggerAchievementsCheck } from "@/services/achievementsService";
 
 const KEY = ["bank"] as const;
@@ -18,7 +18,7 @@ export function useBank() {
   };
 
   const deposit = useMutation({
-    mutationFn: ({ planId, amount }: { planId: string; amount: number }) => bankService.deposit(planId, amount),
+    mutationFn: (input: DepositInput) => bankService.deposit(input),
     onSuccess: invalidate,
   });
   const claim = useMutation({
@@ -77,15 +77,46 @@ export function useBankStatement(months = 12) {
   return { ...query, months: query.data?.months ?? [] };
 }
 
-/** Extrato do Banco: todo movimento real de moedas (ganhos e gastos), com "carregar mais". */
-export function useBankLedger() {
+export interface LedgerUiFilter {
+  /** Categorias visuais selecionadas (utils/ledgerCategory.ts); vazio = todas. */
+  categories: string[];
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
+/** Extrato do Banco: todo movimento real de moedas (ganhos e gastos), com filtro por categoria/período/texto e "carregar mais". */
+export function useBankLedger(filter: LedgerUiFilter) {
   const [limit, setLimit] = useState(LEDGER_PAGE);
+  // Muda o filtro -> recomeça a paginação (senão "carregar mais" misturaria páginas de filtros diferentes).
+  const filterKey = JSON.stringify(filter);
+  const resolved: LedgerFilter = useMemo(
+    () => ({
+      limit,
+      sourceTypes: filter.categories.length > 0 ? filter.categories : undefined,
+      from: filter.from,
+      to: filter.to,
+      q: filter.q,
+    }),
+    [limit, filterKey],
+  );
   const query = useQuery({
-    queryKey: [...KEY, "ledger", limit],
-    queryFn: () => bankService.ledger(limit),
+    queryKey: [...KEY, "ledger", resolved],
+    queryFn: () => bankService.ledger(resolved),
     staleTime: 15_000,
   });
   const entries = query.data?.entries ?? [];
   const hasMore = entries.length >= limit;
-  return { ...query, entries, hasMore, loadMore: () => setLimit((v) => v + LEDGER_PAGE) };
+  return { ...query, entries, hasMore, loadMore: () => setLimit((v) => v + LEDGER_PAGE), resetPaging: () => setLimit(LEDGER_PAGE) };
+}
+
+/** Detalhe ("comprovante") de uma movimentação do extrato: saldo antes/depois, origem completa. */
+export function useLedgerEntryDetail(entryId: string | null) {
+  const query = useQuery({
+    queryKey: [...KEY, "ledger-entry", entryId],
+    queryFn: () => bankService.ledgerEntry(entryId!),
+    enabled: !!entryId,
+    staleTime: 60_000,
+  });
+  return { ...query, detail: query.data ?? null };
 }

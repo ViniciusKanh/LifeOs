@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
+import { useReducedMotion } from "motion/react";
+import { useQuery } from "@tanstack/react-query";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   AlertTriangle,
   Calculator,
   Coins,
   CreditCard,
+  Eye,
+  EyeOff,
   HandCoins,
   Landmark,
   LineChart as LineChartIcon,
@@ -12,27 +17,60 @@ import {
   PiggyBank,
   Receipt,
   Repeat,
+  Search,
   ShieldCheck,
   Sparkles,
+  Target,
   TrendingDown,
   TrendingUp,
   Vault,
+  X,
 } from "lucide-react";
-import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPGSwitch, RPGTabs, RPGToast, RPGWallet, type RpgTone } from "@/components/rpg";
-import { useBank, useBankHistory, useBankLedger, useBankStatement } from "@/hooks/useBank";
+import {
+  RPGBadge,
+  RPGButton,
+  RPGPageHeader,
+  RPGPanel,
+  RPGProgressBar,
+  RPGProgressRing,
+  RPGStatCard,
+  RPGSwitch,
+  RPGTabs,
+  RPGToast,
+  RPG_TONE_SOFT,
+  type RpgTone,
+} from "@/components/rpg";
+import { RPGHowItWorks } from "@/components/rpg/RPGHowItWorks";
+import { Modal } from "@/components/ui/Modal";
+import { achievementIcon } from "@/components/achievements/achievementIcons";
+import { TIER_RPG_TONE } from "@/components/achievements/tierDisplay";
+import { useBank, useBankHistory, useBankLedger, useBankStatement, useLedgerEntryDetail, type LedgerUiFilter } from "@/hooks/useBank";
+import { useAuth } from "@/hooks/useAuth";
+import { useGamificationProfile } from "@/hooks/useGamification";
+import { useAchievements } from "@/hooks/useAchievements";
+import { useRpgPreferences } from "@/hooks/useRpgPreferences";
+import { useCountUp } from "@/hooks/useCountUp";
 import { formatWhen } from "@/utils/treasureDisplay";
+import { LEDGER_CATEGORIES, ledgerCategoryByKey, ledgerCategoryOf } from "@/utils/ledgerCategory";
+import { playSfx } from "@/utils/sfx";
+import { recentActionPoint, spawnBurst } from "@/utils/xpBurst";
+import { goalsService } from "@/services/goalsService";
 import type { AutoInvestRule, BankDeposit, BankLoan, BankPlan, BankStatementMonth, CreditInfo, LedgerEntry, LoanTier } from "@/services/bankService";
+import type { Goal } from "@/types";
 
 /**
  * Banco: tela única e dedicada para administrar as moedas ganhas em
  * missões/contratos -- igual a um banco de verdade, mas gamificado:
- * investimentos de prazo fixo com imposto sobre o ganho, EMPRÉSTIMOS com
- * juros e multa por atraso (limite e taxa dependem do seu SCORE DE
- * CRÉDITO, que sobe investindo e pagando em dia), um simulador antes de
- * decidir, e um extrato com todo ganho e gasto de moedas. Nunca é dinheiro
- * real. Saldo, investimentos, crédito e extrato vêm sempre do backend; a
- * UI só atualiza depois que o servidor confirma.
+ * saldo em destaque com ações rápidas, investimentos de prazo fixo com
+ * imposto sobre o ganho, EMPRÉSTIMOS com juros e multa por atraso (limite
+ * e taxa dependem do seu SCORE DE CRÉDITO), cofrinhos com nome/meta,
+ * extrato filtrável com comprovante por movimentação, e um simulador
+ * antes de decidir. Nunca é dinheiro real. Saldo, investimentos, crédito
+ * e extrato vêm sempre do backend; a UI só atualiza depois que o
+ * servidor confirma.
  */
+
+const HIDE_BALANCE_KEY = "lifeos-banco-saldo-oculto";
 
 function formatCoins(n: number) {
   return n.toLocaleString("pt-BR");
@@ -50,6 +88,10 @@ function daysLeft(iso: string) {
 function daysOverdue(iso: string) {
   const ms = Date.now() - new Date(iso).getTime();
   return Math.max(0, Math.ceil(ms / 86_400_000));
+}
+
+function fullDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // Mesmas fórmulas do backend (config/bank.ts): investimento arredonda pra baixo, dívida pra cima.
@@ -79,13 +121,60 @@ function tierTone(label: string): RpgTone {
   return "muted";
 }
 
-function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: boolean; onInvest: (amount: number) => void }) {
+/** Variação percentual real entre dois meses do extrato de rendimentos -- nunca inventa comparação sem os dois valores. */
+function monthOverMonth(cur: number, prev: number): string | null {
+  if (prev === 0) return cur > 0 ? "novo este mês" : null;
+  const change = Math.round(((cur - prev) / Math.abs(prev)) * 100);
+  if (change === 0) return null;
+  return `${change > 0 ? "+" : ""}${change}% este mês`;
+}
+
+/** Emojis sugeridos pra batizar um cofrinho -- atalho, mas o campo aceita qualquer emoji digitado. */
+const QUICK_ICONS = ["✈️", "🏠", "🎮", "📚", "🎓", "🚗", "💻", "🎁"];
+
+function QuickAmountChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="border border-rpg-border px-2 py-1 text-[11px] font-pixel text-rpg-muted hover:border-rpg-gold hover:text-rpg-gold-light transition-colors"
+      style={{ borderRadius: 2 }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** Metas ativas do usuário, só pra popular o seletor opcional "vincular a uma meta" do cofrinho -- consulta leve e dedicada. */
+function useActiveGoalsForBank() {
+  return useQuery({ queryKey: ["goals", "bank-picker"], queryFn: () => goalsService.list({ status: "active" }), staleTime: 60_000 });
+}
+
+function DepositForm({
+  plan,
+  disabled,
+  balance,
+  goals,
+  onInvest,
+}: {
+  plan: BankPlan;
+  disabled: boolean;
+  balance: number;
+  goals: Goal[];
+  onInvest: (amount: number, opts: { label: string | null; icon: string | null; goalId: string | null }) => void;
+}) {
   const [amount, setAmount] = useState(String(plan.minAmount));
+  const [customize, setCustomize] = useState(false);
+  const [label, setLabel] = useState("");
+  const [icon, setIcon] = useState("");
+  const [goalId, setGoalId] = useState("");
   const parsed = Number(amount);
   const valid = Number.isInteger(parsed) && parsed >= plan.minAmount && parsed <= plan.maxAmount;
   const gain = valid ? projectGain(parsed, plan.rateBps) : 0;
   const tax = valid ? projectTax(parsed, plan.rateBps, plan.taxBps) : 0;
   const net = valid ? projectNet(parsed, plan.rateBps, plan.taxBps) : null;
+  const maxInvestable = Math.min(plan.maxAmount, balance);
+  const quickAmounts = [50, 100, 500].filter((v) => v >= plan.minAmount && v <= plan.maxAmount);
 
   return (
     <RPGPanel variant="gold" title={plan.label} icon={<Vault size={15} />} className="h-full">
@@ -100,7 +189,7 @@ function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: b
         className="flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid) onInvest(parsed);
+          if (valid) onInvest(parsed, { label: label.trim() || null, icon: icon.trim() || null, goalId: goalId || null });
         }}
       >
         <label className="sr-only" htmlFor={`amount-${plan.id}`}>Quantia para investir em {plan.label}</label>
@@ -119,6 +208,14 @@ function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: b
           Investir
         </RPGButton>
       </form>
+      {(quickAmounts.length > 0 || maxInvestable >= plan.minAmount) && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {quickAmounts.map((v) => (
+            <QuickAmountChip key={v} label={formatCoins(v)} onClick={() => setAmount(String(v))} />
+          ))}
+          {maxInvestable >= plan.minAmount && <QuickAmountChip label="Tudo" onClick={() => setAmount(String(maxInvestable))} />}
+        </div>
+      )}
       {valid && net != null ? (
         <dl className="mt-3 space-y-1 text-[11px] border-t border-rpg-border/60 pt-2">
           <div className="flex items-center justify-between">
@@ -138,6 +235,68 @@ function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: b
         <p className="mt-2 text-[11px] text-rpg-muted min-h-[1.2em]">
           Mínimo {formatCoins(plan.minAmount)}, máximo {formatCoins(plan.maxAmount)} moedas.
         </p>
+      )}
+      <button type="button" onClick={() => setCustomize((v) => !v)} className="mt-3 text-[11px] text-rpg-gold-light hover:underline underline-offset-2">
+        {customize ? "Ocultar personalização" : "+ Dar um nome a este cofrinho"}
+      </button>
+      {customize && (
+        <div className="mt-2 space-y-2 border-t border-rpg-border/60 pt-2.5">
+          <div className="flex items-center gap-2">
+            <label className="sr-only" htmlFor={`icon-${plan.id}`}>Emoji do cofrinho</label>
+            <input
+              id={`icon-${plan.id}`}
+              type="text"
+              value={icon}
+              onChange={(e) => setIcon(e.target.value)}
+              maxLength={8}
+              placeholder="🎯"
+              className="w-12 border-2 border-rpg-border bg-rpg-bg px-1.5 py-1.5 text-center text-sm outline-none focus:border-rpg-gold"
+              style={{ borderRadius: 2 }}
+            />
+            <label className="sr-only" htmlFor={`label-${plan.id}`}>Apelido do cofrinho</label>
+            <input
+              id={`label-${plan.id}`}
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              maxLength={60}
+              placeholder="Ex.: Viagem de fim de ano"
+              className="flex-1 min-w-0 border-2 border-rpg-border bg-rpg-bg px-2 py-1.5 text-xs text-rpg-text outline-none focus:border-rpg-gold"
+              style={{ borderRadius: 2 }}
+            />
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {QUICK_ICONS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setIcon(e)}
+                aria-label={`Usar emoji ${e}`}
+                className="h-7 w-7 border border-rpg-border/60 hover:border-rpg-gold text-sm"
+                style={{ borderRadius: 2 }}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+          {goals.length > 0 && (
+            <div>
+              <label className="text-[10.5px] text-rpg-muted" htmlFor={`goal-${plan.id}`}>Vincular a uma meta (opcional)</label>
+              <select
+                id={`goal-${plan.id}`}
+                value={goalId}
+                onChange={(e) => setGoalId(e.target.value)}
+                className="mt-1 w-full border-2 border-rpg-border bg-rpg-bg px-2 py-1.5 text-xs text-rpg-text outline-none focus:border-rpg-gold"
+                style={{ borderRadius: 2 }}
+              >
+                <option value="">Nenhuma</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       )}
     </RPGPanel>
   );
@@ -175,11 +334,20 @@ function DepositRow({
   return (
     <div className="rpg-panel p-3">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <p className="font-rpg font-semibold text-sm text-rpg-text truncate">{deposit.planLabel}</p>
+        <p className="font-rpg font-semibold text-sm text-rpg-text truncate flex items-center gap-1.5">
+          {deposit.icon && <span aria-hidden>{deposit.icon}</span>}
+          {deposit.label || deposit.planLabel}
+        </p>
         <span className="font-pixel text-[11px] text-rpg-gold-light shrink-0">
           {formatCoins(deposit.amount)} → {formatCoins(deposit.netPayout)}
         </span>
       </div>
+      {deposit.label && <p className="text-[10.5px] text-rpg-muted mb-1">{deposit.planLabel}</p>}
+      {deposit.goalTitle && (
+        <p className="flex items-center gap-1 text-[10.5px] text-rpg-blue mb-1.5">
+          <Target size={11} aria-hidden /> Meta: {deposit.goalTitle}
+        </p>
+      )}
       {tax > 0 && (
         <p className="text-[10.5px] text-rpg-muted mb-2">
           Bruto {formatCoins(deposit.payout)} − IR {formatPct(deposit.taxBps)}% (−{formatCoins(tax)})
@@ -214,26 +382,172 @@ function DepositRow({
   );
 }
 
-function LedgerRow({ entry }: { entry: LedgerEntry }) {
+function LedgerRow({ entry, onSelect }: { entry: LedgerEntry; onSelect: (id: string) => void }) {
   const positive = entry.amount > 0;
+  const category = ledgerCategoryOf(entry.sourceType);
+  const Icon = category.icon;
   return (
-    <li className="flex items-center justify-between gap-3 py-2 border-b border-rpg-border/40 last:border-0">
-      <div className="min-w-0 flex items-center gap-2">
-        {positive ? (
-          <TrendingUp size={14} className="text-rpg-green shrink-0" aria-hidden />
-        ) : (
-          <TrendingDown size={14} className="text-rpg-red shrink-0" aria-hidden />
-        )}
-        <div className="min-w-0">
-          <p className="text-sm text-rpg-text truncate">{entry.label ?? entry.eventType}</p>
-          <p className="text-[10.5px] text-rpg-muted">{formatWhen(entry.createdAt)}</p>
+    <li className="border-b border-rpg-border/40 last:border-0">
+      <button
+        type="button"
+        onClick={() => onSelect(entry.id)}
+        aria-label={`Ver comprovante de ${entry.label ?? entry.eventType}`}
+        className="flex w-full items-center justify-between gap-3 py-2 text-left hover:bg-rpg-panel-hover/60 transition-colors"
+        style={{ borderRadius: 3 }}
+      >
+        <div className="min-w-0 flex items-center gap-2.5">
+          <span className={clsx("inline-flex h-7 w-7 shrink-0 items-center justify-center border", RPG_TONE_SOFT[category.tone])} style={{ borderRadius: 3 }} aria-hidden>
+            <Icon size={13} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm text-rpg-text truncate">{entry.label ?? entry.eventType}</p>
+            <p className="text-[10.5px] text-rpg-muted truncate">{category.label} · {formatWhen(entry.createdAt)}</p>
+          </div>
         </div>
-      </div>
-      <span className={`font-pixel text-[12px] font-semibold shrink-0 ${positive ? "text-rpg-green" : "text-rpg-red"}`}>
-        {positive ? "+" : ""}
-        {formatCoins(entry.amount)}
-      </span>
+        <span className={`font-pixel text-[12px] font-semibold shrink-0 ${positive ? "text-rpg-green" : "text-rpg-red"}`}>
+          {positive ? "+" : ""}
+          {formatCoins(entry.amount)}
+        </span>
+      </button>
     </li>
+  );
+}
+
+function LedgerDetailModal({ entryId, onClose }: { entryId: string | null; onClose: () => void }) {
+  const { detail, isLoading } = useLedgerEntryDetail(entryId);
+  if (!entryId) return null;
+  const category = detail ? ledgerCategoryOf(detail.sourceType) : null;
+  const CategoryIcon = category?.icon;
+  return (
+    <Modal open onClose={onClose} title="Comprovante" size="sm">
+      {isLoading || !detail ? (
+        <p className="text-sm text-rpg-muted">Carregando…</p>
+      ) : (
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center gap-2.5">
+            {category && CategoryIcon && (
+              <span className={clsx("inline-flex h-9 w-9 shrink-0 items-center justify-center border", RPG_TONE_SOFT[category.tone])} style={{ borderRadius: 3 }} aria-hidden>
+                <CategoryIcon size={16} />
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="font-semibold text-rpg-text truncate">{detail.label ?? detail.eventType}</p>
+              <p className="text-xs text-rpg-muted">{category?.label ?? "Outros"}</p>
+            </div>
+          </div>
+          <dl className="space-y-1.5 border-t border-rpg-border/60 pt-3 text-[13px]">
+            <div className="flex items-center justify-between">
+              <dt className="text-rpg-muted">Data completa</dt>
+              <dd className="text-rpg-text">{fullDateTime(detail.createdAt)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-rpg-muted">Saldo antes</dt>
+              <dd className="font-pixel text-rpg-text">{formatCoins(detail.balanceBefore)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-rpg-muted">Movimentação</dt>
+              <dd className={`font-pixel font-semibold ${detail.amount >= 0 ? "text-rpg-green" : "text-rpg-red"}`}>
+                {detail.amount >= 0 ? "+" : ""}
+                {formatCoins(detail.amount)}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="font-semibold text-rpg-gold-light">Saldo depois</dt>
+              <dd className="font-pixel font-semibold text-rpg-gold-light">{formatCoins(detail.balanceAfter)}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function ExtratoFilters({
+  selectedKeys,
+  onToggleCategory,
+  from,
+  to,
+  onFromChange,
+  onToChange,
+  q,
+  onQChange,
+  onClear,
+  hasFilter,
+}: {
+  selectedKeys: string[];
+  onToggleCategory: (key: string) => void;
+  from: string;
+  to: string;
+  onFromChange: (v: string) => void;
+  onToChange: (v: string) => void;
+  q: string;
+  onQChange: (v: string) => void;
+  onClear: () => void;
+  hasFilter: boolean;
+}) {
+  return (
+    <div className="mb-3 space-y-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        {LEDGER_CATEGORIES.map((cat) => {
+          const active = selectedKeys.includes(cat.key);
+          const Icon = cat.icon;
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => onToggleCategory(cat.key)}
+              aria-pressed={active}
+              className={clsx(
+                "inline-flex items-center gap-1 border px-2 py-1 text-[10.5px] font-pixel uppercase tracking-wide transition-colors",
+                active ? RPG_TONE_SOFT[cat.tone] : "border-rpg-border text-rpg-muted hover:text-rpg-text",
+              )}
+              style={{ borderRadius: 3 }}
+            >
+              <Icon size={11} aria-hidden /> {cat.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[160px] max-w-xs">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rpg-muted pointer-events-none" aria-hidden />
+          <label className="sr-only" htmlFor="ledger-search">Buscar no extrato</label>
+          <input
+            id="ledger-search"
+            type="search"
+            value={q}
+            onChange={(e) => onQChange(e.target.value)}
+            placeholder="Buscar por descrição…"
+            className="w-full border-2 border-rpg-border bg-rpg-bg pl-7 pr-2 py-1.5 text-xs text-rpg-text outline-none focus:border-rpg-gold"
+            style={{ borderRadius: 2 }}
+          />
+        </div>
+        <label className="sr-only" htmlFor="ledger-from">De</label>
+        <input
+          id="ledger-from"
+          type="date"
+          value={from}
+          onChange={(e) => onFromChange(e.target.value)}
+          className="border-2 border-rpg-border bg-rpg-bg px-2 py-1.5 text-xs text-rpg-text outline-none focus:border-rpg-gold"
+          style={{ borderRadius: 2 }}
+        />
+        <span className="text-xs text-rpg-muted">até</span>
+        <label className="sr-only" htmlFor="ledger-to">Até</label>
+        <input
+          id="ledger-to"
+          type="date"
+          value={to}
+          onChange={(e) => onToChange(e.target.value)}
+          className="border-2 border-rpg-border bg-rpg-bg px-2 py-1.5 text-xs text-rpg-text outline-none focus:border-rpg-gold"
+          style={{ borderRadius: 2 }}
+        />
+        {hasFilter && (
+          <RPGButton type="button" variant="ghost" className="text-xs" onClick={onClear}>
+            <X size={12} /> Limpar filtros
+          </RPGButton>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -264,9 +578,7 @@ function StatementRow({ row }: { row: BankStatementMonth }) {
   );
 }
 
-function StatementSection() {
-  const { months, isLoading } = useBankStatement(12);
-
+function StatementSection({ months, isLoading }: { months: BankStatementMonth[]; isLoading: boolean }) {
   if (isLoading) return null;
   if (months.length === 0) {
     return (
@@ -288,27 +600,78 @@ function StatementSection() {
 }
 
 function ExtratoView() {
-  const { entries, isLoading, hasMore, loadMore, isFetching } = useBankLedger();
+  const [categoryKeys, setCategoryKeys] = useState<string[]>([]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
-  if (isLoading) return <p className="text-sm text-rpg-muted">Carregando extrato…</p>;
-  if (entries.length === 0) {
-    return <p className="text-sm text-rpg-muted">Nenhuma movimentação de moedas ainda. Complete missões e contratos para começar a ganhar.</p>;
-  }
+  // Busca por texto: pequeno atraso antes de disparar a requisição, pra não bater uma a cada tecla.
+  useEffect(() => {
+    const t = window.setTimeout(() => setQ(qInput.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [qInput]);
+
+  const sourceTypes = useMemo(() => categoryKeys.flatMap((k) => ledgerCategoryByKey(k)?.sourceTypes ?? []), [categoryKeys]);
+  const filter: LedgerUiFilter = useMemo(
+    () => ({ categories: sourceTypes, from: from || undefined, to: to || undefined, q: q || undefined }),
+    [sourceTypes, from, to, q],
+  );
+  const { entries, isLoading, hasMore, loadMore, isFetching, resetPaging } = useBankLedger(filter);
+
+  const filterSignature = `${categoryKeys.join(",")}|${from}|${to}|${q}`;
+  useEffect(() => {
+    resetPaging();
+    // Só quando o filtro muda de fato -- resetPaging é estável entre renders do mesmo filtro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterSignature]);
+
+  const hasFilter = categoryKeys.length > 0 || !!from || !!to || !!q;
+  const toggleCategory = (key: string) => setCategoryKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  const clearFilters = () => {
+    setCategoryKeys([]);
+    setFrom("");
+    setTo("");
+    setQInput("");
+  };
+
   return (
     <RPGPanel title="Extrato de moedas" icon={<Receipt size={16} />}>
-      <p className="text-xs text-rpg-muted mb-2">Todo ganho e gasto de moedas do jogo — missões, loja, Tesouro e Banco juntos, mais recente primeiro.</p>
-      <ul>
-        {entries.map((e) => (
-          <LedgerRow key={e.id} entry={e} />
-        ))}
-      </ul>
-      {hasMore && (
-        <div className="pt-3 flex justify-center">
-          <RPGButton type="button" variant="ghost" disabled={isFetching} onClick={loadMore}>
-            {isFetching ? "Carregando…" : "Carregar mais"}
-          </RPGButton>
-        </div>
+      <p className="text-xs text-rpg-muted mb-2">Todo ganho e gasto de moedas do jogo — missões, loja, Tesouro e Banco juntos. Toque numa linha para ver o comprovante.</p>
+      <ExtratoFilters
+        selectedKeys={categoryKeys}
+        onToggleCategory={toggleCategory}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        q={qInput}
+        onQChange={setQInput}
+        onClear={clearFilters}
+        hasFilter={hasFilter}
+      />
+      {isLoading ? (
+        <p className="text-sm text-rpg-muted">Carregando extrato…</p>
+      ) : entries.length === 0 ? (
+        <p className="text-sm text-rpg-muted">{hasFilter ? "Nenhuma movimentação encontrada com esse filtro." : "Nenhuma movimentação de moedas ainda. Complete missões e contratos para começar a ganhar."}</p>
+      ) : (
+        <>
+          <ul>
+            {entries.map((e) => (
+              <LedgerRow key={e.id} entry={e} onSelect={setSelectedEntryId} />
+            ))}
+          </ul>
+          {hasMore && (
+            <div className="pt-3 flex justify-center">
+              <RPGButton type="button" variant="ghost" disabled={isFetching} onClick={loadMore}>
+                {isFetching ? "Carregando…" : "Carregar mais"}
+              </RPGButton>
+            </div>
+          )}
+        </>
       )}
+      <LedgerDetailModal entryId={selectedEntryId} onClose={() => setSelectedEntryId(null)} />
     </RPGPanel>
   );
 }
@@ -355,7 +718,7 @@ function SimuladorView({ plans }: { plans: BankPlan[] }) {
 
   return (
     <RPGPanel title="Simulador de investimento" icon={<Calculator size={16} />} className="mb-5">
-      <p className="text-xs text-rpg-muted mb-3">Compare os 3 planos para a mesma quantia antes de decidir onde investir — sem comprometer moeda nenhuma.</p>
+      <p className="text-xs text-rpg-muted mb-3">Compare os planos para a mesma quantia antes de decidir onde investir — sem comprometer moeda nenhuma.</p>
       <div className="flex items-center gap-2 mb-3 max-w-xs">
         <label className="sr-only" htmlFor="sim-amount">Quantia para simular</label>
         <input
@@ -371,7 +734,7 @@ function SimuladorView({ plans }: { plans: BankPlan[] }) {
         <span className="text-xs text-rpg-muted shrink-0">moedas</span>
       </div>
       {valid ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
           {plans.map((plan) => {
             const inRange = parsed >= plan.minAmount && parsed <= plan.maxAmount;
             const net = projectNet(parsed, plan.rateBps, plan.taxBps);
@@ -381,7 +744,7 @@ function SimuladorView({ plans }: { plans: BankPlan[] }) {
                 <p className="font-rpg font-semibold text-sm text-rpg-text mb-1 truncate">{plan.label}</p>
                 {inRange ? (
                   <dl className="text-[11px] space-y-0.5">
-                    <div className="flex justify-between"><dt className="text-rpg-muted">Prazo</dt><dd>{plan.termDays} dia{plan.termDays > 1 ? "s" : ""}</dd></div>
+                    <div className="flex justify-between"><dt className="text-rpg-muted">Prazo</dt><dd>{plan.earlyWithdrawalPenalty === false ? "livre" : `${plan.termDays} dia${plan.termDays > 1 ? "s" : ""}`}</dd></div>
                     <div className="flex justify-between"><dt className="text-rpg-muted">Imposto</dt><dd className="text-rpg-red">−{formatCoins(tax)}</dd></div>
                     <div className="flex justify-between font-semibold"><dt className="text-rpg-gold-light">Líquido</dt><dd className="text-rpg-gold-light">{formatCoins(net)}</dd></div>
                   </dl>
@@ -407,7 +770,7 @@ function LoanSimuladorView({ credit }: { credit: CreditInfo }) {
   const tiers: LoanTier[] = credit.tiers.filter((t) => t.maxAmount > 0);
 
   return (
-    <RPGPanel title="Simulador de empréstimo" icon={<Calculator size={16} />} className="mb-5">
+    <RPGPanel variant="gold" title="Simulador de empréstimo" icon={<Calculator size={16} />} className="mb-5">
       <p className="text-xs text-rpg-muted mb-3">
         Veja quanto você pagaria em cada nível de crédito pela mesma quantia — útil pra planejar até onde vale subir o score antes de pedir.
       </p>
@@ -456,9 +819,66 @@ function LoanSimuladorView({ credit }: { credit: CreditInfo }) {
   );
 }
 
+/** "Fatura" visual do empréstimo ativo -- nome e nível reais do jogador, nunca uma "classe" inventada sem dado por trás. */
+function LoanFaturaCard({
+  loan,
+  credit,
+  playerName,
+  playerLevel,
+  onRepay,
+  repaying,
+}: {
+  loan: BankLoan;
+  credit: CreditInfo;
+  playerName: string | null;
+  playerLevel: number | null;
+  onRepay: () => void;
+  repaying: boolean;
+}) {
+  const totalWithFee = loan.overdue ? loan.totalDue + projectLateFee(loan.totalDue, loan.lateFeeBps) : loan.totalDue;
+  return (
+    <RPGPanel variant={loan.overdue ? "danger" : "gold"} className="mb-5">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center border-2 border-rpg-gold/70 bg-rpg-bg text-rpg-gold-light" style={{ borderRadius: 3 }} aria-hidden>
+            <CreditCard size={16} />
+          </span>
+          <div className="min-w-0">
+            <p className="font-pixel text-[10px] uppercase tracking-wide text-rpg-muted">Fatura do empréstimo</p>
+            <p className="text-sm font-semibold text-rpg-text truncate">{playerName ?? "Aventureiro"}{playerLevel != null ? ` · Nv. ${playerLevel}` : ""}</p>
+          </div>
+        </div>
+        {loan.overdue ? <RPGBadge tone="red">Atrasado</RPGBadge> : <RPGBadge tone={tierTone(credit.tier.label)}>{credit.tier.label}</RPGBadge>}
+      </div>
+      <div className="flex items-end justify-between gap-3 flex-wrap mb-3">
+        <div>
+          <p className="text-[11px] text-rpg-muted">Valor tomado</p>
+          <p className="font-pixel text-2xl font-bold text-rpg-text tabular-nums">{formatCoins(loan.amount)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] text-rpg-muted">Total a pagar</p>
+          <p className="font-pixel text-2xl font-bold text-rpg-gold-light tabular-nums">{formatCoins(totalWithFee)}</p>
+        </div>
+      </div>
+      {loan.overdue ? (
+        <p className="flex items-center gap-1.5 text-xs text-rpg-red mb-4">
+          <AlertTriangle size={13} aria-hidden /> Atrasado há {daysOverdue(loan.dueAt)} dia(s) (multa de {formatPct(loan.lateFeeBps)}% já incluída) — pagar agora evita mais queda no score.
+        </p>
+      ) : (
+        <p className="text-xs text-rpg-muted mb-4">Vence em {daysLeft(loan.dueAt)} dia(s).</p>
+      )}
+      <RPGButton type="button" variant={loan.overdue ? "danger" : "success"} className="w-full" disabled={repaying} onClick={onRepay}>
+        {repaying ? "Quitando…" : "Quitar empréstimo"}
+      </RPGButton>
+    </RPGPanel>
+  );
+}
+
 function CreditoView({
   credit,
   loan,
+  playerName,
+  playerLevel,
   onRequest,
   onRepay,
   requesting,
@@ -466,6 +886,8 @@ function CreditoView({
 }: {
   credit: CreditInfo;
   loan: { active: BankLoan | null; history: BankLoan[] };
+  playerName: string | null;
+  playerLevel: number | null;
   onRequest: (amount: number) => void;
   onRepay: (loanId: string) => void;
   repaying: boolean;
@@ -476,53 +898,39 @@ function CreditoView({
   const valid = Number.isInteger(parsed) && parsed > 0 && parsed <= credit.tier.maxAmount;
   const total = valid ? projectLoanTotal(parsed, credit.tier.rateBps) : null;
   const scorePct = ((credit.score - credit.scoreMin) / (credit.scoreMax - credit.scoreMin)) * 100;
+  const loanQuickAmounts = [50, 100, 500].filter((v) => v <= credit.tier.maxAmount);
 
   return (
     <>
       <RPGPanel title="Score de crédito" icon={<ShieldCheck size={16} />} className="mb-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2">
-            <span className="font-pixel text-2xl font-bold text-rpg-text tabular-nums">{credit.score}</span>
-            <RPGBadge tone={tierTone(credit.tier.label)}>{credit.tier.label}</RPGBadge>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <RPGProgressRing
+            value={scorePct}
+            size={108}
+            tone={tierTone(credit.tier.label)}
+            label="Score de crédito"
+            displayValue={String(credit.score)}
+            valueClassName="text-xl text-rpg-text"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <RPGBadge tone={tierTone(credit.tier.label)}>{credit.tier.label}</RPGBadge>
+              <span className="text-[11px] text-rpg-muted">{credit.scoreMin}–{credit.scoreMax}</span>
+            </div>
+            <p className="text-[11px] text-rpg-muted mb-1">
+              Limite atual: <strong className="text-rpg-text">{formatCoins(credit.tier.maxAmount)} moedas</strong> · juros {formatPct(credit.tier.rateBps)}%
+            </p>
+            <p className="text-[11px] text-rpg-muted">
+              Sobe quando você conclui investimentos e paga empréstimos em dia. Cai quando paga atrasado ou deixa um empréstimo vencer sem quitar.
+            </p>
           </div>
-          <p className="text-[11px] text-rpg-muted text-right">
-            Limite atual: <strong className="text-rpg-text">{formatCoins(credit.tier.maxAmount)} moedas</strong> · juros {formatPct(credit.tier.rateBps)}%
-          </p>
         </div>
-        <RPGProgressBar tone={tierTone(credit.tier.label)} label="Score" value={scorePct} valueLabel={`${credit.scoreMin}–${credit.scoreMax}`} />
-        <p className="mt-2 text-[11px] text-rpg-muted">
-          Sobe quando você conclui investimentos e paga empréstimos em dia. Cai quando paga atrasado ou deixa um empréstimo vencer sem quitar.
-        </p>
       </RPGPanel>
 
       <LoanSimuladorView credit={credit} />
 
       {loan.active ? (
-        <RPGPanel variant={loan.active.overdue ? "danger" : "quest"} title="Empréstimo ativo" icon={<HandCoins size={16} />} className="mb-5">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-sm text-rpg-text">Pegou emprestado</span>
-            <span className="font-pixel text-sm text-rpg-gold-light">{formatCoins(loan.active.amount)} moedas</span>
-          </div>
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-sm text-rpg-text">Total a pagar</span>
-            <span className="font-pixel text-sm text-rpg-text">
-              {formatCoins(loan.active.overdue ? loan.active.totalDue + projectLateFee(loan.active.totalDue, loan.active.lateFeeBps) : loan.active.totalDue)}
-              {loan.active.overdue && (
-                <span className="text-rpg-red"> (com multa de {formatPct(loan.active.lateFeeBps)}%)</span>
-              )}
-            </span>
-          </div>
-          {loan.active.overdue ? (
-            <p className="flex items-center gap-1.5 text-xs text-rpg-red mb-3">
-              <AlertTriangle size={13} aria-hidden /> Atrasado há {daysOverdue(loan.active.dueAt)} dia(s) — pagar agora já evita mais queda no score.
-            </p>
-          ) : (
-            <p className="text-xs text-rpg-muted mb-3">Vence em {daysLeft(loan.active.dueAt)} dia(s).</p>
-          )}
-          <RPGButton type="button" variant={loan.active.overdue ? "danger" : "success"} className="w-full" disabled={repaying} onClick={() => onRepay(loan.active!.id)}>
-            {repaying ? "Quitando…" : "Quitar empréstimo"}
-          </RPGButton>
-        </RPGPanel>
+        <LoanFaturaCard loan={loan.active} credit={credit} playerName={playerName} playerLevel={playerLevel} onRepay={() => onRepay(loan.active!.id)} repaying={repaying} />
       ) : (
         <RPGPanel variant="gold" title="Pedir empréstimo" icon={<CreditCard size={16} />} className="mb-5">
           {credit.tier.maxAmount <= 0 ? (
@@ -552,6 +960,14 @@ function CreditoView({
                   Pedir
                 </RPGButton>
               </form>
+              {(loanQuickAmounts.length > 0 || credit.tier.maxAmount > 0) && (
+                <div className="flex flex-wrap gap-1.5 mb-3 max-w-xs">
+                  {loanQuickAmounts.map((v) => (
+                    <QuickAmountChip key={v} label={formatCoins(v)} onClick={() => setAmount(String(v))} />
+                  ))}
+                  <QuickAmountChip label="Tudo" onClick={() => setAmount(String(credit.tier.maxAmount))} />
+                </div>
+              )}
               {valid && total != null && (
                 <dl className="text-[11px] space-y-1 border-t border-rpg-border/60 pt-2 max-w-xs">
                   <div className="flex items-center justify-between">
@@ -613,7 +1029,7 @@ function AutoInvestCard({
   const dirty = enabled !== autoInvest.enabled || Math.round(parsedPct * 100) !== autoInvest.pctBps || planId !== autoInvest.planId;
 
   return (
-    <RPGPanel variant="quest" title="Investimento automático" icon={<Repeat size={16} />} className="mb-5">
+    <RPGPanel id="auto-invest-anchor" variant="quest" title="Investimento automático" icon={<Repeat size={16} />} className="mb-5">
       <p className="text-xs text-rpg-muted mb-3">
         Reserve uma fatia de toda moeda ganha em missões e contratos direto num plano, sem precisar investir manualmente. O Banco nunca reinveste moedas que vêm dele mesmo (resgate, empréstimo) — só o que você ganha jogando.
       </p>
@@ -672,21 +1088,166 @@ function AutoInvestCard({
   );
 }
 
+/** "Próxima conquista do Banco" -- visível na própria tela, não só em Conquistas (análise de mercado, item E.16). */
+function NextBankAchievementCard() {
+  const { locked, isLoading } = useAchievements(false);
+  if (isLoading) return null;
+  const bankLocked = [...locked].filter((a) => a.category === "banco").sort((a, b) => b.progress - a.progress);
+  const next = bankLocked[0];
+  if (!next) return null;
+  const Icon = achievementIcon(next.icon);
+  const remaining = next.threshold != null && next.currentValue != null ? Math.max(0, next.threshold - next.currentValue) : null;
+  return (
+    <RPGPanel variant="quest" className="mb-5">
+      <div className="flex items-center gap-3">
+        <span className={clsx("inline-flex h-10 w-10 shrink-0 items-center justify-center border-2", RPG_TONE_SOFT[TIER_RPG_TONE[next.tier]])} style={{ borderRadius: 3 }} aria-hidden>
+          <Icon size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-pixel text-[10px] uppercase tracking-wide text-rpg-muted">Próxima conquista do Banco</p>
+          <p className="text-sm font-semibold text-rpg-text truncate">{next.title}</p>
+          <RPGProgressBar tone="gold" label={next.title} value={next.progress} showLabel={false} className="mt-1.5" />
+        </div>
+        {remaining != null && remaining > 0 && (
+          <RPGBadge tone="gold" className="shrink-0">faltam {remaining}</RPGBadge>
+        )}
+      </div>
+    </RPGPanel>
+  );
+}
+
+/** Saldo como elemento único e central da tela, com ações rápidas logo abaixo (análise de mercado, item A). */
+function BalanceHero({
+  balance,
+  isLoading,
+  todayDelta,
+  hidden,
+  onToggleHidden,
+  onQuickAction,
+}: {
+  balance: number | undefined;
+  isLoading: boolean;
+  todayDelta: number | null;
+  hidden: boolean;
+  onToggleHidden: () => void;
+  onQuickAction: (action: "investir" | "credito" | "automatico" | "extrato") => void;
+}) {
+  const displayBalance = useCountUp(balance ?? 0);
+  return (
+    <RPGPanel variant="gold" className="mb-5">
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-pixel text-[11px] uppercase tracking-wide text-rpg-muted mb-1.5">Saldo disponível</p>
+          <div className="flex items-center gap-2.5">
+            <span className="font-pixel text-4xl sm:text-5xl font-bold text-rpg-gold-light tabular-nums leading-none">
+              {isLoading ? "…" : hidden ? "••••••" : formatCoins(displayBalance)}
+            </span>
+            <button
+              type="button"
+              onClick={onToggleHidden}
+              aria-label={hidden ? "Mostrar saldo" : "Ocultar saldo"}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center border-2 border-rpg-border bg-rpg-bg text-rpg-muted hover:text-rpg-gold-light hover:border-rpg-gold transition-colors"
+              style={{ borderRadius: 3 }}
+            >
+              {hidden ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
+          {!hidden && !isLoading && todayDelta != null && todayDelta !== 0 && (
+            <p className={clsx("mt-1.5 text-xs font-medium", todayDelta > 0 ? "text-rpg-green" : "text-rpg-red")}>
+              {todayDelta > 0 ? `Rendeu +${formatCoins(todayDelta)} hoje` : `${formatCoins(todayDelta)} hoje`}
+            </p>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+          <RPGButton type="button" variant="gold" onClick={() => onQuickAction("investir")}>
+            <Vault size={14} /> Investir
+          </RPGButton>
+          <RPGButton type="button" variant="secondary" onClick={() => onQuickAction("credito")}>
+            <CreditCard size={14} /> Empréstimo
+          </RPGButton>
+          <RPGButton type="button" variant="ghost" onClick={() => onQuickAction("automatico")}>
+            <Repeat size={14} /> Automático
+          </RPGButton>
+          <RPGButton type="button" variant="ghost" onClick={() => onQuickAction("extrato")}>
+            <Receipt size={14} /> Extrato
+          </RPGButton>
+        </div>
+      </div>
+    </RPGPanel>
+  );
+}
+
 export function BancoPage() {
   const { summary, isLoading, deposit, claim, claimEarly, requestLoan, repayLoan, updateAutoInvest } = useBank();
+  const { user } = useAuth();
+  const { data: profile } = useGamificationProfile();
+  const { data: activeGoals } = useActiveGoalsForBank();
+  const { prefs } = useRpgPreferences();
+  const reduceMotion = useReducedMotion() || prefs.animations !== "full";
+  const { points: historyPoints } = useBankHistory(60);
+  const { months: statementMonths, isLoading: statementLoading } = useBankStatement(12);
+
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<"success" | "error">("success");
   const [pendingClaimId, setPendingClaimId] = useState<string | null>(null);
   const [pendingEarlyId, setPendingEarlyId] = useState<string | null>(null);
   const [view, setView] = useState<"investir" | "credito" | "extrato">("investir");
+  const [pendingScroll, setPendingScroll] = useState<string | null>(null);
+  const [hiddenBalance, setHiddenBalance] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(HIDE_BALANCE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
-  const handleInvest = (plan: BankPlan, amount: number) => {
+  useEffect(() => {
+    if (!pendingScroll) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(pendingScroll)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setPendingScroll(null);
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [pendingScroll, view]);
+
+  const toggleHiddenBalance = () => {
+    setHiddenBalance((v) => {
+      try {
+        window.localStorage.setItem(HIDE_BALANCE_KEY, v ? "0" : "1");
+      } catch {
+        /* armazenamento indisponível: só não lembra a preferência */
+      }
+      return !v;
+    });
+  };
+
+  const handleQuickAction = (action: "investir" | "credito" | "automatico" | "extrato") => {
+    if (action === "credito" || action === "extrato") {
+      setView(action);
+      return;
+    }
+    setView("investir");
+    if (action === "automatico") setPendingScroll("auto-invest-anchor");
+  };
+
+  const todayDelta = historyPoints.length >= 2 ? (historyPoints[historyPoints.length - 1].balance ?? 0) - (historyPoints[historyPoints.length - 2].balance ?? 0) : null;
+  const earnedTrend = !statementLoading && statementMonths.length >= 2 ? monthOverMonth(statementMonths[statementMonths.length - 1].earned, statementMonths[statementMonths.length - 2].earned) : null;
+  const taxTrend = !statementLoading && statementMonths.length >= 2 ? monthOverMonth(statementMonths[statementMonths.length - 1].taxPaid, statementMonths[statementMonths.length - 2].taxPaid) : null;
+
+  /** Dispara o burst "+moedas" no último ponto de clique e o chime de feedback -- mesma linguagem visual do XP (utils/xpBurst e utils/sfx), nunca um efeito novo. */
+  const celebrate = (text: string) => {
+    const point = recentActionPoint();
+    if (point) spawnBurst(text, point, { tone: "coins", reduced: reduceMotion });
+    playSfx("xp", prefs.sound);
+  };
+
+  const handleInvest = (plan: BankPlan, amount: number, opts: { label: string | null; icon: string | null; goalId: string | null }) => {
     deposit.mutate(
-      { planId: plan.id, amount },
+      { planId: plan.id, amount, label: opts.label, icon: opts.icon, goalId: opts.goalId },
       {
         onSuccess: () => {
           setToastTone("success");
-          setToast(`Investido ${formatCoins(amount)} moedas no ${plan.label}.`);
+          setToast(`Investido ${formatCoins(amount)} moedas no ${opts.label || plan.label}.`);
         },
         onError: (err) => {
           setToastTone("error");
@@ -702,6 +1263,7 @@ export function BancoPage() {
       onSuccess: (res) => {
         setToastTone("success");
         setToast(`Resgatado: +${formatCoins(res.payout)} moedas líquidas do ${d.planLabel}.`);
+        celebrate(`+${formatCoins(res.payout)}`);
       },
       onError: (err) => {
         setToastTone("error");
@@ -730,6 +1292,7 @@ export function BancoPage() {
             ? `Resgate antecipado: +${formatCoins(res.payout)} moedas (proporcional ao tempo) do ${d.planLabel}.`
             : `Resgate antecipado: +${formatCoins(res.payout)} moedas (sem bônus) do ${d.planLabel}.`,
         );
+        if (res.payout > d.amount) celebrate(`+${formatCoins(res.payout)}`);
       },
       onError: (err) => {
         setToastTone("error");
@@ -770,6 +1333,7 @@ export function BancoPage() {
       onSuccess: (res) => {
         setToastTone("success");
         setToast(`Empréstimo quitado: −${formatCoins(res.paid)} moedas.`);
+        if (res.paid === res.loan.totalDue) celebrate("Quitado em dia!");
       },
       onError: (err) => {
         setToastTone("error");
@@ -786,12 +1350,30 @@ export function BancoPage() {
         eyebrow="Economia da Guilda"
         title="Banco"
         subtitle="Invista com imposto sobre o ganho, peça crédito conforme seu score e veja o extrato completo — tudo numa tela só. Moeda do jogo, nunca dinheiro real."
-        actions={<RPGWallet coins={summary?.balance} />}
         className="mb-5"
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
-        <RPGStatCard icon={<Coins size={18} />} label="Saldo disponível" value={isLoading ? "…" : formatCoins(summary?.balance ?? 0)} tone="gold" />
+      <RPGHowItWorks
+        storageKey="lifeos-banco-como-funciona"
+        steps={[
+          { icon: Vault, title: "Invista com prazo", text: "Escolha um plano (ou o Cofre Livre, sem prazo fixo) e deixe suas moedas renderem — com imposto só sobre o ganho.", tone: "gold" },
+          { icon: ShieldCheck, title: "Construa seu crédito", text: "Resgatar no prazo e pagar empréstimos em dia sobe seu score — ele define quanto você pode pedir emprestado e a juros de quanto.", tone: "blue" },
+          { icon: Repeat, title: "Deixe no automático", text: "Ligue o investimento automático pra reservar uma fatia de toda moeda ganha em missões, sem precisar lembrar.", tone: "purple" },
+        ]}
+      />
+
+      <div className="mt-5">
+        <BalanceHero
+          balance={summary?.balance}
+          isLoading={isLoading}
+          todayDelta={todayDelta}
+          hidden={hiddenBalance}
+          onToggleHidden={toggleHiddenBalance}
+          onQuickAction={handleQuickAction}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
         <RPGStatCard
           icon={<PiggyBank size={18} />}
           label="Investimentos ativos"
@@ -809,14 +1391,14 @@ export function BancoPage() {
           label="Ganho líquido"
           value={isLoading ? "…" : formatCoins(summary?.totals.earned ?? 0)}
           tone="blue"
-          caption="moedas de bônus já resgatadas, após imposto"
+          caption={`moedas de bônus já resgatadas, após imposto${earnedTrend ? ` · ${earnedTrend}` : ""}`}
         />
         <RPGStatCard
           icon={<Percent size={18} />}
           label="Imposto pago"
           value={isLoading ? "…" : formatCoins(summary?.totals.taxPaid ?? 0)}
           tone="red"
-          caption="descontado do rendimento, nunca do principal"
+          caption={`descontado do rendimento, nunca do principal${taxTrend ? ` · ${taxTrend}` : ""}`}
         />
         <RPGStatCard
           icon={<ShieldCheck size={18} />}
@@ -828,6 +1410,8 @@ export function BancoPage() {
       </div>
 
       <EvolucaoCard />
+
+      <NextBankAchievementCard />
 
       <div className="mb-5">
         <RPGTabs
@@ -863,7 +1447,14 @@ export function BancoPage() {
           <RPGPanel variant="gold" title="Planos de investimento" icon={<Vault size={16} />} className="mb-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {(summary?.plans ?? []).map((plan) => (
-                <DepositForm key={plan.id} plan={plan} disabled={deposit.isPending} onInvest={(amount) => handleInvest(plan, amount)} />
+                <DepositForm
+                  key={plan.id}
+                  plan={plan}
+                  disabled={deposit.isPending}
+                  balance={summary?.balance ?? 0}
+                  goals={activeGoals ?? []}
+                  onInvest={(amount, opts) => handleInvest(plan, amount, opts)}
+                />
               ))}
             </div>
           </RPGPanel>
@@ -898,7 +1489,8 @@ export function BancoPage() {
                   return (
                     <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
                       <span className="flex items-center gap-1.5 truncate text-rpg-text">
-                        {d.planLabel}
+                        {d.icon && <span aria-hidden>{d.icon}</span>}
+                        {d.label || d.planLabel}
                         {d.earlyWithdrawn && <RPGBadge tone={earlyWithGain ? "gold" : "red"}>{earlyWithGain ? "Antecipado (proporcional)" : "Antecipado"}</RPGBadge>}
                       </span>
                       <span className="font-pixel text-[11px] text-rpg-gold-light shrink-0">
@@ -923,6 +1515,8 @@ export function BancoPage() {
         <CreditoView
           credit={summary.credit}
           loan={summary.loan}
+          playerName={user?.name ?? null}
+          playerLevel={profile?.level ?? null}
           onRequest={handleRequestLoan}
           onRepay={handleRepayLoan}
           requesting={requestLoan.isPending}
@@ -932,7 +1526,7 @@ export function BancoPage() {
 
       {view === "extrato" && (
         <>
-          <StatementSection />
+          <StatementSection months={statementMonths} isLoading={statementLoading} />
           <ExtratoView />
         </>
       )}

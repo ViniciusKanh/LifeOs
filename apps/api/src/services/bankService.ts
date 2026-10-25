@@ -16,7 +16,7 @@ import {
   type LoanTier,
 } from "../config/bank.js";
 import { coinBalance, todayKeyFor } from "./gamificationService.js";
-import { groupRowsByLocalDay, localDayRangeUtc, shiftDayKey } from "./localDayService.js";
+import { groupRowsByLocalDay, localDayRangeUtc, localDaysWhere, shiftDayKey } from "./localDayService.js";
 
 /**
  * Banco: depósitos de moedas em planos de investimento com prazo, bônus e
@@ -48,6 +48,14 @@ export interface BankDepositRow {
   actualPayout: number | null;
   /** Imposto de fato cobrado no resgate — difere de payout-netPayout quando o resgate foi antecipado/proporcional. null enquanto ainda ativo. */
   actualTax: number | null;
+  /** Apelido opcional do cofrinho ("Viagem de fim de ano"), só apresentação. */
+  label: string | null;
+  /** Emoji opcional do cofrinho, só apresentação. */
+  icon: string | null;
+  /** Meta (goals) vinculada opcionalmente -- dá propósito ao depósito em vez de moeda parada sem significado. */
+  goalId: string | null;
+  /** Título da meta vinculada, já resolvido (LEFT JOIN em listDeposits) para exibir sem round-trip extra. */
+  goalTitle: string | null;
 }
 
 function mapRow(row: Record<string, unknown>): BankDepositRow {
@@ -72,12 +80,18 @@ function mapRow(row: Record<string, unknown>): BankDepositRow {
     actualPayout: row.actual_payout == null ? (row.status === "claimed" ? (row.net_payout == null ? payout : Number(row.net_payout)) : null) : Number(row.actual_payout),
     // Resgates de antes da migration 0081 sempre cobraram o imposto cheio (resgate proporcional não existia).
     actualTax: row.actual_tax == null ? (row.status === "claimed" ? payout - (row.net_payout == null ? payout : Number(row.net_payout)) : null) : Number(row.actual_tax),
+    label: row.label == null ? null : String(row.label),
+    icon: row.icon == null ? null : String(row.icon),
+    goalId: row.goal_id == null ? null : String(row.goal_id),
+    goalTitle: row.goal_title == null ? null : String(row.goal_title),
   };
 }
 
 export async function listDeposits(db: Client, ownerId: string): Promise<BankDepositRow[]> {
   const r = await db.execute({
-    sql: `SELECT * FROM bank_deposits WHERE owner_id = ? ORDER BY created_at DESC`,
+    sql: `SELECT d.*, g.title AS goal_title FROM bank_deposits d
+          LEFT JOIN goals g ON g.id = d.goal_id AND g.owner_id = d.owner_id
+          WHERE d.owner_id = ? ORDER BY d.created_at DESC`,
     args: [ownerId],
   });
   return (r.rows as unknown as Array<Record<string, unknown>>).map(mapRow);
@@ -92,12 +106,40 @@ export interface LedgerEntry {
   createdAt: string;
 }
 
+export interface LedgerFilter {
+  limit: number;
+  /** Lista de source_type (ex.: ["task","habit"]) -- o frontend agrupa em categorias, o backend só filtra pelos valores reais. */
+  sourceTypes?: string[];
+  /** Período local (dia a dia, inclusive nas duas pontas) -- só aplica o filtro quando os três vêm juntos. */
+  from?: string;
+  to?: string;
+  tz?: string;
+  /** Busca por texto no rótulo da movimentação. */
+  q?: string;
+}
+
 /** Extrato (todos os movimentos de moedas do jogador, não só do Banco) — mostra de onde vêm e para onde vão as moedas. */
-export async function listLedger(db: Client, ownerId: string, limit: number): Promise<LedgerEntry[]> {
+export async function listLedger(db: Client, ownerId: string, filter: LedgerFilter): Promise<LedgerEntry[]> {
+  const conditions = ["owner_id = ?"];
+  const args: Array<string | number> = [ownerId];
+  if (filter.sourceTypes && filter.sourceTypes.length > 0) {
+    conditions.push(`source_type IN (${filter.sourceTypes.map(() => "?").join(", ")})`);
+    args.push(...filter.sourceTypes);
+  }
+  if (filter.from && filter.to && filter.tz) {
+    const range = localDaysWhere("created_at", filter.from, filter.to, filter.tz);
+    conditions.push(range.sql);
+    args.push(...range.args);
+  }
+  if (filter.q) {
+    conditions.push("label LIKE ?");
+    args.push(`%${filter.q}%`);
+  }
+  args.push(filter.limit);
   const r = await db.execute({
     sql: `SELECT id, amount, source_type, event_type, label, created_at
-          FROM coin_ledger WHERE owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
-    args: [ownerId, limit],
+          FROM coin_ledger WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+    args,
   });
   return (r.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
@@ -107,6 +149,40 @@ export async function listLedger(db: Client, ownerId: string, limit: number): Pr
     label: row.label == null ? null : String(row.label),
     createdAt: String(row.created_at),
   }));
+}
+
+export interface LedgerEntryDetail extends LedgerEntry {
+  /** Saldo total de moedas logo depois desta movimentação (soma de tudo até ela, inclusive). */
+  balanceAfter: number;
+  /** Saldo imediatamente antes -- balanceAfter menos o valor desta própria linha. */
+  balanceBefore: number;
+}
+
+/** Detalhe de uma linha do extrato ("comprovante"): a movimentação + o saldo real antes/depois dela, derivado do próprio ledger. */
+export async function getLedgerEntryDetail(db: Client, ownerId: string, entryId: string): Promise<LedgerEntryDetail | null> {
+  const row = await db.execute({
+    sql: "SELECT id, amount, source_type, event_type, label, created_at, rowid AS rid FROM coin_ledger WHERE id = ? AND owner_id = ?",
+    args: [entryId, ownerId],
+  });
+  const r = row.rows[0] as unknown as Record<string, unknown> | undefined;
+  if (!r) return null;
+  const totalRow = await db.execute({
+    sql: `SELECT COALESCE(SUM(amount), 0) AS total FROM coin_ledger
+          WHERE owner_id = ? AND (created_at < ? OR (created_at = ? AND rowid <= ?))`,
+    args: [ownerId, String(r.created_at), String(r.created_at), Number(r.rid)],
+  });
+  const amount = Number(r.amount);
+  const balanceAfter = Number(totalRow.rows[0]?.total ?? 0);
+  return {
+    id: String(r.id),
+    amount,
+    sourceType: String(r.source_type),
+    eventType: String(r.event_type),
+    label: r.label == null ? null : String(r.label),
+    createdAt: String(r.created_at),
+    balanceAfter,
+    balanceBefore: balanceAfter - amount,
+  };
 }
 
 export interface BankLoanRow {
@@ -509,7 +585,13 @@ export type DepositResult =
   | { ok: true; deposit: BankDepositRow; balance: number }
   | { ok: false; code: "not_found" | "invalid_amount" | "limit" | "insufficient"; message: string; balance?: number };
 
-export async function createDeposit(db: Client, ownerId: string, planId: string, amount: number, opts: { auto?: boolean } = {}): Promise<DepositResult> {
+export async function createDeposit(
+  db: Client,
+  ownerId: string,
+  planId: string,
+  amount: number,
+  opts: { auto?: boolean; label?: string | null; icon?: string | null; goalId?: string | null } = {},
+): Promise<DepositResult> {
   const plan = getBankPlan(planId);
   if (!plan) return { ok: false, code: "not_found", message: "Plano de investimento não encontrado." };
   if (!Number.isInteger(amount) || amount < plan.minAmount || amount > plan.maxAmount) {
@@ -524,6 +606,16 @@ export async function createDeposit(db: Client, ownerId: string, planId: string,
     return { ok: false, code: "limit", message: `Você já tem o máximo de ${plan.maxActive} investimento(s) ativo(s) neste plano.` };
   }
 
+  // O cofrinho pode ser vinculado a uma Meta existente -- ignora silenciosamente um goalId
+  // que não existe ou não é do dono, em vez de travar o investimento por causa disso.
+  let goalId: string | null = null;
+  if (opts.goalId) {
+    const goalRow = await db.execute({ sql: "SELECT id FROM goals WHERE id = ? AND owner_id = ?", args: [opts.goalId, ownerId] });
+    if (goalRow.rows[0]) goalId = opts.goalId;
+  }
+  const label = opts.label?.trim() || null;
+  const icon = opts.icon?.trim() || null;
+
   const depositId = nanoid();
   // payout bruto (principal + bônus) e líquido (já com o imposto sobre o ganho descontado) ficam
   // ambos congelados agora — mudar o plano depois nunca afeta este depósito.
@@ -534,10 +626,10 @@ export async function createDeposit(db: Client, ownerId: string, planId: string,
   const results = await db.batch(
     [
       {
-        sql: `INSERT INTO bank_deposits (id, owner_id, plan_id, plan_label, amount, rate_bps, term_days, tax_bps, payout, net_payout, matures_at)
-              SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        sql: `INSERT INTO bank_deposits (id, owner_id, plan_id, plan_label, amount, rate_bps, term_days, tax_bps, payout, net_payout, matures_at, label, icon, goal_id)
+              SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
               WHERE (SELECT COALESCE(SUM(amount), 0) FROM coin_ledger WHERE owner_id = ?) >= ?`,
-        args: [depositId, ownerId, plan.id, plan.label, amount, plan.rateBps, plan.termDays, plan.taxBps, grossPayout, netPayout, maturesAt, ownerId, amount],
+        args: [depositId, ownerId, plan.id, plan.label, amount, plan.rateBps, plan.termDays, plan.taxBps, grossPayout, netPayout, maturesAt, label, icon, goalId, ownerId, amount],
       },
       {
         sql: `INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label)

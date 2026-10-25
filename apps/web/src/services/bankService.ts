@@ -34,6 +34,14 @@ export interface BankDeposit {
   actualPayout: number | null;
   /** Imposto de fato cobrado no resgate — difere de payout-netPayout quando foi antecipado/proporcional. null enquanto ainda ativo. */
   actualTax: number | null;
+  /** Apelido opcional do cofrinho ("Viagem de fim de ano"), só apresentação. */
+  label: string | null;
+  /** Emoji opcional do cofrinho, só apresentação. */
+  icon: string | null;
+  /** Meta (Metas) vinculada opcionalmente -- dá propósito ao depósito. */
+  goalId: string | null;
+  /** Título da meta vinculada, já resolvido pelo backend. */
+  goalTitle: string | null;
 }
 
 export interface BankLoan {
@@ -110,6 +118,22 @@ export interface LedgerEntry {
   createdAt: string;
 }
 
+export interface LedgerEntryDetail extends LedgerEntry {
+  /** Saldo total de moedas logo depois desta movimentação. */
+  balanceAfter: number;
+  /** Saldo imediatamente antes desta movimentação. */
+  balanceBefore: number;
+}
+
+export interface LedgerFilter {
+  limit?: number;
+  /** source_type reais (ex.: ["task","habit"]) -- ver utils/ledgerCategory.ts pro agrupamento visual. */
+  sourceTypes?: string[];
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
 export interface DepositSuccess {
   deposit: BankDeposit;
   balance: number;
@@ -132,12 +156,31 @@ export interface RepaySuccess {
   balance: number;
 }
 
+export interface DepositInput {
+  planId: string;
+  amount: number;
+  label?: string | null;
+  icon?: string | null;
+  goalId?: string | null;
+}
+
+function ledgerQueryString(filter: LedgerFilter): string {
+  const params = new URLSearchParams();
+  params.set("limit", String(filter.limit ?? 40));
+  if (filter.sourceTypes && filter.sourceTypes.length > 0) params.set("sourceTypes", filter.sourceTypes.join(","));
+  if (filter.from) params.set("from", filter.from);
+  if (filter.to) params.set("to", filter.to);
+  if (filter.q) params.set("q", filter.q);
+  return params.toString();
+}
+
 export const bankService = {
   summary: () => api.get<BankSummary>("/bank"),
-  deposit: (planId: string, amount: number) => api.post<DepositSuccess>("/bank/deposits", { planId, amount }),
+  deposit: (input: DepositInput) => api.post<DepositSuccess>("/bank/deposits", input),
   claim: (depositId: string) => api.post<ClaimSuccess>(`/bank/deposits/${depositId}/claim`),
   claimEarly: (depositId: string) => api.post<ClaimSuccess>(`/bank/deposits/${depositId}/claim-early`),
-  ledger: (limit = 40) => api.get<{ entries: LedgerEntry[] }>(`/bank/ledger?limit=${limit}`),
+  ledger: (filter: LedgerFilter = {}) => api.get<{ entries: LedgerEntry[] }>(`/bank/ledger?${ledgerQueryString(filter)}`),
+  ledgerEntry: (entryId: string) => api.get<LedgerEntryDetail>(`/bank/ledger/${entryId}`),
   requestLoan: (amount: number) => api.post<LoanSuccess>("/bank/loans", { amount }),
   repayLoan: (loanId: string) => api.post<RepaySuccess>(`/bank/loans/${loanId}/repay`),
   history: (days = 60) => api.get<{ days: number; points: BankHistoryPoint[] }>(`/bank/history?days=${days}`),

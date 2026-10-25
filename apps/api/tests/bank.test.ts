@@ -116,6 +116,50 @@ describe("Banco — investimentos de moedas", () => {
     const stolen = await b.agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
     expect(stolen.status).toBe(404);
   });
+
+  it("aceita apelido e emoji opcionais no cofrinho, e os devolve no resumo", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 1000);
+    const dep = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 50, label: "Viagem de fim de ano", icon: "\u2708\ufe0f" });
+    expect(dep.status).toBe(201);
+    expect(dep.body.deposit.label).toBe("Viagem de fim de ano");
+    expect(dep.body.deposit.icon).toBe("\u2708\ufe0f");
+
+    const summary = await agent.get("/api/bank");
+    const found = summary.body.active.find((d: { id: string }) => d.id === dep.body.deposit.id);
+    expect(found.label).toBe("Viagem de fim de ano");
+    expect(found.icon).toBe("\u2708\ufe0f");
+  });
+
+  it("ignora silenciosamente um goalId inválido ou de outro usuário, sem recusar o investimento", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const other = await createAuthenticatedAgent();
+    await giveCoins(userId, 1000);
+    const otherGoal = await other.agent.post("/api/goals").send({ title: "Meta de outro usuário", kind: "binary" });
+
+    const depInvalid = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 20, goalId: "meta-inexistente" });
+    expect(depInvalid.status).toBe(201);
+    expect(depInvalid.body.deposit.goalId).toBeNull();
+
+    const depForeign = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 20, goalId: otherGoal.body.id });
+    expect(depForeign.status).toBe(201);
+    expect(depForeign.body.deposit.goalId).toBeNull();
+  });
+
+  it("vincula corretamente a uma Meta do próprio usuário e expõe o título vinculado", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 1000);
+    const goal = await agent.post("/api/goals").send({ title: "Fazer um intercâmbio", kind: "binary" });
+    expect(goal.status).toBe(201);
+
+    const dep = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 30, goalId: goal.body.id });
+    expect(dep.status).toBe(201);
+    expect(dep.body.deposit.goalId).toBe(goal.body.id);
+
+    const summary = await agent.get("/api/bank");
+    const found = summary.body.active.find((d: { id: string }) => d.id === dep.body.deposit.id);
+    expect(found.goalTitle).toBe("Fazer um intercâmbio");
+  });
 });
 
 describe("Banco — crédito (empréstimos)", () => {
@@ -540,5 +584,77 @@ describe("Banco — investimento automático", () => {
     const summary = await agent.get("/api/bank");
     expect(summary.body.active.length).toBe(0); // 1% de 5 moedas = 0, abaixo do mínimo (10) do plano
     expect(summary.body.balance).toBe(5);
+  });
+});
+
+describe("Banco — extrato com filtro por categoria/período/texto e detalhe da movimentação", () => {
+  it("filtra o extrato por source_type (categoria) e ignora os demais", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    const dayKey = await todayKeyFor(db, userId);
+    await award(db, userId, { sourceType: "task", sourceId: "tarefa-1", eventType: "completed", xp: 10, coins: 10, label: "Missão concluída" }, dayKey);
+    await award(db, userId, { sourceType: "habit", sourceId: "habito-1", eventType: "completed", xp: 5, coins: 5, label: "Hábito concluído" }, dayKey);
+
+    const all = await agent.get("/api/bank/ledger");
+    expect(all.body.entries.length).toBe(2);
+
+    const onlyTasks = await agent.get("/api/bank/ledger?sourceTypes=task");
+    expect(onlyTasks.body.entries.length).toBe(1);
+    expect(onlyTasks.body.entries[0].sourceType).toBe("task");
+  });
+
+  it("busca por texto no rótulo da movimentação", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    const dayKey = await todayKeyFor(db, userId);
+    await award(db, userId, { sourceType: "task", sourceId: "tarefa-2", eventType: "completed", xp: 10, coins: 10, label: "Revisar introdução" }, dayKey);
+    await award(db, userId, { sourceType: "task", sourceId: "tarefa-3", eventType: "completed", xp: 10, coins: 10, label: "Comprar mantimentos" }, dayKey);
+
+    const res = await agent.get("/api/bank/ledger?q=introdu%C3%A7%C3%A3o");
+    expect(res.body.entries.length).toBe(1);
+    expect(res.body.entries[0].label).toContain("introdução");
+  });
+
+  it("filtra o extrato por período local (from/to)", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 100);
+    const old = await getDb().execute({
+      sql: "SELECT id FROM coin_ledger WHERE owner_id = ? ORDER BY created_at ASC LIMIT 1",
+      args: [userId],
+    });
+    await getDb().execute({
+      sql: "UPDATE coin_ledger SET created_at = datetime('now', '-10 days') WHERE id = ?",
+      args: [old.rows[0]!.id],
+    });
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const res = await agent.get(`/api/bank/ledger?from=${todayKey}&to=${todayKey}`);
+    expect(res.body.entries.length).toBe(0); // a única movimentação foi empurrada pra 10 dias atrás
+  });
+
+  it("detalha uma movimentação do extrato com saldo antes/depois corretos", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 100); // saldo: 0 -> 100
+    await giveCoins(userId, 50); // saldo: 100 -> 150
+
+    const ledger = await agent.get("/api/bank/ledger");
+    const lastEntry = ledger.body.entries[0]; // mais recente primeiro
+    const detail = await agent.get(`/api/bank/ledger/${lastEntry.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.balanceAfter).toBe(150);
+    expect(detail.body.balanceBefore).toBe(100);
+  });
+
+  it("recusa detalhe de movimentação inexistente ou de outro usuário", async () => {
+    const a = await createAuthenticatedAgent();
+    const b = await createAuthenticatedAgent();
+    await giveCoins(a.userId, 100);
+    const ledger = await a.agent.get("/api/bank/ledger");
+    const entryId = ledger.body.entries[0].id;
+
+    const notFound = await a.agent.get("/api/bank/ledger/inexistente");
+    expect(notFound.status).toBe(404);
+
+    const stolen = await b.agent.get(`/api/bank/ledger/${entryId}`);
+    expect(stolen.status).toBe(404);
   });
 });
