@@ -68,6 +68,8 @@ export function distributionFor(e: XpEventLike, ctx: ClassifyContext = {}): Dist
       return M.CAMPAIGN;
     case "contract":
       return M.CONTRACT;
+    case "bank":
+      return M.BANK;
     case "achievement":
       return M.ACHIEVEMENT[ctx.achievementCategory ?? "outros"] ?? M.ACHIEVEMENT.outros;
     default:

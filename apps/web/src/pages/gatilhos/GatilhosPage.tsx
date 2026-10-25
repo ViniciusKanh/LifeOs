@@ -3,10 +3,12 @@ import {
   AlertTriangle,
   BellRing,
   Clock3,
+  CreditCard,
   Mail,
   Mails,
   NotebookPen,
   Pencil,
+  PiggyBank,
   Play,
   Plus,
   Smartphone,
@@ -39,6 +41,8 @@ const EVENT_ICON: Record<NotificationTriggerEvent, typeof BellRing> = {
   weekly_summary: Mails,
   daily_insight: Sparkles,
   journal_reminder: NotebookPen,
+  bank_deposit_matured: PiggyBank,
+  bank_loan_overdue: CreditCard,
 };
 
 const EVENT_TONE: Record<NotificationTriggerEvent, "blue" | "purple" | "green" | "pink" | "teal" | "amber"> = {
@@ -48,6 +52,8 @@ const EVENT_TONE: Record<NotificationTriggerEvent, "blue" | "purple" | "green" |
   weekly_summary: "teal",
   daily_insight: "pink",
   journal_reminder: "pink",
+  bank_deposit_matured: "green",
+  bank_loan_overdue: "amber",
 };
 
 const ALERT_LABEL: Record<NotificationAlertLevel, string> = {

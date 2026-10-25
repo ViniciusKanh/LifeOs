@@ -57,6 +57,7 @@ const SOURCE_LABEL: Record<string, string> = {
   campaign: "Campanhas",
   contract: "Contratos",
   achievement: "Conquistas",
+  bank: "Banco",
 };
 
 function shiftDay(day: string, delta: number) {

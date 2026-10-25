@@ -912,7 +912,7 @@ export interface TimelineEvent {
   type:
     | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
     | "life_admin" | "review" | "focus" | "project" | "contract" | "campaign" | "codex" | "achievement" | "reward" | "level_up"
-    | "inventory" | "protocol" | "recovery" | "season" | "grimoire" | "guild" | "war_council";
+    | "inventory" | "protocol" | "recovery" | "season" | "grimoire" | "guild" | "war_council" | "bank";
   icon: string;
   id: string;
   label: string;
@@ -1000,7 +1000,7 @@ export interface Achievement {
   reward?: { xp: number; coins: number };
 }
 
-export type AchievementCategory = "missoes" | "habitos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
+export type AchievementCategory = "missoes" | "habitos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "banco" | "outros";
 
 /** Um troféu que o próprio usuário cadastrou (estilo PlayStation/Xbox) — desbloqueia sozinho ao atingir a métrica. */
 export interface CustomAchievement {
@@ -1022,7 +1022,7 @@ export interface CustomAchievementMetricOption {
 
 /* -------------------------- Notificações / Gatilhos -------------------------- */
 
-export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight" | "journal_reminder";
+export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight" | "journal_reminder" | "bank_deposit_matured" | "bank_loan_overdue";
 
 export type NotificationAlertLevel = "soft" | "medium" | "critical";
 

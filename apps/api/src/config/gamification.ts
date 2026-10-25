@@ -138,6 +138,17 @@ export const GAMIFICATION_RULES = {
     coins: 2,
   },
   /**
+   * Banco: XP de integração com o Códex/Timeline. As moedas do Banco já
+   * se movem de forma atômica dentro de bankService.ts (depósito, resgate,
+   * empréstimo, quitação) — aqui só nasce XP, nunca moeda, pra não contar
+   * a mesma moeda duas vezes no extrato.
+   */
+  bank: {
+    depositClaimed: { xp: 8 },
+    loanRepaidOnTime: { xp: 15 },
+    loanRepaidLate: { xp: 5 },
+  },
+  /**
    * Curva de nível progressiva: para sair do nível N para o N+1 são
    * necessários base + step * (N - 1) XP. Nível 1 começa em 0 XP.
    */

@@ -42,6 +42,7 @@ export const attributeMappings = {
   PROJECT: { discipline: 0.5, focus: 0.5 },
   CAMPAIGN: { discipline: 0.5, focus: 0.3, knowledge: 0.2 },
   CONTRACT: { discipline: 0.6, focus: 0.4 },
+  BANK: { discipline: 1 },
   ACHIEVEMENT: {
     missoes: { discipline: 0.6, focus: 0.4 },
     habitos: { discipline: 1 },

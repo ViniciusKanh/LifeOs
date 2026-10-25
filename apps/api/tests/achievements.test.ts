@@ -136,4 +136,58 @@ describe("Conquistas (gamificação real)", () => {
     const check = await agent.post("/api/achievements/check");
     expect(check.body.newlyUnlocked.some((achievement: { id: string }) => achievement.id === created.body.id)).toBe(false);
   });
+
+  it("conquistas do Banco: resgate de investimento, quitação em dia e pico do score de crédito (via snapshot)", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const { getDb } = await import("../src/db/client.js");
+    const { nanoid } = await import("nanoid");
+
+    async function giveCoins(amount: number) {
+      await getDb().execute({
+        sql: "INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label) VALUES (?, ?, ?, 'teste', ?, 'credito', 'teste')",
+        args: [nanoid(), userId, amount, nanoid()],
+      });
+    }
+
+    await giveCoins(10_000);
+    // 3 resgates de investimento (threshold do bronze = 3).
+    for (let i = 0; i < 3; i++) {
+      const dep = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 10 });
+      await getDb().execute({ sql: "UPDATE bank_deposits SET matures_at = datetime('now', '-1 minute') WHERE id = ?", args: [dep.body.deposit.id] });
+      await agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
+    }
+    // 3 empréstimos quitados em dia (threshold do bronze = 3).
+    for (let i = 0; i < 3; i++) {
+      const loan = await agent.post("/api/bank/loans").send({ amount: 10 });
+      await agent.post(`/api/bank/loans/${loan.body.loan.id}/repay`);
+    }
+    // Abrir o Banco grava o snapshot diário do score (nunca armazenado em outro lugar).
+    const summary = await agent.get("/api/bank");
+    expect(summary.body.credit.score).toBeGreaterThanOrEqual(650);
+
+    const check = await agent.post("/api/achievements/check");
+    const unlockedCodes = check.body.newlyUnlocked.map((a: { code: string }) => a.code);
+    expect(unlockedCodes).toContain("bank_deposits_3");
+    expect(unlockedCodes).toContain("bank_loans_3");
+    expect(unlockedCodes).toContain("bank_score_650");
+
+    const list = await agent.get("/api/achievements");
+    const depositsAch = list.body.find((a: { code: string }) => a.code === "bank_deposits_3");
+    expect(depositsAch.category).toBe("banco");
+    expect(depositsAch.unlockedAt).not.toBeNull();
+
+    const scoreHistory = await getDb().execute({
+      sql: "SELECT COUNT(*) AS n FROM bank_credit_score_history WHERE owner_id = ?",
+      args: [userId],
+    });
+    expect(Number(scoreHistory.rows[0]!.n)).toBe(1);
+
+    // Reabrir no mesmo dia não duplica a linha do snapshot (upsert por dia).
+    await agent.get("/api/bank");
+    const scoreHistoryAfter = await getDb().execute({
+      sql: "SELECT COUNT(*) AS n FROM bank_credit_score_history WHERE owner_id = ?",
+      args: [userId],
+    });
+    expect(Number(scoreHistoryAfter.rows[0]!.n)).toBe(1);
+  });
 });

@@ -2,7 +2,7 @@ import { getDb } from "../db/client.js";
 import { runLifeAdminRemindersForAll } from "../services/lifeAdminService.js";
 import { Router } from "express";
 import { mondayOf, sendWeeklySummariesToAllOptedIn } from "../services/weeklyEmailService.js";
-import { runTaskDeadlineTriggersForAll, runJournalReminderTriggersForAll } from "../services/notificationTriggersService.js";
+import { runTaskDeadlineTriggersForAll, runJournalReminderTriggersForAll, runBankTriggersForAll } from "../services/notificationTriggersService.js";
 
 /**
  * Endpoints de cron — chamados por um agendador externo (Vercel Cron,
@@ -47,7 +47,9 @@ cronRouter.get("/notification-triggers", async (req, res) => {
   const result = await runTaskDeadlineTriggersForAll();
   // Administração da vida: lembretes de vencimento (antes / hoje / atrasado), no mesmo cron diário.
   const lifeAdmin = await runLifeAdminRemindersForAll(getDb());
-  return res.json({ ...result, lifeAdmin });
+  // Banco: investimento maturado e empréstimo vencido, no mesmo cron diário.
+  const bank = await runBankTriggersForAll();
+  return res.json({ ...result, lifeAdmin, bank });
 });
 
 /**

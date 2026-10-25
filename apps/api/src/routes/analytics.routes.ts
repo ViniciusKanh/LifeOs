@@ -362,6 +362,19 @@ analyticsRouter.get("/timeline", async (req, res) => {
     }),
     db.execute({ sql: "SELECT day_key, created_at AS at FROM recovery_days WHERE owner_id = ? AND day_key >= ? AND day_key <= ?", args: [ownerId, qFrom, qTo] }),
   ]);
+  // Banco: resgate de investimento e quitação de empréstimo (sem gerar evento no pedido/depósito em si — só no desfecho).
+  const [bankDepositsClaimed, bankLoansRepaid] = await Promise.all([
+    db.execute({
+      sql: `SELECT id, plan_label AS label, amount, net_payout, actual_payout, early_withdrawn, tax_bps, claimed_at AS at FROM bank_deposits
+            WHERE owner_id = ? AND status = 'claimed' AND claimed_at >= date(?) AND claimed_at < date(?, '+1 day')`,
+      args: [ownerId, qFrom, qTo],
+    }),
+    db.execute({
+      sql: `SELECT id, amount, total_due, repaid_amount, due_at, repaid_at AS at FROM bank_loans
+            WHERE owner_id = ? AND status = 'repaid' AND repaid_at >= date(?) AND repaid_at < date(?, '+1 day')`,
+      args: [ownerId, qFrom, qTo],
+    }),
+  ]);
   // Inventário: aquisições de itens próprios, usos, cosméticos equipados e conjuntos completos.
   // Relíquias/títulos (Códex) e cupons (Tesouro) já aparecem pela fonte original.
   const inventoryTx = await db.execute({
@@ -468,6 +481,26 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...asRows(recoveryDays.rows).map((r) => ({ type: "recovery", icon: "🌙", id: `recovery-${String(r.day_key)}`, label: "Modo recuperação ativado", at: r.at })),
     ...asRows(grimoireDays.rows).map((r) => ({ type: "grimoire", icon: "📖", id: `grimoire-${String(r.source_id)}`, label: String(r.label), xp: Number(r.xp), at: r.at })),
     ...asRows(contractsDone.rows).map((r) => ({ type: "contract", icon: "📜", ...r, label: `Contrato cumprido: ${String(r.label)}` })),
+    ...asRows(bankDepositsClaimed.rows).map((r) => {
+      const early = Number(r.early_withdrawn ?? 0) === 1;
+      const received = r.actual_payout == null ? Number(r.net_payout) : Number(r.actual_payout);
+      return {
+        type: "bank",
+        icon: "🏦",
+        id: `bank-deposit-${String(r.id)}`,
+        label: early
+          ? `Resgate antecipado no Banco: ${String(r.label)} (sem rendimento, +${received} moedas)`
+          : `Resgate no Banco: ${String(r.label)} (+${received} moedas)`,
+        at: r.at,
+      };
+    }),
+    ...asRows(bankLoansRepaid.rows).map((r) => ({
+      type: "bank",
+      icon: "🏦",
+      id: `bank-loan-${String(r.id)}`,
+      label: `Empréstimo quitado${String(r.at) > String(r.due_at) ? " com atraso" : ""}: ${Number(r.repaid_amount)} moedas`,
+      at: r.at,
+    })),
     ...levelUps
       .filter((l) => l.dayKey >= from && l.dayKey <= to)
       .map((l) => ({ type: "level_up", icon: "👑", id: `level-${l.level}`, label: `Nível ${l.level}`, level: l.level, at: l.reachedAt })),
@@ -491,6 +524,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       : e.type === "life_admin" ? `life_admin:${e.item_id}:${e.due_date}`
       : e.type === "achievement" && e.achievement_id ? `achievement:${e.achievement_id}`
       : e.type === "contract" ? `contract:${e.id}`
+      : e.type === "bank" ? `bank:${String(e.id).replace(/^bank-(deposit|loan)-/, "")}`
       : e.type === "campaign" && e.kind === "milestone" ? `campaign:${e.campaign_id}:${e.ref_id}`
       : e.type === "campaign" && e.kind === "completed" ? `campaign:${e.campaign_id}`
       : null;

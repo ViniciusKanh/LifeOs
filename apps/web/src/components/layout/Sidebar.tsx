@@ -67,11 +67,14 @@ export function NavGroups({
   compact,
   onNavigate,
   layoutPrefix,
+  badges,
 }: {
   groups: NavGroup[];
   compact: boolean;
   onNavigate?: () => void;
   layoutPrefix: string;
+  /** Indicador de pendência por rota (ex.: "/banco" → 2 investimentos prontos) — sempre dado real, nunca decorativo. */
+  badges?: Record<string, number>;
 }) {
   const location = useLocation();
   const currentNav = findNavItem(location.pathname);
@@ -143,6 +146,8 @@ export function NavGroups({
                 >
                   {group.items.map(({ to, label: baseLabel, rpgLabel, icon: Icon }) => {
                     const label = navLabel({ label: baseLabel, rpgLabel }, isRpg);
+                    const badge = badges?.[to];
+                    const badgeText = badge ? `${badge} pendência${badge > 1 ? "s" : ""}` : null;
                     return (
                     <li key={to} className="relative">
                       <NavLink
@@ -155,7 +160,7 @@ export function NavGroups({
                         onMouseLeave={hideTooltip}
                         onFocus={(e) => showTooltip(label, e.currentTarget)}
                         onBlur={hideTooltip}
-                        aria-label={compact ? label : undefined}
+                        aria-label={badgeText ? `${label} — ${badgeText}` : compact ? label : undefined}
                         className={({ isActive: routeActive }) => {
                           const isActive = routeActive || activeTo === to;
                           return `relative flex items-center gap-3 rounded-xl text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${
@@ -180,8 +185,24 @@ export function NavGroups({
                                 className="absolute -left-3 lg:-left-4 top-2 bottom-2 w-[3px] rounded-r-full bg-gradient-to-b from-brand-500 to-signal rpg:from-rpg-gold-light rpg:to-rpg-gold"
                               />
                             )}
-                            <Icon size={17} className="relative shrink-0" />
+                            <span className="relative shrink-0">
+                              <Icon size={17} />
+                              {badge ? (
+                                <span
+                                  className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-drop ring-2 ring-paper-raised dark:ring-ink-raised rpg:bg-rpg-red rpg:ring-rpg-bg-2"
+                                  aria-hidden
+                                />
+                              ) : null}
+                            </span>
                             {!compact && <span className="relative truncate">{label}</span>}
+                            {!compact && badge ? (
+                              <span
+                                className="relative ml-auto shrink-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-drop px-1.5 text-[11px] font-semibold text-white rpg:bg-rpg-red rpg:font-pixel rpg:text-[10px]"
+                                aria-hidden
+                              >
+                                {badge > 9 ? "9+" : badge}
+                              </span>
+                            ) : null}
                           </>
                           );
                         }}
@@ -215,7 +236,7 @@ export function NavGroups({
   );
 }
 
-export function Sidebar({ groups, collapsed, canToggle, onToggle }: { groups: NavGroup[]; collapsed: boolean; canToggle: boolean; onToggle: () => void }) {
+export function Sidebar({ groups, collapsed, canToggle, onToggle, badges }: { groups: NavGroup[]; collapsed: boolean; canToggle: boolean; onToggle: () => void; badges?: Record<string, number> }) {
   const { mode, cycle, isRpg } = useTheme();
 
   return (
@@ -248,7 +269,7 @@ export function Sidebar({ groups, collapsed, canToggle, onToggle }: { groups: Na
       <div className="hidden rpg:block rpg-ornament-line mx-3 shrink-0" aria-hidden />
 
       <nav className={`relative flex-1 overflow-y-auto overflow-x-visible pb-4 ${collapsed ? "px-2" : "px-3 lg:px-4"} [scrollbar-width:thin]`}>
-        <NavGroups groups={groups} compact={collapsed} layoutPrefix="sidebar" />
+        <NavGroups groups={groups} compact={collapsed} layoutPrefix="sidebar" badges={badges} />
       </nav>
 
       <div className={`relative shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 flex ${collapsed ? "flex-col items-center gap-1" : "items-center gap-1"}`}>

@@ -61,6 +61,24 @@ export const NOTIFICATION_TRIGGER_DEFS = {
     defaultAlertLevel: "soft",
     link: "/diario",
   },
+  bank_deposit_matured: {
+    label: "Investimento pronto para resgate",
+    description: "Quando um investimento do Banco vencer e estiver pronto para ser resgatado.",
+    defaultEmail: false,
+    defaultPush: true,
+    defaultInApp: true,
+    defaultAlertLevel: "medium",
+    link: "/banco",
+  },
+  bank_loan_overdue: {
+    label: "Empréstimo vencido",
+    description: "Quando um empréstimo do Banco passar do prazo sem ser quitado.",
+    defaultEmail: true,
+    defaultPush: true,
+    defaultInApp: true,
+    defaultAlertLevel: "critical",
+    link: "/banco",
+  },
 } as const;
 
 export type NotificationTriggerEvent = keyof typeof NOTIFICATION_TRIGGER_DEFS;
@@ -450,6 +468,77 @@ export async function runTaskDeadlineTriggersForAll(date = new Date().toISOStrin
   for (const row of owners.rows as unknown as Array<{ owner_id: string }>) {
     checked += 1;
     const result = await runTaskDeadlineTriggers(row.owner_id, date);
+    fired += result.results.reduce((sum, item) => sum + item.count, 0);
+  }
+  return { date, checked, fired };
+}
+
+/**
+ * Banco: investimento maturado pronto pra resgate e empréstimo vencido sem
+ * quitação — mesma lógica de "tarefa vencida" (agrupa tudo num único aviso
+ * por dia, dedupe via markDelivered). Usuário só pode ter um empréstimo
+ * ativo por vez (bankService.ts), então o aviso de atraso é sempre único.
+ */
+export async function runBankTriggers(ownerId: string, date = new Date().toISOString().slice(0, 10)) {
+  const db = getDb();
+  await ensureNotificationTriggers(ownerId, db);
+  const [matured, overdueLoan] = await Promise.all([
+    db.execute({
+      sql: `SELECT id, plan_label FROM bank_deposits
+            WHERE owner_id = ? AND status = 'active' AND matures_at <= datetime('now')
+            ORDER BY matures_at ASC LIMIT 10`,
+      args: [ownerId],
+    }),
+    db.execute({
+      sql: `SELECT id, amount, total_due FROM bank_loans
+            WHERE owner_id = ? AND status = 'active' AND due_at < datetime('now')
+            LIMIT 1`,
+      args: [ownerId],
+    }),
+  ]);
+
+  const results: Array<{ eventType: NotificationTriggerEvent; count: number; emailSent: boolean; pushSent: number }> = [];
+  const maturedRows = matured.rows as unknown as Array<{ id: string; plan_label: string }>;
+  const overdueRows = overdueLoan.rows as unknown as Array<{ id: string; amount: number; total_due: number }>;
+
+  if (maturedRows.length > 0) {
+    const labels = maturedRows.slice(0, 4).map((d) => d.plan_label).join(", ");
+    const delivered = await dispatchTriggerNotification(ownerId, "bank_deposit_matured", {
+      title: maturedRows.length === 1 ? "Investimento pronto para resgate" : `${maturedRows.length} investimentos prontos para resgate`,
+      body: labels,
+      url: "/banco",
+      sourceId: `bank_deposit_matured_${date}`,
+      ctaLabel: "Resgatar no Banco",
+    });
+    results.push({ eventType: "bank_deposit_matured", count: maturedRows.length, emailSent: delivered.emailSent, pushSent: delivered.pushSent });
+  }
+
+  if (overdueRows.length > 0) {
+    const loan = overdueRows[0];
+    const delivered = await dispatchTriggerNotification(ownerId, "bank_loan_overdue", {
+      title: "Empréstimo vencido",
+      body: `Você tem um empréstimo de ${loan.amount} moedas vencido (total devido: ${loan.total_due} + multa por atraso).`,
+      url: "/banco",
+      sourceId: `bank_loan_overdue_${date}`,
+      ctaLabel: "Quitar no Banco",
+    });
+    results.push({ eventType: "bank_loan_overdue", count: 1, emailSent: delivered.emailSent, pushSent: delivered.pushSent });
+  }
+
+  return { date, results };
+}
+
+export async function runBankTriggersForAll(date = new Date().toISOString().slice(0, 10)) {
+  const db = getDb();
+  const owners = await db.execute({
+    sql: "SELECT id AS owner_id FROM users",
+    args: [],
+  });
+  let checked = 0;
+  let fired = 0;
+  for (const row of owners.rows as unknown as Array<{ owner_id: string }>) {
+    checked += 1;
+    const result = await runBankTriggers(row.owner_id, date);
     fired += result.results.reduce((sum, item) => sum + item.count, 0);
   }
   return { date, checked, fired };

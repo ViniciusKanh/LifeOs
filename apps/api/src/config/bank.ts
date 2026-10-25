@@ -25,6 +25,13 @@ export interface BankPlan {
    * alíquota — recompensa quem deixa o investimento render por mais tempo.
    */
   taxBps: number;
+  /**
+   * true (padrão) nos planos de prazo fixo: resgatar antes do prazo perde o
+   * bônus INTEIRO (bankService.claimDepositEarly). false só no Cofre Livre:
+   * resgate a qualquer momento paga o bônus PRORATADO pelo tempo decorrido,
+   * nunca zero -- é o próprio produto (sem prazo fixo, sem penalidade).
+   */
+  earlyWithdrawalPenalty: boolean;
 }
 
 export const BANK_PLANS: BankPlan[] = [
@@ -38,6 +45,7 @@ export const BANK_PLANS: BankPlan[] = [
     maxAmount: 2000,
     maxActive: 5,
     taxBps: 2250, // 22,5% sobre o ganho — prazo curto, imposto maior.
+    earlyWithdrawalPenalty: true,
   },
   {
     id: "rota-mercador",
@@ -49,6 +57,7 @@ export const BANK_PLANS: BankPlan[] = [
     maxAmount: 5000,
     maxActive: 3,
     taxBps: 2000, // 20% sobre o ganho.
+    earlyWithdrawalPenalty: true,
   },
   {
     id: "fundo-dragao",
@@ -60,6 +69,19 @@ export const BANK_PLANS: BankPlan[] = [
     maxAmount: 20000,
     maxActive: 2,
     taxBps: 1500, // 15% sobre o ganho — prazo mais longo, imposto menor.
+    earlyWithdrawalPenalty: true,
+  },
+  {
+    id: "cofre-livre",
+    label: "Cofre Livre",
+    flavor: "Moedas sempre à mão: rendimento menor, mas pode sacar quando quiser — o valor já rendido até ali nunca se perde.",
+    rateBps: 300, // +3% no prazo de referência (7 dias) — menor que os planos de prazo fixo.
+    termDays: 7,
+    minAmount: 10,
+    maxAmount: 3000,
+    maxActive: 5,
+    taxBps: 2250, // mesma alíquota do plano mais curto — é o mais líquido de todos.
+    earlyWithdrawalPenalty: false,
   },
 ];
 

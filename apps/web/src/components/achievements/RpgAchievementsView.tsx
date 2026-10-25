@@ -10,12 +10,15 @@ import {
   Flame,
   FlaskConical,
   GraduationCap,
+  HandCoins,
   Hourglass,
   Library,
   ListChecks,
   Lock,
+  PiggyBank,
   Rocket,
   Search,
+  ShieldCheck,
   Sparkles,
   Star,
   Target,
@@ -27,7 +30,7 @@ import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGProgressBar, RPGTabs, 
 import { TIER_LABEL, TIER_ORDER, TIER_RPG_TONE } from "./tierDisplay";
 import type { Achievement, AchievementCategory, AchievementTier } from "@/types";
 
-const ICONS: Record<string, typeof Trophy> = { ListChecks, Rocket, Flame, BookOpen, Library, Timer, ClipboardList, Target, Dumbbell, Droplets, GraduationCap, FlaskConical, Trophy };
+const ICONS: Record<string, typeof Trophy> = { ListChecks, Rocket, Flame, BookOpen, Library, Timer, ClipboardList, Target, Dumbbell, Droplets, GraduationCap, FlaskConical, Trophy, PiggyBank, HandCoins, ShieldCheck };
 
 const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   missoes: "Missões",
@@ -39,6 +42,7 @@ const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   metas: "Metas",
   educacao: "Educação",
   experimentos: "Experimentos",
+  banco: "Banco",
   outros: "Outros",
 };
 

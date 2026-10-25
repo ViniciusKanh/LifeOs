@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   AlertTriangle,
   Calculator,
@@ -6,19 +7,21 @@ import {
   CreditCard,
   HandCoins,
   Landmark,
+  LineChart as LineChartIcon,
   Percent,
   PiggyBank,
   Receipt,
+  Repeat,
   ShieldCheck,
   Sparkles,
   TrendingDown,
   TrendingUp,
   Vault,
 } from "lucide-react";
-import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPGTabs, RPGToast, RPGWallet, type RpgTone } from "@/components/rpg";
-import { useBank, useBankLedger } from "@/hooks/useBank";
+import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPGSwitch, RPGTabs, RPGToast, RPGWallet, type RpgTone } from "@/components/rpg";
+import { useBank, useBankHistory, useBankLedger, useBankStatement } from "@/hooks/useBank";
 import { formatWhen } from "@/utils/treasureDisplay";
-import type { BankDeposit, BankLoan, BankPlan, CreditInfo, LedgerEntry } from "@/services/bankService";
+import type { AutoInvestRule, BankDeposit, BankLoan, BankPlan, BankStatementMonth, CreditInfo, LedgerEntry, LoanTier } from "@/services/bankService";
 
 /**
  * Banco: tela única e dedicada para administrar as moedas ganhas em
@@ -89,7 +92,7 @@ function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: b
       <p className="text-xs text-rpg-muted mb-3">{plan.flavor}</p>
       <div className="flex flex-wrap items-center gap-1.5 mb-3">
         <RPGBadge tone="gold">+{formatPct(plan.rateBps)}% bruto</RPGBadge>
-        <RPGBadge tone="blue">{plan.termDays} dia{plan.termDays > 1 ? "s" : ""}</RPGBadge>
+        <RPGBadge tone="blue">{plan.earlyWithdrawalPenalty === false ? "Saque quando quiser" : `${plan.termDays} dia${plan.termDays > 1 ? "s" : ""}`}</RPGBadge>
         <RPGBadge tone="red">IR {formatPct(plan.taxBps)}%</RPGBadge>
         <RPGBadge tone="muted">{formatCoins(plan.minAmount)}–{formatCoins(plan.maxAmount)} moedas</RPGBadge>
       </div>
@@ -140,11 +143,34 @@ function DepositForm({ plan, disabled, onInvest }: { plan: BankPlan; disabled: b
   );
 }
 
-function DepositRow({ deposit, onClaim, claiming }: { deposit: BankDeposit; onClaim?: () => void; claiming?: boolean }) {
+function DepositRow({
+  deposit,
+  onClaim,
+  claiming,
+  onClaimEarly,
+  claimingEarly,
+  noPenalty,
+}: {
+  deposit: BankDeposit;
+  onClaim?: () => void;
+  claiming?: boolean;
+  /** Só passado para investimentos ainda não vencidos (resgate antecipado quebra o prazo, exceto no Cofre Livre). */
+  onClaimEarly?: () => void;
+  claimingEarly?: boolean;
+  /** true só no Cofre Livre (plan.earlyWithdrawalPenalty === false): resgate antecipado paga bônus proporcional ao tempo, nunca zero. */
+  noPenalty?: boolean;
+}) {
   const totalMs = new Date(deposit.maturesAt).getTime() - new Date(deposit.createdAt).getTime();
   const elapsedMs = Date.now() - new Date(deposit.createdAt).getTime();
-  const pct = totalMs > 0 ? Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100)) : 100;
+  const fraction = totalMs > 0 ? Math.min(1, Math.max(0, elapsedMs / totalMs)) : 1;
+  const pct = fraction * 100;
   const tax = deposit.payout - deposit.netPayout;
+  // Estimativa do resgate antecipado no Cofre Livre -- mesma fórmula do backend
+  // (bankService.claimDepositEarly): só pra mostrar um número antes de confirmar,
+  // o valor real sempre vem do servidor no momento do resgate.
+  const proratedGain = Math.floor(projectGain(deposit.amount, deposit.rateBps) * fraction);
+  const proratedTax = Math.floor((proratedGain * deposit.taxBps) / 10_000);
+  const proratedEstimate = deposit.amount + proratedGain - proratedTax;
 
   return (
     <div className="rpg-panel p-3">
@@ -164,7 +190,25 @@ function DepositRow({ deposit, onClaim, claiming }: { deposit: BankDeposit; onCl
           {claiming ? "Resgatando…" : `Resgatar +${formatCoins(deposit.netPayout)} moedas`}
         </RPGButton>
       ) : (
-        <RPGProgressBar tone="purple" label={`${daysLeft(deposit.maturesAt)} dia(s) restante(s)`} value={pct} valueLabel={`${Math.round(pct)}%`} />
+        <>
+          <RPGProgressBar
+            tone="purple"
+            label={noPenalty ? `${daysLeft(deposit.maturesAt)} dia(s) até o prazo de referência` : `${daysLeft(deposit.maturesAt)} dia(s) restante(s)`}
+            value={pct}
+            valueLabel={`${Math.round(pct)}%`}
+          />
+          {onClaimEarly && (
+            noPenalty ? (
+              <RPGButton type="button" variant="ghost" className="w-full mt-2 text-rpg-gold-light" disabled={claimingEarly} onClick={onClaimEarly}>
+                {claimingEarly ? "Resgatando…" : `Resgatar agora (~${formatCoins(proratedEstimate)}, proporcional)`}
+              </RPGButton>
+            ) : (
+              <RPGButton type="button" variant="ghost" className="w-full mt-2 text-rpg-red" disabled={claimingEarly} onClick={onClaimEarly}>
+                {claimingEarly ? "Resgatando…" : `Resgatar antecipado (só ${formatCoins(deposit.amount)}, sem bônus)`}
+              </RPGButton>
+            )
+          )}
+        </>
       )}
     </div>
   );
@@ -193,6 +237,56 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
   );
 }
 
+function monthLabel(ym: string) {
+  const [y, m] = ym.split("-");
+  const date = new Date(Number(y), Number(m) - 1, 1);
+  return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+}
+
+function StatementRow({ row }: { row: BankStatementMonth }) {
+  const total = row.earned - row.taxPaid - row.interestPaid - row.lateFeePaid;
+  return (
+    <li className="rpg-panel p-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="font-rpg font-semibold text-sm text-rpg-text capitalize">{monthLabel(row.month)}</p>
+        <span className={`font-pixel text-sm font-semibold ${total >= 0 ? "text-rpg-green" : "text-rpg-red"}`}>
+          {total >= 0 ? "+" : ""}
+          {formatCoins(total)}
+        </span>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <div className="flex justify-between"><dt className="text-rpg-muted">Rendimento (investimentos)</dt><dd className="text-rpg-green">+{formatCoins(row.earned)}</dd></div>
+        <div className="flex justify-between"><dt className="text-rpg-muted">Imposto sobre ganho</dt><dd className="text-rpg-red">−{formatCoins(row.taxPaid)}</dd></div>
+        <div className="flex justify-between"><dt className="text-rpg-muted">Juros pagos (empréstimos)</dt><dd className="text-rpg-red">−{formatCoins(row.interestPaid)}</dd></div>
+        <div className="flex justify-between"><dt className="text-rpg-muted">Multa por atraso</dt><dd className="text-rpg-red">−{formatCoins(row.lateFeePaid)}</dd></div>
+      </dl>
+    </li>
+  );
+}
+
+function StatementSection() {
+  const { months, isLoading } = useBankStatement(12);
+
+  if (isLoading) return null;
+  if (months.length === 0) {
+    return (
+      <RPGPanel title="Extrato de rendimentos" icon={<Receipt size={16} />} className="mb-5">
+        <p className="text-sm text-rpg-muted">Nenhum rendimento ou juro registrado ainda neste período. Resgate um investimento no prazo ou quite um empréstimo para começar.</p>
+      </RPGPanel>
+    );
+  }
+  return (
+    <RPGPanel title="Extrato de rendimentos (mensal)" icon={<Receipt size={16} />} className="mb-5">
+      <p className="text-xs text-rpg-muted mb-3">Quanto o Banco rendeu e custou por mês — resgate antecipado nunca conta ganho nem imposto aqui.</p>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+        {[...months].reverse().map((row) => (
+          <StatementRow key={row.month} row={row} />
+        ))}
+      </ul>
+    </RPGPanel>
+  );
+}
+
 function ExtratoView() {
   const { entries, isLoading, hasMore, loadMore, isFetching } = useBankLedger();
 
@@ -213,6 +307,41 @@ function ExtratoView() {
           <RPGButton type="button" variant="ghost" disabled={isFetching} onClick={loadMore}>
             {isFetching ? "Carregando…" : "Carregar mais"}
           </RPGButton>
+        </div>
+      )}
+    </RPGPanel>
+  );
+}
+
+function EvolucaoCard() {
+  const { points, isLoading } = useBankHistory(60);
+  const hasScore = points.some((p) => p.score != null);
+  const chartData = points.map((p) => ({ date: p.date.slice(5), saldo: p.balance, score: p.score }));
+
+  return (
+    <RPGPanel title="Evolução do Banco" icon={<LineChartIcon size={16} />} className="mb-5">
+      <p className="text-xs text-rpg-muted mb-3">
+        Saldo de moedas nos últimos 60 dias{hasScore ? " e score de crédito (só nos dias em que você abriu o Banco)" : ""} — sempre dado real, nunca projetado.
+      </p>
+      {isLoading ? (
+        <div className="h-48 rounded animate-pulse bg-rpg-bg-2" />
+      ) : points.length === 0 ? (
+        <p className="text-sm text-rpg-muted">Sem histórico ainda. Invista ou abra o Banco para começar a registrar.</p>
+      ) : (
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 5, right: hasScore ? 10 : 20, bottom: 0, left: -10 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+              <YAxis yAxisId="saldo" tick={{ fontSize: 10 }} width={40} />
+              {hasScore && <YAxis yAxisId="score" orientation="right" domain={[300, 850]} tick={{ fontSize: 10 }} width={34} />}
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(value: number, name: string) => [formatCoins(value), name]} />
+              <Line yAxisId="saldo" type="monotone" dataKey="saldo" name="Saldo" stroke="rgb(var(--rpg-gold-light))" strokeWidth={2} dot={false} connectNulls />
+              {hasScore && (
+                <Line yAxisId="score" type="monotone" dataKey="score" name="Score de crédito" stroke="rgb(var(--rpg-purple))" strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
     </RPGPanel>
@@ -270,6 +399,63 @@ function SimuladorView({ plans }: { plans: BankPlan[] }) {
   );
 }
 
+function LoanSimuladorView({ credit }: { credit: CreditInfo }) {
+  const [amount, setAmount] = useState("200");
+  const parsed = Number(amount);
+  const valid = Number.isInteger(parsed) && parsed > 0;
+  // Ignora o nível "Sem crédito liberado" (score 0): não é um nível de crédito de verdade pra simular.
+  const tiers: LoanTier[] = credit.tiers.filter((t) => t.maxAmount > 0);
+
+  return (
+    <RPGPanel title="Simulador de empréstimo" icon={<Calculator size={16} />} className="mb-5">
+      <p className="text-xs text-rpg-muted mb-3">
+        Veja quanto você pagaria em cada nível de crédito pela mesma quantia — útil pra planejar até onde vale subir o score antes de pedir.
+      </p>
+      <div className="flex items-center gap-2 mb-3 max-w-xs">
+        <label className="sr-only" htmlFor="loan-sim-amount">Quantia para simular o empréstimo</label>
+        <input
+          id="loan-sim-amount"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full border-2 border-rpg-border bg-rpg-bg px-2.5 py-2 text-sm text-rpg-text outline-none focus:border-rpg-gold"
+          style={{ borderRadius: 2 }}
+        />
+        <span className="text-xs text-rpg-muted shrink-0">moedas</span>
+      </div>
+      {valid ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {tiers.map((tier) => {
+            const current = tier.label === credit.tier.label;
+            const inRange = parsed <= tier.maxAmount;
+            const total = projectLoanTotal(parsed, tier.rateBps);
+            return (
+              <div key={tier.label} className="rpg-panel p-3">
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <p className="font-rpg font-semibold text-sm text-rpg-text truncate">{tier.label}</p>
+                  {current && <RPGBadge tone="gold">Seu nível</RPGBadge>}
+                </div>
+                {inRange ? (
+                  <dl className="text-[11px] space-y-0.5">
+                    <div className="flex justify-between"><dt className="text-rpg-muted">Juros ({formatPct(tier.rateBps)}%)</dt><dd className="text-rpg-red">+{formatCoins(total - parsed)}</dd></div>
+                    <div className="flex justify-between font-semibold"><dt className="text-rpg-gold-light">Total a pagar</dt><dd className="text-rpg-gold-light">{formatCoins(total)}</dd></div>
+                  </dl>
+                ) : (
+                  <p className="text-[11px] text-rpg-muted">Acima do limite deste nível ({formatCoins(tier.maxAmount)} moedas).</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-rpg-muted">Informe uma quantia maior que zero para simular.</p>
+      )}
+    </RPGPanel>
+  );
+}
+
 function CreditoView({
   credit,
   loan,
@@ -308,6 +494,8 @@ function CreditoView({
           Sobe quando você conclui investimentos e paga empréstimos em dia. Cai quando paga atrasado ou deixa um empréstimo vencer sem quitar.
         </p>
       </RPGPanel>
+
+      <LoanSimuladorView credit={credit} />
 
       {loan.active ? (
         <RPGPanel variant={loan.active.overdue ? "danger" : "quest"} title="Empréstimo ativo" icon={<HandCoins size={16} />} className="mb-5">
@@ -404,11 +592,92 @@ function CreditoView({
   );
 }
 
+function AutoInvestCard({
+  autoInvest,
+  plans,
+  onSave,
+  saving,
+}: {
+  autoInvest: AutoInvestRule;
+  plans: BankPlan[];
+  onSave: (input: AutoInvestRule) => void;
+  saving: boolean;
+}) {
+  const [enabled, setEnabled] = useState(autoInvest.enabled);
+  const [pct, setPct] = useState(String(autoInvest.pctBps / 100));
+  const [planId, setPlanId] = useState(autoInvest.planId);
+
+  const parsedPct = Number(pct);
+  const validPct = Number.isFinite(parsedPct) && parsedPct >= 1 && parsedPct <= 50;
+  const selectedPlan = plans.find((p) => p.id === planId) ?? plans[0];
+  const dirty = enabled !== autoInvest.enabled || Math.round(parsedPct * 100) !== autoInvest.pctBps || planId !== autoInvest.planId;
+
+  return (
+    <RPGPanel variant="quest" title="Investimento automático" icon={<Repeat size={16} />} className="mb-5">
+      <p className="text-xs text-rpg-muted mb-3">
+        Reserve uma fatia de toda moeda ganha em missões e contratos direto num plano, sem precisar investir manualmente. O Banco nunca reinveste moedas que vêm dele mesmo (resgate, empréstimo) — só o que você ganha jogando.
+      </p>
+      <div className="flex flex-wrap items-end gap-4 mb-2">
+        <div className="flex items-center gap-2">
+          <RPGSwitch checked={enabled} onChange={() => setEnabled((v) => !v)} label={enabled ? "Desativar investimento automático" : "Ativar investimento automático"} />
+          <span className="text-sm text-rpg-text">{enabled ? "Ativado" : "Desativado"}</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-rpg-muted" htmlFor="auto-invest-pct">Percentual investido</label>
+          <div className="flex items-center gap-1.5">
+            <input
+              id="auto-invest-pct"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={50}
+              value={pct}
+              onChange={(e) => setPct(e.target.value)}
+              className="w-20 border-2 border-rpg-border bg-rpg-bg px-2 py-1.5 text-sm text-rpg-text outline-none focus:border-rpg-gold"
+              style={{ borderRadius: 2 }}
+            />
+            <span className="text-xs text-rpg-muted">%</span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-rpg-muted" htmlFor="auto-invest-plan">Plano de destino</label>
+          <select
+            id="auto-invest-plan"
+            value={planId}
+            onChange={(e) => setPlanId(e.target.value)}
+            className="border-2 border-rpg-border bg-rpg-bg px-2 py-1.5 text-sm text-rpg-text outline-none focus:border-rpg-gold"
+            style={{ borderRadius: 2 }}
+          >
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+        <RPGButton
+          type="button"
+          variant="gold"
+          disabled={!validPct || !dirty || saving}
+          onClick={() => onSave({ enabled, pctBps: Math.round(parsedPct * 100), planId: selectedPlan?.id ?? planId })}
+        >
+          {saving ? "Salvando…" : "Salvar"}
+        </RPGButton>
+      </div>
+      {!validPct && <p className="text-[11px] text-rpg-red">Informe um percentual entre 1% e 50%.</p>}
+      {enabled && selectedPlan && (
+        <p className="text-[11px] text-rpg-muted">
+          Cada moeda ganha investe {pct || 0}% automaticamente no {selectedPlan.label} (mínimo {formatCoins(selectedPlan.minAmount)} moedas por depósito — ganhos menores que isso ficam só no saldo).
+        </p>
+      )}
+    </RPGPanel>
+  );
+}
+
 export function BancoPage() {
-  const { summary, isLoading, deposit, claim, requestLoan, repayLoan } = useBank();
+  const { summary, isLoading, deposit, claim, claimEarly, requestLoan, repayLoan, updateAutoInvest } = useBank();
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<"success" | "error">("success");
   const [pendingClaimId, setPendingClaimId] = useState<string | null>(null);
+  const [pendingEarlyId, setPendingEarlyId] = useState<string | null>(null);
   const [view, setView] = useState<"investir" | "credito" | "extrato">("investir");
 
   const handleInvest = (plan: BankPlan, amount: number) => {
@@ -439,6 +708,47 @@ export function BancoPage() {
         setToast(err instanceof Error ? err.message : "Não foi possível resgatar.");
       },
       onSettled: () => setPendingClaimId(null),
+    });
+  };
+
+  const planById = (planId: string): BankPlan | undefined => summary?.plans.find((p) => p.id === planId);
+
+  const handleClaimEarly = (d: BankDeposit) => {
+    const noPenalty = planById(d.planId)?.earlyWithdrawalPenalty === false;
+    const confirmMessage = noPenalty
+      ? `Resgatar "${d.planLabel}" agora? Você recebe o principal + o bônus já proporcional ao tempo decorrido (o valor exato é calculado pelo servidor no momento do resgate). Essa ação não pode ser desfeita.`
+      : `Resgatar "${d.planLabel}" agora, antes do prazo? Você recebe só o principal (${formatCoins(d.amount)} moedas) e perde todo o bônus (${formatCoins(d.netPayout - d.amount)} moedas que renderia esperando). Essa ação não pode ser desfeita.`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+    setPendingEarlyId(d.id);
+    claimEarly.mutate(d.id, {
+      onSuccess: (res) => {
+        setToastTone("success");
+        setToast(
+          noPenalty
+            ? `Resgate antecipado: +${formatCoins(res.payout)} moedas (proporcional ao tempo) do ${d.planLabel}.`
+            : `Resgate antecipado: +${formatCoins(res.payout)} moedas (sem bônus) do ${d.planLabel}.`,
+        );
+      },
+      onError: (err) => {
+        setToastTone("error");
+        setToast(err instanceof Error ? err.message : "Não foi possível resgatar antecipadamente.");
+      },
+      onSettled: () => setPendingEarlyId(null),
+    });
+  };
+
+  const handleSaveAutoInvest = (input: AutoInvestRule) => {
+    updateAutoInvest.mutate(input, {
+      onSuccess: () => {
+        setToastTone("success");
+        setToast(input.enabled ? "Investimento automático configurado." : "Investimento automático desativado.");
+      },
+      onError: (err) => {
+        setToastTone("error");
+        setToast(err instanceof Error ? err.message : "Não foi possível salvar a configuração.");
+      },
     });
   };
 
@@ -517,6 +827,8 @@ export function BancoPage() {
         />
       </div>
 
+      <EvolucaoCard />
+
       <div className="mb-5">
         <RPGTabs
           label="Seção do Banco"
@@ -533,6 +845,10 @@ export function BancoPage() {
       {view === "investir" && (
         <>
           <SimuladorView plans={summary?.plans ?? []} />
+
+          {summary && (
+            <AutoInvestCard autoInvest={summary.autoInvest} plans={summary.plans} onSave={handleSaveAutoInvest} saving={updateAutoInvest.isPending} />
+          )}
 
           {summary && summary.claimable.length > 0 && (
             <RPGPanel variant="success" title="Prontos para resgatar" icon={<Sparkles size={16} />} className="mb-5">
@@ -558,7 +874,13 @@ export function BancoPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
                 {summary.active.map((d) => (
-                  <DepositRow key={d.id} deposit={d} />
+                  <DepositRow
+                    key={d.id}
+                    deposit={d}
+                    onClaimEarly={() => handleClaimEarly(d)}
+                    claimingEarly={pendingEarlyId === d.id}
+                    noPenalty={planById(d.planId)?.earlyWithdrawalPenalty === false}
+                  />
                 ))}
               </div>
             )}
@@ -569,12 +891,23 @@ export function BancoPage() {
               <ul className="space-y-1.5">
                 {summary.history.slice(0, 10).map((d) => {
                   const tax = d.payout - d.netPayout;
+                  const received = d.actualPayout ?? d.netPayout;
+                  // Resgate antecipado no Cofre Livre ainda pode ter rendido algo (proporcional ao tempo) --
+                  // só os planos de prazo fixo sempre devolvem exatamente o principal (sem bônus nenhum).
+                  const earlyWithGain = d.earlyWithdrawn && received > d.amount;
                   return (
                     <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="truncate text-rpg-text">{d.planLabel}</span>
+                      <span className="flex items-center gap-1.5 truncate text-rpg-text">
+                        {d.planLabel}
+                        {d.earlyWithdrawn && <RPGBadge tone={earlyWithGain ? "gold" : "red"}>{earlyWithGain ? "Antecipado (proporcional)" : "Antecipado"}</RPGBadge>}
+                      </span>
                       <span className="font-pixel text-[11px] text-rpg-gold-light shrink-0">
-                        {formatCoins(d.amount)} → {formatCoins(d.netPayout)}
-                        {tax > 0 ? ` (IR −${formatCoins(tax)})` : ""}
+                        {formatCoins(d.amount)} → {formatCoins(received)}
+                        {d.earlyWithdrawn
+                          ? earlyWithGain
+                            ? d.actualTax ? ` (IR −${formatCoins(d.actualTax)})` : ""
+                            : " (sem bônus)"
+                          : tax > 0 ? ` (IR −${formatCoins(tax)})` : ""}
                         {d.claimedAt ? ` · ${new Date(d.claimedAt).toLocaleDateString("pt-BR")}` : ""}
                       </span>
                     </li>
@@ -597,7 +930,12 @@ export function BancoPage() {
         />
       )}
 
-      {view === "extrato" && <ExtratoView />}
+      {view === "extrato" && (
+        <>
+          <StatementSection />
+          <ExtratoView />
+        </>
+      )}
 
       <RPGToast message={toast} tone={toastTone} onClose={() => setToast(null)} />
     </div>

@@ -10,6 +10,8 @@ export interface BankPlan {
   maxAmount: number;
   maxActive: number;
   taxBps: number;
+  /** false só no Cofre Livre: resgate a qualquer momento paga bônus proporcional ao tempo, nunca zero. true (prazo fixo) perde o bônus inteiro ao sair antes do prazo. */
+  earlyWithdrawalPenalty: boolean;
 }
 
 export interface BankDeposit {
@@ -26,6 +28,12 @@ export interface BankDeposit {
   createdAt: string;
   maturesAt: string;
   claimedAt: string | null;
+  /** true quando o resgate quebrou o prazo fixo antes do vencimento (sem bônus nos planos de prazo fixo; proporcional no Cofre Livre). */
+  earlyWithdrawn: boolean;
+  /** O que foi de fato recebido no resgate — difere de netPayout quando foi antecipado. null enquanto ainda ativo. */
+  actualPayout: number | null;
+  /** Imposto de fato cobrado no resgate — difere de payout-netPayout quando foi antecipado/proporcional. null enquanto ainda ativo. */
+  actualTax: number | null;
 }
 
 export interface BankLoan {
@@ -43,6 +51,13 @@ export interface BankLoan {
   overdue: boolean;
 }
 
+export interface LoanTier {
+  minScore: number;
+  label: string;
+  maxAmount: number;
+  rateBps: number;
+}
+
 export interface CreditInfo {
   score: number;
   scoreMin: number;
@@ -50,6 +65,14 @@ export interface CreditInfo {
   tier: { label: string; maxAmount: number; rateBps: number };
   termDays: number;
   lateFeeBps: number;
+  /** Tabela completa de níveis de crédito -- alimenta o Simulador de empréstimo. */
+  tiers: LoanTier[];
+}
+
+export interface AutoInvestRule {
+  enabled: boolean;
+  pctBps: number;
+  planId: string;
 }
 
 export interface BankSummary {
@@ -61,6 +84,21 @@ export interface BankSummary {
   totals: { invested: number; earned: number; taxPaid: number; activeCount: number };
   credit: CreditInfo;
   loan: { active: BankLoan | null; history: BankLoan[] };
+  autoInvest: AutoInvestRule;
+}
+
+export interface BankHistoryPoint {
+  date: string;
+  score: number | null;
+  balance: number | null;
+}
+
+export interface BankStatementMonth {
+  month: string;
+  earned: number;
+  taxPaid: number;
+  interestPaid: number;
+  lateFeePaid: number;
 }
 
 export interface LedgerEntry {
@@ -98,7 +136,11 @@ export const bankService = {
   summary: () => api.get<BankSummary>("/bank"),
   deposit: (planId: string, amount: number) => api.post<DepositSuccess>("/bank/deposits", { planId, amount }),
   claim: (depositId: string) => api.post<ClaimSuccess>(`/bank/deposits/${depositId}/claim`),
+  claimEarly: (depositId: string) => api.post<ClaimSuccess>(`/bank/deposits/${depositId}/claim-early`),
   ledger: (limit = 40) => api.get<{ entries: LedgerEntry[] }>(`/bank/ledger?limit=${limit}`),
   requestLoan: (amount: number) => api.post<LoanSuccess>("/bank/loans", { amount }),
   repayLoan: (loanId: string) => api.post<RepaySuccess>(`/bank/loans/${loanId}/repay`),
+  history: (days = 60) => api.get<{ days: number; points: BankHistoryPoint[] }>(`/bank/history?days=${days}`),
+  statement: (months = 12) => api.get<{ months: BankStatementMonth[] }>(`/bank/statement?months=${months}`),
+  updateAutoInvest: (input: AutoInvestRule) => api.put<{ ok: true; autoInvest: AutoInvestRule }>("/bank/auto-invest", input),
 };

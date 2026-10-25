@@ -18,3 +18,12 @@ export const createLoanSchema = z.object({
 
 export type CreateLoanInput = z.infer<typeof createLoanSchema>;
 
+/** PUT /api/bank/auto-invest — regra opcional: investir X% de toda moeda ganha num plano escolhido. */
+export const autoInvestSchema = z.object({
+  enabled: z.boolean(),
+  // Limite de 50% de propósito: nunca deixar a regra comprometer toda a renda do jogador sem controle manual.
+  pctBps: z.number().int().min(100, "Mínimo de 1% das moedas ganhas.").max(5000, "Máximo de 50% das moedas ganhas."),
+  planId: z.string().trim().min(1, "Escolha um plano de investimento."),
+});
+
+export type AutoInvestInput = z.infer<typeof autoInvestSchema>;

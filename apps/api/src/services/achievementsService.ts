@@ -23,6 +23,9 @@ const METRIC_KEYS = [
   "water_days_total",
   "study_minutes_total",
   "experiments_completed_total",
+  "bank_deposits_claimed",
+  "bank_loans_repaid_on_time",
+  "bank_credit_score_peak",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -83,6 +86,19 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addLocalDay("water_days_total", "SELECT recorded_at AS at FROM water_entries WHERE owner_id = ?", "days");
   addScalar("study_minutes_total", "SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE owner_id = ?");
   addScalar("experiments_completed_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status = 'completed'");
+  // Banco: resgates e quitações em dia já existem em bank_deposits/bank_loans (nunca duplicados);
+  // o score de crédito é sempre derivado, então o "pico" vem do snapshot diário (bank_credit_score_history).
+  // Resgate no prazo (early_withdrawn = 0) sempre conta, mesmo quando o bônus arredondou pra
+  // zero num depósito pequeno -- não é penalidade, é só arredondamento. Resgate ANTECIPADO só
+  // conta quando houve ganho de verdade (Cofre Livre proporcional); um resgate antecipado sem
+  // nenhum rendimento (planos de prazo fixo, ou Cofre Livre sacado sem tempo decorrido) não
+  // conta -- mantém o incentivo real de esperar sem penalizar o produto feito pra ser flexível.
+  addScalar(
+    "bank_deposits_claimed",
+    "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND (COALESCE(early_withdrawn, 0) = 0 OR COALESCE(actual_payout, net_payout) > amount)",
+  );
+  addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= due_at");
+  addScalar("bank_credit_score_peak", "SELECT COALESCE(MAX(score), 0) FROM bank_credit_score_history WHERE owner_id = ?");
 
   // Métricas "por dia" usadas por troféus customizados. O valor é o
   // melhor dia real do histórico do usuário, calculado só quando algum
@@ -156,6 +172,9 @@ export const CUSTOM_ACHIEVEMENT_METRICS = [
   { value: "water_days_total", label: "Dias com água registrada (total)" },
   { value: "study_minutes_total", label: "Minutos de estudo (total)" },
   { value: "experiments_completed_total", label: "Experimentos concluídos (total)" },
+  { value: "bank_deposits_claimed", label: "Investimentos resgatados no Banco (total)" },
+  { value: "bank_loans_repaid_on_time", label: "Empréstimos quitados em dia no Banco (total)" },
+  { value: "bank_credit_score_peak", label: "Score de crédito mais alto já alcançado" },
 ] as const;
 
 export type CustomAchievementMetric = (typeof CUSTOM_ACHIEVEMENT_METRICS)[number]["value"];
@@ -287,7 +306,7 @@ export interface AchievementView {
   reward: { xp: number; coins: number };
 }
 
-export type AchievementCategory = "missoes" | "habitos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "outros";
+export type AchievementCategory = "missoes" | "habitos" | "leitura" | "saude" | "foco" | "revisoes" | "metas" | "educacao" | "experimentos" | "banco" | "outros";
 
 /** Agrupa a conquista pela métrica que ela mede — sem campo novo no banco. */
 export function achievementCategory(metric: string | null): AchievementCategory {
@@ -301,6 +320,7 @@ export function achievementCategory(metric: string | null): AchievementCategory 
   if (metric.startsWith("goals_")) return "metas";
   if (metric.startsWith("study_")) return "educacao";
   if (metric.startsWith("experiments_")) return "experimentos";
+  if (metric.startsWith("bank_")) return "banco";
   return "outros";
 }
 

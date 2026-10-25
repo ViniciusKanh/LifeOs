@@ -7,6 +7,7 @@ import {
   isNotificationTriggerEvent,
   listCustomNotificationTriggers,
   listNotificationTriggers,
+  runBankTriggers,
   runTaskDeadlineTriggers,
   updateCustomNotificationTrigger,
   updateNotificationTrigger,
@@ -82,6 +83,8 @@ notificationsRouter.patch("/triggers/:eventType", async (req, res) => {
 
 notificationsRouter.post("/triggers/run", async (req, res) => {
   const result = await runTaskDeadlineTriggers(req.user!.id);
-  return res.json(result);
+  // Banco: investimento maturado e empréstimo vencido entram na mesma checagem manual.
+  const bank = await runBankTriggers(req.user!.id);
+  return res.json({ ...result, results: [...result.results, ...bank.results] });
 });
 

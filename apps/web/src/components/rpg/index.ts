@@ -18,3 +18,4 @@ export { RewardRedeemModal } from "./RewardRedeemModal";
 export { RPGTabs } from "./RPGTabs";
 export { RPGPortrait } from "./RPGPortrait";
 export { RPGToast } from "./RPGToast";
+export { RPGSwitch } from "./RPGSwitch";

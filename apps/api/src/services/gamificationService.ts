@@ -1,4 +1,5 @@
 import { applyPct, claimTaskBoost, focusBoostAt, releaseTaskBoost } from "./itemEffectService.js";
+import { maybeAutoInvest } from "./bankService.js";
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
@@ -15,7 +16,7 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest" | "bank";
 
 export interface XpGrant {
   sourceType: XpSourceType;
@@ -129,7 +130,14 @@ export async function award(db: Client, ownerId: string, grant: XpGrant, dayKey:
     });
   }
   const results = await db.batch(statements, "write");
-  return results[0].rowsAffected > 0;
+  const granted = results[0].rowsAffected > 0;
+  // Investimento automático (opcional, desligado por padrão): só dispara pra moeda
+  // de verdade ganha agora (nunca numa concessão duplicada/idempotente ignorada) e
+  // nunca pro próprio Banco, que credita moedas direto no ledger sem passar por award().
+  if (granted && grant.coins > 0) {
+    await safely("investimento automático", () => maybeAutoInvest(db, ownerId, grant.coins));
+  }
+  return granted;
 }
 
 /** Hooks nunca derrubam a ação principal: falha de XP vira só um aviso no log. */
@@ -681,6 +689,47 @@ export async function awardJournalEntry(db: Client, ownerId: string, entryDate: 
         xp: GAMIFICATION_RULES.journal.xp,
         coins: GAMIFICATION_RULES.journal.coins,
         label: "Crônica do dia registrada",
+      },
+      dayKey,
+    );
+  });
+}
+
+/** Investimento do Banco resgatado (venceu e foi sacado) → XP fixo; moedas já foram creditadas no extrato do Banco (evita conceder moeda em duplicidade). */
+export async function awardBankDepositClaimed(db: Client, ownerId: string, depositId: string, planLabel: string): Promise<void> {
+  await safely("banco", async () => {
+    const dayKey = await todayKeyFor(db, ownerId);
+    await award(
+      db,
+      ownerId,
+      {
+        sourceType: "bank",
+        sourceId: depositId,
+        eventType: "deposit_claimed",
+        xp: GAMIFICATION_RULES.bank.depositClaimed.xp,
+        coins: 0,
+        label: `Investimento resgatado: ${planLabel}`,
+      },
+      dayKey,
+    );
+  });
+}
+
+/** Empréstimo do Banco quitado → XP (honrar a dívida sempre vale algo, mas menos se atrasado); moedas já saíram no extrato. */
+export async function awardBankLoanRepaid(db: Client, ownerId: string, loanId: string, onTime: boolean): Promise<void> {
+  await safely("banco", async () => {
+    const dayKey = await todayKeyFor(db, ownerId);
+    const rule = onTime ? GAMIFICATION_RULES.bank.loanRepaidOnTime : GAMIFICATION_RULES.bank.loanRepaidLate;
+    await award(
+      db,
+      ownerId,
+      {
+        sourceType: "bank",
+        sourceId: loanId,
+        eventType: "loan_repaid",
+        xp: rule.xp,
+        coins: 0,
+        label: onTime ? "Empréstimo quitado em dia" : "Empréstimo quitado com atraso",
       },
       dayKey,
     );

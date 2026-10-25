@@ -29,6 +29,7 @@ import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
 import { IS_DESKTOP } from "@/platform";
 import { useDesktopNotifications } from "@/hooks/useDesktopNotifications";
+import { useBankPendingCount } from "@/hooks/useBank";
 
 // Aviso de nova versão do app nativo — só existe (e só é baixado) no LifeOS Desktop.
 const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop/DesktopUpdatePrompt")) : null;
@@ -41,7 +42,7 @@ const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop
  */
 
 
-function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () => void; isAdmin: boolean }) {
+function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClose: () => void; isAdmin: boolean; badges?: Record<string, number> }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -85,7 +86,7 @@ function MobileDrawer({ open, onClose, isAdmin }: { open: boolean; onClose: () =
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto px-3 py-2">
-              <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" />
+              <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" badges={badges} />
             </nav>
           </motion.aside>
         </motion.div>
@@ -101,6 +102,10 @@ export function AppShell() {
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
   useDesktopNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Indicadores de pendência no menu (ex.: Banco com investimentos prontos ou empréstimo vencido) — sempre dado real.
+  const bankPending = useBankPendingCount();
+  const navBadges: Record<string, number> = bankPending > 0 ? { "/banco": bankPending } : {};
 
   const current = findNavItem(location.pathname);
   // Sub-página = rota mais funda que o item/aba (ex.: /projetos/:id); uma aba do hub não é sub-página.
@@ -125,7 +130,7 @@ export function AppShell() {
         Pular para o conteúdo
       </a>
 
-      <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} />
+      <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} badges={navBadges} />
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <header className="shrink-0 relative z-30 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70 rpg:bg-rpg-bg-2 rpg:backdrop-blur-none rpg:border-b-2 rpg:border-rpg-border">
@@ -209,7 +214,7 @@ export function AppShell() {
         {/* navegação inferior mobile (indicador "magic navigation") */}
         <MobileMagicNav onOpenModules={() => setDrawerOpen((v) => !v)} modulesOpen={drawerOpen} />
 
-        <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} />
+        <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} badges={navBadges} />
 
         <TermsGate />
         <AchievementToast />
