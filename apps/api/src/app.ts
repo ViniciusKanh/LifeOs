@@ -10,6 +10,8 @@ import "express-async-errors";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import { rateLimit } from "./middleware/rateLimit.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { tasksRouter } from "./routes/tasks.routes.js";
 import { habitsRouter } from "./routes/habits.routes.js";
@@ -31,7 +33,6 @@ import { searchRouter } from "./routes/search.routes.js";
 import { inboxRouter } from "./routes/inbox.routes.js";
 import { workNotesRouter } from "./routes/work-notes.routes.js";
 import { professionalRouter } from "./routes/professional.routes.js";
-import { lifemapRouter } from "./routes/lifemap.routes.js";
 import { experimentsRouter } from "./routes/experiments.routes.js";
 import { cronRouter } from "./routes/cron.routes.js";
 import { signalsRouter } from "./routes/signals.routes.js";
@@ -100,6 +101,11 @@ function ensureMigrations(): Promise<void> {
 // diferentes; o proxy documentado em DEPLOY.md faz as chamadas do
 // front caírem como same-origin, então o CORS abaixo é sobretudo
 // para desenvolvimento local e para quem optar por não usar o proxy.
+// Cabeçalhos de segurança HTTP (HSTS, X-Content-Type-Options, X-Frame-Options
+// etc.). crossOriginResourcePolicy fica "cross-origin" porque a API é
+// consumida de um domínio diferente (ver CORS logo abaixo e DEPLOY.md) —
+// o padrão "same-origin" do Helmet bloquearia esse uso legítimo.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
   cors({
     origin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
@@ -110,6 +116,22 @@ app.use(express.json({ limit: "5mb" })); // fotos do Diário (Fase 4) chegam com
 app.use(cookieParser());
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+
+// Limite geral de escrita por usuário/IP: cobre as rotas que ainda não têm
+// um rateLimit() próprio (tarefas, hábitos, saúde, metas, banco, biblioteca
+// etc.). Rotas sensíveis (login, IA, export...) continuam com seus limites
+// específicos, mais estritos, aplicados depois deste — os dois se somam.
+// GET nunca é limitado aqui: o risco de abuso está na escrita.
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const generalWriteRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 300,
+  message: "Muitas requisições em pouco tempo. Aguarde um instante e tente novamente.",
+});
+app.use((req, res, next) => {
+  if (!WRITE_METHODS.has(req.method)) return next();
+  return generalWriteRateLimit(req, res, next);
+});
 
 app.use(async (_req, _res, next) => {
   await ensureMigrations();
@@ -154,7 +176,6 @@ app.use("/api/import", importRouter);
 app.use("/api/inbox", inboxRouter);
 app.use("/api/work-notes", workNotesRouter);
 app.use("/api/professional", professionalRouter);
-app.use("/api/lifemap", lifemapRouter);
 app.use("/api/experiments", experimentsRouter);
 app.use("/api/signals", signalsRouter);
 app.use("/api/context", contextRouter);

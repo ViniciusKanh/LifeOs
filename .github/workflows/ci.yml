@@ -1,0 +1,38 @@
+name: CI
+
+# Roda em todo push/PR pra main: confere tipos, testes e build dos dois
+# workspaces antes de qualquer coisa chegar na main (de onde a Vercel faz
+# deploy automático). Não substitui rodar local antes de commitar — só
+# garante que isso não dependa de ninguém lembrar de fazer.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api:
+    name: API (tsc + testes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace apps/api
+      - run: npm test --workspace apps/api
+
+  web:
+    name: Web (tsc + testes + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test --workspace apps/web
+      - run: npm run build --workspace apps/web

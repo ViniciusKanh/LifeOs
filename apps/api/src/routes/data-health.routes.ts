@@ -10,7 +10,7 @@ dataHealthRouter.use(requireAuth);
  * por módulo, alertas, prontidão, integridade, distribuição,
  * recomendações, diagnóstico e histórico), sempre calculada a partir
  * dos dados reais do usuário autenticado. Um único endpoint agregado,
- * no mesmo padrão já usado por /api/lifemap e /api/goal-forecast.
+ * no mesmo padrão já usado por /api/goal-forecast.
  */
 dataHealthRouter.get("/", async (req, res) => {
   const data = await getDataHealth(req.user!.id);

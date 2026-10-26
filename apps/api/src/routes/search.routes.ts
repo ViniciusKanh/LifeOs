@@ -54,7 +54,7 @@ searchRouter.get("/", async (req, res) => {
   const like = `%${q}%`;
   const limitEach = 6;
 
-  const [tasks, goals, habits, books, academicProjects, projects, journalEntries, lifeAdmin] = await Promise.all([
+  const [tasks, goals, habits, books, academicProjects, projects, journalEntries, lifeAdmin, workouts, achievementsFound, bankDeposits, contracts, campaigns] = await Promise.all([
     db.execute({
       sql: `SELECT id, title, status FROM tasks WHERE owner_id = ? AND title LIKE ? ORDER BY updated_at DESC LIMIT ?`,
       args: [ownerId, like, limitEach],
@@ -101,6 +101,33 @@ searchRouter.get("/", async (req, res) => {
       sql: `SELECT id, title, due_date FROM life_admin_items WHERE owner_id = ? AND status = 'active' AND (title LIKE ? OR reference LIKE ? OR notes LIKE ?) LIMIT ?`,
       args: [ownerId, like, like, like, limitEach],
     }),
+    // Saúde: treinos por tipo/anotação (água, sono e humor não têm um
+    // "nome" próprio pra buscar por texto, então ficam de fora).
+    db.execute({
+      sql: `SELECT id, kind, performed_at FROM workouts WHERE owner_id = ? AND (kind LIKE ? OR notes LIKE ?) ORDER BY performed_at DESC LIMIT ?`,
+      args: [ownerId, like, like, limitEach],
+    }),
+    // Conquistas: catálogo já desbloqueado + conquistas personalizadas do usuário.
+    db.execute({
+      sql: `SELECT a.id, a.title FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id WHERE ua.owner_id = ? AND a.title LIKE ?
+            UNION ALL
+            SELECT id, title FROM custom_achievements WHERE owner_id = ? AND title LIKE ?
+            LIMIT ?`,
+      args: [ownerId, like, ownerId, like, limitEach],
+    }),
+    // Banco: cofrinhos pelo apelido dado pelo usuário ou pelo nome do plano.
+    db.execute({
+      sql: `SELECT id, label, plan_label, status FROM bank_deposits WHERE owner_id = ? AND (label LIKE ? OR plan_label LIKE ?) LIMIT ?`,
+      args: [ownerId, like, like, limitEach],
+    }),
+    db.execute({
+      sql: `SELECT id, title, status FROM contracts WHERE owner_id = ? AND title LIKE ? LIMIT ?`,
+      args: [ownerId, like, limitEach],
+    }),
+    db.execute({
+      sql: `SELECT id, title, status FROM campaigns WHERE owner_id = ? AND title LIKE ? LIMIT ?`,
+      args: [ownerId, like, limitEach],
+    }),
   ]);
 
   const textResults: SearchResult[] = [
@@ -142,6 +169,29 @@ searchRouter.get("/", async (req, res) => {
         { id: String(r.id), title: String(r.title), subtitle: r.due_date ? `Administração · vence ${String(r.due_date)}` : "Administração", link: `/administracao?item=${String(r.id)}` },
         "text"
       )
+    ),
+    ...workouts.rows.map((r) =>
+      toResult(
+        "workout",
+        { id: String(r.id), title: String(r.kind), subtitle: r.performed_at ? `Treino · ${String(r.performed_at).slice(0, 10)}` : "Treino", link: "/saude" },
+        "text"
+      )
+    ),
+    ...achievementsFound.rows.map((r) =>
+      toResult("achievement", { id: String(r.id), title: String(r.title), subtitle: "Conquista", link: "/conquistas" }, "text")
+    ),
+    ...bankDeposits.rows.map((r) =>
+      toResult(
+        "bank_deposit",
+        { id: String(r.id), title: r.label ? String(r.label) : String(r.plan_label), subtitle: `Banco · ${r.status === "claimed" ? "resgatado" : "ativo"}`, link: "/banco" },
+        "text"
+      )
+    ),
+    ...contracts.rows.map((r) =>
+      toResult("contract", { id: String(r.id), title: String(r.title), subtitle: r.status ? `Contrato · ${String(r.status)}` : "Contrato", link: "/contratos" }, "text")
+    ),
+    ...campaigns.rows.map((r) =>
+      toResult("campaign", { id: String(r.id), title: String(r.title), subtitle: r.status ? `Campanha · ${String(r.status)}` : "Campanha", link: `/campanhas/${String(r.id)}` }, "text")
     ),
   ];
 
