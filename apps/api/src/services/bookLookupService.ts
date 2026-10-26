@@ -19,6 +19,9 @@ export type BookLookupResult = {
   source: "google_books" | "open_library";
 };
 
+/** Candidato de recomendação — igual ao lookup por ISBN, mas o ISBN pode faltar (nem todo volume do Google Books tem um). */
+export type BookSearchCandidate = Omit<BookLookupResult, "isbn" | "source"> & { isbn: string | null };
+
 const FETCH_TIMEOUT_MS = 8000;
 
 function cleanIsbn(raw: string): string {
@@ -121,4 +124,55 @@ export async function lookupIsbn(rawIsbn: string): Promise<BookLookupResult | nu
   if (fromGoogle) return fromGoogle;
 
   return lookupOpenLibrary(isbn);
+}
+
+/**
+ * Busca livros de um autor no Google Books (pra recomendação de leitura —
+ * ver bookRecommendationService.ts). Só o Google Books: a Open Library não
+ * tem uma busca por autor tão confiável quanto a por ISBN, e aqui já é só
+ * sugestão, não cadastro — se falhar, a recomendação por esse autor fica
+ * vazia em vez de arriscar um resultado ruim.
+ */
+export async function searchBooksByAuthor(author: string, limit = 8): Promise<BookSearchCandidate[]> {
+  const res = await fetchWithTimeout(
+    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(`inauthor:"${author}"`)}&maxResults=${limit}&orderBy=relevance`
+  );
+  if (!res || !res.ok) return [];
+
+  const data = (await res.json().catch(() => null)) as
+    | { items?: Array<{ volumeInfo?: Record<string, unknown> }> }
+    | null;
+  const items = data?.items ?? [];
+
+  return items
+    .map((item): BookSearchCandidate | null => {
+      const info = item.volumeInfo as
+        | {
+            title?: string;
+            authors?: string[];
+            publisher?: string;
+            publishedDate?: string;
+            description?: string;
+            pageCount?: number;
+            categories?: string[];
+            imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+            industryIdentifiers?: Array<{ type?: string; identifier?: string }>;
+          }
+        | undefined;
+      if (!info?.title) return null;
+      const isbn13 = info.industryIdentifiers?.find((i) => i.type === "ISBN_13")?.identifier;
+      const isbn10 = info.industryIdentifiers?.find((i) => i.type === "ISBN_10")?.identifier;
+      return {
+        isbn: isbn13 ?? isbn10 ?? null,
+        title: info.title,
+        author: info.authors?.join(", ") ?? null,
+        publisher: info.publisher ?? null,
+        coverUrl: info.imageLinks?.thumbnail?.replace(/^http:/, "https:") ?? info.imageLinks?.smallThumbnail ?? null,
+        publishedYear: extractYear(info.publishedDate),
+        totalPages: info.pageCount ?? null,
+        categories: info.categories ?? [],
+        description: info.description ?? null,
+      };
+    })
+    .filter((b): b is BookSearchCandidate => b !== null);
 }

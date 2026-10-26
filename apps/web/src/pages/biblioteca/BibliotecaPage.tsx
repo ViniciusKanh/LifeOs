@@ -21,6 +21,7 @@ import type { Book, BookLookupResult, BookStatus } from "@/types";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { ReadingYearGoalCard } from "@/components/biblioteca/ReadingYearGoalCard";
 import { QuoteWall } from "@/components/biblioteca/QuoteWall";
+import { BookRecommendations } from "@/components/biblioteca/BookRecommendations";
 
 const STATUS_TABS: Array<{ value: BookStatus | "Todos"; label: string }> = [
   { value: "Todos", label: "Todos" },
@@ -394,6 +395,8 @@ export function BibliotecaPage() {
           </Card>
         </div>
       </div>
+
+      <BookRecommendations onAdd={createBook} />
 
       <QuoteWall books={allBooks} />
 

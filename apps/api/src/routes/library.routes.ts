@@ -2,7 +2,9 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { lookupIsbn } from "../services/bookLookupService.js";
+import { getBookRecommendations } from "../services/bookRecommendationService.js";
 import { insertReadingSession } from "../services/readingSessionService.js";
 import {
   createBookSchema,
@@ -58,6 +60,20 @@ libraryRouter.get("/books/lookup/:isbn", async (req, res) => {
   }
   return res.json(found);
 });
+
+/**
+ * GET /api/books/recommendations — sugestões de leitura baseadas só no que
+ * o próprio usuário já leu e avaliou bem (ver bookRecommendationService.ts).
+ * Chama o Google Books por autor, então leva um rate limit próprio.
+ */
+libraryRouter.get(
+  "/books/recommendations",
+  rateLimit({ windowMs: 10 * 60 * 1000, max: 15, message: "Muitas atualizações de recomendações em pouco tempo. Tente novamente mais tarde." }),
+  async (req, res) => {
+    const result = await getBookRecommendations(getDb(), req.user!.id);
+    return res.json(result);
+  }
+);
 
 /** GET /api/books/:id */
 libraryRouter.get("/books/:id", async (req, res) => {

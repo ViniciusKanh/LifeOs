@@ -50,6 +50,15 @@ export function useIsbnLookup() {
   return useMutation({ mutationFn: (isbn: string) => libraryService.lookupIsbn(isbn) });
 }
 
+/** Recomendações de livros baseadas no histórico real de leitura (autor/nota dos livros concluídos do usuário). */
+export function useBookRecommendations() {
+  return useQuery({
+    queryKey: ["books", "recommendations"],
+    queryFn: () => libraryService.getRecommendations(),
+    staleTime: 1000 * 60 * 30, // 30min — não muda a cada render, só quando o usuário termina/avalia um livro novo
+  });
+}
+
 export function useBook(id: string | undefined) {
   const queryClient = useQueryClient();
 

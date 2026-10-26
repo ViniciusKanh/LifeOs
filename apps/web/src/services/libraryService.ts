@@ -1,6 +1,24 @@
 import { api } from "./api";
 import type { Book, BookLookupResult, BookNote, BookSource, BookStatus, ReadingSession } from "@/types";
 
+export interface BookRecommendation {
+  isbn: string | null;
+  title: string;
+  author: string | null;
+  publisher: string | null;
+  coverUrl: string | null;
+  publishedYear: number | null;
+  totalPages: number | null;
+  categories: string[];
+  description: string | null;
+  reason: string;
+}
+
+export interface BookRecommendationsResult {
+  hasEnoughData: boolean;
+  recommendations: BookRecommendation[];
+}
+
 export interface BookCreateInput {
   title: string;
   isbn?: string | null;
@@ -33,6 +51,8 @@ export const libraryService = {
   },
   get: (id: string) => api.get<Book>(`/books/${id}`),
   lookupIsbn: (isbn: string) => api.get<BookLookupResult>(`/books/lookup/${encodeURIComponent(isbn)}`),
+  // Recomendações derivadas dos próprios livros concluídos e avaliados do usuário (nunca uma lista editorial genérica).
+  getRecommendations: () => api.get<BookRecommendationsResult>("/books/recommendations"),
   create: (input: BookCreateInput) => api.post<Book>("/books", input),
   update: (id: string, patch: BookUpdateInput) => api.patch<Book>(`/books/${id}`, patch),
   remove: (id: string) => api.delete<void>(`/books/${id}`),
