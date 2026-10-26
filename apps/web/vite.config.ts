@@ -58,18 +58,13 @@ export default defineConfig({
   server: {
     port: 5173,
   },
-  build: {
-    // Code-splitting: cada rota já vira um chunk via React.lazy (App.tsx);
-    // aqui separamos as libs pesadas usadas só por parte do app (gráficos,
-    // formulários) do vendor principal, pra elas só baixarem quando a
-    // tela que precisa delas é visitada.
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          charts: ["recharts"],
-          forms: ["react-hook-form", "@hookform/resolvers", "zod"],
-        },
-      },
-    },
-  },
+  // Code-splitting: cada rota já vira um chunk via React.lazy (App.tsx).
+  // Não force recharts/react-hook-form num manualChunks fixo: um chunk
+  // nomeado assim entra no grafo de dependências do bundle principal e o
+  // Vite passa a pré-carregar (<link rel="modulepreload">) esse chunk em
+  // TODA página, mesmo nas que não usam gráfico nem formulário nenhum
+  // (confirmado no build: charts-*.js, ~560 KB, sendo baixado mesmo no
+  // Dashboard) — o chunking automático do Vite já agrupa essas libs por
+  // conta própria, mas só pré-carrega a partir da página lazy que
+  // realmente as importa.
 });

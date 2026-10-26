@@ -7,6 +7,18 @@
    :root = temas Claro/Escuro. .rpg = tema RPG pixel art — a escala
    "ink" e o "slate" são remapeados para o navy do RPG, então mesmo as
    telas ainda não migradas ficam coerentes com o tema.
+
+   Decisão de produto (25/10/2026): as telas construídas com os
+   componentes .rpg-panel/.rpg-* (Taverna, Contratos, Guilda, Tesouro,
+   Códex, Grimório, Conselho, Loja, Inventário, Campanhas, Missões,
+   Mapa do Mundo, Forja da Inteligência, Detector de Gargalos,
+   Capacity Planner, Construção de Personagem, Radar de Prazos) usam
+   as variáveis --rpg-panel/--rpg-gold/--rpg-border abaixo, fixas em
+   :root — de propósito, não dependem de qual tema (Claro/Escuro/
+   Automático/RPG) está ativo. O RPG é tratado como uma "pele" própria
+   e sempre escura por design: o seletor de tema Claro/Escuro continua
+   trocando o restante do app (Dashboard, Tarefas, Hábitos etc.), mas
+   não se aplica a essas telas — isso é intencional, não um bug.
    ============================================================ */
 :root {
   --ink: 10 9 18;
