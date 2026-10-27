@@ -21,6 +21,8 @@ import {
   BellRing,
   Link2,
   Link2Off,
+  UploadCloud,
+  AlertTriangle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,7 +41,7 @@ import { PasswordStrengthPanel } from "@/components/auth/PasswordStrengthPanel";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 import { AppearanceCard } from "@/components/profile/AppearanceCard";
-import { downloadMyData } from "@/services/exportService";
+import { downloadMyData, restoreMyData, summarizeRestore } from "@/services/exportService";
 
 const ADMIN_EMAIL = "viniciussouza742@gmail.com";
 
@@ -61,6 +63,10 @@ export function PerfilPage() {
   const { mode, isRpg } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreStatus, setRestoreStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
 
   /**
    * Exporta todos os dados reais do usuário (tarefas, hábitos, livros,
@@ -78,6 +84,27 @@ export function PerfilPage() {
       setExportStatus({ tone: "error", text: err instanceof Error ? err.message : "Não foi possível exportar seus dados agora." });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  /**
+   * Restaura um backup gerado pelo próprio LifeOS (escopo V1 — módulos
+   * centrais): os registros do arquivo são recriados com ids novos, sempre
+   * sob a conta atual — nunca sob o dono original do arquivo. Rodar o mesmo
+   * arquivo mais de uma vez não duplica nada.
+   */
+  const handleRestoreFile = async (file: File) => {
+    setIsRestoring(true);
+    setRestoreStatus(null);
+    try {
+      const summary = await restoreMyData(file);
+      setRestoreStatus({ tone: "success", text: summarizeRestore(summary) });
+      setRestoreOpen(false);
+    } catch (err) {
+      setRestoreStatus({ tone: "error", text: err instanceof Error ? err.message : "Não foi possível restaurar esse backup agora." });
+    } finally {
+      setIsRestoring(false);
+      if (restoreFileInputRef.current) restoreFileInputRef.current.value = "";
     }
   };
   const {
@@ -300,6 +327,51 @@ export function PerfilPage() {
             <p role="status" aria-live="polite" className={`mt-2 text-xs ${exportStatus?.tone === "error" ? "text-drop" : "text-growth"}`}>
               {exportStatus?.text ?? ""}
             </p>
+
+            <div className="mt-4 pt-4 border-t border-slate/10">
+              {!restoreOpen ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-xs text-slate flex-1 min-w-[180px]">
+                    Trocou de conta ou perdeu seus dados? Restaure um arquivo exportado acima.
+                  </p>
+                  <Button variant="secondary" onClick={() => setRestoreOpen(true)}>
+                    <UploadCloud size={14} /> Restaurar backup
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex gap-2 rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs">
+                    <AlertTriangle size={16} className="text-amber-600 dark:text-amber-300 shrink-0" />
+                    <span>
+                      Restaura tarefas, projetos, metas, hábitos, saúde, biblioteca, educação e diário do arquivo
+                      (.json) selecionado — sempre como novos registros nesta conta. Anexos/mídia, contratos e
+                      compartilhamentos não fazem parte desta versão. Rodar o mesmo arquivo de novo não duplica nada.
+                    </span>
+                  </div>
+                  <input
+                    ref={restoreFileInputRef}
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleRestoreFile(file);
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" className="flex-1 min-w-[160px]" disabled={isRestoring} onClick={() => restoreFileInputRef.current?.click()}>
+                      <UploadCloud size={14} /> {isRestoring ? "Restaurando..." : "Selecionar arquivo (.json)"}
+                    </Button>
+                    <Button variant="ghost" disabled={isRestoring} onClick={() => setRestoreOpen(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <p role="status" aria-live="polite" className={`mt-2 text-xs ${restoreStatus?.tone === "error" ? "text-drop" : "text-growth"}`}>
+                {restoreStatus?.text ?? ""}
+              </p>
+            </div>
           </Card>
     </>
   );
