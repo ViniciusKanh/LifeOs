@@ -120,7 +120,10 @@ describe("Atributo Força — API", () => {
     expect((await post({ category: "musculacao", durationMinutes: 60, performedAt: daysAgoIso(10), sets: [{ exercise: "Supino reto", sets: 3, reps: 10, loadKg: 60 }] })).status).toBe(201);
     expect((await post({ category: "musculacao", durationMinutes: 60, performedAt: daysAgoIso(3), sets: [{ exercise: "supino RETO", sets: 3, reps: 8, loadKg: 70 }] })).status).toBe(201);
     expect((await post({ category: "luta", modality: "muay_thai", rounds: 6, roundMinutes: 3, durationMinutes: 60, performedAt: daysAgoIso(1) })).status).toBe(201);
-    // Fora do período pedido (days=30): não entra nos exercícios.
+    // Fora do período pedido (days=30) para efeito de EXIBIÇÃO no gráfico,
+    // mas o PR precisa continuar sendo o recorde de TODO o histórico: uma
+    // carga de 100kg aqui é maior que qualquer coisa dentro da janela, então
+    // as sessões de 60/70kg não podem aparecer como "novo recorde".
     await post({ category: "musculacao", durationMinutes: 60, performedAt: daysAgoIso(60), sets: [{ exercise: "Supino reto", sets: 3, reps: 10, loadKg: 100 }] });
 
     const res = await agent.get("/api/health/strength?days=30&tz=180");
@@ -128,11 +131,14 @@ describe("Atributo Força — API", () => {
     expect(res.body.exercises).toHaveLength(1);
     const supino = res.body.exercises[0];
     expect(supino.name).toBe("supino RETO");
+    // Gráfico mostra só a janela pedida (30 dias) — o treino de 60 dias atrás não entra na lista exibida...
     expect(supino.sessions).toHaveLength(2);
-    expect(supino.prLoad.value).toBe(70);
-    expect(supino.lastSession).toMatchObject({ newPrLoad: true, newPr1rm: true });
-    // 2 musculação + 1 luta nos últimos 28 dias + 1 PR = 30 + 5 = 35 → nível 1
-    expect(res.body.level).toMatchObject({ strengthSessions: 2, fightSessions: 1, prs: 1, points: 35, level: 1 });
+    // ...mas o PR real (100kg, há 60 dias) continua valendo, mesmo fora da janela exibida.
+    expect(supino.prLoad.value).toBe(100);
+    // Nem a carga (70kg) nem o 1RM da última sessão batem o recorde real de 100kg → não é "novo recorde".
+    expect(supino.lastSession).toMatchObject({ newPrLoad: false, newPr1rm: false });
+    // 2 musculação + 1 luta nos últimos 28 dias + 0 PR de verdade (o PR é de 60 dias atrás) = 30 + 0 = 30 → nível 1
+    expect(res.body.level).toMatchObject({ strengthSessions: 2, fightSessions: 1, prs: 0, points: 30, level: 1 });
     expect(res.body.fight.totalRounds).toBe(6);
 
     const otherRes = await other.agent.get("/api/health/strength?tz=180");

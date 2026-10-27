@@ -256,6 +256,32 @@ describe("Anti dupla recompensa e marcos", () => {
     expect(p.totalXp).toBe(R.habit.xp);
   });
 
+  it("missão principal: fixar uma segunda substitui a primeira — só quem está na 1ª posição ganha o bônus", async () => {
+    // Reproduz o bug do item 9 da análise de 27/10: fixar uma 2ª 'missão de
+    // amanhã' na Taverna reordena focus_task_ids (a nova vai para o índice 0),
+    // mas a antiga continua no array — completar a antiga NÃO pode mais
+    // conceder o bônus de missão principal, só a que está de fato em 1º.
+    const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    const taskA = await agent.post("/api/tasks").send({ title: "Primeira fixada", priority: "Baixa" });
+    const taskB = await agent.post("/api/tasks").send({ title: "Fixada por cima", priority: "Baixa" });
+    // Simula o estado após fixar A e depois B (pinTomorrowMission sempre prepende): [B, A].
+    await db.execute({
+      sql: "INSERT INTO journal_entries (id, owner_id, entry_date, focus_task_ids) VALUES (?, ?, ?, ?)",
+      args: [`je-${userId}`, userId, today(), JSON.stringify([taskB.body.id, taskA.body.id])],
+    });
+
+    await agent.patch(`/api/tasks/${taskA.body.id}`).send({ status: "Concluído" });
+    const afterA = await profile(agent);
+    // Só a recompensa normal de prioridade Baixa + primeira do dia — sem bônus de missão principal.
+    expect(afterA.totalXp).toBe(R.task.xpByPriority.Baixa + R.task.firstOfDayXp);
+
+    await agent.patch(`/api/tasks/${taskB.body.id}`).send({ status: "Concluído" });
+    const afterB = await profile(agent);
+    // B está na posição 0 → ganha também o bônus de missão principal.
+    expect(afterB.totalXp).toBe(afterA.totalXp + R.task.xpByPriority.Baixa + R.task.mainMissionXp);
+  });
+
   it("concede o marco de 7 dias uma única vez", async () => {
     const { agent } = await createAuthenticatedAgent();
     const h = await agent.post("/api/habits").send({ name: "Água" });

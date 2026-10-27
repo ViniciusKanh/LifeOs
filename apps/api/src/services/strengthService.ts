@@ -285,19 +285,20 @@ export async function getStrengthReport(db: Client, ownerId: string, days: numbe
   // Uma única leitura de `workouts` cobre a maior das janelas.
   const earliest = [periodStart, fightStart, levelStart].sort()[0];
   const sinceUtc = localDayBoundsUtc(earliest, tzOffsetMinutes).start;
-  const periodUtc = localDayBoundsUtc(periodStart, tzOffsetMinutes).start;
 
   const [setsResult, workoutsResult] = await Promise.all([
+    // Sem filtro de data: o PR (recorde pessoal) precisa comparar com TODO o
+    // histórico do exercício, não só a janela pedida (`days`) — do contrário
+    // uma carga antiga e maior fica invisível e uma carga menor dentro da
+    // janela aparece como "novo recorde" incorretamente.
     db.execute({
       sql: `SELECT s.workout_id, w.performed_at, s.exercise, s.sets, s.reps, s.load_kg
               FROM workout_sets s
               JOIN workouts w ON w.id = s.workout_id AND w.owner_id = s.owner_id
              WHERE s.owner_id = ? AND w.owner_id = ?
                AND (w.category = 'musculacao' OR w.category IS NULL)
-               AND w.performed_at >= ? AND datetime(w.performed_at) >= datetime(?)
              ORDER BY w.performed_at, s.position`,
-      // Pré-filtro de texto só com a data (vale para os dois formatos salvos) + comparação exata.
-      args: [ownerId, ownerId, periodUtc.slice(0, 10), periodUtc],
+      args: [ownerId, ownerId],
     }),
     db.execute({
       sql: `SELECT kind, category, performed_at, duration_minutes, rounds, round_minutes, modality
@@ -315,7 +316,14 @@ export async function getStrengthReport(db: Client, ownerId: string, days: numbe
     reps: r.reps === null ? null : Number(r.reps),
     loadKg: r.load_kg === null ? null : Number(r.load_kg),
   }));
-  const exercises = buildStrengthExercises(setRows, tzOffsetMinutes);
+  // PR, prDates e newPr* usam o histórico completo (setRows, sem corte de
+  // data); só a lista de sessões exibida no gráfico é recortada para a
+  // janela pedida (`days`), preservando o recorde mesmo quando ele é mais
+  // antigo do que o período selecionado na tela.
+  const exercises = buildStrengthExercises(setRows, tzOffsetMinutes).map((exercise) => ({
+    ...exercise,
+    sessions: exercise.sessions.filter((s) => s.date >= periodStart),
+  }));
 
   // Registros antigos sem `category` têm o tipo inferido do rótulo livre.
   const workouts = workoutsResult.rows.map((r) => ({

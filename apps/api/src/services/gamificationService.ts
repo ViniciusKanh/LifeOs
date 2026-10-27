@@ -352,7 +352,11 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
       sql: "SELECT focus_task_ids FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
       args: [ownerId, dayKey],
     });
-    const isMainMission = parseJsonArray(journal.rows[0]?.focus_task_ids).includes(taskId);
+    // Missão principal é só a PRIMEIRA posição (a mais recentemente fixada —
+    // ver tavernService.pinTomorrowMission, que sempre prepende o novo id).
+    // `.includes()` daria o bônus de missão principal para QUALQUER tarefa já
+    // fixada algum dia, inclusive uma substituída por um fixar posterior.
+    const isMainMission = parseJsonArray(journal.rows[0]?.focus_task_ids)[0] === taskId;
 
     const R = GAMIFICATION_RULES.task;
     // Dificuldade da própria tarefa ou, na falta, a do contrato a que pertence.
