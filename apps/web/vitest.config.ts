@@ -16,5 +16,14 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["./src/test/setup.ts"],
+    // Fuso fixo de São Paulo em todos os testes, em qualquer SO (inclusive
+    // CI do GitHub Actions, onde isso quebrava). Precisa ser passado como
+    // env do processo do worker, não só reatribuído em setup.ts: o V8
+    // resolve e fixa o timezone ao criar o worker/isolate, então mudar
+    // process.env.TZ depois (dentro do próprio teste) não tem mais efeito.
+    // "forks" (child_process) respeita poolOptions.forks.env de verdade;
+    // o pool padrão "threads" (worker_threads) não repassava a tempo.
+    pool: "forks",
+    poolOptions: { forks: { env: { TZ: "America/Sao_Paulo" } } },
   },
 });
