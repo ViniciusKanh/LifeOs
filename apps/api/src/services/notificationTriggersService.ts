@@ -3,6 +3,7 @@ import { getDb } from "../db/client.js";
 import { notificationTriggerEmail, sendMail } from "./emailService.js";
 import { sendPushToUser } from "./pushService.js";
 import { hasJournalEntryForDate } from "./journalService.js";
+import { userDayContext } from "./localDayService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -365,7 +366,7 @@ export async function dispatchTriggerNotification(
   const user = await db.execute({ sql: "SELECT email, email_verified FROM users WHERE id = ?", args: [ownerId] });
   const userRow = user.rows[0] as unknown as { email?: string; email_verified?: number } | undefined;
   const sourceId = input.sourceId ?? eventType;
-  const today = new Date().toISOString().slice(0, 10);
+  const { today } = await userDayContext(db, ownerId);
   let emailSent = false;
   let pushSent = 0;
 
@@ -400,9 +401,12 @@ export async function dispatchTriggerNotification(
   return { emailSent, pushSent, skipped: false };
 }
 
-export async function runTaskDeadlineTriggers(ownerId: string, date = new Date().toISOString().slice(0, 10)) {
+export async function runTaskDeadlineTriggers(ownerId: string, date?: string) {
   const db = getDb();
   await ensureNotificationTriggers(ownerId, db);
+  // Dia local do usuário (não UTC): perto da meia-noite, o dia UTC já pode ter
+  // virado sem que o dia do usuário tenha virado (ou vice-versa).
+  date = date ?? (await userDayContext(db, ownerId)).today;
   const [overdue, dueToday] = await Promise.all([
     db.execute({
       sql: `SELECT id, title, due_date FROM tasks
@@ -457,7 +461,7 @@ export async function runTaskDeadlineTriggers(ownerId: string, date = new Date()
   return { date, results };
 }
 
-export async function runTaskDeadlineTriggersForAll(date = new Date().toISOString().slice(0, 10)) {
+export async function runTaskDeadlineTriggersForAll(date?: string) {
   const db = getDb();
   const owners = await db.execute({
     sql: "SELECT id AS owner_id FROM users",
@@ -467,10 +471,12 @@ export async function runTaskDeadlineTriggersForAll(date = new Date().toISOStrin
   let fired = 0;
   for (const row of owners.rows as unknown as Array<{ owner_id: string }>) {
     checked += 1;
+    // Sem `date` explícito, cada usuário resolve o próprio dia local (fuso
+    // próprio) em vez de um único "hoje" em UTC compartilhado por todos.
     const result = await runTaskDeadlineTriggers(row.owner_id, date);
     fired += result.results.reduce((sum, item) => sum + item.count, 0);
   }
-  return { date, checked, fired };
+  return { date: date ?? null, checked, fired };
 }
 
 /**
@@ -479,9 +485,10 @@ export async function runTaskDeadlineTriggersForAll(date = new Date().toISOStrin
  * por dia, dedupe via markDelivered). Usuário só pode ter um empréstimo
  * ativo por vez (bankService.ts), então o aviso de atraso é sempre único.
  */
-export async function runBankTriggers(ownerId: string, date = new Date().toISOString().slice(0, 10)) {
+export async function runBankTriggers(ownerId: string, date?: string) {
   const db = getDb();
   await ensureNotificationTriggers(ownerId, db);
+  date = date ?? (await userDayContext(db, ownerId)).today;
   const [matured, overdueLoan] = await Promise.all([
     db.execute({
       sql: `SELECT id, plan_label FROM bank_deposits
@@ -528,7 +535,7 @@ export async function runBankTriggers(ownerId: string, date = new Date().toISOSt
   return { date, results };
 }
 
-export async function runBankTriggersForAll(date = new Date().toISOString().slice(0, 10)) {
+export async function runBankTriggersForAll(date?: string) {
   const db = getDb();
   const owners = await db.execute({
     sql: "SELECT id AS owner_id FROM users",
@@ -541,7 +548,7 @@ export async function runBankTriggersForAll(date = new Date().toISOString().slic
     const result = await runBankTriggers(row.owner_id, date);
     fired += result.results.reduce((sum, item) => sum + item.count, 0);
   }
-  return { date, checked, fired };
+  return { date: date ?? null, checked, fired };
 }
 
 /**
@@ -588,11 +595,15 @@ export async function computePreferredJournalReminderHour(db: Db, ownerId: strin
  */
 export async function runJournalReminderTriggers(
   ownerId: string,
-  date = new Date().toISOString().slice(0, 10),
+  date?: string,
   currentHourUtc = new Date().getUTCHours(),
 ) {
   const db = getDb();
   await ensureNotificationTriggers(ownerId, db);
+  // Dia local do usuário: evita cobrar (ou deixar de cobrar) o diário de ontem/hoje
+  // errado perto da meia-noite. A hora de comparação segue em UTC de propósito —
+  // é o mesmo fuso em que o horário aprendido (computePreferredJournalReminderHour) é calculado.
+  date = date ?? (await userDayContext(db, ownerId)).today;
   const already = await hasJournalEntryForDate(db, ownerId, date);
   if (already) return { date, fired: false, reason: "already_written" as const };
 
@@ -619,7 +630,7 @@ export async function runJournalReminderTriggers(
 }
 
 export async function runJournalReminderTriggersForAll(
-  date = new Date().toISOString().slice(0, 10),
+  date?: string,
   currentHourUtc = new Date().getUTCHours(),
 ) {
   const db = getDb();
@@ -634,5 +645,5 @@ export async function runJournalReminderTriggersForAll(
     const result = await runJournalReminderTriggers(row.owner_id, date, currentHourUtc);
     if (result.fired) fired += 1;
   }
-  return { date, hourUtc: currentHourUtc, checked, fired };
+  return { date: date ?? null, hourUtc: currentHourUtc, checked, fired };
 }
