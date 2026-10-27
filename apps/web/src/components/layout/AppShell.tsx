@@ -12,6 +12,7 @@ import { HeroClassChip } from "@/components/rpg/HeroClass";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { AppUpdateWatcher } from "./AppUpdateWatcher";
 import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
+import { NotificationBell } from "./NotificationBell";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
@@ -175,6 +176,7 @@ export function AppShell() {
             {isRpg && <HeroClassChip />}
             {isRpg && <RPGPlayerHUD compact />}
             <AchievementHeaderPulse />
+            <NotificationBell />
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
             <ProfileMenu />
           </div>

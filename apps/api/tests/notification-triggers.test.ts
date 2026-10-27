@@ -42,7 +42,12 @@ describe("Gatilhos de notificação", () => {
       sql: "SELECT channel FROM notification_delivery_log WHERE owner_id = ? AND event_type = 'task_overdue'",
       args: [userId],
     });
-    expect(deliveryLog.rows).toHaveLength(0);
+    const channels = (deliveryLog.rows as unknown as Array<{ channel: string }>).map((r) => r.channel);
+    // E-mail/push exigiriam SMTP/push de verdade configurado (não há nos testes), então não
+    // devem logar entrega; "no app" (o sino) não depende de infraestrutura externa nenhuma.
+    expect(channels).not.toContain("email");
+    expect(channels).not.toContain("push");
+    expect(channels).toContain("in_app");
 
     const retry = await agent.post("/api/notifications/triggers/run");
     expect(retry.status).toBe(200);

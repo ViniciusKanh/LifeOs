@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { CustomNotificationTrigger, NotificationAlertLevel, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
+import type { CustomNotificationTrigger, InAppNotificationItem, NotificationAlertLevel, NotificationTriggerEvent, NotificationTriggerRule } from "@/types";
 
 export const notificationsService = {
   triggers: () => api.get<NotificationTriggerRule[]>("/notifications/triggers"),
@@ -18,4 +18,9 @@ export const notificationsService = {
       date: string;
       results: Array<{ eventType: NotificationTriggerEvent; count: number; emailSent: boolean; pushSent: number }>;
     }>("/notifications/triggers/run", {}),
+  /** Sino de notificações: histórico real do que já foi disparado (canal "No app"). */
+  feed: (limit = 30) =>
+    api.get<{ items: InAppNotificationItem[]; unreadCount: number }>(`/notifications/feed?limit=${limit}`),
+  markFeedItemRead: (id: string) => api.post<{ ok: true }>(`/notifications/feed/${id}/read`, {}),
+  markAllFeedRead: () => api.post<{ marked: number }>("/notifications/feed/read-all", {}),
 };

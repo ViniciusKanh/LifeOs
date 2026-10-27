@@ -299,6 +299,14 @@ async function markDelivered(db: Db, ownerId: string, eventType: string, sourceI
   return result.rowsAffected > 0 ? id : null;
 }
 
+/** Conteúdo exibível do sino (in_app_notifications) — ver migration 0085. */
+async function recordInAppNotification(db: Db, ownerId: string, eventType: string, input: { title: string; body?: string; url?: string | null }) {
+  await db.execute({
+    sql: `INSERT INTO in_app_notifications (id, owner_id, event_type, title, body, url) VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [nanoid(), ownerId, eventType, input.title, input.body ?? null, input.url ?? null],
+  });
+}
+
 export async function matchingCustomTasks(ownerId: string, rule: CustomNotificationTrigger, date: string) {
   const db = getDb();
   const dueExpression = rule.conditionType === "task_due_in"
@@ -346,6 +354,10 @@ async function dispatchCustomTaskTrigger(ownerId: string, rule: CustomNotificati
         await releaseFailedDelivery(db, id);
       }
     }
+  }
+  if (rule.channelInApp) {
+    const id = await markDelivered(db, ownerId, event, source, "in_app", date);
+    if (id) await recordInAppNotification(db, ownerId, event, { title: rule.name, body, url: "/tarefas" });
   }
   return { emailSent, pushSent };
 }
@@ -395,6 +407,13 @@ export async function dispatchTriggerNotification(
         console.error("[trigger] falha ao enviar push:", err);
         await releaseFailedDelivery(db, deliveryId);
       }
+    }
+  }
+
+  if (rule.channelInApp) {
+    const deliveryId = await markDelivered(db, ownerId, eventType, sourceId, "in_app", today);
+    if (deliveryId) {
+      await recordInAppNotification(db, ownerId, eventType, { title: input.title, body: input.body, url: input.url ?? NOTIFICATION_TRIGGER_DEFS[eventType].link });
     }
   }
 
@@ -646,4 +665,87 @@ export async function runJournalReminderTriggersForAll(
     if (result.fired) fired += 1;
   }
   return { date: date ?? null, hourUtc: currentHourUtc, checked, fired };
+}
+
+export interface InAppNotificationItem {
+  id: string;
+  eventType: string;
+  title: string;
+  body: string | null;
+  url: string | null;
+  createdAt: string;
+  read: boolean;
+}
+
+/**
+ * Sino de notificações: histórico real do que já foi disparado (ver
+ * recordInAppNotification), com "lido" vindo de notification_dismissals
+ * (migration 0032 — reaproveitada, nunca duplicada: ela já existia pra
+ * guardar exatamente esse tipo de marcação por usuário+notificação).
+ */
+export async function listInAppNotifications(ownerId: string, limit = 30): Promise<InAppNotificationItem[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT n.id, n.event_type, n.title, n.body, n.url, n.created_at,
+                 CASE WHEN d.notification_id IS NULL THEN 0 ELSE 1 END AS read
+          FROM in_app_notifications n
+          LEFT JOIN notification_dismissals d ON d.owner_id = n.owner_id AND d.notification_id = n.id
+          WHERE n.owner_id = ?
+          ORDER BY n.created_at DESC
+          LIMIT ?`,
+    args: [ownerId, limit],
+  });
+  return (result.rows as unknown as Array<{ id: string; event_type: string; title: string; body: string | null; url: string | null; created_at: string; read: number }>).map((r) => ({
+    id: r.id,
+    eventType: r.event_type,
+    title: r.title,
+    body: r.body,
+    url: r.url,
+    createdAt: r.created_at,
+    read: r.read === 1,
+  }));
+}
+
+export async function countUnreadInAppNotifications(ownerId: string): Promise<number> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM in_app_notifications n
+          WHERE n.owner_id = ? AND NOT EXISTS (
+            SELECT 1 FROM notification_dismissals d WHERE d.owner_id = n.owner_id AND d.notification_id = n.id
+          )`,
+    args: [ownerId],
+  });
+  return Number((result.rows[0] as unknown as { n?: number })?.n ?? 0);
+}
+
+/** Marca uma notificação como lida (idempotente — já lida não é erro). Isolado por dono: um id de outro usuário não marca nada. */
+export async function markInAppNotificationRead(ownerId: string, notificationId: string): Promise<boolean> {
+  const db = getDb();
+  const owns = await db.execute({ sql: "SELECT id FROM in_app_notifications WHERE id = ? AND owner_id = ?", args: [notificationId, ownerId] });
+  if (owns.rows.length === 0) return false;
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO notification_dismissals (id, owner_id, notification_id) VALUES (?, ?, ?)",
+    args: [nanoid(), ownerId, notificationId],
+  });
+  return true;
+}
+
+/** Marca todas as não lidas do usuário como lidas de uma vez ("marcar tudo como lido"). */
+export async function markAllInAppNotificationsRead(ownerId: string): Promise<number> {
+  const db = getDb();
+  const unread = await db.execute({
+    sql: `SELECT n.id FROM in_app_notifications n
+          WHERE n.owner_id = ? AND NOT EXISTS (
+            SELECT 1 FROM notification_dismissals d WHERE d.owner_id = n.owner_id AND d.notification_id = n.id
+          )`,
+    args: [ownerId],
+  });
+  const ids = unread.rows as unknown as Array<{ id: string }>;
+  for (const row of ids) {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO notification_dismissals (id, owner_id, notification_id) VALUES (?, ?, ?)",
+      args: [nanoid(), ownerId, row.id],
+    });
+  }
+  return ids.length;
 }

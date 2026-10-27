@@ -11,6 +11,10 @@ import {
   runTaskDeadlineTriggers,
   updateCustomNotificationTrigger,
   updateNotificationTrigger,
+  listInAppNotifications,
+  countUnreadInAppNotifications,
+  markInAppNotificationRead,
+  markAllInAppNotificationsRead,
 } from "../services/notificationTriggersService.js";
 
 export const notificationsRouter = Router();
@@ -86,5 +90,31 @@ notificationsRouter.post("/triggers/run", async (req, res) => {
   // Banco: investimento maturado e empréstimo vencido entram na mesma checagem manual.
   const bank = await runBankTriggers(req.user!.id);
   return res.json({ ...result, results: [...result.results, ...bank.results] });
+});
+
+/**
+ * Sino de notificações: histórico real do que já foi disparado (canal
+ * "No app" de cada gatilho — channelInApp), não uma recomputação de
+ * condições atuais (isso já existe no cartão "Precisa da sua atenção" do
+ * Dashboard). Ver notificationTriggersService.ts.
+ */
+notificationsRouter.get("/feed", async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
+  const [items, unreadCount] = await Promise.all([
+    listInAppNotifications(req.user!.id, limit),
+    countUnreadInAppNotifications(req.user!.id),
+  ]);
+  return res.json({ items, unreadCount });
+});
+
+notificationsRouter.post("/feed/:id/read", async (req, res) => {
+  const ok = await markInAppNotificationRead(req.user!.id, req.params.id);
+  if (!ok) return res.status(404).json({ error: "Notificação não encontrada." });
+  return res.json({ ok: true });
+});
+
+notificationsRouter.post("/feed/read-all", async (req, res) => {
+  const marked = await markAllInAppNotificationsRead(req.user!.id);
+  return res.json({ marked });
 });
 

@@ -78,6 +78,7 @@ export const EXPORTABLE_TABLES: readonly ExportTable[] = [
   { table: "planned_time_blocks" },
   { table: "data_health_snapshots" },
   { table: "notification_dismissals" },
+  { table: "in_app_notifications" },
   { table: "journal_entries" },
   { table: "journals" },
   { table: "journal_entry_journals", where: "journal_id IN (SELECT id FROM journals WHERE owner_id = ?)" },

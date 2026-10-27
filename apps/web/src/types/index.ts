@@ -1059,6 +1059,17 @@ export interface CustomNotificationTrigger {
   active: boolean;
 }
 
+/** Item do sino de notificações — histórico real do que já foi disparado (canal "No app"). */
+export interface InAppNotificationItem {
+  id: string;
+  eventType: string;
+  title: string;
+  body: string | null;
+  url: string | null;
+  createdAt: string;
+  read: boolean;
+}
+
 /* ------------------------------ Life Map ------------------------------ */
 
 export type LifeMapAreaId = "metas" | "projetos" | "habitos" | "educacao" | "leitura" | "saude" | "profissional";

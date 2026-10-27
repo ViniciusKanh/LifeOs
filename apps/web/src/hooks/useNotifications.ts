@@ -42,3 +42,30 @@ export function useNotificationTriggers() {
     deleteCustomTrigger: deleteCustom.mutateAsync,
   };
 }
+
+/**
+ * Sino de notificações: histórico real do que já foi disparado (não uma
+ * recomputação de condições atuais — isso já existe no cartão "Precisa da
+ * sua atenção" do Dashboard). Atualiza sozinho a cada minuto para o badge
+ * de não lidas refletir disparos recentes sem precisar recarregar a tela.
+ */
+export function useNotificationFeed() {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["notifications", "feed"],
+    queryFn: () => notificationsService.feed(),
+    refetchInterval: 60_000,
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["notifications", "feed"] });
+  const markRead = useMutation({ mutationFn: notificationsService.markFeedItemRead, onSuccess: invalidate });
+  const markAllRead = useMutation({ mutationFn: notificationsService.markAllFeedRead, onSuccess: invalidate });
+
+  return {
+    items: query.data?.items ?? [],
+    unreadCount: query.data?.unreadCount ?? 0,
+    isLoading: query.isLoading,
+    markRead: markRead.mutateAsync,
+    markAllRead: markAllRead.mutateAsync,
+  };
+}
