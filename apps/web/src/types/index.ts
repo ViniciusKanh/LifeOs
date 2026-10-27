@@ -195,6 +195,10 @@ export interface Project {
   completed_at: string | null;
   /** Meta a que o projeto serve (Direção). */
   goal_id?: string | null;
+  // Compartilhamento ("Colaboração total") — presentes só na listagem
+  // (GET /projects), que inclui projetos próprios e compartilhados.
+  isOwner?: boolean;
+  role?: "owner" | "member";
 }
 
 /** Indicadores do projeto — sempre derivados das tarefas, anexos e Diário. */

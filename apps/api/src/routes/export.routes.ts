@@ -33,6 +33,7 @@ export const EXPORTABLE_TABLES: readonly ExportTable[] = [
   { table: "habit_entries" },
   { table: "projects" },
   { table: "project_members", where: "project_id IN (SELECT id FROM projects WHERE owner_id = ?)" },
+  { table: "project_invites", where: "owner_id = ? OR invitee_user_id = ?", argCount: 2 },
   { table: "task_statuses" },
   { table: "tasks" },
   { table: "subtasks" },

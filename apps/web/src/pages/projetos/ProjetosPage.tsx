@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ChevronDown, Clock, FolderKanban, GanttChartSquare, Hourglass, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ChevronDown, Clock, FolderKanban, GanttChartSquare, Hourglass, Mail, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { useProjects, useProjectForecast, useProjectWorkload } from "@/hooks/useProjects";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { Button, Card, EmptyState, IconBadge, PageHeader, StatTile } from "@/components/ui/primitives";
@@ -10,6 +10,7 @@ import { KIND_META, PRIORITY_META, STATUS_META, formatMinutes, formatProjectDate
 import type { Project, ProjectKind, ProjectLoad, ProjectStatus } from "@/types";
 import { useTheme } from "@/hooks/useTheme";
 import { useTasks } from "@/hooks/useTasks";
+import { useMyProjectInvites } from "@/hooks/useProjectSharing";
 import { useProjectsXp } from "@/hooks/useGamification";
 import { RPGButton, RPGPageHeader, RPGStatCard } from "@/components/rpg";
 import { RpgCampaignCard, currentMissionFor } from "@/components/projects/RpgCampaignCard";
@@ -21,6 +22,50 @@ import { RpgCampaignCard, currentMissionFor } from "@/components/projects/RpgCam
  */
 
 type StatusFilter = "all" | ProjectStatus;
+
+/**
+ * Convites de projeto pendentes pra mim, de qualquer dono ("Colaboração
+ * total"). Mesmo padrão da Guilda: aparece no topo da própria listagem,
+ * não precisa de um módulo de notificações à parte.
+ */
+function ProjectInvitesBanner() {
+  const { invites, emailVerified, isResponding, respond } = useMyProjectInvites();
+
+  if (invites.length === 0) return null;
+
+  return (
+    <Card className="p-4 sm:p-5 mb-5 border-brand-500/30">
+      <div className="flex items-center gap-2.5 mb-3">
+        <IconBadge tone="purple" size={32} icon={<Mail size={15} />} />
+        <div>
+          <p className="text-sm font-semibold">Convites de projeto ({invites.length})</p>
+          <p className="text-xs text-slate">Quem convidou te chamou para colaborar — você verá e poderá mexer em todas as tarefas do projeto.</p>
+        </div>
+      </div>
+      {!emailVerified && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">Confirme seu e-mail para responder a convites — é assim que provamos que o convite é seu.</p>
+      )}
+      <div className="space-y-2">
+        {invites.map((inv) => (
+          <div key={inv.id} className="rounded-xl p-3 bg-paper dark:bg-ink space-y-2">
+            <p className="text-sm">
+              <strong>{inv.ownerName}</strong> te chamou para colaborar em <strong>{inv.projectName}</strong>.
+            </p>
+            {inv.message && <p className="text-xs italic text-slate break-words">“{inv.message}”</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!emailVerified || isResponding} onClick={() => respond({ inviteId: inv.id, accept: true })}>
+                Aceitar
+              </Button>
+              <Button variant="ghost" disabled={isResponding} onClick={() => respond({ inviteId: inv.id, accept: false })}>
+                Recusar
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -197,6 +242,8 @@ export function ProjetosPage() {
         }
       />
       )}
+
+      <ProjectInvitesBanner />
 
       {!isLoading && projects.length === 0 && !showArchived ? (
         <EmptyState

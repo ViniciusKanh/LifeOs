@@ -1,16 +1,26 @@
 import { Router } from "express";
-import { nanoid } from "nanoid";
+import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { inviteRateLimit } from "../middleware/rateLimit.js";
 import { createProjectSchema, updateProjectSchema } from "../validators/project.schema.js";
 import {
   buildProjectColumnValues,
-  getOwnedProject,
+  getAccessibleProjectDetail,
   getProjectOverview,
   insertProject,
   listProjectDocuments,
   serializeProjectRow,
 } from "../services/projectDetailsService.js";
+import { getAccessibleProject, sharedProjectIds } from "../services/projectAccessService.js";
+import {
+  ProjectSharingError,
+  createProjectInvite,
+  leaveProject,
+  listProjectMembers,
+  removeProjectMember,
+  revokeProjectInvite,
+} from "../services/projectSharingService.js";
 import { getProjectWorkload, resolveClientToday } from "../services/workloadService.js";
 import { awardProjectCompleted } from "../services/gamificationService.js";
 
@@ -22,30 +32,70 @@ async function goalBelongsTo(db: ReturnType<typeof getDb>, ownerId: string, goal
   return r.rows.length > 0;
 }
 
+function handleSharingError(res: import("express").Response, e: unknown) {
+  if (e instanceof ProjectSharingError) return res.status(e.status).json({ error: e.message });
+  throw e;
+}
+
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
-/** GET /api/projects?includeArchived=true */
+/**
+ * GET /api/projects?includeArchived=true — projetos do próprio usuário
+ * MAIS os projetos compartilhados com ele ("Colaboração total" — ver
+ * projectSharingService.ts). `isOwner`/`role` dizem ao frontend como
+ * exibir cada um (ex.: badge "Compartilhado").
+ */
 projectsRouter.get("/", async (req, res) => {
   const db = getDb();
+  const ownerId = req.user!.id;
   const includeArchived = req.query.includeArchived === "true";
+  const archivedFilter = includeArchived ? "" : "AND p.archived_at IS NULL";
 
-  const result = await db.execute({
-    sql: `SELECT p.*,
-            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.owner_id = p.owner_id) AS task_count,
-            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.owner_id = p.owner_id AND t.status = 'Concluído') AS done_count
-          FROM projects p
-          WHERE p.owner_id = ? ${includeArchived ? "" : "AND p.archived_at IS NULL"}
-          ORDER BY p.created_at DESC`,
-    args: [req.user!.id],
-  });
-  return res.json((result.rows as unknown as Array<Record<string, unknown>>).map(serializeProjectRow));
+  const [ownedResult, sharedIds] = await Promise.all([
+    db.execute({
+      sql: `SELECT p.*, 1 AS is_owner, 'owner' AS role,
+              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'Concluído') AS done_count
+            FROM projects p
+            WHERE p.owner_id = ? ${archivedFilter}
+            ORDER BY p.created_at DESC`,
+      args: [ownerId],
+    }),
+    sharedProjectIds(db, ownerId),
+  ]);
+
+  let sharedRows: Array<Record<string, unknown>> = [];
+  if (sharedIds.length > 0) {
+    const placeholders = sharedIds.map(() => "?").join(", ");
+    const sharedResult = await db.execute({
+      sql: `SELECT p.*, 0 AS is_owner, 'member' AS role,
+              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'Concluído') AS done_count
+            FROM projects p
+            WHERE p.id IN (${placeholders}) ${archivedFilter}
+            ORDER BY p.created_at DESC`,
+      args: sharedIds,
+    });
+    sharedRows = sharedResult.rows as unknown as Array<Record<string, unknown>>;
+  }
+
+  const all = [...(ownedResult.rows as unknown as Array<Record<string, unknown>>), ...sharedRows];
+  return res.json(
+    all.map((row) => ({
+      ...serializeProjectRow(row),
+      isOwner: Number(row.is_owner) === 1,
+      role: String(row.role),
+    })),
+  );
 });
 
 /**
  * GET /api/projects/workload?days=30&kind=professional&today=YYYY-MM-DD —
  * carga por projeto (status, horas estimadas/restantes/registradas, prazos e pressão).
  * Declarada antes de "/:id" para não ser capturada como id.
+ * Fica restrita aos próprios projetos: é uma visão de carga PESSOAL do
+ * usuário, não uma métrica agregada do time num projeto compartilhado.
  */
 projectsRouter.get("/workload", async (req, res) => {
   const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
@@ -74,10 +124,10 @@ projectsRouter.post("/", async (req, res) => {
   return res.status(201).json(await insertProject(db, ownerId, d));
 });
 
-/** GET /api/projects/:id — metadados completos do projeto. */
+/** GET /api/projects/:id — metadados completos do projeto (dono ou membro compartilhado). */
 projectsRouter.get("/:id", async (req, res) => {
   const db = getDb();
-  const project = await getOwnedProject(db, req.user!.id, req.params.id);
+  const project = await getAccessibleProjectDetail(db, req.user!.id, req.params.id);
   if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
   return res.json(project);
 });
@@ -85,27 +135,28 @@ projectsRouter.get("/:id", async (req, res) => {
 /** GET /api/projects/:id/overview — indicadores derivados das tarefas, anexos e Diário. */
 projectsRouter.get("/:id/overview", async (req, res) => {
   const db = getDb();
-  const ownerId = req.user!.id;
-  const project = await getOwnedProject(db, ownerId, req.params.id);
+  const project = await getAccessibleProjectDetail(db, req.user!.id, req.params.id);
   if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
-  const overview = await getProjectOverview(db, ownerId, req.params.id, (project as { due_date?: string | null }).due_date ?? null);
+  // Usa o owner_id REAL do projeto — as tarefas de um projeto compartilhado
+  // podem ter sido criadas por qualquer membro, não só pelo dono.
+  const realOwnerId = String(project.owner_id);
+  const overview = await getProjectOverview(db, realOwnerId, req.params.id, (project as { due_date?: string | null }).due_date ?? null);
   return res.json(overview);
 });
 
-/** GET /api/projects/:id/tasks — tarefas do projeto (inclui contagem de anexos de cada uma). */
+/** GET /api/projects/:id/tasks — tarefas do projeto (inclui contagem de anexos de cada uma), de QUALQUER membro. */
 projectsRouter.get("/:id/tasks", async (req, res) => {
   const db = getDb();
-  const ownerId = req.user!.id;
-  const project = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
-  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+  const project = await getAccessibleProject(db, req.user!.id, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
 
   const result = await db.execute({
     sql: `SELECT t.*,
             (SELECT COUNT(*) FROM task_attachments a WHERE a.task_id = t.id AND a.owner_id = t.owner_id) AS attachment_count
           FROM tasks t
-          WHERE t.owner_id = ? AND t.project_id = ? AND t.parent_task_id IS NULL
+          WHERE t.project_id = ? AND t.parent_task_id IS NULL
           ORDER BY (t.status = 'Concluído') ASC, (t.due_date IS NULL) ASC, t.due_date ASC, t.created_at DESC`,
-    args: [ownerId, req.params.id],
+    args: [req.params.id],
   });
   return res.json(result.rows);
 });
@@ -113,23 +164,87 @@ projectsRouter.get("/:id/tasks", async (req, res) => {
 /** GET /api/projects/:id/documents — anexos das tarefas vinculadas ao projeto. */
 projectsRouter.get("/:id/documents", async (req, res) => {
   const db = getDb();
-  const ownerId = req.user!.id;
-  const project = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
-  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
-  return res.json(await listProjectDocuments(db, ownerId, req.params.id));
+  const project = await getAccessibleProject(db, req.user!.id, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
+  return res.json(await listProjectDocuments(db, String(project.owner_id), req.params.id));
 });
 
-/** PATCH /api/projects/:id */
+// ---------------------------------------------------------------------
+// Compartilhamento ("Colaboração total") — convidar, listar membros,
+// remover e sair. Gerenciar QUEM está no projeto continua exclusivo do
+// dono; qualquer membro pode ver a lista e sair por conta própria.
+// ---------------------------------------------------------------------
+
+const inviteBodySchema = z.object({
+  email: z.string().trim().email("Informe um e-mail válido.").max(254),
+  message: z.string().max(280, "Mensagem de até 280 caracteres.").nullish(),
+});
+
+/** GET /api/projects/:id/members — membros aceitos + convites pendentes (dono ou membro). */
+projectsRouter.get("/:id/members", async (req, res) => {
+  const db = getDb();
+  const project = await getAccessibleProject(db, req.user!.id, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
+  return res.json(await listProjectMembers(db, req.params.id));
+});
+
+/** POST /api/projects/:id/invites — convida alguém por e-mail (só o dono). */
+projectsRouter.post("/:id/invites", inviteRateLimit(), async (req, res) => {
+  const parsed = inviteBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  try {
+    const result = await createProjectInvite(getDb(), req.user!.id, req.params.id, parsed.data);
+    return res.status(201).json(result);
+  } catch (e) {
+    return handleSharingError(res, e);
+  }
+});
+
+/** DELETE /api/projects/:id/invites/:inviteId — revoga um convite pendente (só o dono). */
+projectsRouter.delete("/:id/invites/:inviteId", async (req, res) => {
+  try {
+    await revokeProjectInvite(getDb(), req.user!.id, req.params.id, req.params.inviteId);
+    return res.status(204).send();
+  } catch (e) {
+    return handleSharingError(res, e);
+  }
+});
+
+/** DELETE /api/projects/:id/members/:userId — remove um membro já aceito (só o dono). */
+projectsRouter.delete("/:id/members/:userId", async (req, res) => {
+  try {
+    await removeProjectMember(getDb(), req.user!.id, req.params.id, req.params.userId);
+    return res.status(204).send();
+  } catch (e) {
+    return handleSharingError(res, e);
+  }
+});
+
+/** POST /api/projects/:id/leave — o próprio membro sai do projeto (o dono não pode "sair" do próprio projeto). */
+projectsRouter.post("/:id/leave", async (req, res) => {
+  try {
+    await leaveProject(getDb(), req.user!.id, req.params.id);
+    return res.status(204).send();
+  } catch (e) {
+    return handleSharingError(res, e);
+  }
+});
+
+/**
+ * PATCH /api/projects/:id — dono OU membro pode editar os detalhes
+ * (nome, descrição, datas, status...). A exclusão continua exclusiva
+ * do dono (ver DELETE abaixo).
+ */
 projectsRouter.patch("/:id", async (req, res) => {
   const parsed = updateProjectSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
   const db = getDb();
-  const ownerId = req.user!.id;
-  const existing = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, ownerId] });
-  if (existing.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
-  if (!(await goalBelongsTo(db, ownerId, parsed.data.goalId))) return res.status(400).json({ error: "Meta inválida." });
+  const existing = await getAccessibleProject(db, req.user!.id, req.params.id);
+  if (!existing) return res.status(404).json({ error: "Projeto não encontrado." });
+  const realOwnerId = String(existing.owner_id);
+  if (!(await goalBelongsTo(db, realOwnerId, parsed.data.goalId))) return res.status(400).json({ error: "Meta inválida." });
 
   const pairs = buildProjectColumnValues(parsed.data);
   const sets = pairs.map(([c]) => `${c} = ?`);
@@ -139,14 +254,16 @@ projectsRouter.patch("/:id", async (req, res) => {
     args.push(parsed.data.archived ? new Date().toISOString() : null);
   }
   sets.push("updated_at = datetime('now')");
-  args.push(req.params.id, ownerId);
+  args.push(req.params.id);
 
-  await db.execute({ sql: `UPDATE projects SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args });
-  if (parsed.data.status === "completed") await awardProjectCompleted(db, ownerId, req.params.id);
-  return res.json(await getOwnedProject(db, ownerId, req.params.id));
+  await db.execute({ sql: `UPDATE projects SET ${sets.join(", ")} WHERE id = ?`, args });
+  // XP de "projeto concluído" sempre credita o DONO real do projeto,
+  // não necessariamente quem marcou como concluído.
+  if (parsed.data.status === "completed") await awardProjectCompleted(db, realOwnerId, req.params.id);
+  return res.json(await getAccessibleProjectDetail(db, req.user!.id, req.params.id));
 });
 
-/** DELETE /api/projects/:id — as tarefas do projeto continuam existindo, só perdem o vínculo (project_id vira NULL). */
+/** DELETE /api/projects/:id — exclusivo do dono; as tarefas do projeto continuam existindo, só perdem o vínculo (project_id vira NULL). */
 projectsRouter.delete("/:id", async (req, res) => {
   const db = getDb();
   const result = await db.execute({ sql: "DELETE FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
@@ -163,15 +280,15 @@ projectsRouter.delete("/:id", async (req, res) => {
  */
 projectsRouter.get("/:id/gantt", async (req, res) => {
   const db = getDb();
-  const project = await db.execute({ sql: "SELECT id, name FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+  const project = await getAccessibleProject(db, req.user!.id, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
 
   const tasks = await db.execute({
     sql: `SELECT id, title, status, priority, start_date, due_date, completed_at
           FROM tasks
-          WHERE owner_id = ? AND project_id = ? AND (start_date IS NOT NULL OR due_date IS NOT NULL)
+          WHERE project_id = ? AND (start_date IS NOT NULL OR due_date IS NOT NULL)
           ORDER BY COALESCE(start_date, due_date) ASC`,
-    args: [req.user!.id, req.params.id],
+    args: [req.params.id],
   });
 
   const taskIds = (tasks.rows as unknown as Array<{ id: string }>).map((t) => t.id);
@@ -203,7 +320,7 @@ projectsRouter.get("/:id/gantt", async (req, res) => {
     dependsOn: dependenciesByTask.get(t.id) ?? [],
   }));
 
-  return res.json({ project: project.rows[0], tasks: ganttTasks });
+  return res.json({ project: { id: project.id, name: project.name }, tasks: ganttTasks });
 });
 
 /**
@@ -217,12 +334,12 @@ projectsRouter.get("/:id/gantt", async (req, res) => {
  */
 projectsRouter.get("/:id/forecast", async (req, res) => {
   const db = getDb();
-  const project = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  if (project.rows.length === 0) return res.status(404).json({ error: "Projeto não encontrado." });
+  const project = await getAccessibleProject(db, req.user!.id, req.params.id);
+  if (!project) return res.status(404).json({ error: "Projeto não encontrado." });
 
   const tasksResult = await db.execute({
-    sql: "SELECT id, status, completed_at, updated_at FROM tasks WHERE owner_id = ? AND project_id = ?",
-    args: [req.user!.id, req.params.id],
+    sql: "SELECT id, status, completed_at, updated_at FROM tasks WHERE project_id = ?",
+    args: [req.params.id],
   });
   const tasks = tasksResult.rows as unknown as Array<{
     id: string; status: string; completed_at: string | null; updated_at: string;

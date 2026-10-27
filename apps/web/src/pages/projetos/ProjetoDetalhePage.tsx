@@ -22,11 +22,16 @@ import {
   Plus,
   Target,
   Wallet,
+  UserPlus,
+  UserMinus,
+  Send,
 } from "lucide-react";
 import { useGantt, useProjectDetail, useProjectForecast, useProjects } from "@/hooks/useProjects";
 import { useTasks } from "@/hooks/useTasks";
+import { useAuth } from "@/hooks/useAuth";
+import { useProjectMembers } from "@/hooks/useProjectSharing";
 import { taskService } from "@/services/taskService";
-import { Button, Card, IconBadge, StatTile } from "@/components/ui/primitives";
+import { Button, Card, Field, IconBadge, StatTile } from "@/components/ui/primitives";
 import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
 import { KIND_META, PRIORITY_META, STATUS_META, formatCurrency, formatMinutes, formatProjectDate } from "@/components/projects/projectMeta";
 import { GanttChart } from "@/components/projects/GanttChart";
@@ -50,7 +55,7 @@ import { TaskCard } from "@/components/tasks/TaskCard";
  * ligadas ao projeto e o cronograma (Gantt).
  */
 
-type TabKey = "overview" | "tasks" | "documents" | "timeline";
+type TabKey = "overview" | "tasks" | "documents" | "timeline" | "members";
 
 const PRIORITY_TONE: Record<string, string> = {
   Alta: "text-drop bg-drop/10",
@@ -416,6 +421,113 @@ function TimelineTab({ projectId }: { projectId: string }) {
   );
 }
 
+/**
+ * Membros do projeto ("Colaboração total"): dono convida por e-mail,
+ * qualquer membro vê quem está dentro, só o dono convida/revoga/remove,
+ * e qualquer membro (menos o dono) pode sair por conta própria.
+ */
+function MembersTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
+  const { members, pendingInvites, isLoading, invite, isInviting, inviteError, revokeInvite, removeMember, leave } = useProjectMembers(projectId);
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const navigate = useNavigate();
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    try {
+      await invite({ email: email.trim(), message: message.trim() || undefined });
+      setEmail("");
+      setMessage("");
+    } catch {
+      // erro já exposto via inviteError abaixo
+    }
+  };
+
+  if (isLoading) return <Card className="h-40 animate-pulse" />;
+
+  return (
+    <div className="space-y-4">
+      {isOwner && (
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <IconBadge tone="purple" size={32} icon={<UserPlus size={15} />} />
+            <div>
+              <p className="text-sm font-semibold">Convidar colaborador</p>
+              <p className="text-xs text-slate">Quem aceitar poderá ver, criar, editar e concluir qualquer tarefa deste projeto.</p>
+            </div>
+          </div>
+          <form onSubmit={handleInvite} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Field label="E-mail" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@exemplo.com" />
+            <div className="flex items-end">
+              <Button type="submit" disabled={isInviting || !email.trim()} className="w-full sm:w-auto">
+                <Send size={14} /> {isInviting ? "Enviando..." : "Convidar"}
+              </Button>
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Mensagem (opcional)" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Bora organizar isso juntos?" />
+            </div>
+          </form>
+          {inviteError && <p className="mt-2 text-xs text-drop">{inviteError.message}</p>}
+        </Card>
+      )}
+
+      <Card className="p-4 sm:p-5">
+        <p className="text-sm font-semibold mb-3">Membros ({members.length + 1})</p>
+        <div className="space-y-2">
+          {members.map((m) => (
+            <div key={m.userId} className="flex items-center justify-between gap-3 rounded-xl p-2.5 bg-paper dark:bg-ink">
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{m.name}</p>
+                <p className="text-xs text-slate truncate">{m.email}</p>
+              </div>
+              {isOwner && (
+                <Button variant="ghost" className="!text-drop shrink-0" onClick={() => removeMember(m.userId)}>
+                  <UserMinus size={14} /> Remover
+                </Button>
+              )}
+            </div>
+          ))}
+          {members.length === 0 && <p className="text-sm text-slate py-2">Ainda ninguém colaborando além de você.</p>}
+        </div>
+
+        {pendingInvites.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-paper-border/70 dark:border-ink-border/60">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate mb-2">Convites pendentes</p>
+            <div className="space-y-2">
+              {pendingInvites.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl p-2.5 bg-paper dark:bg-ink">
+                  <p className="text-sm truncate">{inv.email}</p>
+                  {isOwner && (
+                    <Button variant="ghost" className="!text-drop shrink-0" onClick={() => revokeInvite(inv.id)}>
+                      Revogar
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!isOwner && (
+          <div className="mt-4 pt-4 border-t border-paper-border/70 dark:border-ink-border/60">
+            <Button
+              variant="ghost"
+              className="!text-drop"
+              onClick={async () => {
+                await leave();
+                navigate("/projetos");
+              }}
+            >
+              Sair do projeto
+            </Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export function ProjetoDetalhePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -423,6 +535,11 @@ export function ProjetoDetalhePage() {
   const { updateProject } = useProjects();
   const { createTask, updateTask, removeTask, moveTask } = useTasks();
   const { isRpg } = useTheme();
+  const { user } = useAuth();
+  // "Colaboração total": dono pode gerenciar membros/convites; qualquer
+  // membro pode ver, criar, editar e concluir tarefas do projeto.
+  const isOwner = Boolean(project && user && project.owner_id === user.id);
+  const { members } = useProjectMembers(id);
   const { data: projectsXp } = useProjectsXp(isRpg);
   const [tab, setTab] = useState<TabKey>("overview");
   const [editing, setEditing] = useState(false);
@@ -439,8 +556,9 @@ export function ProjetoDetalhePage() {
       { key: "tasks" as const, label: isRpg ? "Missões" : "Tarefas", count: tasks.length },
       { key: "documents" as const, label: "Documentos", count: documents.length },
       { key: "timeline" as const, label: isRpg ? "Roadmap / Gantt" : "Cronograma" },
+      { key: "members" as const, label: "Membros", count: members.length + 1 },
     ],
-    [tasks.length, documents.length, isRpg]
+    [tasks.length, documents.length, isRpg, members.length]
   );
 
   if (isLoading) {
@@ -619,6 +737,7 @@ export function ProjetoDetalhePage() {
             ))}
           {tab === "documents" && <DocumentsTab documents={documents} isLoading={isDocumentsLoading} onOpenTask={openTaskById} />}
           {tab === "timeline" && <TimelineTab projectId={project.id} />}
+          {tab === "members" && <MembersTab projectId={project.id} isOwner={isOwner} />}
         </motion.div>
       </AnimatePresence>
 

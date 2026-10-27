@@ -62,6 +62,7 @@ import { bottlenecksRouter } from "./routes/bottlenecks.routes.js";
 import { intelligenceRouter } from "./routes/intelligence.routes.js";
 import { questsRouter } from "./routes/quests.routes.js";
 import { guildRouter } from "./routes/guild.routes.js";
+import { projectInvitesRouter } from "./routes/projectInvites.routes.js";
 import { grimoireRouter } from "./routes/grimoire.routes.js";
 import { readingYearRouter } from "./routes/readingYear.routes.js";
 import { warCouncilRouter } from "./routes/war-council.routes.js";
@@ -150,6 +151,7 @@ app.use(async (_req, _res, next) => {
 app.use("/api/auth", authRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/projects", projectsRouter);
+app.use("/api/project-invites", projectInvitesRouter);
 app.use("/api/habits", habitsRouter);
 app.use("/api/admin", adminRouter);
 // pushRouter tem uma rota pública (GET /vapid-public-key) e precisa

@@ -65,7 +65,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
 }
 
 /** Normaliza a linha crua do banco: links/tags voltam como arrays de verdade. */
-export function serializeProjectRow(row: Record<string, unknown>) {
+export function serializeProjectRow(row: Record<string, unknown>): Record<string, unknown> {
   return {
     ...row,
     status: (row.status as string | null) ?? "active",
@@ -83,6 +83,28 @@ export async function getOwnedProject(db: Db, ownerId: string, projectId: string
             (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.owner_id = p.owner_id AND t.status = ?) AS done_count
           FROM projects p WHERE p.id = ? AND p.owner_id = ?`,
     args: [DONE_STATUS, projectId, ownerId],
+  });
+  const row = res.rows[0] as unknown as Record<string, unknown> | undefined;
+  return row ? serializeProjectRow(row) : null;
+}
+
+/**
+ * Como getOwnedProject, mas também aceita quem tem acesso ao projeto
+ * via project_members ("Colaboração total" — ver projectAccessService.ts
+ * e projectSharingService.ts), não só o dono. task_count/done_count
+ * contam TODAS as tarefas do projeto (de qualquer membro), não só as
+ * do dono — é o mesmo número de antes para projetos não compartilhados
+ * (onde todo mundo tarefa é do próprio dono).
+ */
+export async function getAccessibleProjectDetail(db: Db, callerId: string, projectId: string) {
+  const res = await db.execute({
+    sql: `SELECT p.*,
+            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+            (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = ?) AS done_count
+          FROM projects p
+          WHERE p.id = ?
+            AND (p.owner_id = ? OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.user_id = ?))`,
+    args: [DONE_STATUS, projectId, callerId, callerId],
   });
   const row = res.rows[0] as unknown as Record<string, unknown> | undefined;
   return row ? serializeProjectRow(row) : null;

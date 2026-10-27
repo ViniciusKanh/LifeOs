@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validators/task.schema.js";
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
+import { getAccessibleProject, getAccessibleTask } from "../services/projectAccessService.js";
 import { awardFocusSession, awardTaskCompletion, syncContractStatus } from "../services/gamificationService.js";
 import { insertTask, maybeCheckInLinkedHabit, maybeSpawnNextOccurrence, moveTaskStatus, recomputePriorityScore } from "../services/taskWriteService.js";
 import { syncAutoHabitsAfterWrite } from "../services/habitAutoService.js";
@@ -13,7 +14,6 @@ import {
   addTaskAttachment,
   deleteTaskAttachment,
   listTaskAttachments,
-  taskBelongsToOwner,
   updateTaskAttachmentCaption,
 } from "../services/taskAttachmentsService.js";
 
@@ -24,21 +24,36 @@ export const tasksRouter = Router();
 // vindo do corpo da requisição.
 tasksRouter.use(requireAuth);
 
-/** GET /api/tasks?status=&projectId= */
+/**
+ * GET /api/tasks?status=&projectId= — sem projectId, só as tarefas do
+ * próprio usuário (lista/Kanban pessoal). Com projectId de um projeto
+ * COMPARTILHADO ("Colaboração total"), mostra as tarefas de TODOS os
+ * membros daquele projeto, não só as minhas — por isso o filtro
+ * owner_id só entra quando não há projectId ou o projeto não é
+ * compartilhado comigo.
+ */
 tasksRouter.get("/", async (req, res) => {
   const db = getDb();
   const { status, projectId } = req.query as { status?: string; projectId?: string };
 
+  if (projectId) {
+    const project = await getAccessibleProject(db, req.user!.id, projectId);
+    if (!project) return res.json([]);
+    const conditions = ["project_id = ?"];
+    const args: Array<string | number> = [projectId];
+    if (status) {
+      conditions.push("status = ?");
+      args.push(status);
+    }
+    const result = await db.execute({ sql: `SELECT * FROM tasks WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`, args });
+    return res.json(result.rows);
+  }
+
   const conditions = ["owner_id = ?"];
   const args: Array<string | number> = [req.user!.id];
-
   if (status) {
     conditions.push("status = ?");
     args.push(status);
-  }
-  if (projectId) {
-    conditions.push("project_id = ?");
-    args.push(projectId);
   }
 
   const result = await db.execute({
@@ -96,14 +111,10 @@ tasksRouter.get("/professional", async (req, res) => {
   return res.json(result.rows);
 });
 
-/** GET /api/tasks/:id */
+/** GET /api/tasks/:id — dona OU de um projeto compartilhado com o usuário. */
 tasksRouter.get("/:id", async (req, res) => {
   const db = getDb();
-  const result = await db.execute({
-    sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [req.params.id, req.user!.id],
-  });
-  const task = result.rows[0];
+  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
   if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
   return res.json(task);
 });
@@ -123,8 +134,10 @@ async function validateTaskLinks(
     if (r.rows.length === 0) return "Contrato inválido.";
   }
   if (d.projectId) {
-    const r = await db.execute({ sql: "SELECT id FROM projects WHERE id = ? AND owner_id = ?", args: [d.projectId, ownerId] });
-    if (r.rows.length === 0) return "Projeto inválido.";
+    // "Colaboração total": também aceita um projeto em que o usuário é
+    // membro (não só dono) — ver projectAccessService.ts.
+    const accessible = await getAccessibleProject(db, ownerId, d.projectId);
+    if (!accessible) return "Projeto inválido.";
   }
   if (d.goalId) {
     const r = await db.execute({ sql: "SELECT id FROM goals WHERE id = ? AND owner_id = ?", args: [d.goalId, ownerId] });
@@ -155,15 +168,16 @@ tasksRouter.patch("/:id", async (req, res) => {
   }
   const db = getDb();
 
-  const existing = await db.execute({
-    sql: "SELECT id, contract_id FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [req.params.id, req.user!.id],
-  });
-  if (existing.rows.length === 0) {
+  const existing = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!existing) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
-  const previousContract = existing.rows[0].contract_id == null ? null : String(existing.rows[0].contract_id);
-  const linkError = await validateTaskLinks(db, req.user!.id, parsed.data);
+  // owner_id REAL da tarefa (quem criou) — nunca o de quem está editando via
+  // projeto compartilhado ("Colaboração total"). Todo efeito colateral
+  // (score, recorrência, hábito, XP, contrato) continua sob o dono real.
+  const realOwnerId = String(existing.owner_id);
+  const previousContract = existing.contract_id == null ? null : String(existing.contract_id);
+  const linkError = await validateTaskLinks(db, realOwnerId, parsed.data);
   if (linkError) return res.status(400).json({ error: linkError });
 
   const fieldMap: Record<string, string> = {
@@ -201,30 +215,30 @@ tasksRouter.patch("/:id", async (req, res) => {
   }
   sets.push("updated_at = datetime('now')");
 
-  args.push(req.params.id, req.user!.id);
+  args.push(req.params.id, realOwnerId);
 
   await db.execute({
     sql: `UPDATE tasks SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`,
     args,
   });
-  await recomputePriorityScore(db, req.params.id, req.user!.id);
+  await recomputePriorityScore(db, req.params.id, realOwnerId);
   if (dataForUpdate.status === "Concluído") {
-    await maybeSpawnNextOccurrence(db, req.params.id, req.user!.id);
-    await maybeCheckInLinkedHabit(db, req.params.id, req.user!.id);
-    await awardTaskCompletion(db, req.user!.id, req.params.id);
+    await maybeSpawnNextOccurrence(db, req.params.id, realOwnerId);
+    await maybeCheckInLinkedHabit(db, req.params.id, realOwnerId);
+    await awardTaskCompletion(db, realOwnerId, req.params.id);
   }
   // Hábito automático "concluir N tarefas" acompanha conclusão e reabertura.
-  if ("status" in dataForUpdate) await syncAutoHabitsAfterWrite(db, req.user!.id);
+  if ("status" in dataForUpdate) await syncAutoHabitsAfterWrite(db, realOwnerId);
   // Contrato acompanha reabertura/troca de vínculo (o bônus pago nunca se repete).
   if ("contractId" in parsed.data && previousContract && previousContract !== parsed.data.contractId) {
-    await syncContractStatus(db, req.user!.id, previousContract);
+    await syncContractStatus(db, realOwnerId, previousContract);
   }
   const currentContract = "contractId" in parsed.data ? parsed.data.contractId ?? null : previousContract;
-  if (currentContract && parsed.data.status !== "Concluído") await syncContractStatus(db, req.user!.id, currentContract);
+  if (currentContract && parsed.data.status !== "Concluído") await syncContractStatus(db, realOwnerId, currentContract);
 
   const updated = await db.execute({
     sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [req.params.id, req.user!.id],
+    args: [req.params.id, realOwnerId],
   });
 
   return res.json(updated.rows[0]);
@@ -236,7 +250,12 @@ tasksRouter.patch("/:id/move", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: "Status inválido." });
   }
-  const moved = await moveTaskStatus(getDb(), req.user!.id, req.params.id, parsed.data.status);
+  const db = getDb();
+  const existing = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!existing) return res.status(404).json({ error: "Tarefa não encontrada." });
+  // "Colaboração total": qualquer membro do projeto pode mover/concluir a
+  // tarefa, mas XP/recorrência/hábito continuam sob o dono real dela.
+  const moved = await moveTaskStatus(db, String(existing.owner_id), req.params.id, parsed.data.status);
   if (!moved) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
@@ -256,11 +275,11 @@ tasksRouter.get("/:id/time/active", async (req, res) => {
 /** POST /api/tasks/:id/time/start — inicia o cronômetro de uma tarefa (monitora o tempo gasto nela) */
 tasksRouter.post("/:id/time/start", async (req, res) => {
   const db = getDb();
-  const task = await db.execute({
-    sql: "SELECT id, project_id FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [req.params.id, req.user!.id],
-  });
-  if (task.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+  // A tarefa pode ser de um projeto compartilhado ("Colaboração total") —
+  // mas o apontamento de tempo é sempre de quem está de fato com o
+  // cronômetro aberto, por isso fica sob req.user!.id, não o dono da tarefa.
+  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
 
   // Só um apontamento aberto por vez — fecha qualquer um pendurado antes de abrir outro.
   await db.execute({
@@ -272,7 +291,7 @@ tasksRouter.post("/:id/time/start", async (req, res) => {
   await db.execute({
     sql: `INSERT INTO time_entries (id, owner_id, task_id, project_id, started_at, kind)
           VALUES (?, ?, ?, ?, datetime('now'), 'manual')`,
-    args: [id, req.user!.id, req.params.id, task.rows[0].project_id ?? null],
+    args: [id, req.user!.id, req.params.id, (task.project_id as string | null) ?? null],
   });
   const created = await db.execute({ sql: "SELECT * FROM time_entries WHERE id = ?", args: [id] });
   return res.status(201).json(created.rows[0]);
@@ -298,20 +317,26 @@ tasksRouter.patch("/:id/time/stop", async (req, res) => {
   const updatedEntry = await db.execute({ sql: "SELECT * FROM time_entries WHERE id = ?", args: [entry.id] });
   const minutes = Number(updatedEntry.rows[0]?.duration_minutes ?? 0);
 
+  // A tarefa pode pertencer a outro membro do projeto compartilhado
+  // ("Colaboração total") — o apontamento de tempo em si é sempre de
+  // quem rodou o cronômetro (req.user!.id), mas a soma em
+  // tasks.time_spent_minutes precisa do owner_id REAL da tarefa.
+  const taskRow = await getAccessibleTask(db, req.user!.id, req.params.id);
+  const realOwnerId = taskRow ? String(taskRow.owner_id) : req.user!.id;
   await db.execute({
     sql: "UPDATE tasks SET time_spent_minutes = time_spent_minutes + ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
-    args: [minutes, req.params.id, req.user!.id],
+    args: [minutes, req.params.id, realOwnerId],
   });
   await awardFocusSession(db, req.user!.id, String(entry.id), minutes, entry.project_id == null ? null : String(entry.project_id));
-  const task = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
+  const task = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, realOwnerId] });
   return res.json(task.rows[0]);
 });
 
 /** GET /api/tasks/:id/dependencies — ids das tarefas das quais esta depende. */
 tasksRouter.get("/:id/dependencies", async (req, res) => {
   const db = getDb();
-  const owned = await db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  if (owned.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+  const owned = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!owned) return res.status(404).json({ error: "Tarefa não encontrada." });
 
   const result = await db.execute({ sql: "SELECT depends_on_id FROM task_dependencies WHERE task_id = ?", args: [req.params.id] });
   return res.json((result.rows as unknown as Array<{ depends_on_id: string }>).map((r) => r.depends_on_id));
@@ -334,11 +359,11 @@ tasksRouter.post("/:id/dependencies", async (req, res) => {
   const db = getDb();
 
   const [task, dependsOn] = await Promise.all([
-    db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] }),
-    db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [parsed.data.dependsOnId, req.user!.id] }),
+    getAccessibleTask(db, req.user!.id, req.params.id),
+    getAccessibleTask(db, req.user!.id, parsed.data.dependsOnId),
   ]);
-  if (task.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
-  if (dependsOn.rows.length === 0) return res.status(404).json({ error: "Tarefa da qual depende não encontrada." });
+  if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
+  if (!dependsOn) return res.status(404).json({ error: "Tarefa da qual depende não encontrada." });
 
   await db.execute({
     sql: "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)",
@@ -350,8 +375,8 @@ tasksRouter.post("/:id/dependencies", async (req, res) => {
 /** DELETE /api/tasks/:id/dependencies/:dependsOnId */
 tasksRouter.delete("/:id/dependencies/:dependsOnId", async (req, res) => {
   const db = getDb();
-  const owned = await db.execute({ sql: "SELECT id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  if (owned.rows.length === 0) return res.status(404).json({ error: "Tarefa não encontrada." });
+  const owned = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!owned) return res.status(404).json({ error: "Tarefa não encontrada." });
 
   await db.execute({
     sql: "DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_id = ?",
@@ -363,10 +388,11 @@ tasksRouter.delete("/:id/dependencies/:dependsOnId", async (req, res) => {
 /** GET /api/tasks/:id/attachments — imagens e PDFs anexados à tarefa. */
 tasksRouter.get("/:id/attachments", async (req, res) => {
   const db = getDb();
-  if (!(await taskBelongsToOwner(db, req.user!.id, req.params.id))) {
+  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!task) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
-  return res.json(await listTaskAttachments(db, req.user!.id, req.params.id));
+  return res.json(await listTaskAttachments(db, String(task.owner_id), req.params.id));
 });
 
 /** POST /api/tasks/:id/attachments — anexa uma imagem (já comprimida no cliente) ou um PDF. */
@@ -376,10 +402,11 @@ tasksRouter.post("/:id/attachments", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Arquivo inválido." });
   }
   const db = getDb();
-  if (!(await taskBelongsToOwner(db, req.user!.id, req.params.id))) {
+  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!task) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
-  const created = await addTaskAttachment(db, req.user!.id, req.params.id, parsed.data);
+  const created = await addTaskAttachment(db, String(task.owner_id), req.params.id, parsed.data);
   if (!created) return res.status(400).json({ error: "Limite de anexos desta tarefa atingido." });
   return res.status(201).json(created);
 });
@@ -391,7 +418,9 @@ tasksRouter.patch("/:id/attachments/:attachmentId", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   }
   const db = getDb();
-  const ok = await updateTaskAttachmentCaption(db, req.user!.id, req.params.id, req.params.attachmentId, parsed.data.caption ?? null);
+  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
+  const ok = await updateTaskAttachmentCaption(db, String(task.owner_id), req.params.id, req.params.attachmentId, parsed.data.caption ?? null);
   if (!ok) return res.status(404).json({ error: "Anexo não encontrado." });
   return res.json({ ok: true });
 });
@@ -399,7 +428,9 @@ tasksRouter.patch("/:id/attachments/:attachmentId", async (req, res) => {
 /** DELETE /api/tasks/:id/attachments/:attachmentId */
 tasksRouter.delete("/:id/attachments/:attachmentId", async (req, res) => {
   const db = getDb();
-  const ok = await deleteTaskAttachment(db, req.user!.id, req.params.id, req.params.attachmentId);
+  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
+  const ok = await deleteTaskAttachment(db, String(task.owner_id), req.params.id, req.params.attachmentId);
   if (!ok) return res.status(404).json({ error: "Anexo não encontrado." });
   return res.status(204).send();
 });
@@ -407,15 +438,21 @@ tasksRouter.delete("/:id/attachments/:attachmentId", async (req, res) => {
 /** DELETE /api/tasks/:id */
 tasksRouter.delete("/:id", async (req, res) => {
   const db = getDb();
-  const linked = await db.execute({ sql: "SELECT contract_id FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, req.user!.id] });
-  const contractId = linked.rows[0]?.contract_id;
+  // "Colaboração total": qualquer membro do projeto pode excluir a tarefa,
+  // não só o dono real dela.
+  const existing = await getAccessibleTask(db, req.user!.id, req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: "Tarefa não encontrada." });
+  }
+  const realOwnerId = String(existing.owner_id);
+  const contractId = existing.contract_id;
   const result = await db.execute({
     sql: "DELETE FROM tasks WHERE id = ? AND owner_id = ?",
-    args: [req.params.id, req.user!.id],
+    args: [req.params.id, realOwnerId],
   });
   if (result.rowsAffected === 0) {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
-  if (typeof contractId === "string" && contractId) await syncContractStatus(db, req.user!.id, contractId);
+  if (typeof contractId === "string" && contractId) await syncContractStatus(db, realOwnerId, contractId);
   return res.status(204).send();
 });
