@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, KeyRound, Mail, Plus, Send, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Gauge, KeyRound, Mail, Plus, Send, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminSettings, useAdminUsers, useGeminiModels, useGoogleRedirectUri, useSecurityInfo } from "@/hooks/useAdmin";
 import { adminService } from "@/services/adminService";
@@ -274,6 +274,8 @@ export function ConfiguracoesPage() {
   const smtpPass = findSetting(settings, "smtp", "app_password");
   const googleClientId = findSetting(settings, "google_oauth", "client_id");
   const googleClientSecret = findSetting(settings, "google_oauth", "client_secret");
+  const redisUrl = findSetting(settings, "redis", "rest_url");
+  const redisToken = findSetting(settings, "redis", "rest_token");
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-4">
@@ -324,6 +326,32 @@ export function ConfiguracoesPage() {
         <p className="text-[11px] text-slate">
           O teste abre uma conexão separada com essas credenciais e roda uma consulta simples — não afeta a conexão
           real da API, que continua vindo de DATABASE_URL/DATABASE_AUTH_TOKEN nas variáveis de ambiente.
+        </p>
+      </SectionCard>
+
+      <SectionCard
+        icon={<IconBadge tone="teal" size={30} icon={<Gauge size={14} />} />}
+        title="Rate limiter compartilhado (Redis)"
+        description="Opcional. Sem credenciais aqui, o limitador de requisições usa um contador em memória por instância (funciona bem com uma instância só). Com um banco Upstash Redis configurado, o limite passa a valer de verdade entre múltiplas instâncias da API."
+      >
+        <SecretField
+          label="Upstash REST URL"
+          placeholder="https://seu-banco.upstash.io"
+          existing={redisUrl}
+          onSave={(value) => upsertSetting({ integration: "redis", keyName: "rest_url", value })}
+          onRemove={() => removeSetting({ integration: "redis", keyName: "rest_url" })}
+        />
+        <SecretField
+          label="Upstash REST Token"
+          placeholder="AX..."
+          existing={redisToken}
+          onSave={(value) => upsertSetting({ integration: "redis", keyName: "rest_token", value })}
+          onRemove={() => removeSetting({ integration: "redis", keyName: "rest_token" })}
+        />
+        <TestConnectionButton integration="redis" />
+        <p className="text-[11px] text-slate">
+          Crie um banco gratuito em upstash.com (Redis → Create database → Regional) e copie a "REST URL" e o "REST
+          Token" daqui. O teste faz um SET/GET/DEL de verdade no banco — só grava um valor curto e apaga em seguida.
         </p>
       </SectionCard>
 

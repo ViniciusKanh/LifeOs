@@ -91,7 +91,7 @@ export interface AdminUserOverview {
   audit: Array<{ action: string; created_at: string; actor_name: string | null }>;
 }
 
-export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth";
+export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth" | "redis";
 
 export interface AdminSetting {
   id: string;

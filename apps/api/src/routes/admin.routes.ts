@@ -9,6 +9,7 @@ import { hashPassword } from "../services/authService.js";
 import { verifySmtpConnection, sendMail, testEmail } from "../services/emailService.js";
 import { testGeminiConnection, GEMINI_MODELS, DEFAULT_GEMINI_MODEL } from "../services/geminiService.js";
 import { testTursoConnection } from "../services/tursoService.js";
+import { testRedisConnection, invalidateRedisConfigCache } from "../services/redisRateLimitService.js";
 import { googleRedirectUri, resolveAppUrl } from "../services/googleAuthService.js";
 import { generatePasswordResetToken } from "../services/authService.js";
 import { passwordResetEmail } from "../services/emailService.js";
@@ -24,7 +25,7 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
 
 const upsertSettingSchema = z.object({
-  integration: z.enum(["gemini", "turso", "smtp", "google_oauth"]),
+  integration: z.enum(["gemini", "turso", "smtp", "google_oauth", "redis"]),
   keyName: z.string().min(1).max(60),
   value: z.string().min(1).max(4000),
   extraConfig: z.record(z.unknown()).optional(),
@@ -115,6 +116,7 @@ adminRouter.put("/settings", async (req, res) => {
   });
 
   await logAudit(db, req.user!.id, "admin_settings.update", `${integration}.${keyName}`, req);
+  if (integration === "redis") invalidateRedisConfigCache();
 
   return res.json({ integration, keyName, maskedPreview: preview });
 });
@@ -127,6 +129,7 @@ adminRouter.delete("/settings/:integration/:keyName", async (req, res) => {
     args: [req.params.integration, req.params.keyName],
   });
   await logAudit(db, req.user!.id, "admin_settings.remove", `${req.params.integration}.${req.params.keyName}`, req);
+  if (req.params.integration === "redis") invalidateRedisConfigCache();
   return res.status(204).send();
 });
 
@@ -147,6 +150,8 @@ adminRouter.post("/settings/:integration/test", async (req, res) => {
     result = await testGeminiConnection();
   } else if (req.params.integration === "turso") {
     result = await testTursoConnection();
+  } else if (req.params.integration === "redis") {
+    result = await testRedisConnection();
   } else {
     return res.status(400).json({ error: `Integração "${req.params.integration}" desconhecida.` });
   }

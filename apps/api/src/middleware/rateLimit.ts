@@ -1,9 +1,21 @@
 import type { Request, Response, NextFunction } from "express";
+import { getRedisClient, redisIncrWithExpiry } from "../services/redisRateLimitService.js";
 
 /**
- * Rate limiter em memória. Suficiente para uma instância única; em produção
- * com múltiplas instâncias, trocar por um backend compartilhado (ex: Redis)
- * mantendo a mesma interface (windowMs, max, key).
+ * Rate limiter com dois backends:
+ *
+ * - Em memória (Map): padrão, sem configuração — correto para UMA
+ *   instância só. É o que o LifeOS sempre usou.
+ * - Redis (Upstash, via admin_settings/Configurações): backend
+ *   compartilhado entre instâncias — necessário se a API rodar mais de
+ *   uma instância ao mesmo tempo (ex. serverless da Vercel sob carga),
+ *   onde cada instância teria seu próprio Map e o limite "furaria".
+ *
+ * A troca é automática e silenciosa: se o Redis estiver configurado e
+ * ativo, ele é usado; se não estiver configurado, OU se a chamada ao
+ * Redis falhar/der timeout por qualquer motivo, cai de volta pro Map em
+ * memória para aquela requisição — o rate limiter nunca pode ser motivo
+ * de a API inteira ficar indisponível.
  *
  * Chave: usuário autenticado quando houver (o limiter roda depois do
  * requireAuth), senão IP — mais o caminho *declarado* da rota
@@ -20,6 +32,33 @@ function sweep(now: number) {
   if (now - lastSweep < SWEEP_EVERY_MS) return;
   lastSweep = now;
   for (const [key, bucket] of buckets) if (bucket.resetAt < now) buckets.delete(key);
+}
+
+/** Backend em memória — sempre disponível, usado como padrão e como fallback do Redis. */
+function hitMemory(key: string, windowMs: number): { count: number; resetAt: number } {
+  const now = Date.now();
+  sweep(now);
+  const bucket = buckets.get(key);
+
+  if (!bucket || bucket.resetAt < now) {
+    const fresh = { count: 1, resetAt: now + windowMs };
+    buckets.set(key, fresh);
+    return fresh;
+  }
+
+  bucket.count += 1;
+  return bucket;
+}
+
+/** Tenta o Redis primeiro; qualquer problema (sem config, timeout, erro de rede) cai pro Map local. */
+async function hit(key: string, windowMs: number): Promise<{ count: number; resetAt: number }> {
+  try {
+    const client = await getRedisClient();
+    if (client) return await redisIncrWithExpiry(client, `lifeos:ratelimit:${key}`, windowMs);
+  } catch (err) {
+    console.error("[rateLimit] Redis indisponível, usando contador em memória para esta requisição:", err);
+  }
+  return hitMemory(key, windowMs);
 }
 
 export type RateLimitOptions = {
@@ -44,27 +83,19 @@ export function rateLimit(options?: RateLimitOptions) {
   const max = options?.max ?? Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10);
   const message = options?.message ?? "Muitas tentativas. Tente novamente em alguns minutos.";
 
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     // Escape explícito só para suítes automatizadas (nunca ligado em produção).
     if (process.env.NODE_ENV === "test" && process.env.RATE_LIMIT_DISABLED === "true") return next();
 
     const key = `${options?.key ? options.key(req) : identity(req)}:${routeKey(req)}`;
-    const now = Date.now();
-    sweep(now);
-    const bucket = buckets.get(key);
+    const { count, resetAt } = await hit(key, windowMs);
 
-    if (!bucket || bucket.resetAt < now) {
-      buckets.set(key, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-
-    if (bucket.count >= max) {
-      const retryAfterSec = Math.ceil((bucket.resetAt - now) / 1000);
+    if (count > max) {
+      const retryAfterSec = Math.ceil((resetAt - Date.now()) / 1000);
       res.setHeader("Retry-After", String(retryAfterSec));
       return res.status(429).json({ error: message, retryAfterSec });
     }
 
-    bucket.count += 1;
     return next();
   };
 }
