@@ -82,6 +82,7 @@ const ProtocolosPage = lazy(() => import("@/pages/protocolos/ProtocolosPage").th
 const DetectorGargalosPage = lazy(() => import("@/pages/detector-gargalos/DetectorGargalosPage").then((m) => ({ default: m.DetectorGargalosPage })));
 const TavernaPage = lazy(() => import("@/pages/taverna/TavernaPage").then((m) => ({ default: m.TavernaPage })));
 const MapaMundoPage = lazy(() => import("@/pages/mapa/MapaMundoPage").then((m) => ({ default: m.MapaMundoPage })));
+const TimelinePage = lazy(() => import("@/pages/timeline/TimelinePage").then((m) => ({ default: m.TimelinePage })));
 const QuestsPage = lazy(() => import("@/pages/quests/QuestsPage").then((m) => ({ default: m.QuestsPage })));
 const GuildaPage = lazy(() => import("@/pages/guilda/GuildaPage").then((m) => ({ default: m.GuildaPage })));
 const GrimorioPage = lazy(() => import("@/pages/grimorio/GrimorioPage").then((m) => ({ default: m.GrimorioPage })));
@@ -183,7 +184,7 @@ export default function App() {
           <Route path="/capacity-planner" element={<CapacityPlannerPage />} />
           <Route path="/deadline-radar" element={<DeadlineRadarPage />} />
           <Route path="/goal-forecast" element={<Navigate to="/metas" replace />} />
-          <Route path="/timeline" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/codex" element={<CodexPage />} />
           <Route path="/mapa" element={<MapaMundoPage />} />
           <Route path="/taverna" element={<TavernaPage />} />

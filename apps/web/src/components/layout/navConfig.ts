@@ -33,6 +33,7 @@ import {
   Users,
   Swords,
   BookOpenText,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -142,6 +143,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Medir",
     items: [
       { to: "/codex", label: "Códex da Jornada", icon: BookMarked, quote: "Toda grande história começa com um registro." },
+      { to: "/timeline", label: "Timeline", rpgLabel: "Crônica da Jornada", icon: History, quote: "Tudo que você vive de verdade vira registro." },
       { to: "/mapa", label: "Mapa do Mundo", icon: MapIcon, quote: "Cada região da vida tem sua própria jornada." },
     ],
   },

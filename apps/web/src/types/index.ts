@@ -923,6 +923,14 @@ export interface TimelineEvent {
   [key: string]: unknown;
 }
 
+export interface TimelineResponse {
+  from: string;
+  to: string;
+  events: TimelineEvent[];
+  /** XP total por dia (YYYY-MM-DD), incluindo bônus do dia. */
+  xpByDay: Record<string, number>;
+}
+
 export interface DailyReview {
   id: string;
   review_date: string;
