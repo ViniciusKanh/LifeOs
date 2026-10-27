@@ -113,6 +113,14 @@ app.use(
     credentials: true, // necessário para o cookie httpOnly de sessão
   })
 );
+// Restaurar o próprio backup (POST /api/import/restore) recebe de volta o
+// mesmo JSON de "Exportar meus dados" — mesmo descartando fotos (fora do
+// escopo V1 da restauração), o arquivo inteiro ainda chega no corpo da
+// requisição, então pode passar dos 5MB padrão em contas com bastante
+// histórico. Registrado ANTES do limite geral: o body-parser já marca a
+// requisição como processada (req._body), então o app.use(express.json)
+// de baixo não entra em conflito, só é pulado para esta rota.
+app.use("/api/import/restore", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "5mb" })); // fotos do Diário (Fase 4) chegam como data URI — teto um pouco acima do limite de 3MB por foto pra sobrar espaço pro JSON ao redor
 app.use(cookieParser());
 

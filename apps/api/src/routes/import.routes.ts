@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { restoreBackup } from "../services/backupRestoreService.js";
 
 /**
  * Importação de tarefas de outros apps (Todoist, Notion, Google Tasks).
@@ -68,4 +69,26 @@ importRouter.post("/tasks", rateLimit({ windowMs: 10 * 60 * 1000, max: 10 }), as
   // Em lotes, numa transação por lote — se um lote falhar, nada dele fica pela metade.
   for (let i = 0; i < statements.length; i += 200) await db.batch(statements.slice(i, i + 200), "write");
   return res.status(201).json({ imported: items.length, projectsCreated });
+});
+
+const restoreSchema = z.object({
+  data: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))),
+});
+
+/**
+ * POST /api/import/restore — restaura o PRÓPRIO backup (o JSON baixado em
+ * "Exportar meus dados"). Escopo V1: só os módulos centrais (tarefas,
+ * projetos, metas, hábitos, saúde, diário, biblioteca, educação) — ver
+ * backupRestoreService.ts para a lista exata e o porquê. Raro e pesado:
+ * rate limit mais apertado que a importação de tarefas.
+ */
+importRouter.post("/restore", rateLimit({ windowMs: 60 * 60 * 1000, max: 3, message: "Você já restaurou um backup várias vezes na última hora. Tente novamente mais tarde." }), async (req, res) => {
+  const parsed = restoreSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Arquivo de backup inválido — envie o JSON gerado por \"Exportar meus dados\" sem editar." });
+  }
+
+  const db = getDb();
+  const summary = await restoreBackup(db, req.user!.id, parsed.data.data);
+  return res.json(summary);
 });
