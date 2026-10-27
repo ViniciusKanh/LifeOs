@@ -25,6 +25,7 @@ import { analyticsRouter } from "./routes/analytics.routes.js";
 import { notificationsRouter } from "./routes/notifications.routes.js";
 import { copilotRouter } from "./routes/copilot.routes.js";
 import { eventsRouter } from "./routes/events.routes.js";
+import { icsRouter } from "./routes/ics.routes.js";
 import { achievementsRouter } from "./routes/achievements.routes.js";
 import { exportRouter } from "./routes/export.routes.js";
 import { pushRouter } from "./routes/push.routes.js";
@@ -166,6 +167,8 @@ app.use("/api/analytics", analyticsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/copilot", copilotRouter);
 app.use("/api/events", eventsRouter);
+// Rota pública (sem requireAuth): autenticação é só o token no path — ver ics.routes.ts.
+app.use("/api/ics", icsRouter);
 app.use("/api/achievements", achievementsRouter);
 app.use("/api/export", exportRouter);
 app.use("/api/search", searchRouter);

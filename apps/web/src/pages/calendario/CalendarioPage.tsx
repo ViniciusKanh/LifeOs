@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
-import { useEvents } from "@/hooks/useEvents";
+import { Check, ChevronLeft, ChevronRight, Copy, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { useEvents, useIcsFeed } from "@/hooks/useEvents";
 import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
 import type { CalendarItem } from "@/types";
 
@@ -32,6 +32,62 @@ function buildMonthGrid(year: number, month: number) {
     days.push(d);
   }
   return days;
+}
+
+/**
+ * Assinatura de calendário externo (.ics): o usuário cola essa URL no
+ * Google/Apple/Outlook Calendar ("adicionar calendário por URL") e passa
+ * a ver prazos de tarefas + eventos do LifeOS direto no app que já usa no
+ * dia a dia — somente leitura, sem precisar abrir o LifeOS.
+ */
+function IcsSubscribeCard() {
+  const { url, isLoading, regenerate, isRegenerating } = useIcsFeed();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard pode falhar (permissão/contexto não seguro) — o campo já mostra a URL pra copiar manualmente.
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">Assinar em outro app</p>
+          <p className="text-xs text-slate mt-0.5">
+            Cole esta URL no Google Calendar, Apple Calendar ou Outlook ("adicionar calendário por URL") para ver seus prazos de
+            tarefas e eventos direto por lá — somente leitura, atualiza sozinho.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          readOnly
+          value={isLoading ? "Gerando link…" : (url ?? "")}
+          onFocus={(e) => e.currentTarget.select()}
+          className="flex-1 min-w-[220px] text-xs font-mono px-3 py-2 rounded-xl border border-paper-border dark:border-ink-border bg-paper dark:bg-ink text-slate"
+        />
+        <Button variant="secondary" onClick={handleCopy} disabled={!url} className="!px-3">
+          {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copiado" : "Copiar"}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => void regenerate()}
+          disabled={isRegenerating}
+          className="!px-3 text-xs"
+          title="Gera uma URL nova e invalida a anterior (use se este link vazou)"
+        >
+          <RefreshCw size={14} className={isRegenerating ? "animate-spin" : ""} /> Gerar novo link
+        </Button>
+      </div>
+    </Card>
+  );
 }
 
 export function CalendarioPage() {
@@ -188,6 +244,8 @@ export function CalendarioPage() {
           <span className="w-2.5 h-2.5 rounded-full bg-cat-green" /> Acadêmico
         </span>
       </div>
+
+      <IcsSubscribeCard />
 
       {/* painel do dia selecionado */}
       {newEventDate && (

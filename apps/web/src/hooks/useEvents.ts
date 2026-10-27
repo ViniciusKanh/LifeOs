@@ -26,3 +26,24 @@ export function useEvents(from: string, to: string) {
     removeEvent: removeEvent.mutateAsync,
   };
 }
+
+/**
+ * URL de assinatura do calendário externo (.ics) — Google/Apple/Outlook
+ * Calendar buscam prazos de tarefas + eventos direto, sem precisar abrir
+ * o LifeOS. "Gerar novo link" invalida a URL anterior.
+ */
+export function useIcsFeed() {
+  const query = useQuery({ queryKey: ["events", "ics-feed"], queryFn: () => eventsService.icsFeed() });
+  const regenerate = useMutation({
+    mutationFn: eventsService.regenerateIcsFeed,
+    onSuccess: () => {
+      void query.refetch();
+    },
+  });
+  return {
+    url: query.data?.url ?? null,
+    isLoading: query.isLoading,
+    regenerate: regenerate.mutateAsync,
+    isRegenerating: regenerate.isPending,
+  };
+}

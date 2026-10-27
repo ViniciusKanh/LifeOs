@@ -8,4 +8,8 @@ export const eventsService = {
   update: (id: string, input: Partial<{ title: string; description: string | null; startsAt: string; endsAt: string | null; allDay: boolean }>) =>
     api.patch<CalendarItem>(`/events/${id}`, input),
   remove: (id: string) => api.delete<void>(`/events/${id}`),
+  /** URL da assinatura .ics (gera o token na primeira chamada, se ainda não existir). */
+  icsFeed: () => api.get<{ url: string }>("/events/ics-feed"),
+  /** Gera uma URL nova, invalidando a anterior (ex.: se o link vazou). */
+  regenerateIcsFeed: () => api.post<{ url: string }>("/events/ics-feed/regenerate"),
 };
