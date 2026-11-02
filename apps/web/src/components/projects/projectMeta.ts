@@ -44,3 +44,51 @@ export function formatCurrency(value: number | null | undefined) {
   if (value == null) return null;
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
+/* ------------------------------------------------------------------ */
+/* Saúde do projeto — regra de negócio central (lista, cartão e HUD). */
+/* ------------------------------------------------------------------ */
+
+export type ProjectHealthKey = "done" | "late" | "risk" | "ok" | "idle";
+
+/** Dias (inteiros) de hoje até a data; negativo = já passou. */
+export function daysUntil(date: string | null | undefined, today: string): number | null {
+  if (!date) return null;
+  const a = Date.parse(`${today.slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${date.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * Saúde derivada só de dados reais: status, prazo do projeto, tarefas
+ * atrasadas e progresso (concluídas/total).
+ * - Atrasado: prazo do projeto vencido ou alguma tarefa vencida.
+ * - Em risco: prazo em até 7 dias com menos de 70% concluído.
+ */
+export function projectHealth(
+  p: { status: ProjectStatus; due_date: string | null; task_count: number; done_count: number },
+  overdueTasks: number,
+  today: string,
+): { key: ProjectHealthKey; label: string } {
+  if (p.status === "completed") return { key: "done", label: "Concluído" };
+  if (p.status === "paused" || p.status === "cancelled") return { key: "idle", label: p.status === "paused" ? "Pausado" : "Cancelado" };
+  const days = daysUntil(p.due_date, today);
+  const pct = p.task_count > 0 ? p.done_count / p.task_count : 0;
+  if ((days !== null && days < 0) || overdueTasks > 0) return { key: "late", label: "Atrasado" };
+  if (days !== null && days <= 7 && pct < 0.7) return { key: "risk", label: "Em risco" };
+  return { key: "ok", label: "Em dia" };
+}
+
+/** Ordem de urgência para listar projetos: atrasados → em risco → prazo mais próximo → nome. */
+type UrgencyInput = { id: string; status: ProjectStatus; due_date: string | null; task_count: number; done_count: number; name: string };
+
+export function compareByUrgency(a: UrgencyInput, b: UrgencyInput, overdueOf: (id: string) => number, today: string): number {
+  const rank = { late: 0, risk: 1, ok: 2, idle: 3, done: 4 } as const;
+  const ha = projectHealth(a, overdueOf(a.id), today).key;
+  const hb = projectHealth(b, overdueOf(b.id), today).key;
+  if (rank[ha] !== rank[hb]) return rank[ha] - rank[hb];
+  const da = a.due_date ?? "9999-12-31";
+  const db = b.due_date ?? "9999-12-31";
+  return da.localeCompare(db) || a.name.localeCompare(b.name, "pt-BR");
+}

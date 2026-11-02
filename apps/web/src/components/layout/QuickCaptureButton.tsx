@@ -44,12 +44,12 @@ export function QuickCaptureButton() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Captura rápida"
-        className="fixed z-20 bottom-[10.75rem] md:bottom-[5.5rem] right-4 md:right-6 w-12 h-12 rounded-full flex items-center justify-center bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border text-brand-600 dark:text-brand-400 shadow-card"
+        className="fixed z-20 bottom-[10.75rem] lg:bottom-[5.5rem] right-4 lg:right-6 w-12 h-12 rounded-full flex items-center justify-center bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border text-brand-600 dark:text-brand-400 shadow-card"
       >
         {justCaptured ? <Check size={20} className="text-growth" /> : <Inbox size={19} />}
       </button>
       {offlineSaved && (
-        <div role="status" className="fixed z-30 bottom-[14.5rem] md:bottom-[9rem] right-4 md:right-6 max-w-[240px] rounded-xl bg-[#1E2537] text-white text-xs px-3 py-2 shadow-lg">
+        <div role="status" className="fixed z-30 bottom-[14.5rem] lg:bottom-[9rem] right-4 lg:right-6 max-w-[240px] rounded-xl bg-[#1E2537] text-white text-xs px-3 py-2 shadow-lg">
           Sem conexão: guardado no aparelho. Sobe sozinho quando a internet voltar.
         </div>
       )}

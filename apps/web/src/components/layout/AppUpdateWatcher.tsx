@@ -46,7 +46,7 @@ export function AppUpdateWatcher() {
 
   if (!ready || dismissed) return null;
   return (
-    <div className="fixed bottom-24 md:bottom-6 left-1/2 z-[65] -translate-x-1/2 px-4 w-full max-w-md" role="status">
+    <div className="fixed bottom-24 lg:bottom-6 left-1/2 z-[65] -translate-x-1/2 px-4 w-full max-w-md" role="status">
       <div className="flex items-center gap-3 rounded-xl border border-brand-500/40 bg-paper-raised dark:bg-ink-raised px-4 py-3 shadow-lg rpg:rounded-[3px] rpg:border-rpg-gold/70 rpg:bg-rpg-panel">
         <RefreshCw size={16} className="shrink-0 text-brand-600 rpg:text-rpg-gold-light" aria-hidden />
         <p className="min-w-0 flex-1 text-sm rpg:text-rpg-text">Nova versão do LifeOS disponível.</p>

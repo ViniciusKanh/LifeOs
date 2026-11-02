@@ -216,7 +216,7 @@ function usePaletteKeyboard(count: number, onRun: (i: number) => void) {
 function Toast({ text }: { text: string | null }) {
   if (!text) return null;
   return (
-    <div role="status" className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[70] rounded-xl bg-[#1E2537] text-white text-xs px-4 py-2.5 shadow-lg">
+    <div role="status" className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-[70] rounded-xl bg-[#1E2537] text-white text-xs px-4 py-2.5 shadow-lg">
       {text}
     </div>
   );
@@ -248,7 +248,7 @@ export function DesktopGlobalSearch() {
   // Ctrl/⌘ + K agora abre a paleta de comandos global (components/command/CommandPalette).
 
   return (
-    <div className="hidden md:flex flex-1 max-w-md relative">
+    <div className="hidden lg:flex flex-1 max-w-md relative">
       <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate pointer-events-none" />
       <input
         ref={inputRef}
@@ -311,12 +311,12 @@ export function MobileGlobalSearch() {
 
   return (
     <>
-      <button onClick={() => setOpenSheet(true)} aria-label="Buscar ou executar comando" className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border">
+      <button onClick={() => setOpenSheet(true)} aria-label="Buscar ou executar comando" className="lg:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border">
         <Search size={16} />
       </button>
 
       {openSheet && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col bg-paper dark:bg-ink">
+        <div className="lg:hidden fixed inset-0 z-50 flex flex-col bg-paper dark:bg-ink">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-paper-border dark:border-ink-border">
             <div className="flex-1 relative">
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate pointer-events-none" />

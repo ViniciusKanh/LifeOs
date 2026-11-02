@@ -10,6 +10,7 @@ import { Button, Card, PageHeader } from "@/components/ui/primitives";
 import { inputClass } from "@/components/ui/Modal";
 import { ProvenanceBadge } from "@/components/experiments/AiThinking";
 import { usePeriodicReview } from "@/hooks/useLifeOs";
+import { ReviewDraftPanel } from "@/components/reviews/ReviewDraftPanel";
 import { LIFE_AREA_BY_KEY, currentCycleKeys } from "@/utils/lifeOsLabels";
 import type { PeriodicKind } from "@/types";
 
@@ -51,7 +52,7 @@ export function RevisoesPage() {
     (initialKind === "monthly" ? /^\d{4}-(0[1-9]|1[0-2])$/ : initialKind === "quarterly" ? /^\d{4}-Q[1-4]$/ : /^\d{4}$/).test(periodParam) &&
     periodParam <= defaultKey(initialKind);
   const [key, setKey] = useState(periodOk ? (periodParam as string) : defaultKey(initialKind));
-  const { review, isLoading, history, save, isSaving, analyze, analysis, isAnalyzing, analyzeError, resetAnalysis } = usePeriodicReview(kind, key);
+  const { review, isLoading, history, save, isSaving, generateDraft, analyze, analysis, isAnalyzing, analyzeError, resetAnalysis } = usePeriodicReview(kind, key);
   const { isRpg } = useTheme();
   const navigate = useNavigate();
   // Selo "Ciclo concluído": só quando ESTE salvamento fez o backend conceder o XP.
@@ -109,6 +110,11 @@ export function RevisoesPage() {
 
   const isFuture = key > defaultKey(kind);
   const p = PROMPTS[kind];
+  const draftFields = [
+    { id: "wins" as const, label: p.wins, value: wins, set: setWins },
+    { id: "lessons" as const, label: p.lessons, value: lessons, set: setLessons },
+    { id: "focus" as const, label: p.focus, value: focusNext, set: setFocusNext },
+  ];
 
   if (isRpg) {
     const pm = review?.previousMetrics ?? null;
@@ -215,6 +221,7 @@ export function RevisoesPage() {
                 <p className="text-sm text-rpg-muted">Esse período ainda não começou.</p>
               ) : (
                 <div className="space-y-4">
+                  <ReviewDraftPanel key={`${kind}-${key}`} fields={draftFields} onGenerate={generateDraft} isRpg />
                   {fields.map((f) => (
                     <div key={f.id}>
                       <label htmlFor={`rev-rpg-${f.id}`} className="text-xs font-semibold text-rpg-text">{f.label}</label>
@@ -374,6 +381,7 @@ export function RevisoesPage() {
             <p className="text-xs text-slate">Esse período ainda não começou.</p>
           ) : (
             <>
+              <ReviewDraftPanel key={`${kind}-${key}`} fields={draftFields} onGenerate={generateDraft} isRpg={false} />
               {[
                 { id: "wins", label: p.wins, value: wins, set: setWins },
                 { id: "lessons", label: p.lessons, value: lessons, set: setLessons },

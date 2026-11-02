@@ -628,20 +628,21 @@ export function ProjetoDetalhePage() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <RPGButton variant="secondary" onClick={() => updateProject({ id: project.id, patch: { archived: !project.archived_at } })}>
-                <Archive size={14} aria-hidden /> {project.archived_at ? "Desarquivar" : "Arquivar"}
-              </RPGButton>
-              <RPGButton variant="secondary" onClick={() => setEditing(true)}>
-                <Pencil size={14} aria-hidden /> Editar
+            {/* Ações: a principal (nova missão) primeiro; no celular viram uma grade 2×2 de toque fácil. */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:max-w-[340px] lg:justify-end">
+              <RPGButton variant="gold" className="col-span-2 justify-center" onClick={() => setTaskModal({ open: true, task: null })}>
+                <Plus size={14} aria-hidden /> Nova missão
               </RPGButton>
               {project.status !== "completed" && (
-                <RPGButton variant="success" onClick={() => updateProject({ id: project.id, patch: { status: "completed" } })}>
+                <RPGButton variant="success" className="col-span-2 justify-center" onClick={() => updateProject({ id: project.id, patch: { status: "completed" } })}>
                   Concluir projeto
                 </RPGButton>
               )}
-              <RPGButton variant="gold" onClick={() => setTaskModal({ open: true, task: null })}>
-                <Plus size={14} aria-hidden /> Missão
+              <RPGButton variant="secondary" className="justify-center" onClick={() => setEditing(true)}>
+                <Pencil size={14} aria-hidden /> Editar
+              </RPGButton>
+              <RPGButton variant="secondary" className="justify-center" onClick={() => updateProject({ id: project.id, patch: { archived: !project.archived_at } })}>
+                <Archive size={14} aria-hidden /> {project.archived_at ? "Desarquivar" : "Arquivar"}
               </RPGButton>
             </div>
           </div>
@@ -689,18 +690,18 @@ export function ProjetoDetalhePage() {
       </Card>
       )}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-paper-border dark:border-ink-border mb-5 -mx-4 px-4 md:mx-0 md:px-0" role="tablist" aria-label="Seções do projeto">
+      <div className="flex gap-1 overflow-x-auto border-b border-paper-border dark:border-ink-border rpg:border-rpg-border mb-5 -mx-4 px-4 md:mx-0 md:px-0 [scrollbar-width:none]" role="tablist" aria-label="Seções do projeto">
         {tabs.map((t) => (
           <button
             key={t.key}
             role="tab"
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
-            className={`relative shrink-0 px-4 py-2.5 text-sm transition-colors ${tab === t.key ? "font-semibold text-brand-700 dark:text-brand-100" : "text-slate hover:text-inherit"}`}
+            className={`relative shrink-0 min-h-[44px] px-4 py-2.5 text-sm transition-colors ${tab === t.key ? "font-semibold text-brand-700 dark:text-brand-100 rpg:text-rpg-gold-light" : "text-slate hover:text-inherit"}`}
           >
             {t.label}
             {"count" in t && t.count !== undefined && t.count > 0 && <span className="ml-1.5 text-[10px] rounded-full px-1.5 py-0.5 bg-paper-border dark:bg-ink-border">{t.count}</span>}
-            {tab === t.key && <motion.span layoutId="project-detail-tab" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-brand-500 to-signal" />}
+            {tab === t.key && <motion.span layoutId="project-detail-tab" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-brand-500 to-signal rpg:bg-none rpg:bg-rpg-gold rpg:rounded-none" />}
           </button>
         ))}
       </div>

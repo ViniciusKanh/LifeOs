@@ -211,11 +211,14 @@ export function withTaskDefaults(
   };
 }
 
-function taskInsert(ownerId: string, contractId: string, t: ReturnType<typeof withTaskDefaults>) {
+// Tarefa de contrato herda a Meta/Projeto do próprio contrato (quando houver) —
+// sem isso ela nascia "órfã" mesmo com o contrato vinculado, e não aparecia
+// no Kanban do projeto nem contava pra meta.
+function taskInsert(ownerId: string, contractId: string, goalId: string | null, projectId: string | null, t: ReturnType<typeof withTaskDefaults>) {
   return {
-    sql: `INSERT INTO tasks (id, owner_id, contract_id, title, description, status, priority, difficulty, due_date, start_date, estimate_minutes)
-          VALUES (?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?, ?)`,
-    args: [nanoid(), ownerId, contractId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.startDate, t.estimateMinutes],
+    sql: `INSERT INTO tasks (id, owner_id, contract_id, goal_id, project_id, title, description, status, priority, difficulty, due_date, start_date, estimate_minutes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?, ?)`,
+    args: [nanoid(), ownerId, contractId, goalId, projectId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.startDate, t.estimateMinutes],
   };
 }
 
@@ -280,7 +283,7 @@ export async function createContract(db: Client, ownerId: string, input: Contrac
       ],
     },
     ...(input.tasks ?? []).map((t) =>
-      taskInsert(ownerId, id, withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null })),
+      taskInsert(ownerId, id, goalId, projectId, withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null })),
     ),
   ];
   await db.batch(statements, "write");
@@ -346,7 +349,7 @@ export async function addContractTasks(db: Client, ownerId: string, id: string, 
   const c = await getContract(db, ownerId, id);
   if (c.status === "arquivado") throw new ContractError("Reative o contrato antes de adicionar tarefas.");
   await db.batch(
-    tasks.map((t) => taskInsert(ownerId, id, withTaskDefaults(t, { title: c.title, objective: c.objective, difficulty: c.difficulty, dueDate: c.dueDate }))),
+    tasks.map((t) => taskInsert(ownerId, id, c.goalId, c.projectId, withTaskDefaults(t, { title: c.title, objective: c.objective, difficulty: c.difficulty, dueDate: c.dueDate }))),
     "write",
   );
   // Contrato já cumprido volta a "ativo" com tarefas novas (o bônus pago não se repete).

@@ -3,6 +3,7 @@ import { getDb } from "../db/client.js";
 import { localDaysWhere, userDayContext } from "./localDayService.js";
 import { computeLifeScore, computeRangeMetrics, computeInsights, changePct } from "./metricsService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
+import { collectReviewEvidence, evidenceOptionsFor, type ReviewEvidence } from "./reviewEvidenceService.js";
 import { dispatchTriggerNotification } from "./notificationTriggersService.js";
 
 /**
@@ -622,8 +623,8 @@ export async function generateHabitsInsight(ownerId: string): Promise<{ ok: bool
  * O usuário sempre revisa/edita antes de salvar — isto só preenche
  * o rascunho, nunca salva a review sozinho.
  */
-const WEEKLY_DRAFT_FIELD_MAX_CHARS = 350; // deixa folga para o limite de 500 do front (MAX_CHARS em WeeklyReviewPage)
-const WEEKLY_DRAFT_SAFETY_MAX_CHARS = 500; // nunca envia um rascunho acima do limite real do front, mesmo que o Gemini ignore a instrução
+const WEEKLY_DRAFT_FIELD_MAX_CHARS = 900; // deixa folga para o limite de 2000 do front (MAX_CHARS em WeeklyReviewPage)
+const WEEKLY_DRAFT_SAFETY_MAX_CHARS = 2000; // nunca envia um rascunho acima do limite real do front/validador, mesmo que o Gemini ignore a instrução
 
 async function buildWeeklyReviewContext(ownerId: string, weekStartDate: string) {
   const weekEndExclusive = addDaysLocal(weekStartDate, 7);
@@ -667,7 +668,7 @@ function addDaysLocal(date: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-function buildWeeklyReviewPrompt(ctx: Awaited<ReturnType<typeof buildWeeklyReviewContext>>): string {
+function buildWeeklyReviewPrompt(ctx: Awaited<ReturnType<typeof buildWeeklyReviewContext>>, evidence: ReviewEvidence): string {
   const { metrics, lifeScore, overdueTasks, changePct: delta } = ctx;
 
   const fmtPct = (v: number | null) => (v === null ? "sem base de comparação" : `${v >= 0 ? "+" : ""}${v}%`);
@@ -682,18 +683,50 @@ function buildWeeklyReviewPrompt(ctx: Awaited<ReturnType<typeof buildWeeklyRevie
   ];
 
   return [
-    "Você é o LifeOS Copilot, ajudando o usuário a preencher a Revisão Semanal. Com base SOMENTE nos dados reais abaixo (nunca invente números, tarefas ou hábitos que não estejam listados), escreva um RASCUNHO em português do Brasil com três reflexões curtas para o usuário revisar e editar antes de salvar.",
+    "Você é o LifeOS Copilot escrevendo, NA VOZ DO USUÁRIO (primeira pessoa), o rascunho da Revisão Semanal dele.",
+    "Você recebe três fontes reais: os números da semana, a lista de tarefas concluídas/atrasadas (com projeto) e o que ele escreveu no Diário.",
     "",
-    "Dados reais da semana:",
+    "COMO ESCREVER:",
+    "- Leia primeiro as tarefas e o Diário: o texto deve soar como alguém que lembra da própria semana, citando entregas e acontecimentos concretos (nomes de tarefas, projetos, situações do diário).",
+    "- Use os números só como apoio (1 ou 2 por campo), nunca como lista de métricas.",
+    "- Agrupe tarefas parecidas em uma frase (ex.: \"fechei três entregas do projeto X\") em vez de listar todas.",
+    "- O Diário revela contexto, dificuldades e sentimentos: use-os com fidelidade, sem exagerar nem dramatizar.",
+    "",
+    "CAMPOS:",
+    "- wentWell (O que foi bem): 2 a 4 frases. Conquistas reais da semana, citando tarefas/projetos concluídos e momentos positivos do diário.",
+    "- toImprove (O que pode melhorar): 2 a 3 frases. Lacunas reais: tarefas atrasadas (cite as principais), hábitos fracos, variações negativas, dificuldades relatadas no diário. Se não houver lacuna clara, diga isso com honestidade.",
+    "- nextWeekFocus (Foco da próxima semana): 2 a 4 prioridades concretas em frases curtas separadas por \"; \" — derivadas das pendências reais, dos projetos em andamento e do que o diário indica.",
+    "",
+    "REGRAS:",
+    "- Use SOMENTE os dados abaixo. Nunca invente tarefas, projetos, pessoas, números ou sentimentos.",
+    "- Se a semana tiver poucos registros, reconheça isso com honestidade em vez de fingir conquistas.",
+    `- Cada campo com no máximo ~${WEEKLY_DRAFT_FIELD_MAX_CHARS} caracteres. Sem markdown, sem emojis, sem listas com marcadores.`,
+    "- Tom direto, humano e encorajador, sem frases de autoajuda. Português do Brasil.",
+    "",
+    "NÚMEROS DA SEMANA:",
     ...lines.map((l) => `- ${l}`),
     "",
-    "Responda ESTRITAMENTE neste formato, uma linha por campo, sem markdown, sem numeração, sem texto antes ou depois:",
-    "O_QUE_FOI_BEM: <texto>",
-    "O_QUE_PODE_MELHORAR: <texto>",
-    "FOCO_PROXIMA_SEMANA: <texto>",
+    evidence.block,
     "",
-    `Regras: cada campo com 1-2 frases curtas, no máximo ~${WEEKLY_DRAFT_FIELD_MAX_CHARS} caracteres; "O_QUE_FOI_BEM" deve citar um número/variação real positiva (conclusões, minutos, % de hábitos etc.); "O_QUE_PODE_MELHORAR" deve citar uma lacuna real (tarefas atrasadas, variação negativa, hábito com baixa consistência) — se não houver lacuna clara nos dados, comente honestamente que a semana teve poucos pontos de atenção; "FOCO_PROXIMA_SEMANA" deve ser uma sugestão concreta e específica (não genérica) ligada aos próprios dados; se os números da semana forem todos muito baixos ou zerados, reconheça isso com honestidade em vez de fingir uma conquista; nunca invente um número que não esteja nos dados acima; tom direto e encorajador, sem ser piegas.`,
+    "Responda APENAS com JSON: {\"wentWell\":\"…\",\"toImprove\":\"…\",\"nextWeekFocus\":\"…\"}",
   ].join("\n");
+}
+
+/** Resposta estruturada (JSON) do rascunho semanal. */
+function parseWeeklyReviewJson(text: string): { wentWell: string; toImprove: string; nextWeekFocus: string } | null {
+  try {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    const o = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+    const pick = (k: string) => (typeof o[k] === "string" && (o[k] as string).trim() ? (o[k] as string).trim().slice(0, WEEKLY_DRAFT_SAFETY_MAX_CHARS) : null);
+    const wentWell = pick("wentWell");
+    const toImprove = pick("toImprove");
+    const nextWeekFocus = pick("nextWeekFocus");
+    return wentWell && toImprove && nextWeekFocus ? { wentWell, toImprove, nextWeekFocus } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Extrai os três campos da resposta do Gemini no formato `CHAVE: texto`, tolerando variação de espaço/quebra de linha. */
@@ -722,14 +755,24 @@ export async function generateWeeklyReviewDraft(
   }
 
   const ctx = await buildWeeklyReviewContext(ownerId, weekStartDate);
-  const prompt = buildWeeklyReviewPrompt(ctx);
-  const result = await generateText(prompt, config);
+  const evidence = await collectReviewEvidence(getDb(), ownerId, weekStartDate, addDaysLocal(weekStartDate, 7), evidenceOptionsFor(7));
+  const prompt = buildWeeklyReviewPrompt(ctx, evidence);
+  const result = await generateText(prompt, config, {
+    responseSchema: {
+      type: "OBJECT",
+      properties: { wentWell: { type: "STRING" }, toImprove: { type: "STRING" }, nextWeekFocus: { type: "STRING" } },
+      required: ["wentWell", "toImprove", "nextWeekFocus"],
+    },
+    timeoutMs: 45_000,
+    retries: 1,
+    maxOutputTokens: 4096,
+  });
 
   if (!result.ok) {
     return { ok: false, message: result.message };
   }
 
-  const draft = parseWeeklyReviewDraft(result.text ?? "");
+  const draft = parseWeeklyReviewJson(result.text ?? "") ?? parseWeeklyReviewDraft(result.text ?? "");
   if (!draft) {
     return { ok: false, message: "Não foi possível interpretar a resposta da IA. Tente novamente." };
   }

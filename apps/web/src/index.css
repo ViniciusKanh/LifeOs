@@ -364,3 +364,23 @@
 @media (prefers-reduced-motion: reduce) {
   .boss-hit { animation: none; }
 }
+
+/* ============================================================
+   Códex da Jornada (v2) — brilhos mágicos discretos.
+   Desligados com prefers-reduced-motion (regra global acima).
+   ============================================================ */
+@keyframes codex-aura {
+  0%, 100% { opacity: 0.35; transform: scale(0.95); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+@keyframes codex-new-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--rpg-gold) / 0); }
+  50% { box-shadow: 0 0 14px 2px rgb(var(--rpg-gold) / 0.55); }
+}
+.codex-aura { animation: codex-aura 4.5s ease-in-out infinite; }
+.codex-glow { box-shadow: 0 0 18px -4px rgb(var(--rpg-gold) / 0.7); }
+.codex-new { animation: codex-new-glow 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .codex-aura,
+  .codex-new { animation: none; }
+}

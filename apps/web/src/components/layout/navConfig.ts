@@ -119,7 +119,6 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { to: "/quests", label: "Quadro de Quests", rpgLabel: "Quadro de Avisos", icon: ScrollText, quote: "Pequenos desafios diários constroem grandes jornadas." },
       { to: "/contratos", label: "Contratos", icon: Scroll, quote: "Um pacto cumprido vale mais que mil promessas." },
-      { to: "/guilda", label: "Guilda", rpgLabel: "Salão da Guilda", icon: Users, quote: "Quem caminha acompanhado vai mais longe." },
       { to: "/projetos", label: "Projetos", icon: GanttChartSquare, quote: "Projetos claros avançam mais rápido." },
       { to: "/profissional", label: "Profissional", icon: Briefcase, quote: "Foco no que move os ponteiros." },
     ],

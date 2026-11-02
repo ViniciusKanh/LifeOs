@@ -799,7 +799,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     };
   }, []);
 
-  const persistNow = (state: FormState) => {
+  const persistNow = (state: FormState) =>
     save({
       thoughts: state.thoughts || null,
       gratitude: state.gratitude.filter((g) => g.trim().length > 0),
@@ -812,6 +812,13 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       locationLng: state.locationLng,
       tags: state.tags,
     }).catch(() => undefined);
+
+  /** Grava agora o que ainda está no debounce — a IA lê o texto do banco, então precisa da versão mais recente. */
+  const flushPendingSave = async () => {
+    if (!saveTimer.current) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    await persistNow(form);
   };
 
   /** Digitação: atualiza na hora e agenda o autosave (~900ms sem digitar) — é assim que o diário "escreve sozinho" no banco. */
@@ -1192,7 +1199,10 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
                 <JournalAiOrganizer
                   saved={entry?.ai ?? null}
                   media={entry?.media ?? []}
-                  onSuggest={(includePhotos) => suggestOrganization(includePhotos)}
+                  onSuggest={async (includePhotos) => {
+                    await flushPendingSave();
+                    return suggestOrganization(includePhotos);
+                  }}
                   onApply={async (input) => {
                     const updated = await applyOrganization(input);
                     // As etiquetas escolhidas entram no form local, senão o próximo autosave as sobrescreveria.
@@ -1201,6 +1211,9 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
                   onClear={() => clearOrganization()}
                   isSuggesting={isSuggestingOrganization}
                   isApplying={isApplyingOrganization}
+                  currentHtml={form.thoughts}
+                  onReplaceText={(plain) => saveNow({ thoughts: toParagraphs(plain) })}
+                  onRestoreText={(html) => saveNow({ thoughts: html })}
                 />
               </SectionCard>
 

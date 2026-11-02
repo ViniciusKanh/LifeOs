@@ -36,7 +36,7 @@ import { useBankPendingCount } from "@/hooks/useBank";
 const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop/DesktopUpdatePrompt")) : null;
 
 /**
- * Estrutura principal: Sidebar (desktop/tablet) + cabeçalho com trilha de
+ * Estrutura principal: Sidebar (desktop, ≥1024px) + cabeçalho com trilha de
  * navegação e busca global + conteúdo + rodapé. No celular, barra inferior
  * com 4 atalhos e um menu em gaveta com todos os módulos agrupados.
  * Toda a navegação vem de navConfig.ts (fonte única).
@@ -44,6 +44,7 @@ const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop
 
 
 function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClose: () => void; isAdmin: boolean; badges?: Record<string, number> }) {
+  const { mode, cycle } = useTheme();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -59,7 +60,7 @@ function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClo
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="md:hidden fixed inset-0 z-40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div className="lg:hidden fixed inset-0 z-40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
           <motion.aside
             role="dialog"
@@ -89,6 +90,12 @@ function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClo
             <nav className="flex-1 overflow-y-auto px-3 py-2">
               <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" badges={badges} />
             </nav>
+            <div className="shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <button type="button" onClick={cycle} className="w-full min-h-[44px] flex items-center gap-2.5 rounded-xl px-3 text-sm text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.05]" aria-label={themeCycleLabel(mode)}>
+                <ThemeCycleIcon mode={mode} size={17} />
+                <span className="truncate">{themeCycleLabel(mode)}</span>
+              </button>
+            </div>
           </motion.aside>
         </motion.div>
       )}
@@ -125,6 +132,14 @@ export function AppShell() {
     setDrawerOpen(false);
   }, [location.pathname]);
 
+  // Ao girar o tablet/aumentar a janela até o layout com sidebar fixa, a gaveta não pode ficar aberta por trás.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => mq.matches && setDrawerOpen(false);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   return (
     <div className="app-shell fixed inset-0 w-full flex overflow-hidden bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] rpg:rpg-backdrop rpg:text-rpg-text">
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] rounded-lg px-3 py-2 bg-brand-600 text-white text-sm">
@@ -134,18 +149,18 @@ export function AppShell() {
       <Sidebar groups={visibleGroups(isAdmin)} collapsed={collapsed} canToggle={canToggle} onToggle={toggle} badges={navBadges} />
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
-        <header className="shrink-0 relative z-30 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center gap-3 px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70 rpg:bg-rpg-bg-2 rpg:backdrop-blur-none rpg:border-b-2 rpg:border-rpg-border">
+        <header className="shrink-0 relative z-30 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-6 lg:px-8 border-b border-paper-border dark:border-ink-border bg-paper-raised/85 dark:bg-ink-raised/85 backdrop-blur-md supports-[backdrop-filter]:bg-paper-raised/70 dark:supports-[backdrop-filter]:bg-ink-raised/70 rpg:bg-rpg-bg-2 rpg:backdrop-blur-none rpg:border-b-2 rpg:border-rpg-border">
           {/* Filete dourado sob o cabeçalho — só no tema RPG */}
           <div className="hidden rpg:block absolute inset-x-0 -bottom-[3px] rpg-ornament-line opacity-70" aria-hidden />
           <button
             onClick={() => setDrawerOpen(true)}
-            className="md:hidden w-9 h-9 -ml-1 rounded-xl flex items-center justify-center text-slate hover:bg-black/5 dark:hover:bg-white/10"
+            className="lg:hidden w-9 h-9 -ml-1 rounded-xl flex items-center justify-center text-slate hover:bg-black/5 dark:hover:bg-white/10"
             aria-label="Abrir menu de módulos"
           >
             <Menu size={19} />
           </button>
 
-          <div className="min-w-0 flex-1 md:flex-none md:w-auto lg:min-w-[220px]">
+          <div className="min-w-0 flex-1 lg:flex-none lg:w-auto lg:min-w-[220px]">
             <nav aria-label="Trilha de navegação" className="flex items-center gap-1 text-[11px] text-slate leading-none rpg:font-pixel rpg:uppercase rpg:tracking-[0.14em] rpg:text-rpg-gold">
               <span className="hidden sm:inline"><span className="hidden rpg:inline" aria-hidden>/ </span>{current?.group.label ?? "LifeOS"}</span>
               {isSubPage && current && (
@@ -160,22 +175,25 @@ export function AppShell() {
             </p>
           </div>
 
-          <div className="hidden md:flex flex-1 justify-center min-w-0">
+          <div className="hidden lg:flex flex-1 justify-center min-w-0">
             <DesktopGlobalSearch />
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto md:ml-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto lg:ml-0">
             <MobileGlobalSearch />
             <button
               onClick={cycle}
-              className="md:hidden w-9 h-9 rounded-full flex items-center justify-center border border-paper-border dark:border-ink-border"
+              className="hidden sm:flex lg:hidden w-9 h-9 rounded-full items-center justify-center border border-paper-border dark:border-ink-border"
               aria-label={themeCycleLabel(mode)}
             >
               <ThemeCycleIcon mode={mode} size={16} />
             </button>
             {isRpg && <HeroClassChip />}
             {isRpg && <RPGPlayerHUD compact />}
-            <AchievementHeaderPulse />
+            {/* Em telas muito estreitas o troféu sai do cabeçalho (continua em Conquistas) para o título não ser esmagado. */}
+            <div className="hidden min-[400px]:block">
+              <AchievementHeaderPulse />
+            </div>
             <NotificationBell />
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
             <ProfileMenu />
@@ -207,7 +225,7 @@ export function AppShell() {
           </ScreenErrorBoundary>
         </main>
 
-        <div className="pb-24 md:pb-0">
+        <div className="pb-24 lg:pb-0">
           <AppFooter />
         </div>
         </AppScrollContext.Provider>

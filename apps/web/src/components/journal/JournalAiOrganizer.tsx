@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Camera, Check, Heart, Loader2, RotateCcw, Sparkles, Star, Tag, Trash2 } from "lucide-react";
+import { Camera, Check, Database, FileText, Heart, Loader2, RotateCcw, Sparkles, Star, Tag, Trash2, Undo2, Wand2 } from "lucide-react";
 import type { JournalAiApplyInput, JournalAiOrganization, JournalAiSuggestion, JournalMedia } from "@/types";
 import { Button } from "@/components/ui/primitives";
 
@@ -13,12 +13,27 @@ function readPhotosPref(): boolean {
   }
 }
 
+/** HTML do editor → texto puro (só para exibir a comparação; nada é inserido no DOM). */
+function htmlToPlain(html: string): string {
+  if (!html) return "";
+  const withBreaks = html.replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n").replace(/<br\s*\/?>/gi, "\n");
+  const el = document.createElement("div");
+  el.innerHTML = withBreaks;
+  return (el.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+type TextChoice = "keep" | "replace";
+
 /**
- * "Organizar com IA" do Diário (v2). Fluxo em duas etapas, como exige a regra
+ * "Organizar com IA" do Diário (v3). Fluxo em duas etapas, como exige a regra
  * de IA do LifeOS: (1) o Gemini sugere título, resumo, momentos marcantes,
  * reflexão da gratidão, temas, categorias e — só se o usuário permitir —
  * descrições e legendas das fotos; nada é salvo; (2) o usuário revisa,
- * escolhe etiquetas e legendas e confirma. O texto original nunca é reescrito.
+ * escolhe etiquetas e legendas e confirma.
+ *
+ * v3: a IA também devolve o rascunho reescrito ("improvedText"). O usuário
+ * compara original × revisado e DECIDE se substitui o texto do dia — o
+ * padrão é manter o original, e a substituição pode ser desfeita.
  */
 export function JournalAiOrganizer({
   saved,
@@ -28,6 +43,9 @@ export function JournalAiOrganizer({
   onClear,
   isSuggesting,
   isApplying,
+  currentHtml,
+  onReplaceText,
+  onRestoreText,
 }: {
   saved: JournalAiOrganization | null;
   media: JournalMedia[];
@@ -36,12 +54,22 @@ export function JournalAiOrganizer({
   onClear: () => Promise<unknown>;
   isSuggesting: boolean;
   isApplying: boolean;
+  /** Texto atual de "Como foi meu dia" (HTML do editor). */
+  currentHtml: string;
+  /** Substitui o texto do dia pela versão revisada (texto puro → parágrafos). */
+  onReplaceText: (plain: string) => void;
+  /** Desfaz a substituição devolvendo o HTML original. */
+  onRestoreText: (html: string) => void;
 }) {
   const [suggestion, setSuggestion] = useState<JournalAiSuggestion | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedCaptions, setSelectedCaptions] = useState<Set<string>>(new Set());
   const [includePhotos, setIncludePhotos] = useState<boolean>(readPhotosPref);
   const [error, setError] = useState<string | null>(null);
+  const [textChoice, setTextChoice] = useState<TextChoice>("keep");
+  const [compareTab, setCompareTab] = useState<"improved" | "original">("improved");
+  // Original guardado para o "Desfazer" depois de uma substituição.
+  const [undoHtml, setUndoHtml] = useState<string | null>(null);
   const photos = media.filter((m) => m.kind === "photo");
 
   const togglePhotos = (on: boolean) => {
@@ -58,6 +86,8 @@ export function JournalAiOrganizer({
     try {
       const s = await onSuggest(includePhotos && photos.length > 0);
       setSuggestion(s);
+      setTextChoice("keep");
+      setCompareTab("improved");
       setSelectedTags(new Set(s.suggestedTags));
       // Legenda sugerida já vem marcada só para fotos ainda sem legenda.
       setSelectedCaptions(new Set(s.photoNotes.filter((p) => p.suggestedCaption && !photos.find((m) => m.id === p.id)?.caption).map((p) => p.id)));
@@ -82,10 +112,30 @@ export function JournalAiOrganizer({
           .map((p) => ({ id: p.id, caption: p.suggestedCaption as string })),
         tagsToAdd: Array.from(selectedTags),
       });
+      if (textChoice === "replace" && suggestion.improvedText) replaceText(suggestion.improvedText);
       setSuggestion(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar a organização.");
     }
+  };
+
+  const replaceText = (plain: string) => {
+    setUndoHtml(currentHtml);
+    onReplaceText(plain);
+  };
+
+  /** Usa só o texto revisado, sem salvar a organização (título/temas). */
+  const replaceOnly = () => {
+    if (!suggestion?.improvedText) return;
+    replaceText(suggestion.improvedText);
+    setTextChoice("keep");
+    setSuggestion((s) => (s ? { ...s, improvedText: null } : s));
+  };
+
+  const undoReplace = () => {
+    if (undoHtml === null) return;
+    onRestoreText(undoHtml);
+    setUndoHtml(null);
   };
 
   const toggle = (set: Set<string>, key: string) => {
@@ -126,7 +176,7 @@ export function JournalAiOrganizer({
 
       {!view && (
         <div className="rounded-xl border border-dashed border-paper-border dark:border-ink-border p-4 space-y-3">
-          <p className="text-sm text-slate text-center">O Gemini sugere um título, resume o dia, destaca os momentos marcantes, reflete sobre sua gratidão e organiza tudo por temas. Você revisa antes de salvar.</p>
+          <p className="text-sm text-slate text-center">Escreveu um rascunho? O Gemini revisa seu texto (você escolhe se substitui o original), sugere um título, resume o dia, destaca os momentos marcantes e organiza tudo por temas. Nada é salvo sem você confirmar.</p>
           {photoToggle}
           <div className="text-center">
             <Button className="!from-brand-500 !to-brand-700 !shadow-glow-brand" onClick={requestSuggestion} disabled={isSuggesting}>
@@ -155,6 +205,18 @@ export function JournalAiOrganizer({
               {view.title && <p className="font-display font-semibold text-lg leading-tight">{view.title}</p>}
               {view.summary && <p className="text-sm text-slate mt-1 leading-relaxed">{view.summary}</p>}
             </div>
+
+            {suggestion?.improvedText && (
+              <ImprovedTextPanel
+                improved={suggestion.improvedText}
+                original={htmlToPlain(currentHtml)}
+                tab={compareTab}
+                onTab={setCompareTab}
+                choice={textChoice}
+                onChoice={setTextChoice}
+                onReplaceOnly={replaceOnly}
+              />
+            )}
 
             {view.highlights.length > 0 && (
               <div>
@@ -268,6 +330,19 @@ export function JournalAiOrganizer({
               </div>
             )}
 
+            {suggestion && suggestion.dataUsed.length > 0 && (
+              <details className="rounded-lg border border-paper-border dark:border-ink-border px-3 py-2 text-[11px] text-slate">
+                <summary className="cursor-pointer inline-flex items-center gap-1 font-semibold">
+                  <Database size={11} /> Dados reais do dia usados como contexto ({suggestion.dataUsed.length})
+                </summary>
+                <ul className="mt-1.5 space-y-0.5">
+                  {suggestion.dataUsed.map((f) => (
+                    <li key={f}>• {f}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
             {!suggestion && photoToggle}
 
             <div className="flex flex-wrap gap-2 pt-1">
@@ -275,7 +350,7 @@ export function JournalAiOrganizer({
                 <>
                   <Button onClick={apply} disabled={isApplying}>
                     {isApplying ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                    Salvar organização
+                    {textChoice === "replace" && suggestion.improvedText ? "Salvar e substituir texto" : "Salvar organização"}
                   </Button>
                   <Button variant="secondary" onClick={() => setSuggestion(null)} disabled={isApplying}>
                     Descartar
@@ -297,6 +372,27 @@ export function JournalAiOrganizer({
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {undoHtml !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-cat-green/40 bg-cat-green/[0.08] px-3 py-2 text-xs"
+            role="status"
+          >
+            <Check size={13} className="text-cat-green" />
+            <span className="flex-1 min-w-0">Texto do dia substituído pela versão revisada.</span>
+            <button type="button" onClick={undoReplace} className="inline-flex items-center gap-1 font-semibold underline">
+              <Undo2 size={12} /> Desfazer
+            </button>
+            <button type="button" onClick={() => setUndoHtml(null)} className="text-slate" aria-label="Fechar aviso">
+              ×
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {error && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-drop" role="alert">
           <span>{error}</span>
@@ -305,6 +401,81 @@ export function JournalAiOrganizer({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Comparação original × revisado + escolha explícita do que fazer com o texto do dia. */
+function ImprovedTextPanel({
+  improved,
+  original,
+  tab,
+  onTab,
+  choice,
+  onChoice,
+  onReplaceOnly,
+}: {
+  improved: string;
+  original: string;
+  tab: "improved" | "original";
+  onTab: (t: "improved" | "original") => void;
+  choice: TextChoice;
+  onChoice: (c: TextChoice) => void;
+  onReplaceOnly: () => void;
+}) {
+  const shown = tab === "improved" ? improved : original;
+  const words = (t: string) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+  return (
+    <div className="rounded-xl border border-brand-500/30 bg-paper-raised dark:bg-ink-raised p-3 space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold text-brand-600 dark:text-brand-100 flex items-center gap-1">
+          <Wand2 size={12} /> Seu rascunho, revisado pela IA
+        </p>
+        <div role="tablist" aria-label="Comparar versões" className="inline-flex rounded-lg border border-paper-border dark:border-ink-border p-0.5 text-[11px]">
+          {(["improved", "original"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => onTab(t)}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${tab === t ? "bg-brand-500 text-white" : "text-slate"}`}
+            >
+              {t === "improved" ? `Revisado · ${words(improved)} pal.` : `Original · ${words(original)} pal.`}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="max-h-72 overflow-y-auto rounded-lg bg-paper dark:bg-ink border border-paper-border dark:border-ink-border p-3 text-sm leading-relaxed whitespace-pre-line break-words">
+        {shown || <span className="text-slate italic">(vazio)</span>}
+      </div>
+      <fieldset className="grid gap-2 sm:grid-cols-2">
+        <legend className="sr-only">O que fazer com o texto do dia</legend>
+        {(
+          [
+            { v: "keep", title: "Manter meu texto", desc: "Salva só título, destaques e temas.", icon: <FileText size={14} /> },
+            { v: "replace", title: "Substituir pelo revisado", desc: "Troca o texto do dia (dá para desfazer).", icon: <Wand2 size={14} /> },
+          ] as const
+        ).map((o) => (
+          <label
+            key={o.v}
+            className={`flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer transition-colors ${
+              choice === o.v ? "border-brand-500 bg-brand-500/10" : "border-paper-border dark:border-ink-border"
+            }`}
+          >
+            <input type="radio" name="journal-text-choice" className="mt-0.5 accent-brand-600" checked={choice === o.v} onChange={() => onChoice(o.v)} />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1 text-xs font-semibold">
+                {o.icon} {o.title}
+              </span>
+              <span className="block text-[11px] text-slate">{o.desc}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <button type="button" onClick={onReplaceOnly} className="text-[11px] font-semibold text-brand-600 dark:text-brand-100 underline underline-offset-2">
+        Usar só o texto revisado agora (sem salvar a organização)
+      </button>
     </div>
   );
 }

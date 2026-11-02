@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { DirectionOverview, LifeArea, LifeVision, PeriodicKind, PeriodicReview, PeriodicReviewAnalysis, WheelData, WhyStep } from "@/types";
+import type { DirectionOverview, LifeArea, LifeVision, PeriodicKind, PeriodicReview, PeriodicReviewAnalysis, PeriodicReviewDraft, WheelData, WhyStep } from "@/types";
 
 export const directionService = {
   overview: () => api.get<DirectionOverview>("/direction"),
@@ -14,5 +14,6 @@ export const directionService = {
   review: (kind: PeriodicKind, key: string) => api.get<PeriodicReview>(`/direction/reviews/${kind}/${key}`),
   saveReview: (kind: PeriodicKind, key: string, input: { wins?: string | null; lessons?: string | null; focusNext?: string | null; energyScore?: number | null }) =>
     api.put<PeriodicReview>(`/direction/reviews/${kind}/${key}`, input),
+  draftReview: (kind: PeriodicKind, key: string) => api.post<PeriodicReviewDraft>(`/direction/reviews/${kind}/${key}/draft`),
   analyzeReview: (kind: PeriodicKind, key: string) => api.post<PeriodicReviewAnalysis>(`/direction/reviews/${kind}/${key}/analyze`),
 };

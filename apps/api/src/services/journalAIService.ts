@@ -38,6 +38,13 @@ export interface JournalOrganizationSuggestion {
   suggestedTags: string[];
   /** Quantas fotos foram de fato analisadas (0 quando o usuário não autorizou). */
   photosAnalyzed: number;
+  /**
+   * Versão revisada do texto "Como foi meu dia" (rascunho → texto corrido, organizado).
+   * Só sugestão: a UI pergunta se o usuário quer substituir o original — nunca é gravada aqui.
+   */
+  improvedText: string | null;
+  /** Fatos reais dos outros módulos usados como contexto (montados no backend, não pelo modelo). */
+  dataUsed: string[];
 }
 
 export type JournalOrganizeResult =
@@ -82,6 +89,7 @@ const ORGANIZE_SCHEMA = {
       },
     },
     suggestedTags: { type: "ARRAY", items: { type: "STRING" } },
+    improvedText: { type: "STRING", nullable: true },
   },
   required: ["title", "summary", "highlights", "categories", "suggestedTags"],
 } as const;
@@ -130,7 +138,19 @@ export function sanitizeSuggestion(raw: unknown, validMediaIds: Set<string>, pho
   const summary = str(o.summary, 1200);
   // Aceita respostas curtas (dias com pouco texto): basta haver algo útil.
   if (!title && !summary && categories.length === 0 && highlights.length === 0 && mediaCategories.length === 0) return null;
-  return { title, summary, highlights, gratitude: str(o.gratitude, 600), categories, mediaCategories, photoNotes, suggestedTags, photosAnalyzed: photoIds.size };
+  return {
+    title,
+    summary,
+    highlights,
+    gratitude: str(o.gratitude, 600),
+    categories,
+    mediaCategories,
+    photoNotes,
+    suggestedTags,
+    photosAnalyzed: photoIds.size,
+    improvedText: str(o.improvedText, 12000),
+    dataUsed: [],
+  };
 }
 
 /** data:image/jpeg;base64,... → partes para o Gemini (apenas imagens). */
@@ -193,30 +213,55 @@ export async function organizeJournalDay(db: Db, ownerId: string, date: string, 
     return { ok: false, status: 422, message: "Escreva algo no dia, registre pelo que é grato ou conte a história de uma mídia antes de pedir a organização." };
   }
 
+  // Fatos reais do dia (tarefas, hábitos, treino, leitura…) entram como CONTEXTO para
+  // a IA entender o rascunho — nunca como texto a ser inserido no diário sem o usuário pedir.
+  const { facts } = await collectDayFacts(db, ownerId, date).catch(() => ({ facts: [] as string[] }));
+  const thoughtsText = stripHtml(row.thoughts as string | null).slice(0, 6000);
   const photoOrder = media.filter((m) => photoIds.has(m.id)).map((m, i) => `imagem ${i + 1} = foto id=${m.id}`);
   const prompt = [
-    "Você é o LifeOS Copilot organizando uma entrada de diário pessoal, com cuidado e sem julgamentos.",
+    "Você é o LifeOS Copilot, editor cuidadoso do diário pessoal do usuário. Tom acolhedor, sem julgamentos, sem frases de autoajuda.",
     "",
-    "Regras obrigatórias:",
-    "- Use SOMENTE o texto do usuário" + (images.length > 0 ? " e o que for visível nas imagens anexadas" : "") + ". Nunca invente fatos, pessoas, nomes, lugares, números ou sentimentos.",
-    "- title: título curto e humano para o dia (até 8 palavras).",
+    "CONTEXTO: o usuário muitas vezes escreve um RASCUNHO (frases soltas, tópicos, abreviações, erros de digitação, ordem confusa).",
+    "Sua tarefa tem duas partes: (A) reescrever o rascunho como um texto de diário bem escrito e (B) organizar o dia em título, resumo, destaques e temas.",
+    "",
+    "REGRAS DE FIDELIDADE (obrigatórias):",
+    "- Use SOMENTE o que o usuário escreveu" + (images.length > 0 ? ", o que for visível nas imagens anexadas" : "") + " e os fatos registrados no LifeOS listados abaixo.",
+    "- Nunca invente acontecimentos, pessoas, nomes, lugares, horários, números, opiniões ou sentimentos. Se algo estiver ambíguo, mantenha ambíguo.",
+    "- Fatos do LifeOS servem para entender e ordenar o dia; só podem aparecer no improvedText se o próprio usuário os mencionou no texto.",
+    "- Não dê diagnósticos, conselhos médicos, lições de moral nem sugestões de comportamento.",
+    "",
+    "(A) improvedText — reescrita do campo [Como foi meu dia]:",
+    thoughtsText
+      ? [
+          "- Primeira pessoa, na voz do próprio usuário (mantenha gírias e expressões dele quando fizerem sentido).",
+          "- Corrija ortografia, gramática e pontuação; expanda abreviações óbvias; transforme tópicos em frases completas.",
+          "- Organize em ordem cronológica ou por assunto, 2 a 6 parágrafos curtos separados por linha em branco (\\n\\n). Sem títulos, sem listas, sem markdown, sem emojis.",
+          "- Preserve TODAS as informações do original — não resuma, não corte detalhes, não acrescente conclusões.",
+          "- Se o texto já estiver bem escrito, faça apenas ajustes mínimos.",
+        ].join("\n")
+      : "- null (o usuário não escreveu texto corrido neste dia).",
+    "",
+    "(B) Organização:",
+    "- title: título curto e humano para o dia (até 8 palavras), sem aspas.",
     "- summary: 1 a 3 frases em primeira pessoa resumindo o dia com fidelidade.",
-    "- highlights: 1 a 4 momentos marcantes do dia, curtos, na voz do usuário.",
+    "- highlights: 1 a 4 momentos marcantes, curtos, na voz do usuário (podem vir do texto ou dos fatos registrados).",
     gratitudeItems.length > 0
       ? "- gratitude: 1 a 2 frases que conectem os itens de gratidão ao dia (o que eles revelam), sem exageros."
       : "- gratitude: null (o usuário não registrou gratidão hoje).",
-    "- categories: 1 a 6 temas presentes no texto (ex.: Trabalho, Estudos, Família, Saúde, Lazer, Relacionamentos, Aprendizados), cada um com pontos curtos fiéis ao texto.",
+    "- categories: 1 a 6 temas realmente presentes (ex.: Trabalho, Estudos, Projetos, Família, Saúde, Lazer, Relacionamentos, Aprendizados, Finanças), cada um com 1 a 4 pontos curtos e concretos.",
     "- mediaCategories: para cada mídia listada, UMA categoria curta.",
     images.length > 0
       ? `- photoNotes: para cada imagem anexada (${photoOrder.join("; ")}), descreva objetivamente o que aparece (sem identificar pessoas pelo nome e sem supor quem são) e sugira uma legenda curta que combine com o texto do dia.`
       : "- photoNotes: lista vazia (nenhuma imagem foi enviada).",
-    "- suggestedTags: 2 a 6 etiquetas curtas, minúsculas, sem #.",
-    "- Não dê diagnóstico médico nem conselhos. Português do Brasil.",
+    "- suggestedTags: 2 a 6 etiquetas curtas, minúsculas, sem #, sem espaços (use hífen).",
+    "",
+    "Português do Brasil.",
     "",
     `Entrada do dia ${date}:`,
     ...lines,
     mediaLines.length > 0 ? "\nMídias do dia:" : "",
     ...mediaLines,
+    facts.length > 0 ? `\nFatos registrados no LifeOS neste dia (dados reais, só contexto):\n- ${facts.join("\n- ")}` : "",
   ]
     .filter((l) => l !== "")
     .join("\n");
@@ -224,14 +269,17 @@ export async function organizeJournalDay(db: Db, ownerId: string, date: string, 
   const result = await generateText(prompt, config, {
     responseSchema: ORGANIZE_SCHEMA as unknown as Record<string, unknown>,
     images,
-    timeoutMs: images.length > 0 ? 60_000 : 40_000,
+    timeoutMs: images.length > 0 ? 70_000 : 50_000,
     retries: 1,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,
   });
   if (!result.ok) return { ok: false, status: 502, message: result.message };
 
   const suggestion = sanitizeSuggestion(extractJson(result.text), new Set(media.map((m) => m.id)), photoIds);
   if (!suggestion) return { ok: false, status: 502, message: "A IA não conseguiu organizar este dia agora. Tente novamente em instantes." };
+  // Sem texto original não há o que substituir — descarta qualquer reescrita "criada do nada".
+  if (!thoughtsText) suggestion.improvedText = null;
+  suggestion.dataUsed = facts;
   return { ok: true, suggestion };
 }
 

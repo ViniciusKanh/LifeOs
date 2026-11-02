@@ -27,7 +27,7 @@ import { RPGAvatar, RPGBadge, RPGButton, RPGPanel, RPGPageHeader, RPGTabs, RPG_S
 import { useProjects } from "@/hooks/useProjects";
 import { RpgCycleSeal } from "@/components/reviews/RpgReviewParts";
 
-const MAX_CHARS = 500;
+const MAX_CHARS = 2000;
 
 function weekLabel(monday: string) {
   const start = new Date(`${monday}T00:00:00`);

@@ -38,8 +38,9 @@ function writeStorage(key: string, value: unknown) {
 }
 
 /**
- * Estado compacto da sidebar. No tablet (768–1023px) ela é sempre compacta
- * — 264px expandidos esmagariam o conteúdo; no desktop, vale a preferência
+ * Estado compacto da sidebar. Ela só existe a partir de 1024px (abaixo
+ * disso — celular, celular deitado e tablet — a navegação é a barra
+ * inferior + gaveta, que sempre fecha). No desktop vale a preferência
  * do usuário.
  */
 export function useSidebarCollapsed() {
@@ -243,7 +244,7 @@ export function Sidebar({ groups, collapsed, canToggle, onToggle, badges }: { gr
     <motion.aside
       animate={{ width: collapsed ? 80 : 264 }}
       transition={{ type: "spring", stiffness: 300, damping: 34 }}
-      className="hidden md:flex flex-col shrink-0 h-full bg-paper-raised dark:bg-ink-raised border-r border-paper-border dark:border-ink-border z-20 relative rpg:rpg-backdrop rpg:bg-rpg-bg-2 rpg:border-r-2 rpg:border-rpg-border rpg:shadow-[inset_-1px_0_0_rgb(var(--rpg-gold)/0.35)]"
+      className="hidden lg:flex flex-col shrink-0 h-full bg-paper-raised dark:bg-ink-raised border-r border-paper-border dark:border-ink-border z-20 relative rpg:rpg-backdrop rpg:bg-rpg-bg-2 rpg:border-r-2 rpg:border-rpg-border rpg:shadow-[inset_-1px_0_0_rgb(var(--rpg-gold)/0.35)]"
       aria-label="Navegação principal"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-aurora opacity-50 dark:opacity-30 rpg:hidden" aria-hidden />

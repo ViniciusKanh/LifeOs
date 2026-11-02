@@ -1,19 +1,20 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ChevronDown, Clock, FolderKanban, GanttChartSquare, Hourglass, Mail, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
-import { useProjects, useProjectForecast, useProjectWorkload } from "@/hooks/useProjects";
+import { Archive, CalendarClock, CheckCircle2, ChevronDown, FolderKanban, GanttChartSquare, Hourglass, LayoutGrid, List, Mail, Plus, Search, Sparkles } from "lucide-react";
+import { useProjects, useProjectWorkload } from "@/hooks/useProjects";
 import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { Button, Card, EmptyState, IconBadge, PageHeader, StatTile } from "@/components/ui/primitives";
 import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
-import { KIND_META, PRIORITY_META, STATUS_META, formatMinutes, formatProjectDate } from "@/components/projects/projectMeta";
-import type { Project, ProjectKind, ProjectLoad, ProjectStatus } from "@/types";
+import { KIND_META, STATUS_META, compareByUrgency, projectHealth } from "@/components/projects/projectMeta";
+import { CampaignCard, NextMissionsPanel, ProjectRow } from "@/components/projects/ProjectPortfolio";
+import type { Project, ProjectKind, ProjectStatus } from "@/types";
 import { useTheme } from "@/hooks/useTheme";
 import { useTasks } from "@/hooks/useTasks";
 import { useMyProjectInvites } from "@/hooks/useProjectSharing";
 import { useProjectsXp } from "@/hooks/useGamification";
 import { RPGButton, RPGPageHeader, RPGStatCard } from "@/components/rpg";
-import { RpgCampaignCard, currentMissionFor } from "@/components/projects/RpgCampaignCard";
+import { currentMissionFor } from "@/components/projects/RpgCampaignCard";
 
 /**
  * Projetos — visão de portfólio. Cada cartão leva ao detalhe completo
@@ -67,108 +68,39 @@ function ProjectInvitesBanner() {
   );
 }
 
+/** Data local (não UTC): à noite no Brasil o UTC já virou o dia. */
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Chip de previsão por ritmo real de conclusão — some quando não há histórico suficiente. */
-function ProjectForecastChip({ project }: { project: Project }) {
-  const { forecast } = useProjectForecast(project.status === "completed" ? undefined : project.id);
-  if (!forecast) return null;
-  return <p className="text-[11px] text-growth">No ritmo atual: {formatProjectDate(forecast.date, { day: "2-digit", month: "short" })}</p>;
+// Preferências de visualização (só conveniência de interface, nunca dado do usuário).
+const VIEW_KEY = "lifeos.projects.view";
+const COLLAPSED_KEY = "lifeos.projects.collapsedGroups";
+function readPref<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writePref(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* storage bloqueado: a preferência só não persiste */
+  }
 }
 
-function ProjectCard({ project, load, onEdit, onDelete }: { project: Project; load?: ProjectLoad; onEdit: () => void; onDelete: () => void }) {
-  const meta = KIND_META[project.kind];
-  const Icon = meta.icon;
-  const status = STATUS_META[project.status] ?? STATUS_META.active;
-  const pct = project.task_count > 0 ? Math.round((project.done_count / project.task_count) * 100) : 0;
-  const overdue = project.due_date && project.status !== "completed" && project.due_date.slice(0, 10) < todayIso();
-
-  return (
-    <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} className="relative group">
-      <Link to={`/projetos/${project.id}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-2xl">
-        <Card className="h-full p-4 sm:p-5 overflow-hidden relative transition-all group-hover:-translate-y-0.5 group-hover:shadow-md group-hover:border-brand-500/40">
-          <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: project.color ?? "#7C4DFF" }} aria-hidden />
-          <div className="flex items-start gap-3 pr-14">
-            <IconBadge tone={meta.tone} size={36} icon={<Icon size={16} />} />
-            <div className="min-w-0">
-              <p className="font-semibold leading-tight truncate">{project.name}</p>
-              <p className="text-[11px] text-slate mt-0.5 truncate">
-                {meta.label}
-                {project.client ? ` · ${project.client}` : ""}
-                {project.area ? ` · ${project.area}` : ""}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 mt-3">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.className}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} /> {status.label}
-            </span>
-            {project.priority && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${PRIORITY_META[project.priority]}`}>{project.priority}</span>}
-            {project.due_date && (
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${overdue ? "bg-drop/10 text-drop font-semibold" : "bg-paper dark:bg-ink text-slate"}`}>
-                <CalendarClock size={10} /> {formatProjectDate(project.due_date, { day: "2-digit", month: "short" })}
-              </span>
-            )}
-          </div>
-
-          {project.description && <p className="text-xs text-slate mt-3 line-clamp-2">{project.description}</p>}
-
-          <div className="mt-4">
-            <div className="flex items-center justify-between text-[11px] text-slate mb-1.5">
-              <span>{project.done_count}/{project.task_count} tarefas</span>
-              <span className="font-semibold text-inherit">{pct}%</span>
-            </div>
-            <div className="h-1.5 rounded-full overflow-hidden bg-paper-border dark:bg-ink-border">
-              <motion.div className="h-full rounded-full bg-growth" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
-            </div>
-            {load && load.open > 0 && (
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate">
-                {load.remainingMinutes > 0 && (
-                  <span className="inline-flex items-center gap-1">
-                    <Hourglass size={11} /> {formatMinutes(load.remainingMinutes)} restantes
-                  </span>
-                )}
-                {load.loggedMinutesPeriod > 0 && (
-                  <span className="inline-flex items-center gap-1">
-                    <Clock size={11} /> {formatMinutes(load.loggedMinutesPeriod)} em 30d
-                  </span>
-                )}
-                {load.overdue > 0 && (
-                  <span className="inline-flex items-center gap-1 text-drop font-semibold">
-                    <AlertTriangle size={11} /> {load.overdue} atrasada{load.overdue > 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-            )}
-            <div className="mt-1.5 min-h-[16px]">
-              <ProjectForecastChip project={project} />
-            </div>
-          </div>
-
-          {project.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {project.tags.slice(0, 4).map((t) => (
-                <span key={t} className="text-[10px] text-brand-600 dark:text-brand-100">#{t}</span>
-              ))}
-              {project.tags.length > 4 && <span className="text-[10px] text-slate">+{project.tags.length - 4}</span>}
-            </div>
-          )}
-        </Card>
-      </Link>
-      <div className="absolute top-4 right-4 flex items-center gap-1">
-        <button onClick={onEdit} aria-label={`Editar projeto ${project.name}`} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate/70 hover:text-brand-600 hover:bg-brand-500/10 transition-colors">
-          <Pencil size={13} />
-        </button>
-        <button onClick={onDelete} aria-label={`Excluir projeto ${project.name}`} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate/70 hover:text-drop hover:bg-drop/10 transition-colors">
-          <Trash2 size={13} />
-        </button>
-      </div>
-    </motion.div>
-  );
-}
+const GROUP_ORDER: ProjectStatus[] = ["active", "planning", "paused", "completed", "cancelled"];
+const GROUP_RPG_LABEL: Record<ProjectStatus, string> = {
+  active: "Campanhas em curso",
+  planning: "Em preparação",
+  paused: "Acampamento (pausadas)",
+  completed: "Lendas concluídas",
+  cancelled: "Abandonadas",
+};
 
 const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Todos" },
@@ -189,7 +121,10 @@ export function ProjetosPage() {
   const [kindFilter, setKindFilter] = useState<ProjectKind | "all">("all");
   const [search, setSearch] = useState("");
   const { workload, isLoading: workloadLoading } = useProjectWorkload({ days: 30, kind: kindFilter === "all" ? undefined : kindFilter });
-  const [loadOpen, setLoadOpen] = useState(true);
+  const [loadOpen, setLoadOpen] = useState(false);
+  const [view, setView] = useState<"cards" | "list">(() => readPref<"cards" | "list">(VIEW_KEY, "cards"));
+  const [collapsedGroups, setCollapsedGroups] = useState<ProjectStatus[]>(() => readPref<ProjectStatus[]>(COLLAPSED_KEY, ["completed", "cancelled"]));
+  const today = todayIso();
   const { isRpg } = useTheme();
   const { tasks } = useTasks();
   const { data: projectsXp } = useProjectsXp(isRpg);
@@ -210,9 +145,35 @@ export function ProjetosPage() {
     const active = projects.filter((p) => p.status === "active" || p.status === "planning").length;
     const completed = projects.filter((p) => p.status === "completed").length;
     const openTasks = projects.reduce((sum, p) => sum + (p.task_count - p.done_count), 0);
-    const overdue = projects.filter((p) => p.due_date && p.status !== "completed" && p.status !== "cancelled" && p.due_date.slice(0, 10) < todayIso()).length;
-    return { active, completed, openTasks, overdue };
-  }, [projects]);
+    let late = 0;
+    let risk = 0;
+    for (const p of projects) {
+      const h = projectHealth(p, loadById.get(p.id)?.overdue ?? 0, today).key;
+      if (h === "late") late++;
+      else if (h === "risk") risk++;
+    }
+    return { active, completed, openTasks, late, risk };
+  }, [projects, loadById, today]);
+
+  // Portfólio agrupado por status e ordenado por urgência (atrasados primeiro).
+  const groups = useMemo(() => {
+    const overdueOf = (id: string) => loadById.get(id)?.overdue ?? 0;
+    return GROUP_ORDER.map((status) => ({
+      status,
+      items: filtered.filter((p) => p.status === status).sort((a, b) => compareByUrgency(a, b, overdueOf, today)),
+    })).filter((g) => g.items.length > 0);
+  }, [filtered, loadById, today]);
+
+  const changeView = (v: "cards" | "list") => {
+    setView(v);
+    writePref(VIEW_KEY, v);
+  };
+  const toggleGroup = (status: ProjectStatus) =>
+    setCollapsedGroups((prev) => {
+      const next = prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status];
+      writePref(COLLAPSED_KEY, next);
+      return next;
+    });
 
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
@@ -254,37 +215,183 @@ export function ProjetosPage() {
         />
       ) : (
         <>
-          {isRpg ? (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-              <RPGStatCard icon={<FolderKanban size={18} />} label="Projetos ativos" value={String(stats.active)} tone="purple" />
-              <RPGStatCard icon={<CheckCircle2 size={18} />} label="Concluídas" value={String(stats.completed)} tone="green" />
-              <RPGStatCard icon={<GanttChartSquare size={18} />} label="Missões em aberto" value={String(stats.openTasks)} tone="blue" />
-              <RPGStatCard icon={<CalendarClock size={18} />} label="Prazos vencidos" value={String(stats.overdue)} tone={stats.overdue > 0 ? "red" : "muted"} />
-              <div className="col-span-2 lg:col-span-1">
-                <RPGStatCard icon={<Sparkles size={18} />} label="XP em projetos" value={totalEarnedXp.toLocaleString("pt-BR")} tone="gold" caption="conquistado em missões e foco" />
+          {/* Mesa de comando: números do portfólio + o que fazer agora. */}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] mb-5">
+            <div className="grid grid-cols-2 gap-3 content-start">
+              {isRpg ? (
+                <>
+                  <RPGStatCard icon={<FolderKanban size={18} />} label="Campanhas ativas" value={String(stats.active)} tone="purple" />
+                  <RPGStatCard icon={<GanttChartSquare size={18} />} label="Missões em aberto" value={String(stats.openTasks)} tone="blue" />
+                  <RPGStatCard icon={<CalendarClock size={18} />} label="Atrasadas / em risco" value={`${stats.late} / ${stats.risk}`} tone={stats.late > 0 ? "red" : stats.risk > 0 ? "orange" : "muted"} />
+                  <RPGStatCard icon={<Sparkles size={18} />} label="XP em projetos" value={totalEarnedXp.toLocaleString("pt-BR")} tone="gold" caption={`${stats.completed} concluída(s)`} />
+                </>
+              ) : (
+                <>
+                  <StatTile icon={<FolderKanban size={16} />} label="Projetos ativos" value={String(stats.active)} tone="purple" />
+                  <StatTile icon={<GanttChartSquare size={16} />} label="Tarefas em aberto" value={String(stats.openTasks)} tone="blue" />
+                  <StatTile icon={<CalendarClock size={16} />} label="Atrasados / em risco" value={`${stats.late} / ${stats.risk}`} tone="amber" />
+                  <StatTile icon={<CheckCircle2 size={16} />} label="Concluídos" value={String(stats.completed)} tone="green" />
+                </>
+              )}
+            </div>
+            <NextMissionsPanel tasks={tasks} projects={projects} today={today} />
+          </div>
+
+          {/* Barra de filtros — rola horizontalmente no celular, sem quebrar o layout. */}
+          <div className="mb-4 space-y-2.5">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="relative flex-1 min-w-0">
+                <span className="sr-only">Buscar projetos</span>
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate pointer-events-none" aria-hidden />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar por nome, cliente, área ou etiqueta…"
+                  className="w-full min-h-[42px] rounded-xl pl-9 pr-3 py-2 text-sm bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border outline-none focus:border-brand-500 rpg:rounded-[3px] rpg:bg-rpg-bg rpg:border-rpg-border rpg:focus:border-rpg-gold"
+                />
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={kindFilter}
+                  onChange={(e) => setKindFilter(e.target.value as ProjectKind | "all")}
+                  aria-label="Filtrar por tipo"
+                  className="flex-1 sm:flex-none min-h-[42px] rounded-xl px-3 py-2 text-xs bg-paper-raised dark:bg-ink-raised border border-paper-border dark:border-ink-border outline-none rpg:rounded-[3px] rpg:bg-rpg-bg rpg:border-rpg-border"
+                >
+                  <option value="all">Todos os tipos</option>
+                  {Object.entries(KIND_META).map(([v, m]) => (
+                    <option key={v} value={v}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="inline-flex shrink-0 rounded-xl border border-paper-border dark:border-ink-border p-0.5 rpg:rounded-[3px] rpg:border-rpg-border" role="group" aria-label="Modo de visualização">
+                  {(
+                    [
+                      ["cards", LayoutGrid, "Cartões"],
+                      ["list", List, "Lista"],
+                    ] as const
+                  ).map(([v, Icon, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => changeView(v)}
+                      aria-pressed={view === v}
+                      aria-label={label}
+                      title={label}
+                      className={`w-10 h-[38px] flex items-center justify-center rounded-lg rpg:rounded-[2px] ${view === v ? "bg-brand-500/10 text-brand-600 rpg:bg-rpg-gold/15 rpg:text-rpg-gold-light" : "text-slate"}`}
+                    >
+                      <Icon size={16} />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowArchived((v) => !v)}
+                  aria-pressed={showArchived}
+                  aria-label="Mostrar arquivados"
+                  title="Arquivados"
+                  className={`inline-flex shrink-0 items-center gap-1.5 min-h-[42px] rounded-xl px-3 text-xs border transition-colors rpg:rounded-[3px] ${showArchived ? "border-brand-500/50 text-brand-600 bg-brand-500/5 rpg:border-rpg-gold rpg:text-rpg-gold-light" : "border-paper-border dark:border-ink-border text-slate rpg:border-rpg-border"}`}
+                >
+                  <Archive size={14} /> <span className="hidden sm:inline">Arquivados</span>
+                </button>
               </div>
             </div>
-          ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatTile icon={<FolderKanban size={16} />} label="Projetos ativos" value={String(stats.active)} tone="purple" />
-            <StatTile icon={<CheckCircle2 size={16} />} label="Concluídos" value={String(stats.completed)} tone="green" />
-            <StatTile icon={<GanttChartSquare size={16} />} label="Tarefas em aberto" value={String(stats.openTasks)} tone="blue" />
-            <StatTile icon={<CalendarClock size={16} />} label="Prazos vencidos" value={String(stats.overdue)} tone="amber" />
+            <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 [scrollbar-width:none]" role="tablist" aria-label="Filtrar por status">
+              {STATUS_FILTERS.map((f) => {
+                const count = f.value === "all" ? projects.length : projects.filter((p) => p.status === f.value).length;
+                const on = statusFilter === f.value;
+                return (
+                  <button
+                    key={f.value}
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => setStatusFilter(f.value)}
+                    className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-colors rpg:rounded-[3px] ${
+                      on
+                        ? "border-brand-500 bg-brand-500/10 text-brand-700 dark:text-brand-100 rpg:border-rpg-gold rpg:bg-rpg-gold/15 rpg:text-rpg-gold-light"
+                        : "border-paper-border dark:border-ink-border text-slate rpg:border-rpg-border"
+                    }`}
+                  >
+                    {f.label}
+                    <span className="tabular-nums opacity-70">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {[0, 1, 2].map((i) => (
+                <Card key={i} className="h-52 animate-pulse" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <Card className="p-10 text-center">
+              <p className="text-sm font-semibold">Nenhum projeto com esses filtros</p>
+              <p className="text-xs text-slate mt-1">Ajuste a busca ou os filtros acima.</p>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {groups.map((g) => {
+                const collapsed = collapsedGroups.includes(g.status);
+                return (
+                  <section key={g.status} aria-labelledby={`grp-${g.status}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(g.status)}
+                      aria-expanded={!collapsed}
+                      className="mb-3 flex w-full items-center gap-2 text-left"
+                    >
+                      <span className="hidden rpg:inline-block w-1.5 h-1.5 rotate-45 bg-rpg-gold" aria-hidden />
+                      <h2 id={`grp-${g.status}`} className="text-sm font-semibold uppercase tracking-wide text-slate rpg:font-pixel rpg:text-rpg-gold rpg:tracking-[0.14em]">
+                        {isRpg ? GROUP_RPG_LABEL[g.status] : STATUS_META[g.status].label}
+                      </h2>
+                      <span className="rounded-full bg-black/[0.05] dark:bg-white/[0.08] px-2 py-0.5 text-[11px] font-semibold tabular-nums rpg:rounded-[2px] rpg:bg-rpg-bg-2 rpg:text-rpg-muted">{g.items.length}</span>
+                      <span className="flex-1 h-px bg-paper-border dark:bg-ink-border rpg:bg-rpg-border" aria-hidden />
+                      <ChevronDown size={16} className={`text-slate transition-transform ${collapsed ? "-rotate-90" : ""}`} aria-hidden />
+                    </button>
+                    {!collapsed &&
+                      (view === "list" ? (
+                        <ul className="space-y-2">
+                          {g.items.map((p) => (
+                            <ProjectRow key={p.id} project={p} load={loadById.get(p.id)} today={today} />
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                          <AnimatePresence mode="popLayout">
+                            {g.items.map((p) => (
+                              <motion.div key={p.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} className="flex min-w-0">
+                                <CampaignCard
+                                  project={p}
+                                  load={loadById.get(p.id)}
+                                  xp={projectsXp?.[p.id]}
+                                  currentMission={currentMissionFor(tasks, p.id)}
+                                  today={today}
+                                  onEdit={() => setProjectToEdit(p)}
+                                  onDelete={() => setProjectToDelete(p)}
+                                />
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+                        </div>
+                      ))}
+                  </section>
+                );
+              })}
+            </div>
           )}
 
-          <Card className="p-4 sm:p-5 mb-5">
-            <button
-              onClick={() => setLoadOpen((v) => !v)}
-              aria-expanded={loadOpen}
-              className="w-full flex items-center justify-between gap-3 text-left"
-            >
-              <span>
-                <span className="flex items-center gap-2 font-display font-semibold text-[15px]">
-                  <Hourglass size={17} className="text-brand-600" /> Carga de trabalho por projeto
+          {/* Carga de trabalho: análise detalhada, recolhida por padrão para não poluir o portfólio. */}
+          <Card className="p-4 sm:p-5 mt-6">
+            <button onClick={() => setLoadOpen((v) => !v)} aria-expanded={loadOpen} className="w-full flex items-center justify-between gap-3 text-left">
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 font-display font-semibold text-[15px] rpg:rpg-title">
+                  <Hourglass size={17} className="text-brand-600 rpg:text-rpg-gold" /> Carga de trabalho por projeto
                 </span>
                 <span className="block text-xs text-slate mt-0.5">
-                  Tarefas em aberto, horas estimadas × registradas (cronômetro e foco, últimos 30 dias) e prazos{kindFilter !== "all" ? ` · ${KIND_META[kindFilter].label}` : ""}.
+                  Tarefas em aberto, horas estimadas × registradas (últimos 30 dias) e prazos{kindFilter !== "all" ? ` · ${KIND_META[kindFilter].label}` : ""}.
                 </span>
               </span>
               <ChevronDown size={18} className={`text-slate shrink-0 transition-transform ${loadOpen ? "rotate-180" : ""}`} />
@@ -303,88 +410,6 @@ export function ProjetosPage() {
               )}
             </AnimatePresence>
           </Card>
-
-          <Card className="p-3 mb-5 flex flex-col lg:flex-row lg:items-center gap-3">
-            <label className="relative flex-1 min-w-0">
-              <span className="sr-only">Buscar projetos</span>
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nome, cliente, área ou etiqueta…"
-                className="w-full rounded-xl pl-9 pr-3 py-2 text-sm bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none focus:border-brand-500"
-              />
-            </label>
-            <div className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-0.5" role="tablist" aria-label="Filtrar por status">
-              {STATUS_FILTERS.map((f) => (
-                <button
-                  key={f.value}
-                  role="tab"
-                  aria-selected={statusFilter === f.value}
-                  onClick={() => setStatusFilter(f.value)}
-                  className={`relative shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${statusFilter === f.value ? "text-brand-700 dark:text-brand-100" : "text-slate hover:text-inherit"}`}
-                >
-                  {statusFilter === f.value && <motion.span layoutId="project-status-filter" className="absolute inset-0 rounded-lg bg-brand-500/10" transition={{ type: "spring", stiffness: 400, damping: 34 }} />}
-                  <span className="relative">{f.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <select
-                value={kindFilter}
-                onChange={(e) => setKindFilter(e.target.value as ProjectKind | "all")}
-                aria-label="Filtrar por tipo"
-                className="rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink border border-paper-border dark:border-ink-border outline-none"
-              >
-                <option value="all">Todos os tipos</option>
-                {Object.entries(KIND_META).map(([v, m]) => (
-                  <option key={v} value={v}>{m.label}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => setShowArchived((v) => !v)}
-                aria-pressed={showArchived}
-                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs border transition-colors ${showArchived ? "border-brand-500/50 text-brand-600 bg-brand-500/5" : "border-paper-border dark:border-ink-border text-slate"}`}
-              >
-                <Archive size={13} /> Arquivados
-              </button>
-            </div>
-          </Card>
-
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {[0, 1, 2].map((i) => (
-                <Card key={i} className="h-52 animate-pulse" />
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <Card className="p-10 text-center">
-              <p className="text-sm font-semibold">Nenhum projeto com esses filtros</p>
-              <p className="text-xs text-slate mt-1">Ajuste a busca ou os filtros acima.</p>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              <AnimatePresence mode="popLayout">
-                {filtered.map((p) =>
-                  isRpg ? (
-                    <motion.div key={p.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} className="flex">
-                    <RpgCampaignCard
-                      project={p}
-                      load={loadById.get(p.id)}
-                      xp={projectsXp?.[p.id]}
-                      currentMission={currentMissionFor(tasks, p.id)}
-                      today={todayIso()}
-                      onEdit={() => setProjectToEdit(p)}
-                      onDelete={() => setProjectToDelete(p)}
-                    />
-                    </motion.div>
-                  ) : (
-                    <ProjectCard key={p.id} project={p} load={loadById.get(p.id)} onEdit={() => setProjectToEdit(p)} onDelete={() => setProjectToDelete(p)} />
-                  )
-                )}
-              </AnimatePresence>
-            </div>
-          )}
         </>
       )}
 

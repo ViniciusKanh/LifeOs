@@ -89,7 +89,9 @@ export function usePeriodicReview(kind: PeriodicKind, key: string) {
     },
   });
   const analyze = useMutation({ mutationFn: () => directionService.analyzeReview(kind, key) });
+  const draft = useMutation({ mutationFn: () => directionService.draftReview(kind, key) });
   return {
+    generateDraft: draft.mutateAsync,
     review: q.data ?? null,
     isLoading: q.isLoading,
     history: history.data ?? [],

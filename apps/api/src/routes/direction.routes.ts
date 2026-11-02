@@ -5,7 +5,7 @@ import { PERIODIC_KINDS, PERIOD_KEY_REGEX, periodicReviewSchema, visionSchema, w
 import { getDirectionOverview, getVision, getWheel, getWhyChain, saveVision, saveWheel } from "../services/directionService.js";
 import { getPeriodicReview, isReviewRewardEligible, listPeriodicReviews, savePeriodicReview, type PeriodicKind } from "../services/periodicReviewService.js";
 import { awardReviewClosed } from "../services/gamificationService.js";
-import { analyzePeriodicReview } from "../services/periodicReviewAIService.js";
+import { analyzePeriodicReview, draftPeriodicReview } from "../services/periodicReviewAIService.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 
 /** Direção: visão, valores, roda da vida, metas por ciclo, "por quê" e revisões periódicas. */
@@ -71,6 +71,15 @@ directionRouter.put("/reviews/:kind/:key", async (req, res) => {
   const hasReflection = [d.wins, d.lessons, d.focusNext].some((v) => typeof v === "string" && v.trim().length > 0);
   await awardReviewClosed(db, req.user!.id, p.kind, p.key, { eligible: await isReviewRewardEligible(db, req.user!.id, p.kind, p.key), hasReflection });
   return res.json(await getPeriodicReview(db, req.user!.id, p.kind, p.key));
+});
+
+/** POST /api/direction/reviews/:kind/:key/draft — rascunho da reflexão (tarefas + diário + métricas reais). Não salva nada. */
+directionRouter.post("/reviews/:kind/:key/draft", rateLimit({ windowMs: 10 * 60 * 1000, max: 8 }), async (req, res) => {
+  const p = parsePeriod(req.params.kind, req.params.key);
+  if (!p) return res.status(400).json({ error: "Período inválido." });
+  const result = await draftPeriodicReview(getDb(), req.user!.id, p.kind, p.key);
+  if (!result.ok) return res.status(400).json({ error: result.message });
+  return res.json(result.draft);
 });
 
 /** POST /api/direction/reviews/:kind/:key/analyze — Copilot da revisão (só sobre o retrato real do período). */

@@ -882,6 +882,10 @@ export interface JournalAiSuggestion {
   photoNotes: Array<{ id: string; description: string; suggestedCaption: string | null }>;
   suggestedTags: string[];
   photosAnalyzed: number;
+  /** Reescrita do rascunho "Como foi meu dia" — só substitui o texto se o usuário escolher. */
+  improvedText: string | null;
+  /** Fatos reais dos outros módulos usados como contexto pela IA. */
+  dataUsed: string[];
 }
 
 /** O que o usuário confirma ao salvar a organização. */
@@ -2267,6 +2271,14 @@ export interface PeriodicReview {
 }
 
 /** Resposta do Copilot da revisão (rotulada por proveniência na UI). */
+/** Rascunho da reflexão do ciclo escrito pela IA (tarefas + diário + métricas) — nunca salvo sozinho. */
+export interface PeriodicReviewDraft {
+  wins: string;
+  lessons: string;
+  focusNext: string;
+  basedOn: { label: string; tasksDone: number; journalDays: number; projects: number };
+}
+
 export interface PeriodicReviewAnalysis {
   achievements: string[];
   patterns: string[];

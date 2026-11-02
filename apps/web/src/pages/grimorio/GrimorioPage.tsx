@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Archive, ArchiveRestore, BarChart3, BookOpenText, GraduationCap, Layers, Library, Pencil, Play, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { BarChart3, BookOpenText, Layers, Plus, Search, Wand2 } from "lucide-react";
 import clsx from "clsx";
 import { Button, Card, PageHeader } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
@@ -12,7 +12,8 @@ import { DeckCardsPanel } from "@/components/grimorio/DeckCardsPanel";
 import { DeckFormModal } from "@/components/grimorio/DeckFormModal";
 import { GrimoireStatsPanel } from "@/components/grimorio/GrimoireStatsPanel";
 import { StudySession } from "@/components/grimorio/StudySession";
-import { Chip, InlineToast, SkeletonBlock, errorMessage } from "@/components/grimorio/grimoireUi";
+import { InlineToast, SkeletonBlock, errorMessage, selectClass } from "@/components/grimorio/grimoireUi";
+import { GrimoireDeckTome, GrimoireRitualHero, masteryOf } from "@/components/grimorio/grimoireTomes";
 
 type Tab = "baralhos" | "estatisticas";
 type Study = { deckId?: string; cards: NonNullable<ReturnType<typeof useGrimoireQueue>["data"]>["cards"] };
@@ -35,6 +36,9 @@ export function GrimorioPage() {
   const [study, setStudy] = useState<Study | null>(null);
   const [confirmDeck, setConfirmDeck] = useState<GrimoireDeck | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"fila" | "dominio" | "nome" | "recentes">("fila");
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const decksQ = useGrimoireDecks({ archived: showArchived });
   const queueQ = useGrimoireQueue();
@@ -114,6 +118,32 @@ export function GrimorioPage() {
 
   const pending = queue ? queue.cards.length : 0;
 
+  // Fila do dia por baralho (calculada uma vez, usada na ordenação e nos tomos).
+  const dueByDeck = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of queue?.cards ?? []) map.set(c.deckId, (map.get(c.deckId) ?? 0) + 1);
+    return map;
+  }, [queue]);
+
+  const visibleDecks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q
+      ? decks.filter((d) => [d.name, d.description, d.subjectName, d.bookTitle].some((v) => v?.toLowerCase().includes(q)))
+      : [...decks];
+    list.sort((a, b) => {
+      if (sort === "nome") return a.name.localeCompare(b.name, "pt-BR");
+      if (sort === "recentes") return b.createdAt.localeCompare(a.createdAt);
+      if (sort === "dominio") return masteryOf(b).pct - masteryOf(a).pct;
+      return (dueByDeck.get(b.id) ?? 0) - (dueByDeck.get(a.id) ?? 0) || a.name.localeCompare(b.name, "pt-BR");
+    });
+    return list;
+  }, [decks, search, sort, dueByDeck]);
+
+  // Ao abrir um baralho, leva o painel de cartões para a vista (essencial no celular).
+  useEffect(() => {
+    if (selectedId) window.setTimeout(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }, [selectedId]);
+
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8 space-y-5">
       <PageHeader
@@ -125,10 +155,10 @@ export function GrimorioPage() {
         actions={
           !study && (
             <>
-              <Button variant="secondary" onClick={() => { setAiBookId(null); setAiOpen(true); }}>
+              <Button variant="secondary" className="flex-1 sm:flex-none" onClick={() => { setAiBookId(null); setAiOpen(true); }}>
                 <Wand2 size={15} aria-hidden /> Gerar com IA
               </Button>
-              <Button onClick={() => setForm({ open: true, deck: null })}>
+              <Button className="flex-1 sm:flex-none" onClick={() => setForm({ open: true, deck: null })}>
                 <Plus size={15} aria-hidden /> Novo baralho
               </Button>
             </>
@@ -156,34 +186,7 @@ export function GrimorioPage() {
               </Button>
             </Card>
           ) : (
-            <Card className={clsx("p-4 sm:p-5", pending > 0 && "rpg:rpg-panel-gold")}>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-wide text-slate rpg:font-pixel rpg:text-rpg-gold">{isRpg ? "Ritual de hoje" : "Estudo de hoje"}</p>
-                  {pending > 0 ? (
-                    <p className="mt-1 font-display text-xl font-bold rpg:rpg-title">
-                      {pending} {pending === 1 ? "cartão" : "cartões"} para revisar
-                    </p>
-                  ) : (
-                    <p className="mt-1 font-display text-xl font-bold rpg:rpg-title">{queue.clearedToday ? "Fila de hoje concluída" : decks.length === 0 ? "Crie seu primeiro baralho" : "Nada para revisar agora"}</p>
-                  )}
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <Chip tone="orange">{queue.dueCount} vencidos</Chip>
-                    <Chip tone="blue">{queue.newCount} novos</Chip>
-                    <Chip>{queue.reviewedToday} revisões hoje</Chip>
-                    {queue.clearedToday && (
-                      <Chip tone="green">
-                        <Sparkles size={10} aria-hidden /> XP do dia recebido
-                      </Chip>
-                    )}
-                  </div>
-                  {!queue.clearedToday && pending > 0 && <p className="mt-2 text-[11px] text-slate">Concluir a fila do dia rende XP (uma vez por dia).</p>}
-                </div>
-                <Button onClick={() => startStudy()} disabled={pending === 0} className="sm:min-w-[170px]">
-                  <Play size={15} aria-hidden /> {isRpg ? "Começar ritual" : "Estudar agora"}
-                </Button>
-              </div>
-            </Card>
+            <GrimoireRitualHero queue={queue} stats={statsQ.data ?? null} pending={pending} decksCount={decks.length} isRpg={isRpg} onStudy={() => startStudy()} />
           )}
 
           <div role="tablist" aria-label="Seções do Grimório" className="flex gap-2 border-b border-paper-border dark:border-ink-border rpg:border-rpg-border">
@@ -220,10 +223,32 @@ export function GrimorioPage() {
             )
           ) : (
             <div className="space-y-4">
-              <label className="inline-flex items-center gap-2 text-xs text-slate">
-                <input type="checkbox" className="h-4 w-4" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-                Mostrar arquivados
-              </label>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <label className="relative flex-1 min-w-0">
+                  <span className="sr-only">Buscar baralho</span>
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate pointer-events-none" aria-hidden />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={isRpg ? "Buscar tomo, disciplina ou livro…" : "Buscar baralho, disciplina ou livro…"}
+                    className={`${selectClass} !pl-9`}
+                  />
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor="grimoire-sort">Ordenar</label>
+                  <select id="grimoire-sort" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className={`${selectClass} sm:!w-auto`}>
+                    <option value="fila">Mais para revisar</option>
+                    <option value="dominio">Maior domínio</option>
+                    <option value="nome">Nome (A–Z)</option>
+                    <option value="recentes">Mais recentes</option>
+                  </select>
+                  <label className="inline-flex shrink-0 items-center gap-2 text-xs text-slate whitespace-nowrap">
+                    <input type="checkbox" className="h-4 w-4" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                    Arquivados
+                  </label>
+                </div>
+              </div>
 
               {decksQ.isLoading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-busy="true" aria-label="Carregando baralhos">
@@ -255,56 +280,33 @@ export function GrimorioPage() {
                   </div>
                 </Card>
               ) : (
-                <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {decks.map((d) => {
-                    const dueToday = (queue?.cards ?? []).filter((c) => c.deckId === d.id).length;
-                    return (
+                visibleDecks.length === 0 ? (
+                  <Card className="p-6 text-center">
+                    <p className="text-sm text-slate">Nenhum baralho encontrado para “{search}”.</p>
+                  </Card>
+                ) : (
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-3">
+                    {visibleDecks.map((d) => (
                       <li key={d.id}>
-                        <Card className={clsx("p-4 h-full flex flex-col", selectedId === d.id && "ring-2 ring-brand-500/60 rpg:ring-rpg-gold/70", d.archivedAt && "opacity-75")}>
-                          <button className="text-left min-w-0 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500" onClick={() => setSelectedId(d.id === selectedId ? null : d.id)} aria-expanded={selectedId === d.id}>
-                            <p className="font-semibold truncate">{d.name}</p>
-                            {d.description && <p className="text-xs text-slate line-clamp-2 mt-0.5">{d.description}</p>}
-                          </button>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {d.subjectName && (
-                              <Chip tone="blue">
-                                <GraduationCap size={10} aria-hidden /> {d.subjectName}
-                              </Chip>
-                            )}
-                            {d.bookTitle && (
-                              <Chip tone="pink">
-                                <Library size={10} aria-hidden /> {d.bookTitle}
-                              </Chip>
-                            )}
-                            {d.archivedAt && <Chip>Arquivado</Chip>}
-                          </div>
-                          <p className="mt-3 text-xs text-slate">
-                            {d.counts.total} cartões · {d.counts.mature} maduros · {d.newPerDay} novos/dia
-                          </p>
-                          <div className="mt-auto pt-3 flex flex-wrap items-center gap-1.5">
-                            <Button className="!px-3 !py-2" onClick={() => startStudy(d)} disabled={dueToday === 0 || !!d.archivedAt}>
-                              <Play size={14} aria-hidden /> Estudar{dueToday > 0 ? ` (${dueToday})` : ""}
-                            </Button>
-                            <div className="ml-auto flex gap-0.5">
-                              <button className="p-2 rounded-lg text-slate hover:bg-black/[0.04] dark:hover:bg-white/[0.06]" aria-label={`Editar baralho ${d.name}`} onClick={() => setForm({ open: true, deck: d })}>
-                                <Pencil size={15} />
-                              </button>
-                              <button className="p-2 rounded-lg text-slate hover:bg-black/[0.04] dark:hover:bg-white/[0.06]" aria-label={d.archivedAt ? `Restaurar baralho ${d.name}` : `Arquivar baralho ${d.name}`} onClick={() => void toggleArchive(d)}>
-                                {d.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                              </button>
-                              <button className="p-2 rounded-lg text-slate hover:text-drop hover:bg-black/[0.04] dark:hover:bg-white/[0.06]" aria-label={`Excluir baralho ${d.name}`} onClick={() => setConfirmDeck(d)}>
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </div>
-                        </Card>
+                        <GrimoireDeckTome
+                          deck={d}
+                          dueToday={dueByDeck.get(d.id) ?? 0}
+                          selected={selectedId === d.id}
+                          onSelect={() => setSelectedId(d.id === selectedId ? null : d.id)}
+                          onStudy={() => startStudy(d)}
+                          onEdit={() => setForm({ open: true, deck: d })}
+                          onArchive={() => void toggleArchive(d)}
+                          onDelete={() => setConfirmDeck(d)}
+                        />
                       </li>
-                    );
-                  })}
-                </ul>
+                    ))}
+                  </ul>
+                )
               )}
 
-              {selected && <DeckCardsPanel key={selected.id} deck={selected} today={queue?.today ?? ""} onToast={notify} onClose={() => setSelectedId(null)} />}
+              <div ref={panelRef} className="scroll-mt-4">
+                {selected && <DeckCardsPanel key={selected.id} deck={selected} today={queue?.today ?? ""} onToast={notify} onClose={() => setSelectedId(null)} />}
+              </div>
             </div>
           )}
         </>

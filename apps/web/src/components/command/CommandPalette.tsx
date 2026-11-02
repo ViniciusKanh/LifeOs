@@ -119,7 +119,7 @@ export function CommandPalette() {
           role="status"
           aria-live="polite"
           className={clsx(
-            "fixed bottom-24 md:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[75] rounded-xl px-4 py-2.5 text-sm shadow-lg text-white",
+            "fixed bottom-24 lg:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[75] rounded-xl px-4 py-2.5 text-sm shadow-lg text-white",
             toast.tone === "success" ? "bg-[#1E2537]" : "bg-drop",
             "rpg:rounded-[3px] rpg:border-2 rpg:bg-rpg-panel rpg:text-rpg-text",
             toast.tone === "success" ? "rpg:border-rpg-green" : "rpg:border-rpg-red"

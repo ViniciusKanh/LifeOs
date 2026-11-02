@@ -21,7 +21,7 @@ export function RPGToast({ message, tone = "success", onClose }: { message: stri
       role="status"
       onClick={onClose}
       className={clsx(
-        "fixed bottom-20 md:bottom-5 right-4 left-4 sm:left-auto z-[70] max-w-sm border-2 bg-rpg-panel px-4 py-3 text-left text-sm text-rpg-text shadow-rpg",
+        "fixed bottom-24 lg:bottom-5 right-4 left-4 sm:left-auto z-[70] max-w-sm border-2 bg-rpg-panel px-4 py-3 text-left text-sm text-rpg-text shadow-rpg",
         tone === "success" ? "border-rpg-green" : "border-rpg-red",
       )}
       style={{ borderRadius: 3 }}

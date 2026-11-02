@@ -30,7 +30,7 @@ export function MobileMagicNav({ onOpenModules, modulesOpen }: { onOpenModules: 
   return (
     <nav
       aria-label="Atalhos"
-      className="magic-nav md:hidden fixed z-20 inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] h-16 rounded-2xl shadow-[0_10px_30px_-8px_rgba(30,37,55,0.25)] border border-paper-border/70 dark:border-ink-border"
+      className="magic-nav lg:hidden fixed z-20 inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] h-16 rounded-2xl shadow-[0_10px_30px_-8px_rgba(30,37,55,0.25)] border border-paper-border/70 dark:border-ink-border"
     >
       <ul className="relative grid h-full" style={{ gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))` }}>
         {primary.map(({ to, label, icon: Icon }, i) => (

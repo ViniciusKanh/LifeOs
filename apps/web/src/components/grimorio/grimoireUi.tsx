@@ -53,7 +53,7 @@ export function InlineToast({ message, tone = "success", onClose }: { message: s
       role="status"
       onClick={onClose}
       className={clsx(
-        "fixed bottom-20 md:bottom-5 right-4 left-4 sm:left-auto z-[70] max-w-sm rounded-xl border px-4 py-3 text-left text-sm shadow-2xl",
+        "fixed bottom-24 lg:bottom-5 right-4 left-4 sm:left-auto z-[70] max-w-sm rounded-xl border px-4 py-3 text-left text-sm shadow-2xl",
         "bg-paper-raised dark:bg-ink-raised rpg:rounded-[3px] rpg:border-2 rpg:bg-rpg-panel rpg:text-rpg-text",
         tone === "success" ? "border-growth rpg:border-rpg-green" : "border-drop rpg:border-rpg-red",
       )}

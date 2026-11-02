@@ -33,7 +33,7 @@ const TYPE_ROUTE: Record<TimelineEvent["type"], string | ((e: TimelineEvent) => 
   recovery: "/saude",
   season: "/quests",
   grimoire: "/grimorio",
-  guild: "/guilda",
+  guild: "/metas",
   war_council: "/conselho",
   bank: "/banco",
 };

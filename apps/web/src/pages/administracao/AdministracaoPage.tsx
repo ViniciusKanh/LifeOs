@@ -396,7 +396,7 @@ export function AdministracaoPage() {
       />
 
       {toast && (
-        <div role="status" className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-[#1E2537] text-white text-xs px-4 py-2.5 shadow-lg rpg:rounded-[4px] rpg:bg-rpg-panel rpg:border-2 rpg:border-rpg-gold rpg:text-rpg-text">
+        <div role="status" className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-[#1E2537] text-white text-xs px-4 py-2.5 shadow-lg rpg:rounded-[4px] rpg:bg-rpg-panel rpg:border-2 rpg:border-rpg-gold rpg:text-rpg-text">
           {toast}
         </div>
       )}

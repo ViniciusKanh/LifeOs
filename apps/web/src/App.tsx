@@ -84,7 +84,6 @@ const TavernaPage = lazy(() => import("@/pages/taverna/TavernaPage").then((m) =>
 const MapaMundoPage = lazy(() => import("@/pages/mapa/MapaMundoPage").then((m) => ({ default: m.MapaMundoPage })));
 const TimelinePage = lazy(() => import("@/pages/timeline/TimelinePage").then((m) => ({ default: m.TimelinePage })));
 const QuestsPage = lazy(() => import("@/pages/quests/QuestsPage").then((m) => ({ default: m.QuestsPage })));
-const GuildaPage = lazy(() => import("@/pages/guilda/GuildaPage").then((m) => ({ default: m.GuildaPage })));
 const GrimorioPage = lazy(() => import("@/pages/grimorio/GrimorioPage").then((m) => ({ default: m.GrimorioPage })));
 const ConselhoPage = lazy(() => import("@/pages/conselho/ConselhoPage").then((m) => ({ default: m.ConselhoPage })));
 const ForjaInteligenciaPage = lazy(() => import("@/pages/forja-inteligencia/ForjaInteligenciaPage").then((m) => ({ default: m.ForjaInteligenciaPage })));
@@ -189,7 +188,8 @@ export default function App() {
           <Route path="/mapa" element={<MapaMundoPage />} />
           <Route path="/taverna" element={<TavernaPage />} />
           <Route path="/quests" element={<QuestsPage />} />
-          <Route path="/guilda" element={<GuildaPage />} />
+          {/* Salão da Guilda removido da navegação: parceiros de compromisso seguem dentro de Metas e Contratos. */}
+          <Route path="/guilda" element={<Navigate to="/metas" replace />} />
           <Route path="/grimorio" element={<GrimorioPage />} />
           <Route path="/conselho" element={<ConselhoPage />} />
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
