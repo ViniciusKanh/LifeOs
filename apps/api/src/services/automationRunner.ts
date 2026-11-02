@@ -22,6 +22,8 @@ import { runBuildSnapshot, runJourneyBigMoments, runJourneyWeeklyRetro, runNearA
 import { runHabitReminders, runHabitWeeklyReview, runStreakAnalysis } from "./habitsHubService.js";
 import { runReadingReminder, runReadingSummary } from "./libraryHubService.js";
 import { runAdminSummary, runDocumentCheck, runMissingFiles, runRiskAlerts, runSubscriptionDigest } from "./lifeAdminHubService.js";
+import { runMorningPlan, runSmartAlerts } from "./todayHubService.js";
+import { runPerformanceAlerts, runWeeklyEvolution } from "./heroDashboardService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
 type Db = ReturnType<typeof getDb>;
@@ -159,6 +161,21 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "admin:due_reminders":
     case "admin:recurrence":
     case "admin:agenda_sync":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
+    case "today:morning_plan":
+      return runMorningPlan(db, ownerId, config);
+    case "today:smart_alerts":
+      return runSmartAlerts(db, ownerId, config);
+    case "hero:weekly_evolution":
+      return runWeeklyEvolution(db, ownerId, config);
+    case "hero:performance_alerts":
+      return runPerformanceAlerts(db, ownerId, config);
+    case "today:next_action":
+    case "today:focus_blocks":
+    case "today:progress_sync":
+    case "today:day_close":
+    case "hero:attributes_refresh":
+    case "hero:progression":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "diary:day_context":
     case "diary:learnings_grimoire":

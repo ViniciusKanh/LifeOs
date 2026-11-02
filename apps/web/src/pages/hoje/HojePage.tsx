@@ -42,6 +42,7 @@ import { RpgCopilotPanel } from "@/components/dashboard/RpgDashboardSections";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useTheme } from "@/hooks/useTheme";
 import type { Task } from "@/types";
+import { TodayCentral } from "@/components/today/TodayCentral";
 
 // Metas de referência usadas só para calcular "% da meta" nos
 // indicadores — ainda não são configuráveis por usuário no backend
@@ -69,7 +70,13 @@ function formatTime(at: string) {
   return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Hoje: no tema RPG, a Central da Jornada Diária; nos demais temas, a tela clássica. */
 export function HojePage() {
+  const { isRpg } = useTheme();
+  return isRpg ? <TodayCentral /> : <ClassicHojePage />;
+}
+
+function ClassicHojePage() {
   const { tasks, createTask, moveTask } = useTasks();
   const { focusTasks } = useFocusTasks(5);
   const { habits, summaryByHabitId, checkIn } = useHabits();

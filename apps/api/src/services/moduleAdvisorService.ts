@@ -11,6 +11,7 @@ import { getTreasureHub } from "./heroHubService.js";
 import { getHabitsHub } from "./habitsHubService.js";
 import { getLibraryHub } from "./libraryHubService.js";
 import { getAdminHub } from "./lifeAdminHubService.js";
+import { focusBlocks, getTodayHub, nextBestAction } from "./todayHubService.js";
 import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./planningHubService.js";
 
 /**
@@ -23,7 +24,7 @@ import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./plan
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin" | "today";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -51,6 +52,7 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   habits: "Sugestões sobre seus hábitos — nada é alterado sem você.",
   library: "Baseado nas suas sessões e anotações. Nenhum trecho de livro é reproduzido.",
   admin: "Valores em dinheiro real são só informativos e não se misturam às moedas do LifeOS. Nada é pago ou cancelado automaticamente.",
+  today: "Sugestões para o seu dia — nenhum compromisso ou tarefa é criado ou alterado sem a sua aprovação.",
 };
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -263,6 +265,24 @@ async function adminFacts(db: Client, ownerId: string): Promise<{ items: Advisor
   return { items, insufficient: i.total === 0 };
 }
 
+async function todayFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getTodayHub(db, ownerId);
+  const items: AdvisorItem[] = [];
+  items.push({ kind: "dado", text: `Hoje: ${h.indicators.missionsDone} missão(ões) concluída(s), ${h.missions.length} pendente(s); hábitos ${h.habits.done}/${h.habits.total}; ${h.indicators.focusMinutes} min de foco; ${h.profile.xpToday} XP.` });
+  if (h.main) items.push({ kind: "dado", text: `Missão principal: ${h.main.title}${h.main.subtasks.total ? ` (${h.main.subtasks.done}/${h.main.subtasks.total} subtarefas)` : ""}.` });
+  const overdue = h.missions.filter((m) => m.overdue);
+  if (overdue.length) items.push({ kind: "dado", text: `${overdue.length} missão(ões) atrasada(s): ${overdue.slice(0, 3).map((m) => m.title).join(", ")}.` });
+  for (const c of h.conflicts.slice(0, 2)) items.push({ kind: "dado", text: `Conflito na agenda: ${c.a} e ${c.b} se sobrepõem em ${c.minutes} min.` });
+  const pct = h.indicators.prioritiesTotal ? Math.round((h.indicators.prioritiesDone / h.indicators.prioritiesTotal) * 100) : null;
+  if (pct != null) items.push({ kind: "inferencia", text: `${pct}% das missões previstas para hoje já foram concluídas.` });
+  const na = nextBestAction(h);
+  items.push({ kind: "sugestao", text: na.text });
+  const now = new Date();
+  const blocks = focusBlocks(h, now.getHours() * 60 + now.getMinutes(), 2);
+  if (blocks.length) items.push({ kind: "sugestao", text: `Janelas livres para foco: ${blocks.map((b) => `${b.start}–${b.end}`).join(", ")} (horário do servidor).` });
+  return { items, insufficient: !h.missions.length && !h.habits.total && !h.agenda.length };
+}
+
 const SCHEMA = {
   type: "object",
   properties: {
@@ -290,6 +310,7 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     habits: () => habitsFacts(db, ownerId),
     library: () => libraryFacts(db, ownerId),
     admin: () => adminFacts(db, ownerId),
+    today: () => todayFacts(db, ownerId),
   };
   const base = await loaders[module]();
   const fallback: AdvisorAnswer = { ai: false, items: base.items, disclaimer: DISCLAIMER[module], insufficient: base.insufficient };
@@ -312,6 +333,7 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     habits: "Justifique com consistência e horários reais. Não altere hábitos; sugira ajustes de frequência ou simplificação.",
     library: "Não invente livros, autores, trechos ou conteúdo de obras. Use apenas títulos e números dados.",
     admin: "Diferencie valores em dinheiro real (R$) das moedas virtuais. Não recomende pagamentos ou cancelamentos automáticos.",
+    today: "Baseie a ordem do dia em prazos, prioridades e horários dados. Não invente compromissos nem mova eventos; apenas sugira.",
   }[module];
   const prompt = `Você é o conselheiro do LifeOS (módulo ${module}). Responda em português do Brasil, em até 6 itens curtos.
 Use SOMENTE os fatos abaixo (dados reais do usuário). Não crie números novos. ${rules}

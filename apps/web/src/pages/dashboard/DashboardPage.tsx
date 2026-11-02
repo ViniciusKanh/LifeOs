@@ -23,6 +23,7 @@ import { useHabits } from "@/hooks/useHabits";
 import { useDeadlineRadar } from "@/hooks/useDeadlineRadar";
 import { useEvents } from "@/hooks/useEvents";
 import { useTheme } from "@/hooks/useTheme";
+import { HeroDashboardScreen } from "@/components/herodash/HeroDashboard";
 import { DONE, buildAttentionItems, buildDayEntries, lifeScoreWeekDelta, localIsoDate } from "@/utils/dashboardMetrics";
 
 /* ============================================================
@@ -53,7 +54,13 @@ const DIM_EXPLAIN = {
   professional: "Tarefas concluídas em projetos profissionais.",
 };
 
+/** Painel do Herói: no tema RPG, o centro de evolução; nos demais temas, o Dashboard clássico. */
 export function DashboardPage() {
+  const { isRpg } = useTheme();
+  return isRpg ? <HeroDashboardScreen /> : <ClassicDashboardPage />;
+}
+
+function ClassicDashboardPage() {
   const today = localIsoDate();
   const now = new Date();
   const nowLabel = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });

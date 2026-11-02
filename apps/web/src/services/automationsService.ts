@@ -1,7 +1,7 @@
 import { api } from "./api";
 
 /** Espelho de /api/automations — automações por módulo (estado por usuário). */
-export type AutomationModule = "grimoire" | "goals" | "bank" | "education" | "health" | "agenda" | "missions" | "quests" | "diary" | "lab" | "hero" | "journey" | "habits" | "library" | "admin";
+export type AutomationModule = "grimoire" | "goals" | "bank" | "education" | "health" | "agenda" | "missions" | "quests" | "diary" | "lab" | "hero" | "journey" | "habits" | "library" | "admin" | "today";
 export type AutomationRunStatus = "ok" | "skipped" | "error";
 
 export interface Automation {

@@ -2132,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "lifeos-desktop"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "serde_json",
  "tauri",
