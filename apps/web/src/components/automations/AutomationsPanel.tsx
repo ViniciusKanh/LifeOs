@@ -24,6 +24,7 @@ const LABELS: Record<string, { label: string; suffix?: string; min?: number; max
   preferredHour: { label: "Seu horário de estudo", suffix: "h", min: 0, max: 23 },
   minDue: { label: "Avisar a partir de", suffix: "cartões", min: 1, max: 500 },
   inApp: { label: "Avisar no LifeOS" },
+  minPct: { label: "Avisar a partir de", suffix: "%", min: 50, max: 99 },
   push: { label: "Enviar notificação push" },
   daysBefore: { label: "Avisar quando faltarem", suffix: "dias", min: 1, max: 60 },
   stalledDays: { label: "Considerar parada após", suffix: "dias", min: 3, max: 90 },

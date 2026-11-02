@@ -5,6 +5,9 @@ import { getBankHub } from "./bankHubService.js";
 import { getEducationHub } from "./educationHubService.js";
 import { getHealthHub } from "./healthHubService.js";
 import { getChronicleHub, getLabHub } from "./chronicleLabService.js";
+import { getBuildOverview } from "./characterBuildService.js";
+import { listAchievements } from "./achievementsService.js";
+import { getTreasureHub } from "./heroHubService.js";
 import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./planningHubService.js";
 
 /**
@@ -17,7 +20,7 @@ import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./plan
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -40,6 +43,8 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   quests: "As recompensas seguem as regras do Quadro de Avisos — a IA não cria quests nem XP.",
   diary: "Leitura só com números e etiquetas do Diário (o texto das crônicas não é enviado). Não é avaliação psicológica.",
   lab: "Estudo pessoal observacional: sem prova de causa e efeito. Nada é criado sem a sua confirmação.",
+  hero: "Leitura dos seus registros — não é teste de personalidade. Metas e missões só são criadas com a sua aprovação.",
+  treasure: "Moedas virtuais do LifeOS. A IA só sugere: nenhum resgate acontece sem a sua confirmação.",
 };
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -183,6 +188,36 @@ async function labFacts(db: Client, ownerId: string): Promise<{ items: AdvisorIt
   return { items, insufficient: h.experiments.length === 0 };
 }
 
+async function heroFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const [b, ach] = await Promise.all([getBuildOverview(db, ownerId), listAchievements(ownerId)]);
+  const items: AdvisorItem[] = [];
+  if (!b.sufficiency.enough || !b.archetype) {
+    items.push({ kind: "dado", text: `Ainda há pouco XP na janela de ${b.windowDays} dias (${b.sufficiency.windowXp} de ${b.sufficiency.minWindowXp}) para ler a build com segurança.` });
+  } else {
+    items.push({ kind: "dado", text: `Arquétipo atual: ${b.archetype.name} (afinidade ${b.archetype.affinity}%)${b.archetype.secondary ? `; o mais próximo depois dele é ${b.archetype.secondary.name} (${b.archetype.secondary.affinity}%)` : ""}.` });
+    const top = [...b.attributes].sort((x, y) => y.score - x.score).slice(0, 2);
+    items.push({ kind: "dado", text: `Atributos mais fortes: ${top.map((a) => `${a.label} ${a.score}/100`).join(" e ")}.` });
+    for (const g of b.gaps.filter((x) => x.status === "below").sort((x, y) => y.gap - x.gap).slice(0, 2))
+      items.push({ kind: "sugestao", text: `${g.label}: ${g.current} de ${g.target} pontos na build desejada. Pequenas ações frequentes dessa área fecham a distância.` });
+    const d30 = b.comparisons.d30 as Record<string, number>;
+    const deltas = b.attributes.map((a) => ({ label: a.label, d: a.score - (d30[a.key] ?? 0) })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+    if (deltas[0] && deltas[0].d !== 0) items.push({ kind: "inferencia", text: `Maior mudança em 30 dias: ${deltas[0].label} (${deltas[0].d > 0 ? "+" : ""}${deltas[0].d} pontos).` });
+  }
+  const near = ach.filter((a) => !a.unlockedAt && a.progress >= 70).sort((x, y) => y.progress - x.progress).slice(0, 2);
+  for (const a of near) items.push({ kind: "dado", text: `Conquista perto: ${a.title} (${a.progress}%).` });
+  return { items, insufficient: !b.sufficiency.enough };
+}
+
+async function treasureFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getTreasureHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `Saldo: ${i.coins} moedas e ${i.gems} gemas; ${i.available} recompensa(s) disponível(is); ${i.redemptions} resgate(s) no total.` }];
+  items.push({ kind: "dado", text: `Últimos 30 dias: +${i.earned30} ganhas, −${i.spent30} gastas.` });
+  for (const g of h.goals.slice(0, 2)) items.push({ kind: "dado", text: `Meta ${g.title}: ${g.current}/${g.target} ${g.unit}${g.eta ? ` · ~${g.eta} dia(s) no ritmo atual` : ""}.` });
+  for (const t of h.tips) items.push({ kind: t.kind, text: t.text });
+  return { items, insufficient: h.goalOptions.rewards.length === 0 };
+}
+
 const SCHEMA = {
   type: "object",
   properties: {
@@ -205,6 +240,8 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     quests: () => questsFacts(db, ownerId),
     diary: () => diaryFacts(db, ownerId),
     lab: () => labFacts(db, ownerId),
+    hero: () => heroFacts(db, ownerId),
+    treasure: () => treasureFacts(db, ownerId),
   };
   const base = await loaders[module]();
   const fallback: AdvisorAnswer = { ai: false, items: base.items, disclaimer: DISCLAIMER[module], insufficient: base.insufficient };
@@ -222,6 +259,8 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     quests: "Não invente quests, recompensas, participantes ou rankings.",
     diary: "Você não tem acesso ao texto das crônicas, só a estatísticas. Não interprete sentimentos nem faça diagnósticos; não invente acontecimentos.",
     lab: "Diferencie correlação de causalidade, aponte amostras pequenas e fatores de confusão. Nunca diga que algo foi comprovado.",
+    hero: "Não faça avaliação de personalidade; baseie-se nos atributos e números dados. Não crie metas nem tarefas, apenas sugira.",
+    treasure: "Não invente recompensas, preços ou saldos. Não incentive gastar todas as moedas. Nunca fale de dinheiro real.",
   }[module];
   const prompt = `Você é o conselheiro do LifeOS (módulo ${module}). Responda em português do Brasil, em até 6 itens curtos.
 Use SOMENTE os fatos abaixo (dados reais do usuário). Não crie números novos. ${rules}

@@ -922,7 +922,7 @@ export interface TimelineEvent {
   type:
     | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
     | "life_admin" | "review" | "focus" | "project" | "contract" | "campaign" | "codex" | "achievement" | "reward" | "level_up"
-    | "inventory" | "protocol" | "recovery" | "season" | "grimoire" | "guild" | "war_council" | "bank";
+    | "inventory" | "protocol" | "recovery" | "season" | "grimoire" | "guild" | "war_council" | "bank" | "archetype";
   icon: string;
   id: string;
   label: string;

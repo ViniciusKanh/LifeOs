@@ -1,6 +1,6 @@
 [package]
 name = "lifeos-desktop"
-version = "0.5.5"
+version = "0.5.6"
 description = "LifeOS Desktop — Transforme sua rotina em progresso."
 authors = ["Vinicius Santos"]
 edition = "2021"

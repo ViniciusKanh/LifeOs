@@ -6,11 +6,13 @@ import { RPGButton, RPGToast, rpgButtonClass } from "@/components/rpg";
 import { TreasureSidePanel } from "@/components/treasure/TreasureSidePanel";
 import { InventoryCollections } from "@/components/inventory/InventoryCollections";
 import { InventoryFilters, type ViewMode } from "@/components/inventory/InventoryFilters";
-import { InventoryHero } from "@/components/inventory/InventoryHero";
 import { InventoryHistoryModal } from "@/components/inventory/InventoryHistoryModal";
 import { InventoryItemCard } from "@/components/inventory/InventoryItemCard";
 import { InventoryItemDetail } from "@/components/inventory/InventoryItemDetail";
-import { InventoryKpis } from "@/components/inventory/InventoryKpis";
+import { ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { CollectionIndicators, EquipmentSlots, SetsGallery } from "@/components/hero/CollectionHub";
+import { HERO_ART, useUrlTab } from "@/components/hero/HeroShared";
+import { Layers, LayoutGrid, Shield, Wrench } from "lucide-react";
 import { InventoryRecent } from "@/components/inventory/InventoryRecent";
 import { ItemEquipModal } from "@/components/inventory/ItemEquipModal";
 import { ItemUseModal } from "@/components/inventory/ItemUseModal";
@@ -59,6 +61,8 @@ export function InventarioPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [newItem, setNewItem] = useState<Recent | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Coleção 3.0: abas na URL (?aba=). Equipamento e conjuntos leem o MESMO inventário.
+  const [tab, setTab] = useUrlTab(["itens", "equipamento", "conjuntos"] as const, "itens");
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
   const origins = useMemo(() => [...new Set(items.map((i) => i.origin?.sourceType).filter((o): o is string => !!o))].sort(), [items]);
@@ -126,10 +130,42 @@ export function InventarioPage() {
   const empty = !isLoading && !isError && items.length === 0;
 
   return (
-    <div className="w-full px-4 md:px-6 lg:px-8 py-6">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px] items-start">
+    <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-4">
+      <ModuleBanner
+        eyebrow="Coleção do Herói"
+        title="Inventário"
+        subtitle="Relíquias, títulos, cosméticos e consumíveis conquistados com marcos reais. Nada aqui é comprado."
+        mage={HERO_ART.collection.mage}
+        scene={HERO_ART.collection.scene}
+        actions={
+          <RPGButton variant={organizing ? "gold" : "secondary"} onClick={() => (setOrganizing((v) => !v), setTab("itens"))} aria-pressed={organizing}>
+            <Wrench size={15} aria-hidden /> {organizing ? "Concluir organização" : "Organizar"}
+          </RPGButton>
+        }
+      />
+      {data ? <CollectionIndicators data={data} /> : <div className="rpg-panel h-24 animate-pulse" aria-busy aria-label="Carregando indicadores" />}
+      <ModuleTabs
+        label="Seções da Coleção"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "itens", label: "Itens", icon: <LayoutGrid size={15} /> },
+          { value: "equipamento", label: "Equipamento", icon: <Shield size={15} /> },
+          { value: "conjuntos", label: "Conjuntos", icon: <Layers size={15} /> },
+        ]}
+      />
+      {tab === "equipamento" && data && <EquipmentSlots items={data.items} onEquip={(item, eq) => setEquipTarget({ item, equip: eq })} />}
+      {tab === "conjuntos" && data && (
+        <SetsGallery
+          data={data}
+          onSelect={(key) => {
+            setTab("itens");
+            selectKey(key);
+          }}
+        />
+      )}
+      <div className={tab === "itens" ? "grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px] items-start" : "hidden"}>
         <div className="space-y-4 min-w-0">
-          <InventoryHero organizing={organizing} onOrganize={() => setOrganizing((v) => !v)} />
           {isError ? (
             <div className="rpg-panel p-6 text-center">
               <p className="text-sm text-rpg-red">Não foi possível carregar o inventário.</p>
@@ -139,7 +175,6 @@ export function InventarioPage() {
             </div>
           ) : (
             <>
-              <InventoryKpis kpis={data?.kpis} loading={isLoading} />
               {organizing && (
                 <p className="rpg-panel px-3 py-2 text-xs text-rpg-gold-light" role="status">
                   Modo organização: favorite, arquive ou desarquive itens{archivedCount > 0 ? ` (${archivedCount} arquivado${archivedCount > 1 ? "s" : ""} visíveis agora)` : ""}. Itens de missão ativos não podem ser arquivados.

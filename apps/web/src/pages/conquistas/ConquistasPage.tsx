@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { BookOpen, ClipboardList, Droplets, Dumbbell, Flame, FlaskConical, GraduationCap, Library, ListChecks, Lock, Plus, Rocket, Target, Timer, Trash2, Trophy, X } from "lucide-react";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useTheme } from "@/hooks/useTheme";
-import { RpgAchievementsView } from "@/components/achievements/RpgAchievementsView";
-import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
+import { ACH_TABS, AchievementsShell } from "@/components/hero/HeroShells";
+import { useUrlTab } from "@/components/hero/HeroShared";
 import { useCustomAchievements } from "@/hooks/useCustomAchievements";
 import { Button, Card, EmptyState, Field } from "@/components/ui/primitives";
 import { TIER_BORDER_TONE, TIER_EMOJI, TIER_GLOW, TIER_LABEL, TIER_MEDAL_GRADIENT, TIER_ORDER, TIER_TEXT_TONE } from "@/components/achievements/tierDisplay";
@@ -221,6 +221,8 @@ export function ConquistasPage() {
   const { trophies, unlockedCount, metrics, isLoading: trophiesLoading, create, remove } = useCustomAchievements();
   const [modalOpen, setModalOpen] = useState(false);
   const { isRpg } = useTheme();
+  // Abas do Hall de Troféus (tema RPG) na URL (?aba=).
+  const [achTab, setAchTab] = useUrlTab(ACH_TABS, "salao");
 
   // Vitrine agrupada por raridade (platina → bronze), como uma sala de troféus.
   const byTier = useMemo(() => {
@@ -233,13 +235,7 @@ export function ConquistasPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-8">
       {isRpg ? (
-        <RpgAchievementsView
-          achievements={achievements}
-          isLoading={isLoading}
-          isError={isError}
-          onRetry={() => void refetch()}
-          quote={findNavItem("/conquistas")?.item.quote ?? DEFAULT_QUOTE}
-        />
+        <AchievementsShell tab={achTab} onTab={setAchTab} />
       ) : (
         <>
       <div>
@@ -279,6 +275,7 @@ export function ConquistasPage() {
         </>
       )}
 
+      {(!isRpg || achTab === "trofeus") && (
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -312,6 +309,7 @@ export function ConquistasPage() {
           </div>
         )}
       </div>
+      )}
 
       {modalOpen && (
         <CreateTrophyModal metrics={metrics} onClose={() => setModalOpen(false)} onCreate={(input) => create(input)} />

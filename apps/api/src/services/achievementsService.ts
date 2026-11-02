@@ -49,6 +49,7 @@ const METRIC_KEYS = [
   "experiments_started_total",
   "experiment_log_days_total",
   "experiments_documented",
+  "achievements_unlocked_total",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -135,6 +136,7 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("journal_takeaways_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND night_takeaway IS NOT NULL AND night_takeaway <> ''");
   addScalar("journal_retros_saved", "SELECT COUNT(*) FROM journal_retrospectives WHERE owner_id = ? AND saved_at IS NOT NULL");
   addScalar("experiments_with_hypothesis", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND hypothesis IS NOT NULL AND hypothesis <> ''");
+  addScalar("achievements_unlocked_total", "SELECT COUNT(*) FROM user_achievements WHERE owner_id = ?");
   addScalar("experiments_started_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status <> 'draft'");
   addScalar("experiment_log_days_total", "SELECT COUNT(DISTINCT log_date) FROM personal_experiment_logs WHERE owner_id = ?");
   // Conclusão documentada vale igual para hipótese apoiada, não apoiada ou inconclusiva.

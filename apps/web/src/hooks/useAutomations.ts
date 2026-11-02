@@ -19,6 +19,8 @@ export function useAutomations(module: AutomationModule) {
       quests: ["gamification", "quests"],
       diary: ["journal"],
       lab: ["experiments"],
+      hero: ["achievements"],
+      journey: ["analytics"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

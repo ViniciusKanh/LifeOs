@@ -4,6 +4,9 @@ import { Button, Card, EmptyState, IconBadge, PageHeader } from "@/components/ui
 import { useTimeline } from "@/hooks/useAnalytics";
 import { groupTimelineByDay, timelineDayLabel, timelineEventRoute, timelineEventTone } from "@/utils/timelineEvents";
 import type { TimelineEvent } from "@/types";
+import { useTheme } from "@/hooks/useTheme";
+import { JOURNEY_TABS, JourneyShell } from "@/components/hero/HeroShells";
+import { useUrlTab } from "@/components/hero/HeroShared";
 
 /** Linha de um evento: ícone (emoji real vindo do backend), rótulo, horário e XP/moedas quando houve. */
 function TimelineRow({ event }: { event: TimelineEvent }) {
@@ -46,7 +49,20 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
  * claude/analise-funcoes-2026-10-27.md. Período começa em 14 dias e cresce
  * com "carregar mais", sem paginação por cursor (o endpoint é por data).
  */
+/** Crônica da Jornada 2.0 no tema RPG; layout clássico nos demais temas. */
 export function TimelinePage() {
+  const { isRpg } = useTheme();
+  const [tab, setTab] = useUrlTab(JOURNEY_TABS, "cronica");
+  if (isRpg)
+    return (
+      <div className="w-full px-4 py-6 md:px-6 lg:px-8">
+        <JourneyShell tab={tab} onTab={setTab} />
+      </div>
+    );
+  return <ClassicTimelinePage />;
+}
+
+function ClassicTimelinePage() {
   const { timeline, isLoading, isFetching, isError, refetch, from, to, loadMore } = useTimeline();
   const events = timeline?.events ?? [];
   const groups = groupTimelineByDay(events);

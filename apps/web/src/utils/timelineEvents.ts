@@ -36,6 +36,7 @@ const TYPE_ROUTE: Record<TimelineEvent["type"], string | ((e: TimelineEvent) => 
   guild: "/metas",
   war_council: "/conselho",
   bank: "/banco",
+  archetype: "/build?aba=marcos",
 };
 
 /** Rota de destino do evento, ou null quando não há tela correspondente (não deveria ocorrer, mas evita quebrar se um tipo novo aparecer sem ser mapeado). */
@@ -76,6 +77,7 @@ const TYPE_TONE: Record<TimelineEvent["type"], "blue" | "purple" | "green" | "pi
   guild: "purple",
   war_council: "purple",
   bank: "amber",
+  archetype: "purple",
 };
 
 export function timelineEventTone(e: TimelineEvent): "blue" | "purple" | "green" | "pink" | "amber" {

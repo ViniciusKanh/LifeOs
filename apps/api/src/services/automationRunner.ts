@@ -18,6 +18,7 @@ import { runGuildReport, runLoanAlerts, runVaultGoals } from "./bankHubService.j
 import { runAutoProgress, runGrimoireLink, runSmartDeadlines, runWeeklyStudyPlan } from "./educationHubService.js";
 import { runAgendaDigest, runAutoPlan, runConflictAlerts, runDueAlerts, runQuestReminder, runReplan } from "./planningHubService.js";
 import { runLabCheckin, runLabCycleEnd, runLabMissingData, runMemories, runWeeklyRetro, runWriteReminder } from "./chronicleLabService.js";
+import { runBuildSnapshot, runJourneyBigMoments, runJourneyWeeklyRetro, runNearAchievements, runRewardGoalReady, runUnlockPipeline, runWeeklyRewardSuggestion } from "./heroHubService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
 type Db = ReturnType<typeof getDb>;
@@ -104,6 +105,25 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runLabMissingData(db, ownerId, config);
     case "lab:cycle_end":
       return runLabCycleEnd(db, ownerId, config);
+    case "hero:unlock_pipeline":
+      return runUnlockPipeline(db, ownerId, config);
+    case "hero:near_achievements":
+      return runNearAchievements(db, ownerId, config);
+    case "hero:reward_goal_ready":
+      return runRewardGoalReady(db, ownerId, config);
+    case "hero:weekly_reward_tip":
+      return runWeeklyRewardSuggestion(db, ownerId, config);
+    case "hero:build_snapshot":
+      return runBuildSnapshot(db, ownerId, config);
+    case "journey:big_moments":
+      return runJourneyBigMoments(db, ownerId, config);
+    case "journey:weekly_retro":
+      return runJourneyWeeklyRetro(db, ownerId, config);
+    case "hero:economy_log":
+    case "journey:auto_log":
+    case "journey:grouping":
+    case "journey:codex_sync":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "diary:day_context":
     case "diary:learnings_grimoire":
     case "diary:goal_links":
@@ -180,6 +200,8 @@ export async function runDueAutomationsForAll(db: Db): Promise<{ ran: number; sk
       "SELECT DISTINCT owner_id FROM personal_experiments WHERE status = 'active'",
       "SELECT DISTINCT owner_id FROM sleep_entries WHERE woke_up_at >= date('now', '-14 days')",
       "SELECT DISTINCT owner_id FROM water_entries WHERE recorded_at >= date('now', '-14 days')",
+      // Perfil do Herói/Crônica: quem ganhou XP nas últimas 2 semanas.
+      "SELECT DISTINCT owner_id FROM xp_events WHERE day_key >= date('now', '-14 days')",
     ];
     for (const sql of sources) {
       const users = await db.execute({ sql, args: [] });

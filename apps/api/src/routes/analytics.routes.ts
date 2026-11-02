@@ -1,4 +1,5 @@
 import { itemDef } from "../config/items.js";
+import { buildTimelineEvents } from "../services/heroHubService.js";
 import { Router } from "express";
 import { KNOWLEDGE, RELICS, TITLES } from "../config/codex.js";
 import { getDb } from "../db/client.js";
@@ -406,10 +407,13 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const guildEvents = await guildTimelineEvents(db, ownerId, qFrom, qTo);
   // Conselho de Guerra: um evento por plano semanal selado.
   const warCouncilEvents = await warCouncilTimelineEvents(db, ownerId, qFrom, qTo);
+  // Build do Personagem: troca de arquétipo entre fotografias semanais.
+  const archetypeEvents = await buildTimelineEvents(db, ownerId, qFrom, qTo);
 
   const events = [
     ...guildEvents,
     ...warCouncilEvents,
+    ...archetypeEvents,
     ...asRows(tasks.rows).map((r) => ({ type: "task", icon: "✅", ...r })),
     ...asRows(habitEntries.rows).map((r) => ({ type: "habit", icon: "🔁", ...r })),
     ...asRows(workouts.rows).map((r) => ({ type: "workout", icon: "🏃", ...r })),

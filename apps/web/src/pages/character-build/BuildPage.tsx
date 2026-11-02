@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 import { Compass } from "lucide-react";
 import { RPGButton, RPGTabs, RPGToast, rpgButtonClass } from "@/components/rpg";
 import { RPG_TONE_TEXT } from "@/components/rpg/rpgAssets";
-import { CharacterBuildHero } from "@/components/character-build/CharacterBuildHero";
+import { AdvisorPanel, ModuleBanner } from "@/components/rpg-modules/ModuleKit";
+import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
+import { BuildComparisonTable, BuildMilestones, BuildRulesPanel, StrengthsPanel } from "@/components/hero/BuildHub";
+import { HERO_ART, useUrlTab } from "@/components/hero/HeroShared";
+import { useBuildSnapshots, useHeroActions } from "@/hooks/useHero";
+import { Camera, SlidersHorizontal } from "lucide-react";
 import { CharacterArchetypeCard } from "@/components/character-build/CharacterArchetypeCard";
 import { CharacterAttributeCard } from "@/components/character-build/CharacterAttributeCard";
 import { CharacterBuildRadar } from "@/components/character-build/CharacterBuildRadar";
@@ -15,15 +20,20 @@ import { useBuild } from "@/hooks/useBuild";
 import type { BuildOverview } from "@/services/buildService";
 import { ATTR_UI } from "@/utils/codexDisplay";
 
-type Tab = "overview" | "attributes" | "archetype" | "desired" | "evolution" | "recommendations" | "comparisons";
+const TAB_IDS = ["overview", "attributes", "archetype", "desired", "evolution", "analysis", "marcos", "recommendations", "comparisons", "master", "automations"] as const;
+type Tab = (typeof TAB_IDS)[number];
 const TABS: Array<{ value: Tab; label: string }> = [
   { value: "overview", label: "Visão Geral" },
   { value: "attributes", label: "Atributos" },
   { value: "archetype", label: "Arquétipo" },
   { value: "desired", label: "Build Desejada" },
   { value: "evolution", label: "Evolução" },
+  { value: "analysis", label: "Análise" },
+  { value: "marcos", label: "Marcos" },
   { value: "recommendations", label: "Recomendações" },
   { value: "comparisons", label: "Comparações" },
+  { value: "master", label: "Mestre da Evolução" },
+  { value: "automations", label: "Automações" },
 ];
 
 /** Sem XP suficiente na janela: explica o que falta, sem inventar atributos. */
@@ -68,7 +78,15 @@ function BuildEmpty({ data }: { data: BuildOverview }) {
  */
 export function BuildPage() {
   const { data, isLoading, isError, refetch, saveDesired, resetDesired, applyPlan } = useBuild();
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useUrlTab(TAB_IDS, "overview");
+  // Marcos da build: fotografias persistidas (semanais/manuais), nunca sobrescritas.
+  const snaps = useBuildSnapshots();
+  const { recordSnapshot } = useHeroActions();
+  const recordMark = () =>
+    recordSnapshot.mutate(undefined, {
+      onSuccess: (r) => setToast({ msg: r.created ? `Marco registrado: ${r.archetype}.` : "O marco de hoje já foi registrado.", tone: "success" }),
+      onError: (e) => setToast({ msg: e instanceof Error ? e.message : "Não foi possível registrar o marco.", tone: "error" }),
+    });
   const [desiredOpen, setDesiredOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
@@ -119,12 +137,44 @@ export function BuildPage() {
         return <BuildRecommendations recommendations={data.recommendations} onApply={() => setPlanOpen(true)} />;
       case "comparisons":
         return <BuildComparisons data={data} />;
+      case "analysis":
+        return (
+          <div className="space-y-4">
+            <BuildComparisonTable data={data} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <StrengthsPanel data={data} />
+              <BuildRulesPanel data={data} />
+            </div>
+          </div>
+        );
+      case "marcos":
+        return <BuildMilestones snaps={snaps.data} labels={Object.fromEntries(data.attributes.map((a) => [a.key, a.label]))} onRecord={recordMark} recording={recordSnapshot.isPending} />;
+      case "master":
+        return <AdvisorPanel module="hero" title="Mestre da Evolução" avatar={HERO_ART.advisor} />;
+      case "automations":
+        return <AutomationsPanel module="hero" keys={["build_snapshot"]} title="Automações da Build" intro="Uma fotografia por semana dos seus atributos e do arquétipo — o histórico nunca é sobrescrito." />;
     }
   };
 
   return (
     <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-4">
-      <CharacterBuildHero />
+      <ModuleBanner
+        eyebrow="Build do Personagem"
+        title={data?.archetype ? data.archetype.name : "Sua build"}
+        subtitle={data?.archetype ? `Arquétipo atual (${data.archetype.affinity}% de afinidade)${data.archetype.secondary ? ` · próximo: ${data.archetype.secondary.name} (${data.archetype.secondary.affinity}%)` : ""}. Leitura dos seus registros, não um teste de personalidade.` : "Atributos calculados a partir do XP real dos últimos 30 dias."}
+        mage={data?.archetype ? `/assets/rpg/avatars/${data.archetype.avatar}.webp` : HERO_ART.build.mage}
+        scene={HERO_ART.build.scene}
+        actions={
+          <>
+            <RPGButton variant="gold" onClick={() => setDesiredOpen(true)} disabled={!data}>
+              <SlidersHorizontal size={15} aria-hidden /> Build desejada
+            </RPGButton>
+            <RPGButton variant="secondary" onClick={recordMark} disabled={!ready || recordSnapshot.isPending}>
+              <Camera size={15} aria-hidden /> Registrar marco
+            </RPGButton>
+          </>
+        }
+      />
       {isError ? (
         <div className="rpg-panel p-6 text-center">
           <p className="text-sm text-rpg-red">Não foi possível carregar sua build.</p>

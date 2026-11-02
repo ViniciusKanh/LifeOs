@@ -9,8 +9,12 @@ import { RewardFilters, type StateFilter } from "@/components/treasure/RewardFil
 import { RewardFormModal } from "@/components/treasure/RewardFormModal";
 import { RewardHistory, RewardHistoryModal } from "@/components/treasure/RewardHistory";
 import { RewardInventory, type InventoryAction } from "@/components/treasure/RewardInventory";
-import { TreasureHero } from "@/components/treasure/TreasureHero";
-import { TreasureKpis } from "@/components/treasure/TreasureKpis";
+import { AdvisorPanel, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
+import { EconomyHistory, RewardGoalsPanel, SpecialChest, TreasureIndicators, TreasureTips } from "@/components/hero/TreasureHub";
+import { HERO_ART, useUrlTab } from "@/components/hero/HeroShared";
+import { useTreasureHub } from "@/hooks/useHero";
+import { BarChart3, Bot, Gift as GiftIcon, LayoutGrid, Target as TargetIcon, Zap } from "lucide-react";
 import { useRewards, useTreasure } from "@/hooks/useGamification";
 import { gamificationService, type InventoryItem, type RedemptionStatus, type Reward } from "@/services/gamificationService";
 import { RARITY, categoryGroup, categoryLabel, formatWhen, limitText, matchesQuery, requirementText, rewardArtUrl, sortRewards, type CategoryGroup, type SortKey } from "@/utils/treasureDisplay";
@@ -39,6 +43,9 @@ export function TesouroPage() {
   const [history, setHistory] = useState<{ status: "all" | RedemptionStatus; rewardId: string | null } | null>(null);
   const [itemAction, setItemAction] = useState<{ item: InventoryItem; action: "use" | "details" | "cancel" } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Tesouro 3.0: abas na URL (?aba=) + hub derivado (metas, economia, recomendações).
+  const [tab, setTab] = useUrlTab(["visao", "metas", "bau", "economia", "automacoes", "ia"] as const, "visao");
+  const treasureHub = useTreasureHub();
 
   // Pacote inicial: idempotente no backend (não duplica recompensas pelo nome).
   const starter = useMutation({
@@ -126,10 +133,43 @@ export function TesouroPage() {
   );
 
   return (
-    <div className="w-full px-4 md:px-6 lg:px-8 py-6">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px] items-start">
+    <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-4">
+      <ModuleBanner
+        eyebrow="Tesouro & Recompensas"
+        title="Câmara do Tesouro"
+        subtitle="Moedas ganhas com ações reais viram recompensas escolhidas por você. Uma carteira só, sem compras com dinheiro real."
+        mage={HERO_ART.treasure.mage}
+        scene={HERO_ART.treasure.scene}
+        actions={heroActions}
+      />
+      {treasureHub.data ? <TreasureIndicators hub={treasureHub.data} /> : <div className="rpg-panel h-24 animate-pulse" aria-busy aria-label="Carregando indicadores" />}
+      <ModuleTabs
+        label="Seções do Tesouro"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "visao", label: "Recompensas", icon: <LayoutGrid size={15} /> },
+          { value: "metas", label: "Metas", icon: <TargetIcon size={15} />, badge: treasureHub.data?.goals.filter((g) => g.reached).length || undefined },
+          { value: "bau", label: "Baú Especial", icon: <GiftIcon size={15} /> },
+          { value: "economia", label: "Economia", icon: <BarChart3 size={15} /> },
+          { value: "automacoes", label: "Automações", icon: <Zap size={15} /> },
+          { value: "ia", label: "Conselheiro", icon: <Bot size={15} /> },
+        ]}
+      />
+      {tab === "metas" && treasureHub.data && (
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <RewardGoalsPanel hub={treasureHub.data} onToast={(m) => setToast(m)} />
+          <TreasureTips hub={treasureHub.data} />
+        </div>
+      )}
+      {tab === "bau" && <SpecialChest rewards={rewards} balance={summary?.coins ?? 0} gems={summary?.gems ?? 0} onRedeem={setRedeeming} />}
+      {tab === "economia" && treasureHub.data && <EconomyHistory hub={treasureHub.data} />}
+      {tab === "automacoes" && (
+        <AutomationsPanel module="hero" keys={["reward_goal_ready", "weekly_reward_tip", "economy_log"]} title="Automações do Tesouro" intro="Avisos de metas e sugestões. Nenhuma moeda é gasta sem a sua confirmação." />
+      )}
+      {tab === "ia" && <AdvisorPanel module="treasure" title="Conselheiro do Tesouro" avatar={HERO_ART.advisor} />}
+      <div className={tab === "visao" ? "grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px] items-start" : "hidden"}>
         <div className="space-y-5 min-w-0">
-          <TreasureHero actions={heroActions} />
           {isError ? (
             <div className="rpg-panel p-6 text-center">
               <p className="text-sm text-rpg-red">Não foi possível carregar o Tesouro.</p>
@@ -139,7 +179,6 @@ export function TesouroPage() {
             </div>
           ) : (
             <>
-              <TreasureKpis summary={summary} loading={isLoading} />
               {(isLoading || active.length > 0) && (
                 <RewardFilters group={group} onGroup={setGroup} counts={counts} sort={sort} onSort={setSort} state={stateFilter} onState={setStateFilter} query={query} onQuery={setQuery} />
               )}
