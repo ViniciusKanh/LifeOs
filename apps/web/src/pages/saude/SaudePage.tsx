@@ -34,6 +34,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { RPGAvatarButton, RPGPageHeader } from "@/components/rpg";
 import { RpgHealthAttributes } from "@/components/health/RpgHealthSections";
 import type { MoodEntryInput, SleepEntryInput, WaterEntryInput, WorkoutInput } from "@/services/healthService";
+import { aggregateSleepNights } from "@/utils/sleepNights";
+import { useHealthHub } from "@/hooks/useModuleHub";
+import { ModuleBanner, MODULE_ART } from "@/components/rpg-modules/ModuleKit";
+import { HealthAttributesHub, HealthRankPanel } from "@/components/health/HealthAttributes";
 
 function boundedPct(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -56,6 +60,7 @@ function formatDayLabel(dateKey: string) {
 }
 
 export function SaudePage() {
+  const { data: healthHub } = useHealthHub();
   const {
     water,
     sleep,
@@ -110,18 +115,22 @@ export function SaudePage() {
   const waterPct = Math.round((waterTotal / WATER_GOAL_ML) * 100);
   const waterWeekly = useMemo(() => weeklySeries(water, (entry) => entry.recorded_at, (entry) => entry.amount_ml / 1000, weekStart), [water, weekStart]);
 
-  const sleepThisWeek = useMemo(
-    () => sleep.filter((entry) => parseHealthDate(entry.went_to_bed_at) >= weekStart && entry.duration_minutes),
-    [sleep, weekStart]
-  );
+  // Sono agregado em NOITES (dia do despertar, sobreposições unidas, > 16h fora) —
+  // corrige "32h de sono" e porcentagens acima de 100% (ver utils/sleepNights.ts).
+  const sleepAgg = useMemo(() => aggregateSleepNights(sleep), [sleep]);
+  const nightByDay = useMemo(() => new Map(sleepAgg.nights.map((n) => [n.day, n])), [sleepAgg]);
+  const weekDayKeys = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysKey(localDateKey(weekStart), i)), [weekStart]);
+  const sleepThisWeek = useMemo(() => weekDayKeys.map((d) => nightByDay.get(d)).filter((n): n is NonNullable<typeof n> => !!n), [weekDayKeys, nightByDay]);
   const sleepWeekly = useMemo(
-    () => weeklySeries(sleep, (entry) => entry.went_to_bed_at, (entry) => (entry.duration_minutes ?? 0) / 60, weekStart),
-    [sleep, weekStart]
+    () => weekDayKeys.map((d) => ({ label: WEEKDAY_LABELS[dateKeyToLocalDate(d).getDay()], date: d, value: (nightByDay.get(d)?.minutes ?? 0) / 60 })),
+    [weekDayKeys, nightByDay]
   );
-  const lastNightMinutes = sleep[0]?.duration_minutes ?? null;
-  const sleepPct = lastNightMinutes ? Math.round((lastNightMinutes / SLEEP_GOAL_MINUTES) * 100) : 0;
-  const avgSleepMinutes = average(sleepThisWeek.map((entry) => entry.duration_minutes ?? 0));
-  const avgQuality = average(sleepThisWeek.map((entry) => entry.quality).filter((value): value is number => value !== null));
+  // "Última noite" = a noite que terminou no dia selecionado (ou a mais recente antes dele).
+  const lastNight = sleepAgg.nights.find((n) => n.day <= selectedDate) ?? null;
+  const lastNightMinutes = lastNight?.minutes ?? null;
+  const sleepPct = lastNightMinutes ? boundedPct((lastNightMinutes / SLEEP_GOAL_MINUTES) * 100) : 0;
+  const avgSleepMinutes = average(sleepThisWeek.map((n) => n.minutes));
+  const avgQuality = average(sleepThisWeek.map((n) => n.quality).filter((value): value is number => value !== null));
 
   // Mesma regra do card de Exercícios (utils/workoutStats): janela [segunda, segunda + 7).
   const workoutWeek = useMemo(() => weeklyWorkoutSummary(workouts, weekStart), [workouts, weekStart]);
@@ -155,26 +164,22 @@ export function SaudePage() {
     avgMoodWeek === null ? { label: "Sem registro", tone: "slate" } : avgMoodWeek >= 4 ? { label: "Bem hoje", tone: "green" } : avgMoodWeek >= 2.5 ? { label: "Estavel", tone: "amber" } : { label: "Atencao", tone: "slate" };
 
   const yesterday = addDaysKey(selectedDate, -1);
-  const recentSleep = sleep.find((entry) => {
-    const key = localDateKey(entry.went_to_bed_at);
-    return key === today || key === yesterday;
-  });
-  const dailySleepPct = recentSleep ? Math.max(
-    boundedPct(((recentSleep.duration_minutes ?? 0) / SLEEP_GOAL_MINUTES) * 100),
-    boundedPct((recentSleep.quality ?? 0) * 20)
-  ) : 0;
+  // Vitalidade: a noite que terminou no dia selecionado (ou na véspera); limitada a 100%.
+  const recentSleep = nightByDay.get(today) ?? nightByDay.get(yesterday) ?? null;
+  const dailySleepPct = recentSleep ? Math.max(boundedPct((recentSleep.minutes / SLEEP_GOAL_MINUTES) * 100), boundedPct((recentSleep.quality ?? 0) * 20)) : 0;
   const movedToday = workouts.some((entry) => localDateKey(entry.performed_at) === today);
   const moodLoggedToday = mood.some((entry) => localDateKey(entry.recorded_at) === today);
   const vitalityScore = Math.round((boundedPct(waterPct) + dailySleepPct + (movedToday ? 100 : 0) + (moodLoggedToday ? 100 : 0)) / 4);
 
+  // Dias sem registro ficam null (lacuna no gráfico), em vez de virar 0% e parecer piora.
   const healthPulse = useMemo(
     () =>
       waterWeekly.map((day, index) => ({
         label: day.label,
-        Agua: boundedPct((day.value * 1000 / WATER_GOAL_ML) * 100),
-        Sono: boundedPct((((sleepWeekly[index]?.value ?? 0) * 60) / SLEEP_GOAL_MINUTES) * 100),
-        Movimento: (workoutsWeekly[index]?.value ?? 0) > 0 ? 100 : 0,
-        Humor: boundedPct(((moodWeekly[index]?.value ?? 0) / 5) * 100),
+        Agua: day.value > 0 ? boundedPct(((day.value * 1000) / WATER_GOAL_ML) * 100) : null,
+        Sono: (sleepWeekly[index]?.value ?? 0) > 0 ? boundedPct((((sleepWeekly[index]?.value ?? 0) * 60) / SLEEP_GOAL_MINUTES) * 100) : null,
+        Movimento: (workoutsWeekly[index]?.value ?? 0) > 0 ? 100 : null,
+        Humor: (moodWeekly[index]?.value ?? 0) > 0 ? boundedPct(((moodWeekly[index]?.value ?? 0) / 5) * 100) : null,
       })),
     [moodWeekly, sleepWeekly, waterWeekly, workoutsWeekly]
   );
@@ -203,16 +208,16 @@ export function SaudePage() {
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
       {isRpg ? (
-        <RPGPageHeader
-          banner="saude"
-          className="mb-4"
-          leading={<RPGAvatarButton />}
-          eyebrow="Atributos do personagem"
-          title="Saúde e bem-estar"
-          subtitle="Cuide de você hoje para viver um amanhã melhor."
-          footnote="Água, sono, movimento e humor — sempre dos seus registros reais."
-          aside={<p className="rpg-parchment hidden md:block mx-1.5 my-1.5 max-w-[260px] px-4 py-3 text-center text-sm italic">&ldquo;Corpo saudável, mente mais forte.&rdquo;</p>}
-        />
+        <div className="mb-4">
+          <ModuleBanner
+            eyebrow="Atributos do personagem"
+            title="Saúde e bem-estar"
+            subtitle="Água, sono, movimento e humor — os pilares da sua vitalidade, sempre dos seus registros reais. Não é avaliação médica."
+            mage={`${MODULE_ART}/health/banner-mage.webp`}
+            scene={`${MODULE_ART}/health/banner-scene.webp`}
+            aside={healthHub ? <HealthRankPanel hub={healthHub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
+          />
+        </div>
       ) : (
         <PageHeader
           icon={<HeartPulse size={21} />}
@@ -491,6 +496,11 @@ export function SaudePage() {
         >
           {toast}
         </button>
+      )}
+      {isRpg && healthHub && (
+        <div className="mt-4">
+          <HealthAttributesHub hub={healthHub} />
+        </div>
       )}
     </div>
   );

@@ -16,6 +16,7 @@ import {
   type LoanTier,
 } from "../config/bank.js";
 import { coinBalance, todayKeyFor } from "./gamificationService.js";
+import { maybeSplitAutoInvest } from "./bankHubService.js";
 import { groupRowsByLocalDay, localDayRangeUtc, localDaysWhere, shiftDayKey } from "./localDayService.js";
 
 /**
@@ -459,7 +460,10 @@ export async function maybeAutoInvest(db: Client, ownerId: string, coinsEarned: 
   if (!rule.enabled) return;
   const plan = getBankPlan(rule.planId);
   if (!plan) return;
-  const amount = Math.min(plan.maxAmount, Math.floor((coinsEarned * rule.pctBps) / 10_000));
+  const reserve = Math.floor((coinsEarned * rule.pctBps) / 10_000);
+  // Automação B (Divisão entre cofres): quando ligada, reparte a reserva entre os planos.
+  if (reserve > 0 && (await maybeSplitAutoInvest(db, ownerId, reserve))) return;
+  const amount = Math.min(plan.maxAmount, reserve);
   if (amount < plan.minAmount) return;
   await createDeposit(db, ownerId, plan.id, amount, { auto: true });
 }

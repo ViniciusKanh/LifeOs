@@ -12,6 +12,8 @@ const KEYS = {
   correlations: ["health", "correlations"],
   // Entra em KEYS para ser invalidado junto com criar/editar/excluir treino.
   strength: ["health", "strength"],
+  // Camada RPG (/api/hub/health): vitalidade, pulso e rank — recalculada a cada registro.
+  hub: ["health", "hub"],
 };
 
 /** Reaproveitado por Dashboard, Hoje e a própria tela de Saúde. */

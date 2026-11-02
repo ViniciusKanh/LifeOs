@@ -31,6 +31,13 @@ const METRIC_KEYS = [
   "flashcards_mature_total",
   "goals_completed_on_time",
   "goal_plans_applied",
+  "bank_deposits_total",
+  "educations_total",
+  "educations_completed",
+  "academic_deadlines_done",
+  "education_stages_done",
+  "sleep_nights_balanced",
+  "mood_checkins_total",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -112,6 +119,14 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
     "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND (COALESCE(early_withdrawn, 0) = 0 OR COALESCE(actual_payout, net_payout) > amount)",
   );
   addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= due_at");
+  addScalar("bank_deposits_total", "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ?");
+  addScalar("educations_total", "SELECT COUNT(*) FROM educations WHERE owner_id = ?");
+  addScalar("educations_completed", "SELECT COUNT(*) FROM educations WHERE owner_id = ? AND progress_pct >= 100");
+  addScalar("academic_deadlines_done", "SELECT COUNT(*) FROM academic_deadlines WHERE owner_id = ? AND done = 1");
+  addScalar("education_stages_done", "SELECT COUNT(*) FROM education_stages WHERE owner_id = ? AND status = 'done'");
+  // Saúde: só faixas prudentes contam (sono entre 6h e 10h) — nada premia excesso ou restrição.
+  addScalar("sleep_nights_balanced", "SELECT COUNT(*) FROM sleep_entries WHERE owner_id = ? AND duration_minutes BETWEEN 360 AND 600");
+  addScalar("mood_checkins_total", "SELECT COUNT(DISTINCT date(recorded_at)) FROM mood_entries WHERE owner_id = ?");
   addScalar("bank_credit_score_peak", "SELECT COALESCE(MAX(score), 0) FROM bank_credit_score_history WHERE owner_id = ?");
 
   // Métricas "por dia" usadas por troféus customizados. O valor é o

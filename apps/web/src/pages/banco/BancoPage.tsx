@@ -41,6 +41,10 @@ import {
   type RpgTone,
 } from "@/components/rpg";
 import { RPGHowItWorks } from "@/components/rpg/RPGHowItWorks";
+import { useSearchParams } from "react-router-dom";
+import { useBankHub } from "@/hooks/useModuleHub";
+import { AdvisorPanel, KitSection, MODULE_ART, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { AutomaticView, BankIndicators, BankRankPanel, FinancialJourney, GuildStats, PlanCatalog, RewardsView, VaultGrid } from "@/components/bank/BankGuild";
 import { Modal } from "@/components/ui/Modal";
 import { achievementIcon } from "@/components/achievements/achievementIcons";
 import { TIER_RPG_TONE } from "@/components/achievements/tierDisplay";
@@ -71,6 +75,8 @@ import type { Goal } from "@/types";
  */
 
 const HIDE_BALANCE_KEY = "lifeos-banco-saldo-oculto";
+const BANK_VIEWS = ["investir", "credito", "automatico", "extrato", "cofres", "recompensas"] as const;
+type BankView = (typeof BANK_VIEWS)[number];
 
 function formatCoins(n: number) {
   return n.toLocaleString("pt-BR");
@@ -1191,7 +1197,18 @@ export function BancoPage() {
   const [toastTone, setToastTone] = useState<"success" | "error">("success");
   const [pendingClaimId, setPendingClaimId] = useState<string | null>(null);
   const [pendingEarlyId, setPendingEarlyId] = useState<string | null>(null);
-  const [view, setView] = useState<"investir" | "credito" | "extrato">("investir");
+  const hubQ = useBankHub();
+  const hub = hubQ.data;
+  // A aba fica na URL (?aba=) — links de notificações/automações abrem a seção certa.
+  const [params, setParams] = useSearchParams();
+  const view: BankView = BANK_VIEWS.includes(params.get("aba") as BankView) ? (params.get("aba") as BankView) : "investir";
+  const setView = (v: BankView) =>
+    setParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (v === "investir") p.delete("aba");
+      else p.set("aba", v);
+      return p;
+    });
   const [pendingScroll, setPendingScroll] = useState<string | null>(null);
   const [hiddenBalance, setHiddenBalance] = useState<boolean>(() => {
     try {
@@ -1221,14 +1238,7 @@ export function BancoPage() {
     });
   };
 
-  const handleQuickAction = (action: "investir" | "credito" | "automatico" | "extrato") => {
-    if (action === "credito" || action === "extrato") {
-      setView(action);
-      return;
-    }
-    setView("investir");
-    if (action === "automatico") setPendingScroll("auto-invest-anchor");
-  };
+  const handleQuickAction = (action: "investir" | "credito" | "automatico" | "extrato") => setView(action);
 
   const todayDelta = historyPoints.length >= 2 ? (historyPoints[historyPoints.length - 1].balance ?? 0) - (historyPoints[historyPoints.length - 2].balance ?? 0) : null;
   const earnedTrend = !statementLoading && statementMonths.length >= 2 ? monthOverMonth(statementMonths[statementMonths.length - 1].earned, statementMonths[statementMonths.length - 2].earned) : null;
@@ -1343,96 +1353,86 @@ export function BancoPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 w-full">
-      <RPGPageHeader
-        banner="loja"
-        size="md"
+    <div className="w-full space-y-4 px-4 py-5 md:px-6 md:py-6 lg:px-8">
+      <ModuleBanner
         eyebrow="Economia da Guilda"
         title="Banco"
-        subtitle="Invista com imposto sobre o ganho, peça crédito conforme seu score e veja o extrato completo — tudo numa tela só. Moeda do jogo, nunca dinheiro real."
-        className="mb-5"
+        subtitle="Invista, proteja e multiplique as moedas da sua jornada. Moedas virtuais do LifeOS — nunca dinheiro real."
+        mage={`${MODULE_ART}/bank/banner-mage.webp`}
+        scene={`${MODULE_ART}/bank/banner-scene.webp`}
+        aside={hub ? <BankRankPanel hub={hub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
       />
+
+      {hubQ.isError && (
+        <div className="rpg-panel p-3 text-sm" role="alert">
+          Não foi possível carregar os indicadores da guilda.{" "}
+          <button type="button" className="underline" onClick={() => void hubQ.refetch()}>
+            Tentar de novo
+          </button>
+        </div>
+      )}
+      {hub ? <BankIndicators hub={hub} /> : <div className="grid h-40 animate-pulse grid-cols-2 gap-2 lg:grid-cols-4" aria-busy aria-label="Carregando indicadores" />}
+
+      <ModuleTabs
+        label="Seções do Banco"
+        value={view}
+        onChange={setView}
+        tabs={[
+          { value: "investir", label: "Investir", icon: <TrendingUp size={15} /> },
+          { value: "credito", label: "Empréstimo", icon: <CreditCard size={15} /> },
+          { value: "automatico", label: "Automático", icon: <Repeat size={15} /> },
+          { value: "extrato", label: "Extrato", icon: <Receipt size={15} /> },
+          { value: "cofres", label: "Cofres", icon: <Vault size={15} />, badge: summary?.claimable.length ?? 0 },
+          { value: "recompensas", label: "Recompensas", icon: <Sparkles size={15} /> },
+        ]}
+      />
+
+      {view === "cofres" && hub && (
+        <div className="space-y-3">
+          <KitSection title={`Investimentos ativos (${hub.summary.active.length})`} icon={<Coins size={16} />} tone="gold">
+            <VaultGrid hub={hub} onClaim={handleClaim} busy={claim.isPending} />
+          </KitSection>
+          <KitSection title="Cofres e planos da guilda" icon={<Vault size={16} />}>
+            <PlanCatalog hub={hub} onInvest={() => setView("investir")} />
+          </KitSection>
+          <GuildStats hub={hub} />
+        </div>
+      )}
+
+      {view === "recompensas" && hub && <RewardsView hub={hub} />}
+
+      {view === "automatico" && (
+        <AutomaticView
+          reserveCard={summary ? <AutoInvestCard autoInvest={summary.autoInvest} plans={summary.plans} onSave={handleSaveAutoInvest} saving={updateAutoInvest.isPending} /> : null}
+        />
+      )}
+
+      {view === "investir" && hub && (
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-3">
+            <KitSection title={`Investimentos ativos (${hub.summary.active.length})`} icon={<Coins size={16} />} tone="gold" action={<button type="button" className="text-xs text-rpg-gold-light underline" onClick={() => setView("cofres")}>Ver todos</button>}>
+              <VaultGrid hub={hub} onClaim={handleClaim} busy={claim.isPending} limit={3} />
+            </KitSection>
+            <FinancialJourney hub={hub} />
+          </div>
+          <aside className="min-w-0 space-y-3" aria-label="Conselheiro do Banco">
+            <AdvisorPanel module="bank" title="Conselheiro do Banco" avatar={`${MODULE_ART}/bank/advisor.webp`} />
+          </aside>
+        </div>
+      )}
 
       <RPGHowItWorks
         storageKey="lifeos-banco-como-funciona"
         steps={[
           { icon: Vault, title: "Invista com prazo", text: "Escolha um plano (ou o Cofre Livre, sem prazo fixo) e deixe suas moedas renderem — com imposto só sobre o ganho.", tone: "gold" },
           { icon: ShieldCheck, title: "Construa seu crédito", text: "Resgatar no prazo e pagar empréstimos em dia sobe seu score — ele define quanto você pode pedir emprestado e a juros de quanto.", tone: "blue" },
-          { icon: Repeat, title: "Deixe no automático", text: "Ligue o investimento automático pra reservar uma fatia de toda moeda ganha em missões, sem precisar lembrar.", tone: "purple" },
+          { icon: Repeat, title: "Deixe no automático", text: "Ligue a reserva automática e a divisão entre cofres na aba Automático, sem precisar lembrar.", tone: "purple" },
         ]}
       />
-
-      <div className="mt-5">
-        <BalanceHero
-          balance={summary?.balance}
-          isLoading={isLoading}
-          todayDelta={todayDelta}
-          hidden={hiddenBalance}
-          onToggleHidden={toggleHiddenBalance}
-          onQuickAction={handleQuickAction}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-5">
-        <RPGStatCard
-          icon={<PiggyBank size={18} />}
-          label="Investimentos ativos"
-          value={isLoading ? "…" : String(summary?.totals.activeCount ?? 0)}
-          tone="purple"
-        />
-        <RPGStatCard
-          icon={<Sparkles size={18} />}
-          label="Prontos para resgatar"
-          value={isLoading ? "…" : String(summary?.claimable.length ?? 0)}
-          tone={summary && summary.claimable.length > 0 ? "green" : "muted"}
-        />
-        <RPGStatCard
-          icon={<TrendingUp size={18} />}
-          label="Ganho líquido"
-          value={isLoading ? "…" : formatCoins(summary?.totals.earned ?? 0)}
-          tone="blue"
-          caption={`moedas de bônus já resgatadas, após imposto${earnedTrend ? ` · ${earnedTrend}` : ""}`}
-        />
-        <RPGStatCard
-          icon={<Percent size={18} />}
-          label="Imposto pago"
-          value={isLoading ? "…" : formatCoins(summary?.totals.taxPaid ?? 0)}
-          tone="red"
-          caption={`descontado do rendimento, nunca do principal${taxTrend ? ` · ${taxTrend}` : ""}`}
-        />
-        <RPGStatCard
-          icon={<ShieldCheck size={18} />}
-          label="Score de crédito"
-          value={isLoading ? "…" : String(summary?.credit.score ?? "—")}
-          tone={summary ? tierTone(summary.credit.tier.label) : "muted"}
-          caption={summary?.credit.tier.label}
-        />
-      </div>
-
-      <EvolucaoCard />
-
-      <NextBankAchievementCard />
-
-      <div className="mb-5">
-        <RPGTabs
-          label="Seção do Banco"
-          value={view}
-          onChange={setView}
-          tabs={[
-            { value: "investir", label: "Investir", icon: <Landmark size={14} /> },
-            { value: "credito", label: "Crédito", icon: <CreditCard size={14} /> },
-            { value: "extrato", label: "Extrato (gastos e ganhos)", icon: <Receipt size={14} /> },
-          ]}
-        />
-      </div>
 
       {view === "investir" && (
         <>
           <SimuladorView plans={summary?.plans ?? []} />
-
-          {summary && (
-            <AutoInvestCard autoInvest={summary.autoInvest} plans={summary.plans} onSave={handleSaveAutoInvest} saving={updateAutoInvest.isPending} />
-          )}
 
           {summary && summary.claimable.length > 0 && (
             <RPGPanel variant="success" title="Prontos para resgatar" icon={<Sparkles size={16} />} className="mb-5">
@@ -1526,6 +1526,8 @@ export function BancoPage() {
 
       {view === "extrato" && (
         <>
+          <EvolucaoCard />
+          <NextBankAchievementCard />
           <StatementSection months={statementMonths} isLoading={statementLoading} />
           <ExtratoView />
         </>

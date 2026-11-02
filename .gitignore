@@ -24,3 +24,4 @@ apps/desktop/src-tauri/target
 apps/desktop/src-tauri/gen/schemas
 *.key
 apps/desktop/.keys/
+.backups/

@@ -13,6 +13,7 @@ export function useBank() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: KEY });
     qc.invalidateQueries({ queryKey: [...KEY, "ledger"] });
+    qc.invalidateQueries({ queryKey: [...KEY, "hub"] });
     // Saldo de moedas mudou (atualiza o HUD) e resgate/quitação podem destravar uma conquista do Banco.
     triggerAchievementsCheck();
   };

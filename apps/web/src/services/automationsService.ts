@@ -1,7 +1,7 @@
 import { api } from "./api";
 
-/** Espelho de /api/automations — automações do Grimório e de Metas (estado por usuário). */
-export type AutomationModule = "grimoire" | "goals";
+/** Espelho de /api/automations — automações por módulo (estado por usuário). */
+export type AutomationModule = "grimoire" | "goals" | "bank" | "education" | "health";
 export type AutomationRunStatus = "ok" | "skipped" | "error";
 
 export interface Automation {

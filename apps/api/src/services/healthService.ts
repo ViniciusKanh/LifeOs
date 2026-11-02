@@ -304,7 +304,8 @@ export async function insertSleepEntry(
   d: { wentToBedAt: string; wokeUpAt: string; quality?: number; notes?: string }
 ) {
   const duration = minutesBetween(d.wentToBedAt, d.wokeUpAt);
-  if (duration === null) return null;
+  // Mais de 16h não é uma noite de sono (quase sempre data errada) — ver healthHubService.
+  if (duration === null || duration > 16 * 60) return null;
   const id = nanoid();
   await db.execute({
     sql: `INSERT INTO sleep_entries (id, owner_id, went_to_bed_at, woke_up_at, duration_minutes, quality, notes)

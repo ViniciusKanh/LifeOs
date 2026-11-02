@@ -11,7 +11,7 @@ type Db = ReturnType<typeof getDb>;
  * O CATÁLOGO (o que cada automação faz, quando roda e a configuração
  * padrão) fica aqui no código; o banco guarda só o que é do usuário:
  * ligada/desligada, configuração, última/próxima execução e histórico
- * (module_automations + module_automation_runs).
+ * (automations + automation_runs).
  *
  * A execução reaproveita o cron diário já existente (/api/cron/notification-triggers)
  * e o botão "Executar agora" — não há um segundo motor de agendamento.
@@ -19,7 +19,8 @@ type Db = ReturnType<typeof getDb>;
  * tabela de execuções tem UNIQUE (automation_id, run_key).
  */
 
-export type AutomationModule = "grimoire" | "goals";
+export const AUTOMATION_MODULES = ["grimoire", "goals", "bank", "education", "health"] as const;
+export type AutomationModule = (typeof AUTOMATION_MODULES)[number];
 export type AutomationTrigger = "daily" | "weekly" | "event" | "manual";
 export type RunStatus = "ok" | "skipped" | "error";
 
@@ -34,7 +35,17 @@ export interface AutomationDef {
   usesAi: boolean;
   defaultEnabled: boolean;
   defaultConfig: Record<string, unknown>;
+  /** Limites por chave numérica (padrão 0–1000). */
+  bounds?: Record<string, [number, number]>;
+  /** Validação da configuração completa (ex.: percentuais que somam 100%). */
+  validate?: (config: Record<string, unknown>) => string | null;
 }
+
+/** Configuração recusada pela validação da automação (vira 400 na rota). */
+export class AutomationConfigError extends Error {}
+
+const daily = "Uma vez por dia (e em “Executar agora”)";
+const weekly = "Toda segunda-feira (e em “Executar agora”)";
 
 export const AUTOMATION_DEFS: AutomationDef[] = [
   {
@@ -169,6 +180,186 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     defaultEnabled: false,
     defaultConfig: {},
   },
+  // ───────────────────────── Banco da Guilda ─────────────────────────
+  // A reserva automática (A) é a regra de investimento automático já
+  // existente (bank_auto_invest_rules) e é configurada no próprio Banco.
+  {
+    module: "bank",
+    key: "vault_split",
+    label: "B · Divisão entre cofres",
+    description: "Divide a reserva automática entre os cofres da guilda pelos percentuais escolhidos (precisam somar 100%). Cofres abaixo do mínimo do plano ficam de fora daquela vez.",
+    trigger: "event",
+    triggerLabel: "A cada moeda ganha, junto da reserva automática",
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { split_cofre_livre: 40, split_cofre_aventureiro: 30, split_rota_mercador: 20, split_fundo_dragao: 10 },
+    bounds: { split_cofre_livre: [0, 100], split_cofre_aventureiro: [0, 100], split_rota_mercador: [0, 100], split_fundo_dragao: [0, 100] },
+    validate: (c) => {
+      const total = ["split_cofre_livre", "split_cofre_aventureiro", "split_rota_mercador", "split_fundo_dragao"].reduce((a, k) => a + Number(c[k] ?? 0), 0);
+      return total === 100 ? null : `Os percentuais precisam somar 100% (hoje somam ${total}%).`;
+    },
+  },
+  {
+    module: "bank",
+    key: "loan_alerts",
+    label: "C · Alertas de empréstimo",
+    description: "Avisa quando o empréstimo está perto do vencimento ou atrasado. Pagamento automático só com o seu consentimento (opção abaixo) e só se o saldo cobrir a fatura inteira.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: true,
+    defaultConfig: { daysBefore: 2, autoPay: false, inApp: true, push: false },
+    bounds: { daysBefore: [1, 14] },
+  },
+  {
+    module: "bank",
+    key: "vault_goals",
+    label: "D · Cofres ligados a metas",
+    description: "Acompanha os cofres vinculados a uma meta e avisa quando um deles vence e pode ser resgatado para ela.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: true,
+    defaultConfig: { inApp: true, push: false },
+  },
+  {
+    module: "bank",
+    key: "guild_report",
+    label: "E · Relatório da guilda",
+    description: "Resumo semanal com números reais do extrato: moedas que entraram e saíram, rendimentos, impostos e cofres vencendo.",
+    trigger: "weekly",
+    triggerLabel: weekly,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { inApp: true, push: false },
+  },
+  // ─────────────────────── Jornada do Conhecimento ───────────────────────
+  {
+    module: "education",
+    key: "smart_deadlines",
+    label: "A · Prazos inteligentes",
+    description: "Avisa sobre entregas, provas e prazos acadêmicos que vencem nos próximos dias e sobre os que já passaram sem conclusão.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: true,
+    defaultConfig: { daysBefore: 5, inApp: true, push: false },
+    bounds: { daysBefore: [1, 30] },
+  },
+  {
+    module: "education",
+    key: "weekly_study_plan",
+    label: "B · Plano semanal de estudo",
+    description: "Monta uma proposta de semana distribuindo sua meta de horas entre as disciplinas em andamento e os prazos próximos. Nada vira tarefa sem você revisar e aprovar.",
+    trigger: "weekly",
+    triggerLabel: weekly,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { sessionsPerDay: 2, includeWeekend: false, sessionMinutes: 50 },
+    bounds: { sessionsPerDay: [1, 6], sessionMinutes: [15, 180] },
+  },
+  {
+    module: "education",
+    key: "grimoire_link",
+    label: "C · Integração com o Grimório",
+    description: "Verifica quais disciplinas em andamento já têm baralho no Grimório e sugere criar um para as que ainda não têm.",
+    trigger: "weekly",
+    triggerLabel: weekly,
+    usesAi: false,
+    defaultEnabled: true,
+    defaultConfig: { inApp: true },
+  },
+  {
+    module: "education",
+    key: "auto_progress",
+    label: "D · Progresso automático",
+    description: "Recalcula o progresso de cada formação pelas disciplinas concluídas, etapas da campanha e projetos acadêmicos. Ligada, substitui o progresso manual.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: {},
+  },
+  {
+    module: "education",
+    key: "research_assistant",
+    label: "E · Assistente de pesquisa",
+    description: "No Conselheiro Acadêmico: organiza próximos passos da pesquisa a partir das suas etapas e prazos. Nunca inventa referências, autores ou resultados.",
+    trigger: "manual",
+    triggerLabel: "Pelo Conselheiro Acadêmico",
+    usesAi: true,
+    defaultEnabled: true,
+    defaultConfig: {},
+  },
+  // ─────────────────────── Atributos do Personagem ───────────────────────
+  {
+    module: "health",
+    key: "hydration",
+    label: "A · Hidratação",
+    description: "Lembrete diário com o resultado real de ontem e a meta de hoje. Não incentiva beber além da meta.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { inApp: true, push: true },
+  },
+  {
+    module: "health",
+    key: "sleep_routine",
+    label: "B · Rotina de sono",
+    description: "Lembra do seu ritual noturno no horário escolhido e mostra a última noite registrada.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { bedtimeHour: 23, inApp: true, push: false },
+    bounds: { bedtimeHour: [18, 23] },
+  },
+  {
+    module: "health",
+    key: "mood_checkin",
+    label: "C · Check-in de humor",
+    description: "Se ontem ficou sem registro de humor e energia, convida para um check-in rápido. Sem interpretar nem diagnosticar nada.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { inApp: true, push: false },
+  },
+  {
+    module: "health",
+    key: "daily_summary",
+    label: "D · Resumo diário",
+    description: "Resumo de ontem nos quatro pilares (água, sono, movimento, humor), só com o que foi registrado.",
+    trigger: "daily",
+    triggerLabel: daily,
+    usesAi: false,
+    defaultEnabled: false,
+    defaultConfig: { inApp: true, push: false },
+  },
+  {
+    module: "health",
+    key: "health_goals",
+    label: "E · Metas de saúde",
+    description: "Suas metas pessoais usadas na Vitalidade do Dia e nos rankings. Limites prudentes: sem metas extremas de água, sono ou treino.",
+    trigger: "event",
+    triggerLabel: "Usadas sempre que a Saúde é calculada",
+    usesAi: false,
+    defaultEnabled: true,
+    defaultConfig: { waterGoalMl: 2500, sleepGoalMinutes: 480, weeklyWorkouts: 3 },
+    bounds: { waterGoalMl: [1500, 4000], sleepGoalMinutes: [360, 600], weeklyWorkouts: [1, 7] },
+  },
+  {
+    module: "health",
+    key: "consistency_history",
+    label: "F · Histórico de consistência",
+    description: "Toda semana guarda quantos dias você registrou cada pilar — o histórico aparece no Rank de Saúde.",
+    trigger: "weekly",
+    triggerLabel: weekly,
+    usesAi: false,
+    defaultEnabled: true,
+    defaultConfig: {},
+  },
 ];
 
 export function findDef(module: AutomationModule, key: string): AutomationDef | undefined {
@@ -208,7 +399,7 @@ export function nextCronRun(trigger: AutomationTrigger, now = new Date()): strin
 }
 
 export async function listAutomations(db: Db, ownerId: string, module: AutomationModule): Promise<AutomationView[]> {
-  const r = await db.execute({ sql: "SELECT * FROM module_automations WHERE owner_id = ? AND module = ?", args: [ownerId, module] });
+  const r = await db.execute({ sql: "SELECT * FROM automations WHERE owner_id = ? AND module = ?", args: [ownerId, module] });
   const byKey = new Map((r.rows as unknown as Row[]).map((row) => [String(row.key), row]));
   return AUTOMATION_DEFS.filter((d) => d.module === module).map((def) => {
     const row = byKey.get(def.key);
@@ -228,6 +419,16 @@ export async function listAutomations(db: Db, ownerId: string, module: Automatio
   });
 }
 
+/** Configuração efetiva (padrão + do usuário) sem criar linha no banco. */
+export async function automationConfig(db: Db, ownerId: string, module: AutomationModule, key: string): Promise<{ enabled: boolean; config: Record<string, unknown> }> {
+  const def = findDef(module, key);
+  const r = await db.execute({ sql: "SELECT enabled, config_json FROM automations WHERE owner_id = ? AND module = ? AND key = ?", args: [ownerId, module, key] });
+  const row = r.rows[0] as unknown as Row | undefined;
+  const stored = row ? parseConfig(row.config_json) : {};
+  delete stored._state;
+  return { enabled: row ? Number(row.enabled) === 1 : (def?.defaultEnabled ?? false), config: { ...(def?.defaultConfig ?? {}), ...stored } };
+}
+
 export async function getAutomation(db: Db, ownerId: string, module: AutomationModule, key: string): Promise<AutomationView | null> {
   return (await listAutomations(db, ownerId, module)).find((a) => a.key === key) ?? null;
 }
@@ -236,11 +437,11 @@ export async function getAutomation(db: Db, ownerId: string, module: AutomationM
 async function ensureRow(db: Db, ownerId: string, def: AutomationDef): Promise<string> {
   const id = nanoid();
   await db.execute({
-    sql: `INSERT INTO module_automations (id, owner_id, module, key, enabled, config_json) VALUES (?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO automations (id, owner_id, module, key, enabled, config_json) VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT (owner_id, module, key) DO NOTHING`,
     args: [id, ownerId, def.module, def.key, def.defaultEnabled ? 1 : 0, JSON.stringify(def.defaultConfig)],
   });
-  const r = await db.execute({ sql: "SELECT id FROM module_automations WHERE owner_id = ? AND module = ? AND key = ?", args: [ownerId, def.module, def.key] });
+  const r = await db.execute({ sql: "SELECT id FROM automations WHERE owner_id = ? AND module = ? AND key = ?", args: [ownerId, def.module, def.key] });
   return String(r.rows[0]!.id);
 }
 
@@ -250,7 +451,8 @@ export function sanitizeConfig(def: AutomationDef, patch: Record<string, unknown
   for (const [k, base] of Object.entries(def.defaultConfig)) {
     if (!(k in patch)) continue;
     const v = patch[k];
-    if (typeof base === "number" && typeof v === "number" && Number.isFinite(v)) out[k] = Math.max(0, Math.min(1000, Math.round(v)));
+    const [lo, hi] = def.bounds?.[k] ?? [0, 1000];
+    if (typeof base === "number" && typeof v === "number" && Number.isFinite(v)) out[k] = Math.max(lo, Math.min(hi, Math.round(v)));
     else if (typeof base === "boolean" && typeof v === "boolean") out[k] = v;
     else if (base === null && (v === null || (typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v)))) out[k] = v;
   }
@@ -267,10 +469,14 @@ export async function updateAutomation(
   const def = findDef(module, key);
   if (!def) return null;
   const id = await ensureRow(db, ownerId, def);
-  const raw = await db.execute({ sql: "SELECT config_json FROM module_automations WHERE id = ?", args: [id] });
+  const raw = await db.execute({ sql: "SELECT config_json FROM automations WHERE id = ?", args: [id] });
   const config = { ...def.defaultConfig, ...parseConfig(raw.rows[0]?.config_json), ...(patch.config ? sanitizeConfig(def, patch.config) : {}) };
+  if (def.validate) {
+    const problem = def.validate(config);
+    if (problem) throw new AutomationConfigError(problem);
+  }
   await db.execute({
-    sql: "UPDATE module_automations SET enabled = COALESCE(?, enabled), config_json = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    sql: "UPDATE automations SET enabled = COALESCE(?, enabled), config_json = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
     args: [patch.enabled === undefined ? null : patch.enabled ? 1 : 0, JSON.stringify(config), id, ownerId],
   });
   return getAutomation(db, ownerId, module, key);
@@ -278,7 +484,7 @@ export async function updateAutomation(
 
 /** Estado interno da automação (ex.: entradas do Diário já processadas) — não é editável pelo usuário. */
 export async function readAutomationState(db: Db, ownerId: string, module: AutomationModule, key: string): Promise<Record<string, unknown>> {
-  const r = await db.execute({ sql: "SELECT config_json FROM module_automations WHERE owner_id = ? AND module = ? AND key = ?", args: [ownerId, module, key] });
+  const r = await db.execute({ sql: "SELECT config_json FROM automations WHERE owner_id = ? AND module = ? AND key = ?", args: [ownerId, module, key] });
   const cfg = parseConfig(r.rows[0]?.config_json);
   return (cfg._state as Record<string, unknown> | undefined) ?? {};
 }
@@ -287,9 +493,9 @@ export async function writeAutomationState(db: Db, ownerId: string, module: Auto
   const def = findDef(module, key);
   if (!def) return;
   const id = await ensureRow(db, ownerId, def);
-  const r = await db.execute({ sql: "SELECT config_json FROM module_automations WHERE id = ?", args: [id] });
+  const r = await db.execute({ sql: "SELECT config_json FROM automations WHERE id = ?", args: [id] });
   const cfg = parseConfig(r.rows[0]?.config_json);
-  await db.execute({ sql: "UPDATE module_automations SET config_json = ? WHERE id = ? AND owner_id = ?", args: [JSON.stringify({ ...cfg, _state: state }), id, ownerId] });
+  await db.execute({ sql: "UPDATE automations SET config_json = ? WHERE id = ? AND owner_id = ?", args: [JSON.stringify({ ...cfg, _state: state }), id, ownerId] });
 }
 
 /**
@@ -300,7 +506,7 @@ export async function beginRun(db: Db, ownerId: string, def: AutomationDef, trig
   const automationId = await ensureRow(db, ownerId, def);
   const id = nanoid();
   const r = await db.execute({
-    sql: `INSERT INTO module_automation_runs (id, owner_id, automation_id, trigger_type, run_key, status) VALUES (?, ?, ?, ?, ?, 'skipped')
+    sql: `INSERT INTO automation_runs (id, owner_id, automation_id, trigger_type, run_key, status) VALUES (?, ?, ?, ?, ?, 'skipped')
           ON CONFLICT (automation_id, run_key) DO NOTHING`,
     args: [id, ownerId, automationId, trigger, runKey],
   });
@@ -311,9 +517,9 @@ export async function finishRun(db: Db, ownerId: string, def: AutomationDef, run
   const automationId = await ensureRow(db, ownerId, def);
   await db.batch(
     [
-      { sql: "UPDATE module_automation_runs SET status = ?, summary = ?, finished_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [status, summary.slice(0, 500), runId, ownerId] },
+      { sql: "UPDATE automation_runs SET status = ?, summary = ?, finished_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [status, summary.slice(0, 500), runId, ownerId] },
       {
-        sql: "UPDATE module_automations SET last_run_at = datetime('now'), last_status = ?, last_message = ?, next_run_at = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+        sql: "UPDATE automations SET last_run_at = datetime('now'), last_status = ?, last_message = ?, next_run_at = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
         args: [status, summary.slice(0, 500), nextCronRun(def.trigger), automationId, ownerId],
       },
     ],
@@ -323,8 +529,8 @@ export async function finishRun(db: Db, ownerId: string, def: AutomationDef, run
 
 export async function listRuns(db: Db, ownerId: string, module: AutomationModule, key: string, limit = 15) {
   const r = await db.execute({
-    sql: `SELECT r.trigger_type, r.status, r.summary, r.started_at, r.finished_at FROM module_automation_runs r
-          JOIN module_automations a ON a.id = r.automation_id AND a.owner_id = r.owner_id
+    sql: `SELECT r.trigger_type, r.status, r.summary, r.started_at, r.finished_at FROM automation_runs r
+          JOIN automations a ON a.id = r.automation_id AND a.owner_id = r.owner_id
           WHERE r.owner_id = ? AND a.module = ? AND a.key = ? ORDER BY r.started_at DESC LIMIT ?`,
     args: [ownerId, module, key, limit],
   });

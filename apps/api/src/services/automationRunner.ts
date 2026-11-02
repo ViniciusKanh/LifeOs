@@ -14,6 +14,9 @@ import {
 import { runDiaryCards, studyReminderPayload } from "./grimoireHubService.js";
 import { runDeadlineAlerts, runProgressSync, runSmartReplan, runWeeklyPlan } from "./goalsHubService.js";
 import { syncDeckGoalAfterStudy } from "./grimoireService.js";
+import { runGuildReport, runLoanAlerts, runVaultGoals } from "./bankHubService.js";
+import { runAutoProgress, runGrimoireLink, runSmartDeadlines, runWeeklyStudyPlan } from "./educationHubService.js";
+import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
 type Db = ReturnType<typeof getDb>;
 type Outcome = { status: RunStatus; summary: string };
@@ -59,6 +62,36 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runWeeklyPlan(db, ownerId, config);
     case "goals:smart_replan":
       return runSmartReplan(db, ownerId);
+    case "bank:loan_alerts":
+      return runLoanAlerts(db, ownerId, config);
+    case "bank:vault_goals":
+      return runVaultGoals(db, ownerId, config);
+    case "bank:guild_report":
+      return runGuildReport(db, ownerId, config);
+    case "bank:vault_split": {
+      const total = Object.values(config).reduce<number>((a, v) => a + (typeof v === "number" ? v : 0), 0);
+      return { status: "ok", summary: `Ativa a cada moeda ganha (com a reserva automática ligada). Divisão atual soma ${total}%.` };
+    }
+    case "education:smart_deadlines":
+      return runSmartDeadlines(db, ownerId, config);
+    case "education:weekly_study_plan":
+      return runWeeklyStudyPlan(db, ownerId, config);
+    case "education:grimoire_link":
+      return runGrimoireLink(db, ownerId, config);
+    case "education:auto_progress":
+      return runAutoProgress(db, ownerId);
+    case "health:hydration":
+      return runHydration(db, ownerId, config);
+    case "health:sleep_routine":
+      return runSleepRoutine(db, ownerId, config);
+    case "health:mood_checkin":
+      return runMoodCheckin(db, ownerId, config);
+    case "health:daily_summary":
+      return runDailySummary(db, ownerId, config);
+    case "health:consistency_history":
+      return runConsistencyHistory(db, ownerId);
+    case "health:health_goals":
+      return { status: "ok", summary: "Metas aplicadas na Vitalidade do Dia, missões e rankings." };
     case "grimoire:priority_review":
       return { status: "ok", summary: `Ativa: a fila de hoje é ordenada por prioridade, com até ${Number(config.dailyLimit ?? 150)} revisões por dia.` };
     case "goals:forecast":
@@ -91,12 +124,23 @@ export async function runAutomationNow(db: Db, ownerId: string, module: Automati
 export async function runDueAutomationsForAll(db: Db): Promise<{ ran: number; skipped: number; errors: number }> {
   const scheduled = AUTOMATION_DEFS.filter((d) => d.trigger === "daily" || d.trigger === "weekly");
   const owners = new Set<string>();
-  const enabledRows = await db.execute({ sql: "SELECT DISTINCT owner_id FROM module_automations WHERE enabled = 1", args: [] });
+  const enabledRows = await db.execute({ sql: "SELECT DISTINCT owner_id FROM automations WHERE enabled = 1", args: [] });
   for (const r of enabledRows.rows) owners.add(String(r.owner_id));
   // Automações ligadas por padrão valem também para quem nunca abriu a tela (sem linha no banco).
   if (scheduled.some((d) => d.defaultEnabled)) {
-    const users = await db.execute({ sql: "SELECT DISTINCT owner_id FROM goals WHERE status = 'active'", args: [] });
-    for (const r of users.rows) owners.add(String(r.owner_id));
+    // Usuários ativos em cada módulo (só quem tem dados — ninguém recebe automação de módulo que não usa).
+    const sources = [
+      "SELECT DISTINCT owner_id FROM goals WHERE status = 'active'",
+      "SELECT DISTINCT owner_id FROM bank_loans WHERE status = 'active'",
+      "SELECT DISTINCT owner_id FROM bank_deposits WHERE status = 'active' AND goal_id IS NOT NULL",
+      "SELECT DISTINCT owner_id FROM educations WHERE progress_pct < 100",
+      "SELECT DISTINCT owner_id FROM sleep_entries WHERE woke_up_at >= date('now', '-14 days')",
+      "SELECT DISTINCT owner_id FROM water_entries WHERE recorded_at >= date('now', '-14 days')",
+    ];
+    for (const sql of sources) {
+      const users = await db.execute({ sql, args: [] });
+      for (const r of users.rows) owners.add(String(r.owner_id));
+    }
   }
   let ran = 0;
   let skipped = 0;

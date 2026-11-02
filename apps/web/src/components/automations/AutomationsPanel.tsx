@@ -30,6 +30,20 @@ const LABELS: Record<string, { label: string; suffix?: string; min?: number; max
   tasksPerDay: { label: "Tarefas por dia", min: 1, max: 10 },
   includeWeekend: { label: "Incluir fim de semana" },
   deckId: { label: "Baralho de destino" },
+  // Banco
+  split_cofre_livre: { label: "Cofre Livre", suffix: "%", min: 0, max: 100 },
+  split_cofre_aventureiro: { label: "Cofre do Aventureiro", suffix: "%", min: 0, max: 100 },
+  split_rota_mercador: { label: "Rota do Mercador", suffix: "%", min: 0, max: 100 },
+  split_fundo_dragao: { label: "Fundo do Dragão", suffix: "%", min: 0, max: 100 },
+  autoPay: { label: "Autorizo o pagamento automático da fatura quando o saldo cobrir" },
+  // Educação
+  sessionsPerDay: { label: "Sessões por dia", min: 1, max: 6 },
+  sessionMinutes: { label: "Duração da sessão", suffix: "min", min: 15, max: 180 },
+  // Saúde (limites prudentes — o backend também valida)
+  bedtimeHour: { label: "Horário do ritual noturno", suffix: "h", min: 18, max: 23 },
+  waterGoalMl: { label: "Meta diária de água", suffix: "ml", min: 1500, max: 4000 },
+  sleepGoalMinutes: { label: "Meta de sono", suffix: "min", min: 360, max: 600 },
+  weeklyWorkouts: { label: "Treinos por semana", min: 1, max: 7 },
 };
 
 const STATUS_UI = {
@@ -96,7 +110,15 @@ export function AutomationsPanel({
             busy={(update.isPending && update.variables?.automationKey === a.key) || (run.isPending && run.variables === a.key)}
             result={result[a.key]}
             onToggle={() => update.mutate({ automationKey: a.key, patch: { enabled: !a.enabled } })}
-            onConfig={(config) => update.mutate({ automationKey: a.key, patch: { config } })}
+            onConfig={(config) =>
+              update.mutate(
+                { automationKey: a.key, patch: { config } },
+                {
+                  onSuccess: () => setResult((s) => ({ ...s, [a.key]: { status: "ok", summary: "Configuração salva." } })),
+                  onError: (e) => setResult((s) => ({ ...s, [a.key]: { status: "error", summary: e instanceof Error ? e.message : "Configuração recusada." } })),
+                },
+              )
+            }
             onRun={() =>
               run.mutate(a.key, {
                 onSuccess: (r) => setResult((s) => ({ ...s, [a.key]: r })),
@@ -132,7 +154,7 @@ function AutomationCard({
   const runs = useAutomationRuns(a.module, history ? a.key : null);
   const configKeys = Object.keys(a.config).filter((k) => k in LABELS);
   const status = a.lastStatus ? STATUS_UI[a.lastStatus] : null;
-  const runnable = a.trigger === "daily" || a.trigger === "weekly" || a.key === "goal_sync" || a.key === "priority_review" || a.key === "forecast";
+  const runnable = a.trigger === "daily" || a.trigger === "weekly" || a.key === "goal_sync" || a.key === "priority_review" || a.key === "forecast" || a.key === "vault_split" || a.key === "health_goals";
 
   return (
     <li className={clsx("border-2 bg-rpg-bg-2/70 p-3", a.enabled ? "border-rpg-gold/50" : "border-rpg-border")} style={{ borderRadius: 4 }}>

@@ -8,7 +8,14 @@ export function useAutomations(module: AutomationModule) {
   // Executar pode criar sugestões/planos: atualiza os painéis do módulo também.
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
-    void qc.invalidateQueries({ queryKey: [module === "grimoire" ? "grimoire" : "goals-hub"] });
+    const related: Record<AutomationModule, string[]> = {
+      grimoire: ["grimoire"],
+      goals: ["goals-hub"],
+      bank: ["bank", "hub"],
+      education: ["educations", "hub"],
+      health: ["health", "hub"],
+    };
+    void qc.invalidateQueries({ queryKey: related[module] });
   };
   const update = useMutation({
     mutationFn: ({ automationKey, patch }: { automationKey: string; patch: { enabled?: boolean; config?: Record<string, unknown> } }) =>

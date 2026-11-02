@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { sleepWriteProblem } from "../services/healthHubService.js";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -138,6 +139,9 @@ healthRouter.post("/sleep", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: firstValidationMessage(parsed.error) });
   }
+  // Valida duração máxima (16h) e sobreposição com noites já registradas — evita "32h de sono".
+  const problem = await sleepWriteProblem(getDb(), req.user!.id, parsed.data.wentToBedAt, parsed.data.wokeUpAt);
+  if (problem) return res.status(problem.includes("sobrepõe") ? 409 : 400).json({ error: problem });
   const created = await insertSleepEntry(getDb(), req.user!.id, parsed.data);
   if (!created) {
     return res.status(400).json({ error: "O horário de acordar precisa ser depois do horário em que você dormiu." });
@@ -166,6 +170,10 @@ healthRouter.patch("/sleep/:id", async (req, res) => {
   const nextDuration = minutesBetween(nextWentToBedAt, nextWokeUpAt);
   if (nextDuration === null) {
     return res.status(400).json({ error: "O horário de acordar precisa ser depois do horário em que você dormiu." });
+  }
+  if (d.wentToBedAt !== undefined || d.wokeUpAt !== undefined) {
+    const problem = await sleepWriteProblem(db, req.user!.id, nextWentToBedAt, nextWokeUpAt, req.params.id);
+    if (problem) return res.status(problem.includes("sobrepõe") ? 409 : 400).json({ error: problem });
   }
 
   const fieldMap: Record<string, string> = {

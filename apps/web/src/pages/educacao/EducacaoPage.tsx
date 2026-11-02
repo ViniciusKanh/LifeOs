@@ -5,6 +5,20 @@ import { useEducations } from "@/hooks/useEducations";
 import { Button, EmptyState, Field, PageHeader } from "@/components/ui/primitives";
 import { EducationDashboard } from "./EducationDashboard";
 import type { EducationKind, EducationPhase } from "@/types";
+import { RPGToast } from "@/components/rpg";
+import { useEducationHub } from "@/hooks/useModuleHub";
+import { MODULE_ART, ModuleBanner } from "@/components/rpg-modules/ModuleKit";
+import {
+  ActiveEducationCard,
+  CampaignMap,
+  DeadlinesProjectsPanel,
+  EducationAdvisor,
+  EducationIndicators,
+  EducationRankPanel,
+  EducationRewardsAndAutomations,
+  StudyPlanEditor,
+  SubjectsGrimoirePanel,
+} from "@/components/education/EducationJourney";
 
 const KIND_LABEL: Record<EducationKind, string> = {
   graduacao: "Graduação",
@@ -49,6 +63,10 @@ export function EducacaoPage() {
   const { educations, isLoading, createEducation } = useEducations();
   const [modalOpen, setModalOpen] = useState(false);
   const { isRpg } = useTheme();
+  const hubQ = useEducationHub();
+  const hub = hubQ.data;
+  const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
+  const notify = (msg: string, tone: "success" | "error" = "success") => setToast({ msg, tone });
 
   // Formação em destaque no painel: a primeira ainda ativa (não
   // concluída); se todas estiverem concluídas, cai na mais recente.
@@ -75,18 +93,22 @@ export function EducacaoPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
       {isRpg ? (
-        <PageHeader
-          banner="educacao"
-          tone="blue"
-          icon={<GraduationCap size={24} />}
-          title="Educação"
-          subtitle="Organize seus estudos, disciplinas, projetos e prazos em um só lugar."
-          actions={
-            <Button onClick={() => setModalOpen(true)}>
-              <Plus size={15} /> Nova formação
-            </Button>
-          }
-        />
+        <div className="mb-4 space-y-3">
+          <ModuleBanner
+            eyebrow="Jornada do Conhecimento"
+            title="Educação"
+            subtitle="Organize estudos, disciplinas, projetos e prazos em uma verdadeira jornada de aprendizado."
+            mage={`${MODULE_ART}/education/banner-mage.webp`}
+            scene={`${MODULE_ART}/education/banner-scene.webp`}
+            actions={
+              <Button onClick={() => setModalOpen(true)}>
+                <Plus size={15} /> Nova formação
+              </Button>
+            }
+            aside={hub ? <EducationRankPanel hub={hub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
+          />
+          {hub && hub.educations.length > 0 && <EducationIndicators hub={hub} />}
+        </div>
       ) : (
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <div>
@@ -126,7 +148,35 @@ export function EducacaoPage() {
         </div>
       )}
 
-      {activeEducationId && <EducationDashboard educationId={activeEducationId} />}
+      {isRpg && hub && hub.educations.length > 0 && (
+        <div className="mb-4 space-y-3">
+          <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0 space-y-3">
+              <ActiveEducationCard hub={hub} educationId={activeEducationId} />
+              <CampaignMap hub={hub} educationId={activeEducationId} onToast={notify} />
+              <div className="grid items-start gap-3 lg:grid-cols-2">
+                <SubjectsGrimoirePanel hub={hub} educationId={activeEducationId} />
+                <DeadlinesProjectsPanel hub={hub} educationId={activeEducationId} />
+              </div>
+            </div>
+            <aside className="min-w-0 space-y-3" aria-label="Conselheiro e plano de estudo">
+              <EducationAdvisor />
+              <StudyPlanEditor hub={hub} onToast={notify} />
+            </aside>
+          </div>
+        </div>
+      )}
+
+      {activeEducationId && (
+        <>
+          {isRpg && <p className="rpg-title mb-2 text-sm font-bold uppercase">Painel completo da formação</p>}
+          <EducationDashboard educationId={activeEducationId} />
+        </>
+      )}
+
+      {isRpg && hub && <div className="mt-4"><EducationRewardsAndAutomations /></div>}
+
+      <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />
 
       {modalOpen && <NovaFormacaoModal onClose={() => setModalOpen(false)} onCreate={createEducation} />}
     </div>
