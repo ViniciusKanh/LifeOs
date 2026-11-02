@@ -33,6 +33,8 @@ import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RPGButton, RPGIconSlot, RPGPageHeader, RPGStatCard } from "@/components/rpg";
 import { RpgHabitsPanel } from "@/components/habits/RpgHabitsPanel";
 import { HabitAutoBadges } from "@/components/habits/HabitAutoBadges";
+import { HABIT_TABS, HabitsShell } from "@/components/routine/RoutineShells";
+import { useUrlTab } from "@/components/hero/HeroShared";
 import type { HabitAutoInput, HabitAutoSource, HabitAutoSourceInfo, HabitWithAuto } from "@/services/habitService";
 
 /* ------------------------------------------------------------------ */
@@ -238,6 +240,8 @@ export function HabitosPage() {
   const hasBestTimesData = bestTimesData.buckets.some((b) => b.value > 0);
 
   const { isRpg } = useTheme();
+  // Hábitos 3.0 (tema RPG): abas na URL; "Painel completo" mantém a tela anterior.
+  const [habTab, setHabTab] = useUrlTab(HABIT_TABS, "jornada");
   const habitActions = (
     <div className="flex items-center gap-2">
       {habits.length > 0 && (
@@ -255,30 +259,13 @@ export function HabitosPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
       {isRpg ? (
-        <RPGPageHeader
-          banner="habitos"
-          size="md"
-          leading={<RPGIconSlot icon={<ScrollText size={26} />} />}
-          eyebrow="Jornada"
-          title="Hábitos da Jornada"
-          subtitle="Pequenas ações repetidas constroem a vida que você deseja. Mantenha a sequência e evolua o personagem."
-          actions={
-            <>
-              {habits.length > 0 && (
-                <RPGButton variant="secondary" onClick={() => document.getElementById("historico-habitos")?.scrollIntoView({ behavior: "smooth" })}>
-                  <History size={14} aria-hidden /> Ver história
-                </RPGButton>
-              )}
-              {habits.length > 0 && (
-                <RPGButton variant="secondary" onClick={() => setGeneratorOpen(true)} disabled={isGeneratingTasks} title="Gera tarefas (missões) a partir dos hábitos — a recompensa continua vindo do hábito">
-                  {isGeneratingTasks ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ListChecks size={14} aria-hidden />} Gerar missões
-                </RPGButton>
-              )}
-              <RPGButton variant="primary" onClick={() => setModalOpen(true)}>
-                <Plus size={14} aria-hidden /> Novo hábito
-              </RPGButton>
-            </>
-          }
+        <HabitsShell
+          tab={habTab}
+          onTab={setHabTab}
+          onNew={() => setModalOpen(true)}
+          onEdit={(id) => setEditingHabit(habits.find((h) => h.id === id) ?? null)}
+          onGenerate={() => setGeneratorOpen(true)}
+          canGenerate={habits.length > 0 && !isGeneratingTasks}
         />
       ) : (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -290,6 +277,7 @@ export function HabitosPage() {
         </div>
       )}
 
+      <div className={isRpg && habTab !== "classico" ? "hidden" : "space-y-5"}>
       {habits.length === 0 ? (
         <EmptyState
           title="Nenhum hábito criado ainda"
@@ -301,7 +289,7 @@ export function HabitosPage() {
         <>
           {/* Cartões de estatística (no RPG, mesma informação como atributos do personagem) */}
           {isRpg ? (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="hidden">
               <RPGStatCard icon={<Flame size={18} />} label="Sequência atual" value={diasLabel(stats?.currentStreakMax ?? 0)} tone="red" />
               <RPGStatCard
                 icon={<Target size={18} />}
@@ -662,6 +650,7 @@ export function HabitosPage() {
           </div>
         </>
       )}
+      </div>
 
       {modalOpen && (
         <HabitoModal

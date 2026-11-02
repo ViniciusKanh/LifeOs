@@ -50,6 +50,16 @@ const METRIC_KEYS = [
   "experiment_log_days_total",
   "experiments_documented",
   "achievements_unlocked_total",
+  "habit_checks_total",
+  "habit_perfect_days_total",
+  "books_registered_total",
+  "pages_unique_total",
+  "reading_trails_completed",
+  "reading_best_streak",
+  "life_admin_on_time_total",
+  "life_admin_resolved_total",
+  "life_admin_with_file_total",
+  "life_admin_active_months",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -136,6 +146,46 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("journal_takeaways_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND night_takeaway IS NOT NULL AND night_takeaway <> ''");
   addScalar("journal_retros_saved", "SELECT COUNT(*) FROM journal_retrospectives WHERE owner_id = ? AND saved_at IS NOT NULL");
   addScalar("experiments_with_hypothesis", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND hypothesis IS NOT NULL AND hypothesis <> ''");
+  addScalar("habit_checks_total", "SELECT COUNT(*) FROM habit_entries e JOIN habits h ON h.id = e.habit_id AND h.owner_id = e.owner_id WHERE e.owner_id = ? AND e.count >= h.target_count");
+  // Dia perfeito: todos os hábitos diários ativos naquele dia foram cumpridos.
+  addScalar(
+    "habit_perfect_days_total",
+    `SELECT COUNT(*) FROM (SELECT e.owner_id AS o, e.entry_date AS d, COUNT(*) AS c FROM habit_entries e JOIN habits h ON h.id = e.habit_id AND h.owner_id = e.owner_id
+       WHERE e.owner_id = ? AND e.count >= h.target_count AND h.frequency = 'daily' GROUP BY e.entry_date) x
+     WHERE x.c >= (SELECT COUNT(*) FROM habits h2 WHERE h2.owner_id = x.o AND h2.frequency = 'daily' AND (h2.archived_at IS NULL OR date(h2.archived_at) > x.d)
+                   AND date(h2.created_at) <= x.d AND (h2.paused_at IS NULL OR date(h2.paused_at) > x.d))`
+  );
+  addScalar("books_registered_total", "SELECT COUNT(*) FROM books WHERE owner_id = ?");
+  addScalar("pages_unique_total", "SELECT COALESCE(SUM(CASE WHEN total_pages IS NOT NULL AND current_page > total_pages THEN total_pages ELSE current_page END), 0) FROM books WHERE owner_id = ?");
+  addScalar(
+    "reading_trails_completed",
+    `SELECT COUNT(*) FROM reading_trails t WHERE t.owner_id = ? AND EXISTS (SELECT 1 FROM reading_trail_books tb WHERE tb.trail_id = t.id)
+       AND NOT EXISTS (SELECT 1 FROM reading_trail_books tb JOIN books b ON b.id = tb.book_id WHERE tb.trail_id = t.id AND b.status != 'Concluído')`
+  );
+  // Prazo cumprido sem "adiantar" ciclos (mesma janela de 60 dias da recompensa).
+  addScalar("life_admin_on_time_total", "SELECT COUNT(*) FROM life_admin_history WHERE owner_id = ? AND due_date IS NOT NULL AND done_at <= due_date AND done_at >= date(due_date, '-60 days')");
+  addScalar("life_admin_resolved_total", "SELECT COUNT(*) FROM life_admin_history WHERE owner_id = ? AND (due_date IS NULL OR done_at >= date(due_date, '-60 days'))");
+  addScalar("life_admin_with_file_total", "SELECT COUNT(*) FROM life_admin_items WHERE owner_id = ? AND file_data_uri IS NOT NULL");
+  addScalar("life_admin_active_months", "SELECT COUNT(DISTINCT substr(done_at, 1, 7)) FROM life_admin_history WHERE owner_id = ?");
+  // Maior sequência de dias (locais) com sessão de leitura.
+  if (requested.has("reading_best_streak")) {
+    tzPromise ??= userTimezone(db, ownerId);
+    jobs.push(
+      Promise.all([tzPromise, db.execute({ sql: "SELECT started_at AS at FROM reading_sessions WHERE owner_id = ? AND (pages_read > 0 OR COALESCE(duration_minutes, 0) > 0)", args: [ownerId] })]).then(([tz, result]) => {
+        const days = [...new Set(result.rows.map((r) => localDayOfStored(String(r.at), tz)))].sort();
+        let best = 0;
+        let cur = 0;
+        let prev = "";
+        for (const d of days) {
+          const expected = prev ? new Date(Date.parse(`${prev}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10) : "";
+          cur = d === expected ? cur + 1 : 1;
+          best = Math.max(best, cur);
+          prev = d;
+        }
+        metrics.reading_best_streak = best;
+      })
+    );
+  }
   addScalar("achievements_unlocked_total", "SELECT COUNT(*) FROM user_achievements WHERE owner_id = ?");
   addScalar("experiments_started_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status <> 'draft'");
   addScalar("experiment_log_days_total", "SELECT COUNT(DISTINCT log_date) FROM personal_experiment_logs WHERE owner_id = ?");
@@ -367,7 +417,7 @@ export function achievementCategory(metric: string | null): AchievementCategory 
   if (!metric) return "outros";
   if (metric.startsWith("tasks_")) return "missoes";
   if (metric.startsWith("habit_")) return "habitos";
-  if (metric.startsWith("books_") || metric.startsWith("pages_")) return "leitura";
+  if (metric.startsWith("books_") || metric.startsWith("pages_") || metric.startsWith("reading_")) return "leitura";
   if (metric.startsWith("water_") || metric.startsWith("workouts_")) return "saude";
   if (metric.startsWith("focus_")) return "foco";
   if (metric.startsWith("weekly_reviews")) return "revisoes";

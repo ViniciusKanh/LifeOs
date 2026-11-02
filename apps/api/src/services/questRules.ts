@@ -15,7 +15,7 @@ export interface QuestTemplate {
   /** Genérica = sempre alcançável (missões/XP/diário); as demais exigem uso recente do módulo. */
   generic: boolean;
   /** Módulo exibido na interface e usado como link. */
-  module: "missions" | "projects" | "health" | "library" | "habits" | "journal" | "focus" | "xp" | "lab";
+  module: "missions" | "projects" | "health" | "library" | "habits" | "journal" | "focus" | "xp" | "lab" | "admin";
   title: (target: number) => string;
   unit: string | null;
   /** Meta mínima e teto (ex.: diário 1x/dia → no máximo 7 na semana). */
@@ -51,6 +51,8 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
   { key: "w_workout_minutes", period: "weekly", metric: "workoutMinutes", generic: false, module: "health", title: (n) => `Acumule ${n} minutos de treino`, unit: "min", min: 30, max: 900, step: 10, xp: 75, fallback: 60 },
   { key: "w_pages", period: "weekly", metric: "pages", generic: false, module: "library", title: (n) => `Leia ${n} páginas na semana`, unit: "pág.", min: 10, max: 1000, step: 5, xp: 75, fallback: 30 },
   { key: "w_habits", period: "weekly", metric: "habits", generic: false, module: "habits", title: (n) => `Cumpra ${n} hábitos na semana`, unit: null, min: 3, max: 100, step: 1, xp: 70, fallback: 5 },
+  { key: "w_reading_days", period: "weekly", metric: "readingDays", generic: false, module: "library", title: (n) => `Leia em ${n} ${plural(n, "dia", "dias")} na semana`, unit: "dias", min: 2, max: 7, step: 1, xp: 70, fallback: 3 },
+  { key: "w_admin_resolved", period: "weekly", metric: "adminResolved", generic: false, module: "admin", title: (n) => `Resolva ${n} ${plural(n, "compromisso", "compromissos")} da Administração`, unit: null, min: 1, max: 10, step: 1, xp: 60, fallback: 2 },
   { key: "w_lab_logs", period: "weekly", metric: "experimentLogs", generic: false, module: "lab", title: (n) => `Registre observações de experimento em ${n} ${plural(n, "dia", "dias")}`, unit: "dias", min: 2, max: 7, step: 1, xp: 60, fallback: 3 },
   { key: "w_journal", period: "weekly", metric: "journal", generic: true, module: "journal", title: (n) => `Escreva no diário em ${n} ${plural(n, "dia", "dias")}`, unit: "dias", min: 2, max: 7, step: 1, xp: 70, fallback: 3 },
   { key: "w_focus", period: "weekly", metric: "focusMinutes", generic: false, module: "focus", title: (n) => `Foque por ${n} minutos na semana`, unit: "min", min: 60, max: 2400, step: 15, xp: 80, fallback: 120 },

@@ -58,6 +58,8 @@ export const GAMIFICATION_RULES = {
   lifeAdmin: {
     byKind: { vencimento: { xp: 10, coins: 2 }, documento: { xp: 10, coins: 2 }, conta: { xp: 10, coins: 2 }, manutencao: { xp: 15, coins: 3 } } as Record<string, { xp: number; coins: number }>,
     maxDaysAhead: 60,
+    /** Baú de Tranquilidade: dias seguidos sem pendência vencida; um resgate por sequência. */
+    chest: { days: 30, xp: 50, coins: 10 },
   },
   /**
    * Conquista do catálogo oficial desbloqueada → XP e moedas por raridade,

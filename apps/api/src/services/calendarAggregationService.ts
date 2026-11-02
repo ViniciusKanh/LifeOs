@@ -9,7 +9,7 @@ export interface CalendarItem {
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
-  sourceType: "manual" | "task" | "goal" | "academic_project";
+  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin";
   sourceId: string | null;
   link: string | null;
   /** Categoria visual (estudo, foco, saúde...) — eventos antigos vêm como null. */
@@ -28,7 +28,7 @@ export interface CalendarItem {
  * ser reaproveitado também pelo feed de assinatura .ics (icsFeedService.ts).
  */
 export async function getCalendarItems(db: Db, ownerId: string, from: string, to: string): Promise<CalendarItem[]> {
-  const [manual, tasks, goals, academic] = await Promise.all([
+  const [manual, tasks, goals, academic, lifeAdmin] = await Promise.all([
     db.execute({
       sql: `SELECT * FROM events WHERE owner_id = ? AND starts_at >= date(?) AND starts_at < date(?, '+1 day') ORDER BY starts_at ASC`,
       args: [ownerId, from, to],
@@ -46,6 +46,12 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
     db.execute({
       sql: `SELECT id, title, defense_date FROM academic_projects WHERE owner_id = ? AND defense_date IS NOT NULL
             AND defense_date >= date(?) AND defense_date < date(?, '+1 day')`,
+      args: [ownerId, from, to],
+    }),
+    // Administração da Vida: vencimentos ativos entram como compromissos do dia (somente leitura).
+    db.execute({
+      sql: `SELECT id, title, kind, due_date FROM life_admin_items WHERE owner_id = ? AND status = 'active' AND due_date IS NOT NULL
+            AND due_date >= date(?) AND due_date < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
   ]);
@@ -118,6 +124,21 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
       sourceType: "academic_project",
       sourceId: row.id,
       link: "/educacao",
+    });
+  }
+
+  const ADMIN_LABEL: Record<string, string> = { vencimento: "Vence", manutencao: "Manutenção", documento: "Validade", conta: "Conta" };
+  for (const row of lifeAdmin.rows as unknown as Array<{ id: string; title: string; kind: string; due_date: string }>) {
+    items.push({
+      id: `life_admin_${row.id}`,
+      title: `${ADMIN_LABEL[row.kind] ?? "Prazo"}: ${row.title}`,
+      description: null,
+      startsAt: row.due_date,
+      endsAt: null,
+      allDay: true,
+      sourceType: "life_admin",
+      sourceId: row.id,
+      link: "/administracao",
     });
   }
 

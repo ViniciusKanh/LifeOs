@@ -8,6 +8,9 @@ import { getChronicleHub, getLabHub } from "./chronicleLabService.js";
 import { getBuildOverview } from "./characterBuildService.js";
 import { listAchievements } from "./achievementsService.js";
 import { getTreasureHub } from "./heroHubService.js";
+import { getHabitsHub } from "./habitsHubService.js";
+import { getLibraryHub } from "./libraryHubService.js";
+import { getAdminHub } from "./lifeAdminHubService.js";
 import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./planningHubService.js";
 
 /**
@@ -20,7 +23,7 @@ import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./plan
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -45,6 +48,9 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   lab: "Estudo pessoal observacional: sem prova de causa e efeito. Nada é criado sem a sua confirmação.",
   hero: "Leitura dos seus registros — não é teste de personalidade. Metas e missões só são criadas com a sua aprovação.",
   treasure: "Moedas virtuais do LifeOS. A IA só sugere: nenhum resgate acontece sem a sua confirmação.",
+  habits: "Sugestões sobre seus hábitos — nada é alterado sem você.",
+  library: "Baseado nas suas sessões e anotações. Nenhum trecho de livro é reproduzido.",
+  admin: "Valores em dinheiro real são só informativos e não se misturam às moedas do LifeOS. Nada é pago ou cancelado automaticamente.",
 };
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -218,6 +224,45 @@ async function treasureFacts(db: Client, ownerId: string): Promise<{ items: Advi
   return { items, insufficient: h.goalOptions.rewards.length === 0 };
 }
 
+async function habitsFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getHabitsHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `${i.active} hábito(s) ativo(s), ${i.doneToday}/${i.scheduledToday} do ritual de hoje; consistência de 30 dias: ${i.consistency30 ?? "—"}%.` }];
+  items.push({ kind: "dado", text: `Maior sequência ativa: ${i.currentStreak} dia(s); melhor já registrada: ${i.bestStreak}.` });
+  if (i.consistencyDeltaPts != null) items.push({ kind: "inferencia", text: `A consistência ${i.consistencyDeltaPts >= 0 ? "subiu" : "caiu"} ${Math.abs(i.consistencyDeltaPts)} ponto(s) em relação aos 30 dias anteriores.` });
+  const peak = h.hoursUtc.indexOf(Math.max(...h.hoursUtc));
+  if (Math.max(...h.hoursUtc) >= 5) items.push({ kind: "inferencia", text: `Seus registros de hábito acontecem mais por volta das ${peak}h (UTC).` });
+  for (const c of h.habits.filter((x) => !x.paused && x.consistency30.expected >= 5 && (x.consistency30.pct ?? 100) < 40).slice(0, 2))
+    items.push({ kind: "sugestao", text: `${c.name}: ${c.consistency30.pct}% em 30 dias. Considere reduzir a frequência ou a meta (${c.target}${c.unit ? ` ${c.unit}` : ""}) — você decide.` });
+  if (i.active > 8) items.push({ kind: "sugestao", text: "Rotina com muitos hábitos ativos: pausar os menos importantes costuma ajudar a manter os essenciais." });
+  return { items, insufficient: i.consistency30 == null };
+}
+
+async function libraryFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getLibraryHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `${i.total} livro(s), ${i.reading} em leitura, ${i.completed} concluído(s); ${i.pagesRead} página(s) registradas em sessões (${i.uniquePages} inéditas).` }];
+  if (h.featured) items.push({ kind: "dado", text: `Leitura atual: ${h.featured.title}, página ${h.featured.currentPage}${h.featured.totalPages ? ` de ${h.featured.totalPages}` : ""}.` });
+  items.push({ kind: "dado", text: `Sequência de leitura: ${i.streak} dia(s); ${h.desk.readDays30} dia(s) com leitura nos últimos 30.` });
+  if (i.yearBooks) items.push({ kind: "inferencia", text: `Meta anual: ${i.yearBooks.done}/${i.yearBooks.target} livros — ritmo ${i.yearBooks.status.replace("_", " ")}.` });
+  if (i.reading > 3) items.push({ kind: "sugestao", text: `${i.reading} livros em leitura ao mesmo tempo: concentrar em um ou dois costuma acelerar as conclusões.` });
+  if (!h.desk.dailyGoal && h.desk.readDays30 > 0) items.push({ kind: "sugestao", text: `Uma meta diária pequena (ex.: ${Math.max(5, Math.round(i.pagesRead / Math.max(1, h.desk.readDays30) / 2))} páginas) tende a ser sustentável com o seu ritmo atual.` });
+  if (h.learnings.length) items.push({ kind: "sugestao", text: `Você tem ${h.learnings.length} aprendizado(s) registrado(s): transformar em flashcards ajuda a revisar.` });
+  return { items, insufficient: i.total === 0 };
+}
+
+async function adminFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getAdminHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `${i.total} registro(s): ${i.overdue} atrasado(s), ${i.soon} perto do prazo, ${i.withFile} com arquivo.` }];
+  if (h.order) items.push({ kind: "dado", text: `Índice de Ordem ${h.order.score}/100 (prazo ${h.order.parts.onTimePct}%, lembretes ${h.order.parts.remindersPct}%, completude ${h.order.parts.completePct}%).` });
+  for (const c of h.critical.slice(0, 3)) items.push({ kind: "dado", text: `Prioritário: ${c.title} (${c.urgency === "overdue" ? `${Math.abs(c.daysLeft ?? 0)} dia(s) de atraso` : `vence em ${c.daysLeft} dia(s)`}).` });
+  for (const t of h.subscriptions.totals) items.push({ kind: "dado", text: `Assinaturas (dinheiro real, ${t.currency}): ${t.count} item(ns), ~${t.monthly.toFixed(2)}/mês. Não são moedas do LifeOS.` });
+  if (h.subscriptions.items.length >= 3) items.push({ kind: "sugestao", text: "Revise as assinaturas: alguma deixou de ser usada? Cancelar é uma ação sua, fora do LifeOS." });
+  if (h.missingFiles.length) items.push({ kind: "sugestao", text: `${h.missingFiles.length} documento(s)/conta(s) sem comprovante anexado.` });
+  return { items, insufficient: i.total === 0 };
+}
+
 const SCHEMA = {
   type: "object",
   properties: {
@@ -242,6 +287,9 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     lab: () => labFacts(db, ownerId),
     hero: () => heroFacts(db, ownerId),
     treasure: () => treasureFacts(db, ownerId),
+    habits: () => habitsFacts(db, ownerId),
+    library: () => libraryFacts(db, ownerId),
+    admin: () => adminFacts(db, ownerId),
   };
   const base = await loaders[module]();
   const fallback: AdvisorAnswer = { ai: false, items: base.items, disclaimer: DISCLAIMER[module], insufficient: base.insufficient };
@@ -261,6 +309,9 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     lab: "Diferencie correlação de causalidade, aponte amostras pequenas e fatores de confusão. Nunca diga que algo foi comprovado.",
     hero: "Não faça avaliação de personalidade; baseie-se nos atributos e números dados. Não crie metas nem tarefas, apenas sugira.",
     treasure: "Não invente recompensas, preços ou saldos. Não incentive gastar todas as moedas. Nunca fale de dinheiro real.",
+    habits: "Justifique com consistência e horários reais. Não altere hábitos; sugira ajustes de frequência ou simplificação.",
+    library: "Não invente livros, autores, trechos ou conteúdo de obras. Use apenas títulos e números dados.",
+    admin: "Diferencie valores em dinheiro real (R$) das moedas virtuais. Não recomende pagamentos ou cancelamentos automáticos.",
   }[module];
   const prompt = `Você é o conselheiro do LifeOS (módulo ${module}). Responda em português do Brasil, em até 6 itens curtos.
 Use SOMENTE os fatos abaixo (dados reais do usuário). Não crie números novos. ${rules}

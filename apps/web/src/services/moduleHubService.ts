@@ -134,7 +134,7 @@ export interface HealthHub {
   consistencyHistory: Array<{ week: string; water: number; sleep: number; move: number; mood: number }>;
 }
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin";
 export interface AdvisorAnswer {
   ai: boolean;
   items: Array<{ kind: "dado" | "inferencia" | "sugestao"; text: string }>;

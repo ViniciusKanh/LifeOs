@@ -10,6 +10,8 @@ import { LifeAdminCard } from "@/components/lifeAdmin/LifeAdminCard";
 import { LifeAdminForm, LIFE_ADMIN_TEMPLATES } from "@/components/lifeAdmin/LifeAdminForm";
 import { LifeAdminDetailModal } from "@/components/lifeAdmin/LifeAdminDetailModal";
 import { LIFE_ADMIN_CATEGORY, LIFE_ADMIN_KIND } from "@/utils/lifeOsLabels";
+import { ADMIN_TABS, AdminShell } from "@/components/routine/RoutineShells";
+import { useUrlTab } from "@/components/hero/HeroShared";
 import type { LifeAdminCategory, LifeAdminDetail, LifeAdminItem, LifeAdminKind } from "@/types";
 
 type KindFilter = LifeAdminKind | "todos";
@@ -29,6 +31,8 @@ export function AdministracaoPage() {
   const [showArchived, setShowArchived] = useState(false);
   const { items, isLoading, isError, create, update, remove, markDone, removeHistory } = useLifeAdmin(showArchived);
   const { isRpg } = useTheme();
+  // Administração 3.0 (tema RPG): abas na URL; "Registros" mantém a lista anterior.
+  const [admTab, setAdmTab] = useUrlTab(ADMIN_TABS, "reino");
   const [searchParams, setSearchParams] = useSearchParams();
   const [kind, setKind] = useState<KindFilter>("todos");
   const [category, setCategory] = useState<LifeAdminCategory | null>(null);
@@ -114,19 +118,14 @@ export function AdministracaoPage() {
   return (
     <div className="w-full px-4 py-6 md:px-8 md:py-8">
       {isRpg ? (
-        <RPGPageHeader
-          banner="reino"
-          size="md"
-          leading={<RPGIconSlot icon={<FolderLock size={26} />} />}
-          eyebrow="Controle do reino"
-          title="Administração da vida"
-          subtitle="Vencimentos, manutenções, documentos e contas — lembre-se antes que virem problema e mantenha seu reino funcionando."
-          actions={
-            <RPGButton variant="primary" onClick={openNew}>
-              <Plus size={15} aria-hidden /> Novo item
-            </RPGButton>
-          }
-          className="mb-4"
+        <AdminShell
+          tab={admTab}
+          onTab={setAdmTab}
+          onNew={openNew}
+          onImport={() => {
+            setAdmTab("registros");
+            openNew();
+          }}
         />
       ) : (
       <PageHeader
@@ -149,7 +148,8 @@ export function AdministracaoPage() {
       />
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className={isRpg && admTab !== "registros" ? "hidden" : ""}>
+      <div className={isRpg ? "hidden" : "grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4"}>
         {[
           { label: "Atrasados", caption: "Itens que precisam de atenção", value: counts.overdue, icon: <AlertTriangle size={16} />, tone: "text-drop bg-drop/10", rpgTone: "red" as const },
           { label: "Vencem em breve", caption: "Próximos dos vencimentos", value: counts.soon, icon: <CalendarClock size={16} />, tone: "text-cat-purple bg-cat-purple/10", rpgTone: "orange" as const },
@@ -354,6 +354,7 @@ export function AdministracaoPage() {
           })}
         </div>
       )}
+      </div>
 
       <LifeAdminForm
         open={formOpen}

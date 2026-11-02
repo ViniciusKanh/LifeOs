@@ -991,7 +991,7 @@ export interface CalendarItem {
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
-  sourceType: "manual" | "task" | "goal" | "academic_project";
+  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin";
   sourceId: string | null;
   link: string | null;
   /** Categoria visual do evento (estudo, foco, saúde...) — eventos antigos vêm como null. */

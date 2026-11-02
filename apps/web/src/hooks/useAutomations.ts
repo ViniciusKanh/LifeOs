@@ -21,6 +21,9 @@ export function useAutomations(module: AutomationModule) {
       lab: ["experiments"],
       hero: ["achievements"],
       journey: ["analytics"],
+      habits: ["habits"],
+      library: ["books"],
+      admin: ["life-admin"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

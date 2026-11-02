@@ -19,6 +19,9 @@ import { runAutoProgress, runGrimoireLink, runSmartDeadlines, runWeeklyStudyPlan
 import { runAgendaDigest, runAutoPlan, runConflictAlerts, runDueAlerts, runQuestReminder, runReplan } from "./planningHubService.js";
 import { runLabCheckin, runLabCycleEnd, runLabMissingData, runMemories, runWeeklyRetro, runWriteReminder } from "./chronicleLabService.js";
 import { runBuildSnapshot, runJourneyBigMoments, runJourneyWeeklyRetro, runNearAchievements, runRewardGoalReady, runUnlockPipeline, runWeeklyRewardSuggestion } from "./heroHubService.js";
+import { runHabitReminders, runHabitWeeklyReview, runStreakAnalysis } from "./habitsHubService.js";
+import { runReadingReminder, runReadingSummary } from "./libraryHubService.js";
+import { runAdminSummary, runDocumentCheck, runMissingFiles, runRiskAlerts, runSubscriptionDigest } from "./lifeAdminHubService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
 type Db = ReturnType<typeof getDb>;
@@ -124,6 +127,39 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "journey:grouping":
     case "journey:codex_sync":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
+    case "habits:reminders":
+      return runHabitReminders(db, ownerId, config);
+    case "habits:streak_analysis":
+      return runStreakAnalysis(db, ownerId, config);
+    case "habits:weekly_review":
+      return runHabitWeeklyReview(db, ownerId, config);
+    case "library:reminders":
+      return runReadingReminder(db, ownerId, config);
+    case "library:summary":
+      return runReadingSummary(db, ownerId, config);
+    case "admin:documents":
+      return runDocumentCheck(db, ownerId, config);
+    case "admin:subscriptions":
+      return runSubscriptionDigest(db, ownerId, config);
+    case "admin:files":
+      return runMissingFiles(db, ownerId, config);
+    case "admin:summary":
+      return runAdminSummary(db, ownerId, config);
+    case "admin:risk":
+      return runRiskAlerts(db, ownerId, config);
+    case "habits:module_sync":
+    case "habits:consistency_missions":
+    case "habits:planning":
+    case "habits:experiments":
+    case "library:progress":
+    case "library:goal_sync":
+    case "library:grimoire":
+    case "library:isbn":
+    case "library:recommendations":
+    case "admin:due_reminders":
+    case "admin:recurrence":
+    case "admin:agenda_sync":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "diary:day_context":
     case "diary:learnings_grimoire":
     case "diary:goal_links":
@@ -202,6 +238,9 @@ export async function runDueAutomationsForAll(db: Db): Promise<{ ran: number; sk
       "SELECT DISTINCT owner_id FROM water_entries WHERE recorded_at >= date('now', '-14 days')",
       // Perfil do Herói/Crônica: quem ganhou XP nas últimas 2 semanas.
       "SELECT DISTINCT owner_id FROM xp_events WHERE day_key >= date('now', '-14 days')",
+      "SELECT DISTINCT owner_id FROM habits WHERE archived_at IS NULL",
+      "SELECT DISTINCT owner_id FROM books WHERE status = 'Lendo'",
+      "SELECT DISTINCT owner_id FROM life_admin_items WHERE status = 'active'",
     ];
     for (const sql of sources) {
       const users = await db.execute({ sql, args: [] });

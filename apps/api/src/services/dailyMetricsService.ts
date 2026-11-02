@@ -22,7 +22,11 @@ export type DailyMetric =
   | "journal"
   | "waterMl"
   | "focusMinutes"
-  | "experimentLogs";
+  | "experimentLogs"
+  /** Dias com sessão de leitura (1 por dia). */
+  | "readingDays"
+  /** Compromissos da Administração resolvidos (sem contar ciclos adiantados). */
+  | "adminResolved";
 
 export const ALL_DAILY_METRICS: readonly DailyMetric[] = [
   "missions",
@@ -38,6 +42,8 @@ export const ALL_DAILY_METRICS: readonly DailyMetric[] = [
   "waterMl",
   "focusMinutes",
   "experimentLogs",
+  "readingDays",
+  "adminResolved",
 ];
 
 export type DailySeries = Record<DailyMetric, Map<string, number>>;
@@ -75,7 +81,7 @@ export async function collectDailyMetrics(
   const fromUtc = addDays(from, -1);
   const none = Promise.resolve(null);
 
-  const [tasks, workouts, reading, habits, xp, journal, water, focus, labLogs] = await Promise.all([
+  const [tasks, workouts, reading, habits, xp, journal, water, focus, labLogs, adminDone] = await Promise.all([
     has("missions", "projectMissions", "highPriorityMissions")
       ? db.execute({
           sql: "SELECT completed_at AS t, project_id, priority FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at >= ?",
@@ -85,7 +91,7 @@ export async function collectDailyMetrics(
     has("workouts", "workoutMinutes")
       ? db.execute({ sql: "SELECT performed_at AS t, COALESCE(duration_minutes, 0) AS v FROM workouts WHERE owner_id = ? AND performed_at >= ?", args: [ownerId, fromUtc] })
       : none,
-    has("pages")
+    has("pages", "readingDays")
       ? db.execute({ sql: "SELECT started_at AS t, COALESCE(pages_read, 0) AS v FROM reading_sessions WHERE owner_id = ? AND started_at >= ?", args: [ownerId, fromUtc] })
       : none,
     has("habits")
@@ -116,6 +122,12 @@ export async function collectDailyMetrics(
       : none,
     has("experimentLogs")
       ? db.execute({ sql: "SELECT log_date AS d, COUNT(*) AS v FROM personal_experiment_logs WHERE owner_id = ? AND log_date >= ? GROUP BY log_date", args: [ownerId, from] })
+      : none,
+    has("adminResolved")
+      ? db.execute({
+          sql: "SELECT done_at AS d, COUNT(*) AS v FROM life_admin_history WHERE owner_id = ? AND done_at >= ? AND (due_date IS NULL OR done_at >= date(due_date, '-60 days')) GROUP BY done_at",
+          args: [ownerId, from],
+        })
       : none,
   ]);
 
@@ -149,5 +161,11 @@ export async function collectDailyMetrics(
   for (const r of water?.rows ?? []) if (r.t) add("waterMl", localDay(r.t), Number(r.v));
   for (const r of focus?.rows ?? []) if (r.t) add("focusMinutes", localDay(r.t), Number(r.v));
   for (const r of labLogs?.rows ?? []) add("experimentLogs", String(r.d), Number(r.v));
+  for (const r of adminDone?.rows ?? []) add("adminResolved", String(r.d), Number(r.v));
+  for (const r of reading?.rows ?? []) {
+    if (!r.t || !want.has("readingDays")) continue;
+    const day = localDay(r.t);
+    if (day >= from && day <= to) out.readingDays.set(day, 1);
+  }
   return out;
 }

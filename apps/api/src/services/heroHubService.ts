@@ -105,6 +105,8 @@ const METRIC_SOURCES: Array<{ prefix: string; events: string; module: string; li
   { prefix: "grimoire_", events: "Dias de estudo no Grimório", module: "Grimório", link: "/grimorio" },
   { prefix: "journal_", events: "Registros do Diário (só contagens, nunca o texto)", module: "Diário", link: "/diario" },
   { prefix: "quests_", events: "Quests resgatadas no Quadro de Avisos", module: "Quadro de Avisos", link: "/quests" },
+  { prefix: "reading_", events: "Sessões e trilhas de leitura", module: "Biblioteca", link: "/biblioteca" },
+  { prefix: "life_admin_", events: "Compromissos resolvidos e documentos guardados", module: "Administração", link: "/administracao" },
   { prefix: MASTERY_METRIC, events: "Conquistas oficiais desbloqueadas", module: "Conquistas", link: "/conquistas" },
 ];
 

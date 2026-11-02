@@ -22,6 +22,9 @@ import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { ReadingYearGoalCard } from "@/components/biblioteca/ReadingYearGoalCard";
 import { QuoteWall } from "@/components/biblioteca/QuoteWall";
 import { BookRecommendations } from "@/components/biblioteca/BookRecommendations";
+import { useTheme } from "@/hooks/useTheme";
+import { LIBRARY_TABS, LibraryShell } from "@/components/routine/RoutineShells";
+import { useUrlTab } from "@/components/hero/HeroShared";
 
 const STATUS_TABS: Array<{ value: BookStatus | "Todos"; label: string }> = [
   { value: "Todos", label: "Todos" },
@@ -88,6 +91,9 @@ export function BibliotecaPage() {
   const [sort, setSort] = useState<SortKey>("recentes");
   const [view, setView] = useState<"grade" | "lista">("grade");
   const [modal, setModal] = useState<"none" | "isbn" | "manual">("none");
+  // Biblioteca 3.0 (tema RPG): abas na URL; "Painel completo" mantém a tela anterior.
+  const { isRpg } = useTheme();
+  const [libTab, setLibTab] = useUrlTab(LIBRARY_TABS, "academia");
 
   const { books, isLoading, createBook } = useBooks({
     status: statusFilter === "Todos" ? undefined : statusFilter,
@@ -122,6 +128,8 @@ export function BibliotecaPage() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
+      {isRpg && <LibraryShell tab={libTab} onTab={setLibTab} onManual={() => setModal("manual")} onIsbn={() => setModal("isbn")} />}
+      {!isRpg && (
       <PageHeader
         banner="biblioteca"
         tone="orange"
@@ -139,7 +147,9 @@ export function BibliotecaPage() {
           </>
         }
       />
+      )}
 
+      <div className={isRpg && libTab !== "classico" ? "hidden" : isRpg ? "mt-3" : ""}>
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-5">
@@ -399,6 +409,8 @@ export function BibliotecaPage() {
       <BookRecommendations onAdd={createBook} />
 
       <QuoteWall books={allBooks} />
+
+      </div>
 
       {modal === "isbn" && <IsbnModal onClose={() => setModal("none")} onCreate={createBook} />}
       {modal === "manual" && <ManualBookModal onClose={() => setModal("none")} onCreate={createBook} />}
