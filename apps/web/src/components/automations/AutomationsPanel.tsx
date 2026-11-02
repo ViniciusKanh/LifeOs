@@ -44,6 +44,10 @@ const LABELS: Record<string, { label: string; suffix?: string; min?: number; max
   waterGoalMl: { label: "Meta diária de água", suffix: "ml", min: 1500, max: 4000 },
   sleepGoalMinutes: { label: "Meta de sono", suffix: "min", min: 360, max: 600 },
   weeklyWorkouts: { label: "Treinos por semana", min: 1, max: 7 },
+  // Agenda
+  dayStartHour: { label: "Início da janela de trabalho", suffix: "h", min: 5, max: 12 },
+  dayEndHour: { label: "Fim da janela de trabalho", suffix: "h", min: 13, max: 23 },
+  maxPerDay: { label: "Máximo de missões por dia", min: 1, max: 10 },
 };
 
 const STATUS_UI = {
@@ -154,7 +158,7 @@ function AutomationCard({
   const runs = useAutomationRuns(a.module, history ? a.key : null);
   const configKeys = Object.keys(a.config).filter((k) => k in LABELS);
   const status = a.lastStatus ? STATUS_UI[a.lastStatus] : null;
-  const runnable = a.trigger === "daily" || a.trigger === "weekly" || a.key === "goal_sync" || a.key === "priority_review" || a.key === "forecast" || a.key === "vault_split" || a.key === "health_goals";
+  const runnable = a.trigger === "daily" || a.trigger === "weekly" || a.key === "goal_sync" || a.key === "priority_review" || a.key === "forecast" || a.key === "vault_split" || a.key === "health_goals" || a.trigger === "event";
 
   return (
     <li className={clsx("border-2 bg-rpg-bg-2/70 p-3", a.enabled ? "border-rpg-gold/50" : "border-rpg-border")} style={{ borderRadius: 4 }}>

@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { recordPlanVersion } from "../services/planningHubService.js";
 import { buildProposal, FOCUS_TYPES, getCouncilOverview, MAX_FOCUS, sealPlan, WarCouncilError } from "../services/warCouncilService.js";
 
 /** Conselho de Guerra — planejamento da semana. Só POST /seal grava. */
@@ -64,7 +65,15 @@ warCouncilRouter.post("/seal", async (req, res) => {
   const parsed = sealSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   try {
-    return res.json(await sealPlan(getDb(), req.user!.id, parsed.data));
+    const out = await sealPlan(getDb(), req.user!.id, parsed.data);
+    // Versão do plano (revisão posterior). Falha aqui não desfaz o plano selado.
+    await recordPlanVersion(getDb(), req.user!.id, parsed.data.weekStart, {
+      planned: out.plannedCount,
+      events: out.eventsCreated,
+      focus: parsed.data.focus.length,
+      assignments: parsed.data.assignments,
+    }).catch((err: unknown) => console.warn("[conselho] versão do plano não gravada:", err instanceof Error ? err.message : "erro"));
+    return res.json(out);
   } catch (err) {
     return fail(res, err);
   }

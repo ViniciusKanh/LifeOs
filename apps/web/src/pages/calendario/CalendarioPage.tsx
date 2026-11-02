@@ -4,6 +4,8 @@ import { Check, ChevronLeft, ChevronRight, Copy, Plus, RefreshCw, Trash2, X } fr
 import { useEvents, useIcsFeed } from "@/hooks/useEvents";
 import { Button, Card, Field, IconBadge } from "@/components/ui/primitives";
 import type { CalendarItem } from "@/types";
+import { useTheme } from "@/hooks/useTheme";
+import { AgendaRpgPage } from "./AgendaRpgPage";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -40,7 +42,7 @@ function buildMonthGrid(year: number, month: number) {
  * a ver prazos de tarefas + eventos do LifeOS direto no app que já usa no
  * dia a dia — somente leitura, sem precisar abrir o LifeOS.
  */
-function IcsSubscribeCard() {
+export function IcsSubscribeCard() {
   const { url, isLoading, regenerate, isRegenerating } = useIcsFeed();
   const [copied, setCopied] = useState(false);
 
@@ -90,7 +92,13 @@ function IcsSubscribeCard() {
   );
 }
 
+/** No tema RPG a Agenda vira a Central Temporal da Jornada; nos demais temas fica o calendário clássico. */
 export function CalendarioPage() {
+  const { isRpg } = useTheme();
+  return isRpg ? <AgendaRpgPage /> : <CalendarioClassico />;
+}
+
+function CalendarioClassico() {
   const navigate = useNavigate();
   const today = new Date();
   const [cursor, setCursor] = useState({ year: today.getUTCFullYear(), month: today.getUTCMonth() });

@@ -8,6 +8,9 @@ import { fmtDay } from "@/components/taverna/tavernFormat";
 import { CouncilFocusStep, CouncilReportStep, MAX_FOCUS } from "@/components/conselho/CouncilSteps";
 import { blockError, CouncilAgendaStep, CouncilDistributionStep, SealSummaryBadges, type Assignments, type BlockDraft } from "@/components/conselho/CouncilPlanSteps";
 import { usePreviousWeekSummary, useWarCouncil } from "@/hooks/useWarCouncil";
+import { useCouncilHub } from "@/hooks/usePlanningHub";
+import { MODULE_ART, ModuleBanner } from "@/components/rpg-modules/ModuleKit";
+import { CampaignsWeek, CouncilGeneral, LoadBalance, PlanVersions, StrategyFlow } from "@/components/council/CouncilRPG";
 import { useRhythm } from "@/hooks/useRhythm";
 import { useWide } from "@/hooks/useWide";
 import type { CouncilFocusRef, CouncilProposal } from "@/services/warCouncilService";
@@ -58,6 +61,7 @@ export function ConselhoPage() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRender = useRef(true);
   const desktop = useWide("(min-width: 1024px)");
+  const { data: councilHub } = useCouncilHub();
 
   const { overview, proposal: proposalMutation, seal } = useWarCouncil(weekParam);
   const data = overview.data;
@@ -200,13 +204,26 @@ export function ConselhoPage() {
 
   return (
     <div className="w-full px-4 md:px-6 lg:px-8 py-6 space-y-4">
-      <RPGPageHeader
-        banner="revisoes"
-        size="md"
-        eyebrow="Planejamento da semana"
+      <ModuleBanner
+        eyebrow="Estratégia semanal"
         title="Conselho de Guerra"
-        subtitle="Escolha os focos, distribua as missões pelos dias que cabem de verdade e sele o plano da semana."
-        aside={weekSwitcher}
+        subtitle="Planeje sua semana, distribua suas forças, defina prioridades e vença seus desafios."
+        mage={`${MODULE_ART}/council/banner-mage.webp`}
+        scene={`${MODULE_ART}/council/banner-scene.webp`}
+        actions={weekSwitcher}
+        aside={
+          <section className="rpg-panel rpg-panel-gold rpg-parchment p-3" aria-label="Plano semanal">
+            <p className="rpg-title text-sm font-bold uppercase">Plano semanal</p>
+            <ul className="mt-1 space-y-0.5 text-[12.5px]">
+              {STEPS.map((s, i) => (
+                <li key={s.id} className="flex items-center gap-1.5">
+                  <span aria-hidden>{data?.plan?.sealedAt || (visited.has(i) && i < step) ? "☑" : "☐"}</span> {s.label}
+                </li>
+              ))}
+            </ul>
+            {councilHub && <p className="mt-1 text-[10.5px] opacity-80">{councilHub.sealedTotal} plano(s) selado(s) no total.</p>}
+          </section>
+        }
       />
 
       <RPGHowItWorks
@@ -237,7 +254,17 @@ export function ConselhoPage() {
         </RPGPanel>
       )}
 
-      <TavernStepper steps={STEPS} current={step} visited={visited} onSelect={go} label="Passos do Conselho de Guerra" />
+      {councilHub && (
+        <div className="grid items-start gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(280px,0.9fr)]">
+          <CampaignsWeek hub={councilHub} />
+          <LoadBalance hub={councilHub} />
+          <CouncilGeneral />
+        </div>
+      )}
+
+      <section className="rpg-panel p-3" aria-label="Fluxo estratégico">
+        <StrategyFlow step={step} visited={visited} sealed={!!data?.plan?.sealedAt} onSelect={go} labels={STEPS.map((s) => s.label)} />
+      </section>
 
       <section aria-labelledby="conselho-passo-titulo" className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -381,6 +408,8 @@ export function ConselhoPage() {
           </RPGButton>
         </nav>
       )}
+
+      {councilHub && <PlanVersions hub={councilHub} />}
 
       <RPGToast message={toast?.text ?? null} tone={toast?.tone} onClose={() => setToast(null)} />
     </div>

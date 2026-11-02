@@ -6,7 +6,7 @@ import { getDb } from "../db/client.js";
 import { getBankHub } from "../services/bankHubService.js";
 import { applyStageTemplate, createStage, decideStudyPlan, deleteStage, getEducationHub, runWeeklyStudyPlan, updateStage } from "../services/educationHubService.js";
 import { getHealthHub } from "../services/healthHubService.js";
-import { askAdvisor } from "../services/moduleAdvisorService.js";
+import { askAdvisor, type AdvisorModule } from "../services/moduleAdvisorService.js";
 import { automationConfig } from "../services/automationService.js";
 
 /**
@@ -25,10 +25,10 @@ moduleHubRouter.get("/education", async (req, res) => res.json(await getEducatio
 moduleHubRouter.get("/health", async (req, res) => res.json(await getHealthHub(getDb(), req.user!.id)));
 
 const advisorSchema = z.object({ useAi: z.boolean().default(false), question: z.string().max(400).optional(), research: z.boolean().optional() });
-moduleHubRouter.post("/:module(bank|education|health)/advisor", aiRateLimit(), async (req, res) => {
+moduleHubRouter.post("/:module(bank|education|health|agenda|council|missions|quests)/advisor", aiRateLimit(), async (req, res) => {
   const body = advisorSchema.safeParse(req.body ?? {});
   if (!body.success) return res.status(400).json({ error: "Pergunta inválida." });
-  const module = req.params.module as "bank" | "education" | "health";
+  const module = req.params.module as AdvisorModule;
   if (module === "education" && body.data.research) {
     const a = await automationConfig(getDb(), req.user!.id, "education", "research_assistant");
     if (!a.enabled) return res.status(403).json({ error: "O Assistente de pesquisa está desligado nas automações." });

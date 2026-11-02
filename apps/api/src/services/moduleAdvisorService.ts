@@ -4,6 +4,7 @@ import { generateText, getGeminiConfig } from "./geminiService.js";
 import { getBankHub } from "./bankHubService.js";
 import { getEducationHub } from "./educationHubService.js";
 import { getHealthHub } from "./healthHubService.js";
+import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./planningHubService.js";
 
 /**
  * Conselheiros dos módulos (Banco, Educação, Saúde).
@@ -15,7 +16,7 @@ import { getHealthHub } from "./healthHubService.js";
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -32,6 +33,10 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   bank: "Moedas virtuais do LifeOS — não é dinheiro real nem recomendação financeira.",
   education: "Rank e sugestões de jogo — não substituem orientação acadêmica. Referências nunca são inventadas.",
   health: "Gamificação de autocuidado, não diagnóstico. Em caso de sintomas ou dúvidas, procure um profissional de saúde.",
+  agenda: "Sugestões de horário — nada é reagendado sem a sua aprovação.",
+  council: "Plano proposto a partir dos seus registros; você decide o que selar.",
+  missions: "Subtarefas e prioridades sugeridas só são salvas com a sua aprovação.",
+  quests: "As recompensas seguem as regras do Quadro de Avisos — a IA não cria quests nem XP.",
 };
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -88,6 +93,63 @@ async function healthFacts(db: Client, ownerId: string): Promise<{ items: Adviso
   return { items, insufficient: dataDays < 3 };
 }
 
+
+async function agendaFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getAgendaHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [
+    { kind: "dado", text: `Semana: ${i.eventsWeek} compromisso(s)/prazo(s), ${hm(i.plannedMinutes)} planejadas, ${i.focusBlocks} bloco(s) de foco agendado(s).` },
+  ];
+  if (i.completionPct != null) items.push({ kind: "dado", text: `Cumprimento das missões planejadas até hoje: ${i.completionPct}%.` });
+  if (h.conflicts.length > 0) {
+    const c = h.conflicts[0]!;
+    items.push({ kind: "inferencia", text: `${h.conflicts.length} conflito(s) de horário. “${c.a.title}” e “${c.b.title}” se sobrepõem ${c.overlapMinutes} min.` });
+    if (c.suggestion) items.push({ kind: "sugestao", text: `Mover “${c.b.title}” para ${c.suggestion.start}–${c.suggestion.end} resolve o primeiro conflito.` });
+  }
+  const overdue = h.tower.filter((b) => b.overdue).length;
+  if (overdue) items.push({ kind: "sugestao", text: `${overdue} missão(ões) planejada(s) em dias anteriores ainda abertas — use o Replanejamento para redistribuir.` });
+  const loose = h.tower.filter((b) => b.kind === "task").length;
+  if (loose) items.push({ kind: "sugestao", text: `${loose} missão(ões) de hoje sem horário. Reserve um bloco de foco na Torre do Tempo.` });
+  if (i.plannedMinutes > 50 * 60) items.push({ kind: "inferencia", text: "Mais de 50h planejadas na semana — risco de sobrecarga." });
+  return { items, insufficient: i.eventsWeek === 0 && h.tower.length === 0 };
+}
+
+async function councilFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getCouncilHub(db, ownerId);
+  const l = h.load;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `Capacidade livre declarada na semana: ${hm(l.freeMinutes)} · missões planejadas: ${hm(l.plannedMinutes)}.` }];
+  if (l.occupancyPct != null) items.push({ kind: "inferencia", text: l.overloaded ? `Ocupação de ${l.occupancyPct}%: o plano passa da capacidade. Tire ou adie missões de menor prioridade.` : `Ocupação de ${l.occupancyPct}% da capacidade.` });
+  else items.push({ kind: "inferencia", text: "Sem capacidade declarada no Capacity Planner — não dá para medir sobrecarga com segurança." });
+  if (l.unestimatedTasks) items.push({ kind: "sugestao", text: `${l.unestimatedTasks} missão(ões) planejada(s) sem estimativa de tempo. Estimar ajuda a equilibrar os dias.` });
+  const heavy = l.byDay.filter((d) => d.freeMinutes > 0 && d.plannedMinutes > d.freeMinutes);
+  if (heavy.length) items.push({ kind: "sugestao", text: `Dias acima da capacidade: ${heavy.map((d) => d.date.slice(8, 10) + "/" + d.date.slice(5, 7)).join(", ")}.` });
+  const stalled = h.campaigns.filter((c) => c.status === "active" && c.total > 0 && c.pct < 30);
+  if (stalled.length) items.push({ kind: "sugestao", text: `Campanha com pouco avanço: ${stalled[0]!.title} (${stalled[0]!.pct}%). Considere torná-la um dos focos.` });
+  return { items, insufficient: l.plannedMinutes === 0 && h.campaigns.length === 0 };
+}
+
+async function missionsFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getMissionsHub(db, ownerId);
+  const l = h.load;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `${l.pending} missão(ões) abertas, ${l.overdue} atrasada(s), ${hm(l.pendingEstimateMinutes)} estimadas.` }];
+  if (h.featured) items.push({ kind: "sugestao", text: `Próxima ação: “${h.featured.title}”${h.featured.overdue ? " (atrasada)" : ""}${h.featured.subtasks.total ? ` — ${h.featured.subtasks.done}/${h.featured.subtasks.total} subtarefas` : ""}.` });
+  if (l.occupancyPct != null && l.occupancyPct > 100) items.push({ kind: "inferencia", text: `O estimado (${hm(l.pendingEstimateMinutes)}) passa da capacidade livre do resto da semana (${hm(l.freeMinutesRestOfWeek)}).` });
+  if (l.unestimated) items.push({ kind: "sugestao", text: `${l.unestimated} missão(ões) sem estimativa — o Mestre de Missões pode dividir as maiores.` });
+  if (h.combo.current > 0) items.push({ kind: "dado", text: `Combo de execução: ${h.combo.current} dia(s) seguido(s) (recorde ${h.combo.best}).` });
+  return { items, insufficient: l.pending === 0 };
+}
+
+async function questsFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getGuildHub(db, ownerId);
+  const items: AdvisorItem[] = [{ kind: "dado", text: `Quests de hoje: ${h.progress.dailyDone}/${h.progress.dailyTotal} · semanais: ${h.progress.weeklyDone}/${h.progress.weeklyTotal}.` }];
+  if (h.chest.claimable.length) items.push({ kind: "sugestao", text: `${h.chest.claimable.length} recompensa(s) prontas no baú (${h.chest.xp} XP). Abra o baú para resgatar.` });
+  const close = [...h.board.daily.quests, ...h.board.weekly.quests].filter((q) => !q.completed && q.target > 0).sort((a, b) => b.progress / b.target - a.progress / a.target)[0];
+  if (close) items.push({ kind: "sugestao", text: `Quest mais perto do fim: ${close.title} (${close.progress}/${close.target}).` });
+  if (h.notices.deadlines.length) items.push({ kind: "dado", text: `Prazo próximo: ${h.notices.deadlines[0]!.title} (${h.notices.deadlines[0]!.date.slice(8, 10)}/${h.notices.deadlines[0]!.date.slice(5, 7)}).` });
+  if (h.notices.reviewsDue) items.push({ kind: "sugestao", text: `${h.notices.reviewsDue} cartão(ões) do Grimório para revisar hoje — costuma valer quest de estudo.` });
+  return { items, insufficient: h.progress.dailyTotal === 0 };
+}
+
 const SCHEMA = {
   type: "object",
   properties: {
@@ -100,7 +162,16 @@ const SCHEMA = {
 };
 
 export async function askAdvisor(db: Client, ownerId: string, module: AdvisorModule, opts: { useAi: boolean; question?: string; research?: boolean }): Promise<AdvisorAnswer> {
-  const base = module === "bank" ? await bankFacts(db, ownerId) : module === "education" ? await educationFacts(db, ownerId, !!opts.research) : await healthFacts(db, ownerId);
+  const loaders: Record<AdvisorModule, () => Promise<{ items: AdvisorItem[]; insufficient: boolean }>> = {
+    bank: () => bankFacts(db, ownerId),
+    education: () => educationFacts(db, ownerId, !!opts.research),
+    health: () => healthFacts(db, ownerId),
+    agenda: () => agendaFacts(db, ownerId),
+    council: () => councilFacts(db, ownerId),
+    missions: () => missionsFacts(db, ownerId),
+    quests: () => questsFacts(db, ownerId),
+  };
+  const base = await loaders[module]();
   const fallback: AdvisorAnswer = { ai: false, items: base.items, disclaimer: DISCLAIMER[module], insufficient: base.insufficient };
   if (!opts.useAi) return fallback;
   const config = await getGeminiConfig();
@@ -110,6 +181,10 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     bank: "As moedas são virtuais (jogo). Não fale de dinheiro real, não prometa rendimentos e não invente números.",
     education: "Nunca invente referências bibliográficas, autores, artigos, resultados científicos ou evidências. Se pedirem fontes, diga para consultar a biblioteca/orientador.",
     health: "Não diagnostique nem infira doenças ou condições psicológicas. Recomendações prudentes e gerais. Nunca incentive excesso de água, restrição de sono ou treino excessivo.",
+    agenda: "Não mova compromissos: apenas sugira horários e justifique com os fatos.",
+    council: "Justifique cada recomendação com os números dados. Não presuma disponibilidade que não esteja nos fatos.",
+    missions: "Não invente prazos ou estimativas; baseie a prioridade nos fatos.",
+    quests: "Não invente quests, recompensas, participantes ou rankings.",
   }[module];
   const prompt = `Você é o conselheiro do LifeOS (módulo ${module}). Responda em português do Brasil, em até 6 itens curtos.
 Use SOMENTE os fatos abaixo (dados reais do usuário). Não crie números novos. ${rules}

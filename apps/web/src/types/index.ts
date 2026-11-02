@@ -992,6 +992,12 @@ export interface CalendarItem {
   sourceType: "manual" | "task" | "goal" | "academic_project";
   sourceId: string | null;
   link: string | null;
+  /** Categoria visual do evento (estudo, foco, saúde...) — eventos antigos vêm como null. */
+  category?: string | null;
+  reminderMinutes?: number | null;
+  /** Bloco planejado para uma missão (Conselho/Agenda). */
+  blockTaskId?: string | null;
+  goalId?: string | null;
 }
 
 /** Uma conquista do catálogo (`achievements`) — se `unlockedAt` existir, o usuário já destravou. */

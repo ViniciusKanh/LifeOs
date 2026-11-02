@@ -14,6 +14,9 @@ export function useAutomations(module: AutomationModule) {
       bank: ["bank", "hub"],
       education: ["educations", "hub"],
       health: ["health", "hub"],
+      agenda: ["events"],
+      missions: ["tasks"],
+      quests: ["gamification", "quests"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

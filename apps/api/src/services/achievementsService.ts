@@ -38,6 +38,9 @@ const METRIC_KEYS = [
   "education_stages_done",
   "sleep_nights_balanced",
   "mood_checkins_total",
+  "weekly_plans_sealed",
+  "quests_claimed_total",
+  "subtasks_done_total",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -119,6 +122,9 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
     "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND (COALESCE(early_withdrawn, 0) = 0 OR COALESCE(actual_payout, net_payout) > amount)",
   );
   addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= due_at");
+  addScalar("weekly_plans_sealed", "SELECT COUNT(*) FROM weekly_plans WHERE owner_id = ? AND sealed_at IS NOT NULL");
+  addScalar("quests_claimed_total", "SELECT COUNT(*) FROM quest_assignments WHERE owner_id = ? AND claimed_at IS NOT NULL");
+  addScalar("subtasks_done_total", "SELECT COUNT(*) FROM subtasks WHERE owner_id = ? AND done = 1");
   addScalar("bank_deposits_total", "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ?");
   addScalar("educations_total", "SELECT COUNT(*) FROM educations WHERE owner_id = ?");
   addScalar("educations_completed", "SELECT COUNT(*) FROM educations WHERE owner_id = ? AND progress_pct >= 100");

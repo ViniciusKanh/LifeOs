@@ -31,7 +31,10 @@ import { useTasks } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
 import { Button, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { useTheme } from "@/hooks/useTheme";
-import { RPGButton, RPGIconSlot, RPGPageHeader, RPGPanel, RPGQuestCard } from "@/components/rpg";
+import { RPGButton, RPGIconSlot, RPGPageHeader, RPGPanel, RPGQuestCard, RPGToast } from "@/components/rpg";
+import { useMissionsHub } from "@/hooks/usePlanningHub";
+import { MODULE_ART, ModuleBanner } from "@/components/rpg-modules/ModuleKit";
+import { DailyCombo, ExecutorRankPanel, MissionLoad, MissionMaster, MissionsAutomationsAndAdvisor, TierCounts } from "@/components/missions/MissionsRPG";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskCard } from "@/components/tasks/TaskCard";
@@ -93,6 +96,8 @@ export function TarefasPage() {
   const { projects } = useProjects();
   const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<View>(readView);
+  const { data: missionsHub } = useMissionsHub();
+  const [hubToast, setHubToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [priorities, setPriorities] = useState<Set<Task["priority"]>>(new Set());
   const [quick, setQuick] = useState<QuickFilter | null>(null);
@@ -227,19 +232,8 @@ export function TarefasPage() {
     return createTask({ ...input, status: input.status ?? modal.initialStatus });
   };
 
-  return (
-    <div className="w-full px-4 py-6 md:px-8 md:py-8">
-      {isRpg ? (
-        <RPGPageHeader
-          banner="missoes"
-          size="md"
-          leading={<RPGIconSlot icon={<ScrollText size={26} />} />}
-          eyebrow="Quadro de missões"
-          title="Missões"
-          subtitle="Organize suas missões e avance na sua jornada. Grandes conquistas começam com pequenas missões."
-          footnote={<span className="italic">&ldquo;{findNavItem("/tarefas")?.item.quote ?? DEFAULT_QUOTE}&rdquo;</span>}
-          actions={
-            <>
+  const missionActions = (
+<>
               <RPGButton variant="secondary" onClick={() => setValuesOpen(true)} title="Definir quanto XP e moedas cada missão vale">
                 <Scale size={15} /> Valor das missões
               </RPGButton>
@@ -250,9 +244,22 @@ export function TarefasPage() {
                 <Plus size={15} /> Nova missão
               </RPGButton>
             </>
-          }
-          className="mb-4"
-        />
+  );
+
+  return (
+    <div className="w-full px-4 py-6 md:px-8 md:py-8">
+      {isRpg ? (
+        <div className="mb-4">
+          <ModuleBanner
+            eyebrow="Central de execução"
+            title="Missões da Jornada"
+            subtitle="Transforme suas metas, hábitos e projetos em missões épicas com recompensas reais."
+            mage={`${MODULE_ART}/missions/banner-mage.webp`}
+            scene={`${MODULE_ART}/missions/banner-scene.webp`}
+            actions={<>{missionActions}</>}
+            aside={missionsHub ? <ExecutorRankPanel hub={missionsHub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
+          />
+        </div>
       ) : (
         <PageHeader
           icon={<ListChecks size={20} />}
@@ -269,6 +276,17 @@ export function TarefasPage() {
             </>
           }
         />
+      )}
+
+      {isRpg && missionsHub && (
+        <div className="mb-4 space-y-3">
+          <TierCounts hub={missionsHub} />
+          <div className="grid items-start gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <MissionMaster hub={missionsHub} onToast={(m) => setHubToast(m)} />
+            <DailyCombo hub={missionsHub} />
+            <MissionLoad hub={missionsHub} />
+          </div>
+        </div>
       )}
 
       {/* Resumo: missão principal + filtros rápidos clicáveis */}
@@ -575,6 +593,12 @@ export function TarefasPage() {
         </Modal>
       )}
       {modal.open && <TaskModal task={modal.task} statusOptions={COLUMNS} onClose={close} onSave={handleSave} onDelete={removeTask} />}
+      {isRpg && (
+        <div className="mt-4">
+          <MissionsAutomationsAndAdvisor />
+        </div>
+      )}
+      <RPGToast message={hubToast} onClose={() => setHubToast(null)} />
     </div>
   );
 }

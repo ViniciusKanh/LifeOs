@@ -9,6 +9,7 @@ import { daysLeftLabel, fmtShortDay } from "@/components/quests/questFormat";
 import { useQuests } from "@/hooks/useQuests";
 import { useTheme } from "@/hooks/useTheme";
 import type { Quest } from "@/services/questsService";
+import { GuildRpgPage } from "./GuildRpgPage";
 
 function QuestList({ quests, children }: { quests: Quest[]; children: (q: Quest) => ReactNode }) {
   if (quests.length === 0) return <p className="text-sm text-rpg-muted">Nenhuma quest neste período.</p>;
@@ -20,7 +21,13 @@ function QuestList({ quests, children }: { quests: Quest[]; children: (q: Quest)
  * realmente usa, com meta no seu ritmo recente. Progresso sempre dos dados
  * reais; resgatar concede XP bônus. Abaixo, a Temporada do mês.
  */
+/** No tema RPG o quadro vira a Guilda de Quests completa; nos demais temas fica o quadro clássico. */
 export function QuestsPage() {
+  const { isRpg } = useTheme();
+  return isRpg ? <GuildRpgPage /> : <QuestsClassico />;
+}
+
+function QuestsClassico() {
   const { isRpg } = useTheme();
   const { data, isLoading, isError, refetch, isFetching, claim, reroll } = useQuests();
   const [toast, setToast] = useState<{ text: string; tone: "success" | "error" } | null>(null);

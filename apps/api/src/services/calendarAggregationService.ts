@@ -12,6 +12,12 @@ export interface CalendarItem {
   sourceType: "manual" | "task" | "goal" | "academic_project";
   sourceId: string | null;
   link: string | null;
+  /** Categoria visual (estudo, foco, saúde...) — eventos antigos vêm como null. */
+  category?: string | null;
+  reminderMinutes?: number | null;
+  /** Bloco planejado para uma missão (Conselho/Agenda): id da tarefa. */
+  blockTaskId?: string | null;
+  goalId?: string | null;
 }
 
 /**
@@ -53,6 +59,11 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
     starts_at: string;
     ends_at: string | null;
     all_day: number;
+    source_type?: string | null;
+    source_id?: string | null;
+    category?: string | null;
+    reminder_minutes?: number | null;
+    goal_id?: string | null;
   }>) {
     items.push({
       id: row.id,
@@ -63,7 +74,11 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
       allDay: !!row.all_day,
       sourceType: "manual",
       sourceId: null,
-      link: null,
+      link: row.source_type === "task" ? "/tarefas" : null,
+      category: row.category ?? (row.source_type === "task" ? "missao" : null),
+      reminderMinutes: row.reminder_minutes ?? null,
+      blockTaskId: row.source_type === "task" ? (row.source_id ?? null) : null,
+      goalId: row.goal_id ?? null,
     });
   }
   for (const row of tasks.rows as unknown as Array<{ id: string; title: string; due_date: string }>) {
