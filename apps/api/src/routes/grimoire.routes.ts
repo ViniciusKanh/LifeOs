@@ -20,6 +20,7 @@ import {
   updateDeck,
 } from "../services/grimoireService.js";
 import { proposeCards } from "../services/grimoireAIService.js";
+import { IMPORT_LIMITS, decideSuggestions, explainOracle, getGrimoireHub, importContent, listImports, listSuggestions, queueSuggestions } from "../services/grimoireHubService.js";
 
 /**
  * Grimório de Memorização (repetição espaçada). Toda rota é do usuário
@@ -41,6 +42,12 @@ const deckSchema = z.object({
   courseId: optionalId,
   bookId: optionalId,
   newPerDay: z.number().int().min(0).max(200).optional(),
+  goalId: optionalId,
+  goalSyncMode: z.enum(["study_days", "mastery", "none"]).optional(),
+  sources: z
+    .array(z.object({ title: z.string().trim().min(1).max(200), url: z.string().trim().url("Link inválido.").max(500).nullable().optional() }))
+    .max(20)
+    .optional(),
 });
 const deckPatchSchema = deckSchema.partial().extend({ archived: z.boolean().optional() });
 
@@ -53,7 +60,7 @@ const createCardsSchema = z.object({
   source: z.enum(["manual", "ai"]).default("manual"),
 });
 const cardPatchSchema = cardSchema.partial().extend({ deckId: id.optional() });
-const reviewSchema = z.object({ quality: z.number().int().min(0).max(5) });
+const reviewSchema = z.object({ quality: z.number().int().min(0).max(5), durationMs: z.number().int().min(0).max(3_600_000).optional() });
 const fromNoteSchema = z.object({ noteId: id, deckId: id, front: z.string().trim().max(2000).optional(), back: z.string().trim().max(4000).optional() });
 
 const generateSchema = z.object({
@@ -194,7 +201,7 @@ grimoireRouter.post("/cards/:id/review", async (req, res) => {
   const parsed = reviewSchema.safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, parsed.error);
   try {
-    return res.json(await reviewCard(getDb(), req.user!.id, req.params.id, parsed.data.quality));
+    return res.json(await reviewCard(getDb(), req.user!.id, req.params.id, parsed.data.quality, new Date(), parsed.data.durationMs ?? null));
   } catch (e) {
     return fail(res, e);
   }
@@ -220,4 +227,112 @@ grimoireRouter.post("/generate", aiRateLimit(), async (req, res) => {
   const result = await proposeCards(getDb(), req.user!.id, parsed.data.source, { count: parsed.data.count });
   if (!result.ok) return res.status(result.status).json({ error: result.message });
   return res.json(result.data);
+});
+
+// ---------------- Grimório 2.0 ----------------
+
+/** GET /api/grimoire/hub — indicadores, ritual, oráculo, mapa do domínio e conquistas (dados reais). */
+grimoireRouter.get("/hub", async (req, res) => {
+  try {
+    return res.json(await getGrimoireHub(getDb(), req.user!.id));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+/** POST /api/grimoire/oracle/explain — a IA explica as recomendações já calculadas (opcional). */
+grimoireRouter.post("/oracle/explain", aiRateLimit(), async (req, res) => {
+  const r = await explainOracle(getDb(), req.user!.id);
+  if (!r.ok) return res.status(r.status).json({ error: r.message });
+  return res.json({ text: r.text });
+});
+
+/** Cartões "a reforçar" de um baralho (lapsos ou facilidade baixa) — para a sessão "Revisar difíceis". */
+grimoireRouter.get("/decks/:id/hard", async (req, res) => {
+  try {
+    const db = getDb();
+    const r = await db.execute({
+      sql: `SELECT c.*, d.name AS deck_name FROM flashcards c JOIN flashcard_decks d ON d.id = c.deck_id AND d.owner_id = c.owner_id
+            WHERE c.owner_id = ? AND c.deck_id = ? AND c.last_reviewed_at IS NOT NULL AND (c.lapses >= 1 OR c.ease <= 2.1)
+            ORDER BY c.lapses DESC, c.ease ASC LIMIT 50`,
+      args: [req.user!.id, req.params.id],
+    });
+    return res.json(
+      (r.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+        id: String(row.id),
+        deckId: String(row.deck_id),
+        deckName: String(row.deck_name),
+        front: String(row.front),
+        back: String(row.back),
+        source: String(row.source),
+        sourceNoteId: row.source_note_id ? String(row.source_note_id) : null,
+        ease: Number(row.ease),
+        intervalDays: Number(row.interval_days),
+        repetitions: Number(row.repetitions),
+        lapses: Number(row.lapses),
+        dueDate: String(row.due_date),
+        isNew: false,
+        lastReviewedAt: row.last_reviewed_at ? String(row.last_reviewed_at) : null,
+        createdAt: String(row.created_at),
+      })),
+    );
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+const importSchema = z
+  .object({
+    title: z.string().trim().min(1, "Dê um título à importação.").max(160),
+    kind: z.enum(["text", "pdf"]),
+    text: z.string().max(IMPORT_LIMITS.maxTextChars, "Texto muito longo (máx. 40.000 caracteres).").optional(),
+    pdfBase64: z.string().max(Math.ceil((IMPORT_LIMITS.maxPdfBytes * 4) / 3) + 16, "PDF muito grande (máx. 3 MB).").optional(),
+    deckId: optionalId,
+  })
+  .refine((v) => (v.kind === "text" ? !!v.text : !!v.pdfBase64), { message: "Envie o texto ou o PDF." });
+
+/** POST /api/grimoire/import — documento → resumo → cartões sugeridos (fila de aprovação). */
+grimoireRouter.post("/import", aiRateLimit(), async (req, res) => {
+  const parsed = importSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return bad(res, parsed.error);
+  const r = await importContent(getDb(), req.user!.id, { ...parsed.data, pdfBase64: parsed.data.pdfBase64?.replace(/^data:application\/pdf;base64,/, "") });
+  if (!r.ok) return res.status(r.status).json({ error: r.message, importId: r.importId ?? null });
+  return res.json(r);
+});
+
+grimoireRouter.get("/imports", async (req, res) => res.json(await listImports(getDb(), req.user!.id)));
+grimoireRouter.get("/suggestions", async (req, res) => res.json(await listSuggestions(getDb(), req.user!.id)));
+
+const decideSchema = z.object({
+  approve: z.array(z.object({ id, front: z.string().trim().max(2000).optional(), back: z.string().trim().max(4000).optional() })).max(200).default([]),
+  reject: z.array(id).max(200).default([]),
+  deckId: optionalId,
+});
+
+/** POST /api/grimoire/suggestions/decide — aprova (cria cartões) e/ou rejeita sugestões. */
+grimoireRouter.post("/suggestions/decide", async (req, res) => {
+  const parsed = decideSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return bad(res, parsed.error);
+  try {
+    return res.json(await decideSuggestions(getDb(), req.user!.id, parsed.data));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+/** POST /api/grimoire/suggestions/from-journal — a IA lê uma entrada do Diário e propõe cartões (vão para aprovação). */
+grimoireRouter.post("/suggestions/from-journal", aiRateLimit(), async (req, res) => {
+  const parsed = z.object({ entryDate: dayKey, deckId: optionalId }).safeParse(req.body ?? {});
+  if (!parsed.success) return bad(res, parsed.error);
+  const db = getDb();
+  const r = await proposeCards(db, req.user!.id, { kind: "journal", entryDate: parsed.data.entryDate }, { count: 6 });
+  if (!r.ok) return res.status(r.status).json({ error: r.message });
+  const added = await queueSuggestions(db, req.user!.id, {
+    deckId: parsed.data.deckId ?? null,
+    sourceKind: "journal",
+    sourceRef: parsed.data.entryDate,
+    sourceLabel: r.data.basedOn,
+    cards: r.data.suggestions,
+  });
+  return res.json({ added });
 });

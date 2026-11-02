@@ -69,11 +69,18 @@ export function NavGroups({
   onNavigate,
   layoutPrefix,
   badges,
+  animated = true,
 }: {
   groups: NavGroup[];
   compact: boolean;
   onNavigate?: () => void;
   layoutPrefix: string;
+  /**
+   * Indicador ativo deslizante (layoutId) e grupos animados. Desligado na
+   * gaveta mobile: elementos com layoutId dentro de um painel que desmonta
+   * podiam travar a animação de saída e a gaveta "não fechava".
+   */
+  animated?: boolean;
   /** Indicador de pendência por rota (ex.: "/banco" → 2 investimentos prontos) — sempre dado real, nunca decorativo. */
   badges?: Record<string, number>;
 }) {
@@ -139,7 +146,7 @@ export function NavGroups({
             <AnimatePresence initial={false}>
               {isOpen && (
                 <motion.ul
-                  initial={{ height: 0, opacity: 0 }}
+                  initial={animated ? { height: 0, opacity: 0 } : false}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
@@ -175,14 +182,14 @@ export function NavGroups({
                           <>
                             {isActive && (
                               <motion.span
-                                layoutId={`${layoutPrefix}-active`}
+                                layoutId={animated ? `${layoutPrefix}-active` : undefined}
                                 className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-500/[0.12] to-brand-500/[0.03] dark:from-brand-500/25 dark:to-brand-500/5 ring-1 ring-brand-500/15 rpg:from-rpg-blue/55 rpg:to-rpg-purple/30 rpg:ring-2 rpg:ring-rpg-gold/80 rpg:shadow-[inset_0_1px_0_rgb(255_255_255/0.15)]"
                                 transition={{ type: "spring", stiffness: 420, damping: 36 }}
                               />
                             )}
                             {isActive && !compact && (
                               <motion.span
-                                layoutId={`${layoutPrefix}-rail`}
+                                layoutId={animated ? `${layoutPrefix}-rail` : undefined}
                                 className="absolute -left-3 lg:-left-4 top-2 bottom-2 w-[3px] rounded-r-full bg-gradient-to-b from-brand-500 to-signal rpg:from-rpg-gold-light rpg:to-rpg-gold"
                               />
                             )}

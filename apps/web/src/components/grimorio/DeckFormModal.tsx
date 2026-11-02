@@ -4,8 +4,9 @@ import { Modal, FormRow, inputClass } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/primitives";
 import { useBooks } from "@/hooks/useBooks";
 import { useEducations } from "@/hooks/useEducations";
+import { useGoals } from "@/hooks/useGoals";
 import { educationService } from "@/services/educationService";
-import type { DeckInput, GrimoireDeck } from "@/services/grimoireService";
+import type { DeckInput, DeckSource, GoalSyncMode, GrimoireDeck } from "@/services/grimoireService";
 import { errorMessage, selectClass, textareaClass } from "./grimoireUi";
 
 type LinkKind = "none" | "subject" | "book";
@@ -33,6 +34,9 @@ export function DeckFormModal({
   const [linkKind, setLinkKind] = useState<LinkKind>("none");
   const [subjectId, setSubjectId] = useState("");
   const [bookId, setBookId] = useState("");
+  const [goalId, setGoalId] = useState("");
+  const [goalSyncMode, setGoalSyncMode] = useState<GoalSyncMode>("study_days");
+  const [sources, setSources] = useState<DeckSource[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -45,10 +49,16 @@ export function DeckFormModal({
     setSubjectId(src.subjectId ?? "");
     setBookId(src.bookId ?? "");
     setLinkKind(src.subjectId ? "subject" : src.bookId ? "book" : "none");
+    setGoalId(src.goalId ?? "");
+    setGoalSyncMode(src.goalSyncMode ?? "study_days");
+    setSources(src.sources ?? []);
     setError(null);
   }, [open, deck, prefill]);
 
   const { books } = useBooks();
+  const { goals } = useGoals();
+  const activeGoals = goals.filter((g) => g.status === "active");
+  const selectedGoal = activeGoals.find((g) => g.id === goalId);
   const { educations } = useEducations();
   // Disciplinas de todas as formações (só carrega quando o vínculo for "disciplina").
   const subjectQueries = useQueries({
@@ -81,6 +91,9 @@ export function DeckFormModal({
         subjectId: linkKind === "subject" ? subjectId : null,
         courseId: linkKind === "subject" ? (subject?.courseId ?? prefill?.courseId ?? deck?.courseId ?? null) : null,
         bookId: linkKind === "book" ? bookId : null,
+        goalId: goalId || null,
+        goalSyncMode,
+        sources: sources.filter((x) => x.title.trim()).map((x) => ({ title: x.title.trim(), url: x.url?.trim() || null })),
       });
       onClose();
     } catch (err) {
@@ -153,6 +166,75 @@ export function DeckFormModal({
             </select>
           </FormRow>
         )}
+        {/* Grimório ↔ Metas: o estudo deste baralho pode avançar uma meta. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormRow label="Meta que este baralho alimenta (opcional)" htmlFor="deck-goal">
+            <select id="deck-goal" className={selectClass} value={goalId} onChange={(e) => setGoalId(e.target.value)}>
+              <option value="">Nenhuma</option>
+              {activeGoals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.title}
+                </option>
+              ))}
+            </select>
+          </FormRow>
+          {goalId && (
+            <FormRow
+              label="Como avança a meta"
+              htmlFor="deck-goal-mode"
+              hint={
+                goalSyncMode === "study_days"
+                  ? selectedGoal?.kind === "numeric"
+                    ? "+1 na meta por dia em que você estudar este baralho."
+                    : "Use em metas numéricas (ex.: 30 dias de estudo). Nas demais, o dia fica só no histórico."
+                  : goalSyncMode === "mastery"
+                    ? selectedGoal?.kind === "percentage"
+                      ? "A meta recebe o % de domínio do baralho."
+                      : "Use em metas de percentual."
+                    : "A meta não é alterada pelo estudo."
+              }
+            >
+              <select id="deck-goal-mode" className={selectClass} value={goalSyncMode} onChange={(e) => setGoalSyncMode(e.target.value as GoalSyncMode)}>
+                <option value="study_days">Dias de estudo</option>
+                <option value="mastery">Domínio do baralho (%)</option>
+                <option value="none">Não sincronizar</option>
+              </select>
+            </FormRow>
+          )}
+        </div>
+        <div>
+          <p className="text-xs font-medium text-slate rpg:text-rpg-muted mb-1.5">Fontes e referências (opcional)</p>
+          <ul className="space-y-1.5">
+            {sources.map((src, i) => (
+              <li key={i} className="flex gap-1.5">
+                <input
+                  className={inputClass}
+                  placeholder="Título (livro, curso, artigo)"
+                  value={src.title}
+                  maxLength={200}
+                  onChange={(e) => setSources((l) => l.map((x, n) => (n === i ? { ...x, title: e.target.value } : x)))}
+                  aria-label="Título da fonte"
+                />
+                <input
+                  className={inputClass}
+                  placeholder="https://… (opcional)"
+                  value={src.url ?? ""}
+                  maxLength={500}
+                  onChange={(e) => setSources((l) => l.map((x, n) => (n === i ? { ...x, url: e.target.value } : x)))}
+                  aria-label="Link da fonte"
+                />
+                <button type="button" className="px-2 text-slate hover:text-drop" onClick={() => setSources((l) => l.filter((_, n) => n !== i))} aria-label="Remover fonte">
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+          {sources.length < 20 && (
+            <button type="button" className="mt-1.5 text-xs font-semibold text-brand-600 rpg:text-rpg-gold-light" onClick={() => setSources((l) => [...l, { title: "", url: "" }])}>
+              + Adicionar fonte
+            </button>
+          )}
+        </div>
         {error && (
           <p role="alert" className="text-xs text-drop rpg:text-rpg-red">
             {error}

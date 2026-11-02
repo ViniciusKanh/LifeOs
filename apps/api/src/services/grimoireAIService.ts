@@ -2,6 +2,7 @@ import type { Client } from "@libsql/client";
 import { z } from "zod";
 import { extractJson } from "./aiJson.js";
 import { generateText, getGeminiConfig } from "./geminiService.js";
+import { stripHtml } from "./journalService.js";
 
 /**
  * Gerador de cartões do Grimório. O Gemini apenas PROPÕE pares
@@ -88,7 +89,8 @@ async function loadMaterial(db: Client, ownerId: string, source: CardGenSource):
     ] as const
   ).filter(([, v]) => v && v.trim());
   if (parts.length === 0) return { ok: false, status: 422, message: "Essa entrada do diário não tem texto suficiente para gerar cartões." };
-  return { text: parts.map(([k, v]) => `${k}: ${v}`).join("\n"), basedOn: `Diário de ${source.entryDate.split("-").reverse().join("/")}` };
+  // O diário é texto rico (HTML do editor): a IA recebe só o texto.
+  return { text: parts.map(([k, v]) => `${k}: ${stripHtml(v)}`).join("\n"), basedOn: `Diário de ${source.entryDate.split("-").reverse().join("/")}` };
 }
 
 /** Dedup + limites: frente/verso não vazios, sem cartões repetidos. Função pura (testada). */

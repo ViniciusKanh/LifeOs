@@ -27,7 +27,7 @@ export function StudySession({
 }: {
   cards: QueueCard[];
   isRpg: boolean;
-  onReview: (cardId: string, quality: number) => Promise<ReviewResult>;
+  onReview: (cardId: string, quality: number, durationMs?: number) => Promise<ReviewResult>;
   onExit: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -37,6 +37,8 @@ export function StudySession({
   const [tally, setTally] = useState({ errei: 0, dificil: 0, bom: 0, facil: 0 });
   const [result, setResult] = useState<{ cleared: boolean; xp: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  // Início da exibição do cartão atual — vira o "tempo estudado" real da revisão.
+  const shownAt = useRef<number>(Date.now());
 
   const done = index >= cards.length;
   const card = done ? null : cards[index];
@@ -48,7 +50,8 @@ export function StudySession({
       setBusy(true);
       setError(null);
       try {
-        const r = await onReview(card.id, g.quality);
+        const r = await onReview(card.id, g.quality, Date.now() - shownAt.current);
+        shownAt.current = Date.now();
         setTally((t) => ({ ...t, [key]: t[key] + 1 }));
         if (r.queueCleared || r.xpAwarded > 0) setResult((prev) => ({ cleared: r.queueCleared || !!prev?.cleared, xp: (prev?.xp ?? 0) + r.xpAwarded }));
         setFlipped(false);

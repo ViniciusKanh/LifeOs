@@ -26,6 +26,11 @@ const METRIC_KEYS = [
   "bank_deposits_claimed",
   "bank_loans_repaid_on_time",
   "bank_credit_score_peak",
+  "flashcard_reviews_total",
+  "grimoire_study_days_total",
+  "flashcards_mature_total",
+  "goals_completed_on_time",
+  "goal_plans_applied",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -85,6 +90,15 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("workouts_total", "SELECT COUNT(*) FROM workouts WHERE owner_id = ?");
   addLocalDay("water_days_total", "SELECT recorded_at AS at FROM water_entries WHERE owner_id = ?", "days");
   addScalar("study_minutes_total", "SELECT COALESCE(SUM(duration_minutes), 0) FROM study_sessions WHERE owner_id = ?");
+  // Grimório e Metas 2.0 — sempre contagens das fontes originais.
+  addScalar("flashcard_reviews_total", "SELECT COUNT(*) FROM flashcard_reviews WHERE owner_id = ?");
+  addScalar("grimoire_study_days_total", "SELECT COUNT(DISTINCT day_key) FROM flashcard_reviews WHERE owner_id = ?");
+  addScalar("flashcards_mature_total", "SELECT COUNT(*) FROM flashcards WHERE owner_id = ? AND interval_days >= 21");
+  addScalar(
+    "goals_completed_on_time",
+    "SELECT COUNT(*) FROM goals WHERE owner_id = ? AND status = 'done' AND due_date IS NOT NULL AND completed_at IS NOT NULL AND date(completed_at) <= date(due_date)",
+  );
+  addScalar("goal_plans_applied", "SELECT COUNT(*) FROM goal_plan_suggestions WHERE owner_id = ? AND status = 'applied' AND kind IN ('weekly', 'replan')");
   addScalar("experiments_completed_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status = 'completed'");
   // Banco: resgates e quitações em dia já existem em bank_deposits/bank_loans (nunca duplicados);
   // o score de crédito é sempre derivado, então o "pico" vem do snapshot diário (bank_credit_score_history).

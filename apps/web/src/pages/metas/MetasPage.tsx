@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -121,11 +122,21 @@ function formatDate(value: string | null) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
 }
 
-export function MetasPage() {
+export function MetasPage({ embedded = false }: { embedded?: boolean } = {}) {
   // Busca todas as metas (não só as de topo) pra poder montar a hierarquia
   // meta/submeta na tela — antes só vinha o topo e a submeta nunca aparecia.
   const { goals: allGoals, stats, createGoal, updateGoal, removeGoal, addProgress, renewGoal } = useGoals();
-  const [modalOpen, setModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [modalOpen, setModalOpenState] = useState(() => searchParams.get("nova") === "1");
+  // ?nova=1 (botão "Nova meta" da Visão Geral) abre o formulário uma vez e sai da URL.
+  const setModalOpen = (open: boolean) => {
+    setModalOpenState(open);
+    if (!open && searchParams.get("nova")) {
+      const p = new URLSearchParams(searchParams);
+      p.delete("nova");
+      setSearchParams(p, { replace: true });
+    }
+  };
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
   // Guilda: meta cujos parceiros estão sendo gerenciados + aviso curto.
@@ -171,8 +182,8 @@ export function MetasPage() {
   };
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 w-full space-y-5">
-      <PageHeader
+    <div className={embedded ? "w-full space-y-5" : "px-4 py-6 md:px-8 md:py-8 w-full space-y-5"}>
+      {!embedded && <PageHeader
         icon={<Flag size={20} />}
         title="Metas"
         subtitle="Transforme planos em conquistas. Metas claras, progresso real."
@@ -181,7 +192,14 @@ export function MetasPage() {
             <Plus size={14} /> Nova meta
           </Button>
         }
-      />
+      />}
+      {embedded && (
+        <div className="flex justify-end">
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus size={14} /> Nova meta
+          </Button>
+        </div>
+      )}
 
       {goals.length === 0 ? (
         <EmptyState

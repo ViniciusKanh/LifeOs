@@ -53,10 +53,32 @@ export function useGrimoireMutations() {
   const deleteCard = useMutation({ mutationFn: (id: string) => grimoireService.deleteCard(id), onSuccess: () => invalidate({ quotes: true }) });
   const cardFromNote = useMutation({ mutationFn: grimoireService.cardFromNote, onSuccess: () => invalidate({ quotes: true }) });
   const review = useMutation({
-    mutationFn: ({ cardId, quality }: { cardId: string; quality: number }) => grimoireService.review(cardId, quality),
+    mutationFn: ({ cardId, quality, durationMs }: { cardId: string; quality: number; durationMs?: number }) => grimoireService.review(cardId, quality, durationMs),
     // A fila é avançada localmente durante a sessão; aqui só atualizamos contagens/estatísticas.
     onSuccess: (r) => invalidate({ xp: r.xpAwarded > 0 }),
   });
   const generate = useMutation({ mutationFn: ({ source, count }: { source: Parameters<typeof grimoireService.generate>[0]; count?: number }) => grimoireService.generate(source, count) });
   return { createDeck, updateDeck, deleteDeck, createCards, updateCard, deleteCard, cardFromNote, review, generate };
+}
+
+export function useGrimoireHub() {
+  return useQuery({ queryKey: [...GRIMOIRE_KEY, "hub"], queryFn: grimoireService.hub, staleTime: 30_000 });
+}
+
+export function useGrimoireSuggestions() {
+  return useQuery({ queryKey: [...GRIMOIRE_KEY, "suggestions"], queryFn: grimoireService.suggestions });
+}
+
+export function useGrimoireImports(enabled = true) {
+  return useQuery({ queryKey: [...GRIMOIRE_KEY, "imports"], queryFn: grimoireService.imports, enabled });
+}
+
+/** Ações do Grimório 2.0 (importar, aprovar sugestões, explicar o oráculo). */
+export function useGrimoireHubActions() {
+  const qc = useQueryClient();
+  const refresh = () => void qc.invalidateQueries({ queryKey: GRIMOIRE_KEY });
+  const importContent = useMutation({ mutationFn: grimoireService.importContent, onSettled: refresh });
+  const decide = useMutation({ mutationFn: grimoireService.decideSuggestions, onSuccess: refresh });
+  const explain = useMutation({ mutationFn: grimoireService.explainOracle });
+  return { importContent, decide, explain };
 }

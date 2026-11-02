@@ -300,7 +300,7 @@ async function markDelivered(db: Db, ownerId: string, eventType: string, sourceI
 }
 
 /** Conteúdo exibível do sino (in_app_notifications) — ver migration 0085. */
-async function recordInAppNotification(db: Db, ownerId: string, eventType: string, input: { title: string; body?: string; url?: string | null }) {
+export async function recordInAppNotification(db: Db, ownerId: string, eventType: string, input: { title: string; body?: string; url?: string | null }) {
   await db.execute({
     sql: `INSERT INTO in_app_notifications (id, owner_id, event_type, title, body, url) VALUES (?, ?, ?, ?, ?, ?)`,
     args: [nanoid(), ownerId, eventType, input.title, input.body ?? null, input.url ?? null],

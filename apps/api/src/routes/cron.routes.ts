@@ -1,5 +1,6 @@
 import { getDb } from "../db/client.js";
 import { runLifeAdminRemindersForAll } from "../services/lifeAdminService.js";
+import { runDueAutomationsForAll } from "../services/automationRunner.js";
 import { Router } from "express";
 import { mondayOf, sendWeeklySummariesToAllOptedIn } from "../services/weeklyEmailService.js";
 import { runTaskDeadlineTriggersForAll, runJournalReminderTriggersForAll, runBankTriggersForAll } from "../services/notificationTriggersService.js";
@@ -49,7 +50,12 @@ cronRouter.get("/notification-triggers", async (req, res) => {
   const lifeAdmin = await runLifeAdminRemindersForAll(getDb());
   // Banco: investimento maturado e empréstimo vencido, no mesmo cron diário.
   const bank = await runBankTriggersForAll();
-  return res.json({ ...result, lifeAdmin, bank });
+  // Automações do Grimório e de Metas agendadas (diárias/semanais), idempotentes por dia/semana.
+  const automations = await runDueAutomationsForAll(getDb()).catch((err) => {
+    console.error("[cron] automações falharam:", err);
+    return { ran: 0, skipped: 0, errors: 1 };
+  });
+  return res.json({ ...result, lifeAdmin, bank, automations });
 });
 
 /**

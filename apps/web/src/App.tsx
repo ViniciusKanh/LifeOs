@@ -60,7 +60,7 @@ const AdminUsuariosPage = lazy(() =>
 );
 const SaudePage = lazy(() => import("@/pages/saude/SaudePage").then((m) => ({ default: m.SaudePage })));
 const HabitosPage = lazy(() => import("@/pages/habitos/HabitosPage").then((m) => ({ default: m.HabitosPage })));
-const MetasPage = lazy(() => import("@/pages/metas/MetasPage").then((m) => ({ default: m.MetasPage })));
+const MetasPage = lazy(() => import("@/pages/metas/MetasHubPage").then((m) => ({ default: m.MetasHubPage })));
 const ExperimentsPage = lazy(() => import("@/pages/experimentos/ExperimentsPage").then((m) => ({ default: m.ExperimentsPage })));
 const ExperimentDetailPage = lazy(() => import("@/pages/experimentos/ExperimentDetailPage").then((m) => ({ default: m.ExperimentDetailPage })));
 const ConquistasPage = lazy(() =>

@@ -1,6 +1,5 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, Menu, X } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,14 +42,29 @@ const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop
  */
 
 
+/**
+ * Gaveta de módulos do celular/tablet. Fica sempre montada e abre/fecha só
+ * por CSS (transform + visibility): sem depender da animação de saída do
+ * AnimatePresence, que em algumas telas travava e deixava a gaveta presa
+ * mesmo tocando no X. Fechada, ela fica `inert` (sem foco nem toque).
+ */
 function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClose: () => void; isAdmin: boolean; badges?: Record<string, number> }) {
   const { mode, cycle } = useTheme();
+  const panelRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
+    const panel = panelRef.current?.parentElement;
+    if (panel) {
+      if (open) panel.removeAttribute("inert");
+      else panel.setAttribute("inert", "");
+    }
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Foco vai para o botão de fechar (acessibilidade de diálogo).
+    window.setTimeout(() => panelRef.current?.querySelector<HTMLButtonElement>("[data-drawer-close]")?.focus(), 50);
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
@@ -58,48 +72,54 @@ function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClo
   }, [open, onClose]);
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="lg:hidden fixed inset-0 z-40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
-          <motion.aside
-            role="dialog"
-            aria-modal="true"
-            aria-label="Menu de módulos"
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 36 }}
-            className="absolute inset-y-0 left-0 w-[86%] max-w-[320px] flex flex-col bg-paper-raised dark:bg-ink-raised shadow-2xl"
+    <div className={`lg:hidden fixed inset-0 z-[45] ${open ? "visible pointer-events-auto" : "invisible pointer-events-none"}`} aria-hidden={!open}>
+      <div
+        className={`absolute inset-0 bg-black/45 backdrop-blur-[2px] transition-opacity duration-200 motion-reduce:transition-none ${open ? "opacity-100" : "opacity-0"}`}
+        onClick={onClose}
+        aria-hidden
+      />
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu de módulos"
+        className={`absolute inset-y-0 left-0 w-[86%] max-w-[320px] flex flex-col bg-paper-raised dark:bg-ink-raised shadow-2xl rpg:bg-rpg-bg-2 rpg:border-r-2 rpg:border-rpg-border transition-transform duration-200 ease-out motion-reduce:transition-none ${open ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <div className="flex items-center justify-between h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] px-4 border-b border-paper-border dark:border-ink-border rpg:border-rpg-border">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px] rpg:hidden">
+              <img src="/logo/icon-64.png" alt="" className="w-full h-full rounded-[10px] object-cover bg-white" />
+            </span>
+            <img src={RPG_LOGO.icon} alt="" loading="lazy" className="hidden rpg:block w-10 h-10 object-contain" />
+            <span className="leading-tight min-w-0">
+              <span className="block font-display font-bold rpg:rpg-title">LifeOS</span>
+              <span className="block text-[10.5px] text-slate truncate">Transforme sua rotina em progresso</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            data-drawer-close
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="w-11 h-11 -mr-2 rounded-xl flex items-center justify-center text-slate hover:bg-black/5 dark:hover:bg-white/10"
+            aria-label="Fechar menu"
           >
-            <div className="flex items-center justify-between h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] px-4 border-b border-paper-border dark:border-ink-border">
-              <div className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-signal p-[2.5px] rpg:hidden">
-                  <img src="/logo/icon-64.png" alt="" className="w-full h-full rounded-[10px] object-cover bg-white" />
-                </span>
-                <img src={RPG_LOGO.icon} alt="" loading="lazy" className="hidden rpg:block w-10 h-10 object-contain" />
-                <span className="leading-tight">
-                  <span className="block font-display font-bold rpg:rpg-title">LifeOS</span>
-                  <span className="block text-[10.5px] text-slate">Transforme sua rotina em progresso</span>
-                </span>
-              </div>
-              <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center text-slate" aria-label="Fechar menu">
-                <X size={18} />
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto px-3 py-2">
-              <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" badges={badges} />
-            </nav>
-            <div className="shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <button type="button" onClick={cycle} className="w-full min-h-[44px] flex items-center gap-2.5 rounded-xl px-3 text-sm text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.05]" aria-label={themeCycleLabel(mode)}>
-                <ThemeCycleIcon mode={mode} size={17} />
-                <span className="truncate">{themeCycleLabel(mode)}</span>
-              </button>
-            </div>
-          </motion.aside>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <X size={20} />
+          </button>
+        </div>
+        <nav className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
+          <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" badges={badges} animated={false} />
+        </nav>
+        <div className="shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button type="button" onClick={cycle} className="w-full min-h-[44px] flex items-center gap-2.5 rounded-xl px-3 text-sm text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.05]" aria-label={themeCycleLabel(mode)}>
+            <ThemeCycleIcon mode={mode} size={17} />
+            <span className="truncate">{themeCycleLabel(mode)}</span>
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -110,6 +130,7 @@ export function AppShell() {
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
   useDesktopNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
   // Indicadores de pendência no menu (ex.: Banco com investimentos prontos ou empréstimo vencido) — sempre dado real.
   const bankPending = useBankPendingCount();
@@ -234,7 +255,7 @@ export function AppShell() {
         {/* navegação inferior mobile (indicador "magic navigation") */}
         <MobileMagicNav onOpenModules={() => setDrawerOpen((v) => !v)} modulesOpen={drawerOpen} />
 
-        <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} isAdmin={isAdmin} badges={navBadges} />
+        <MobileDrawer open={drawerOpen} onClose={closeDrawer} isAdmin={isAdmin} badges={navBadges} />
 
         <TermsGate />
         <AchievementToast />

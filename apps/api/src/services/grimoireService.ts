@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { award, computeStreak, dayKeyIn, todayKeyFor, userTimezone } from "./gamificationService.js";
 import { normalizeStoredUtc } from "./healthService.js";
 import { addDaysToKey, buildDailyQueue, sm2 } from "./srsEngine.js";
+import { getAutomation } from "./automationService.js";
 
 /**
  * Grimório de Memorização — baralhos, cartões, fila do dia, revisões e
@@ -26,6 +27,17 @@ export interface DeckInput {
   courseId?: string | null;
   bookId?: string | null;
   newPerDay?: number;
+  /** Meta que este baralho alimenta (Grimório ↔ Metas). */
+  goalId?: string | null;
+  goalSyncMode?: GoalSyncMode;
+  sources?: DeckSource[];
+}
+
+/** Como o estudo deste baralho avança a meta vinculada. */
+export type GoalSyncMode = "study_days" | "mastery" | "none";
+export interface DeckSource {
+  title: string;
+  url?: string | null;
 }
 
 export interface CardInput {
@@ -48,8 +60,35 @@ export interface Deck {
   newPerDay: number;
   createdAt: string;
   archivedAt: string | null;
-  counts: { total: number; due: number; new: number; mature: number };
+  counts: { total: number; due: number; new: number; mature: number; reinforce: number };
+  goalId: string | null;
+  goalTitle: string | null;
+  goalSyncMode: GoalSyncMode;
+  sources: DeckSource[];
+  /** Próxima data em que algum cartão já estudado vence (null sem histórico). */
+  nextReview: string | null;
+  lastStudiedAt: string | null;
 }
+
+function parseSources(raw: unknown): DeckSource[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v)
+      ? v
+          .map((x) => x as Record<string, unknown>)
+          .filter((x) => typeof x.title === "string" && x.title.trim())
+          .map((x) => ({ title: String(x.title).slice(0, 200), url: typeof x.url === "string" ? x.url.slice(0, 500) : null }))
+          .slice(0, 20)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Cartão "a reforçar": já errado alguma vez ou com facilidade baixa (SM-2). Regra única do Grimório. */
+export const REINFORCE_RULE = { minLapses: 1, maxEase: 2.1 } as const;
+export const isReinforceCard = (c: { lapses: number; ease: number; isNew: boolean }) => !c.isNew && (c.lapses >= REINFORCE_RULE.minLapses || c.ease <= REINFORCE_RULE.maxEase);
 
 export interface Card {
   id: string;
@@ -91,7 +130,11 @@ function mapCard(r: Row): Card {
 }
 
 /** Valida que os vínculos opcionais (disciplina, curso, livro) pertencem ao usuário. */
-async function assertLinksOwned(db: Client, ownerId: string, input: Pick<DeckInput, "subjectId" | "courseId" | "bookId">) {
+async function assertLinksOwned(db: Client, ownerId: string, input: Pick<DeckInput, "subjectId" | "courseId" | "bookId" | "goalId">) {
+  if (input.goalId) {
+    const g = await db.execute({ sql: "SELECT 1 FROM goals WHERE id = ? AND owner_id = ?", args: [input.goalId, ownerId] });
+    if (!g.rows[0]) throw new GrimoireError(404, "Meta não encontrada.");
+  }
   const checks: Array<[string | null | undefined, string, string]> = [
     [input.subjectId, "subjects", "Disciplina não encontrada."],
     [input.courseId, "courses", "Curso não encontrado."],
@@ -134,8 +177,14 @@ export async function listDecks(db: Client, ownerId: string, opts: { includeArch
             (SELECT COUNT(*) FROM flashcards c WHERE c.deck_id = d.id AND c.owner_id = d.owner_id AND c.last_reviewed_at IS NOT NULL AND c.due_date <= ?) AS due,
             (SELECT COUNT(*) FROM flashcards c WHERE c.deck_id = d.id AND c.owner_id = d.owner_id AND c.last_reviewed_at IS NULL) AS fresh,
             (SELECT COUNT(*) FROM flashcards c WHERE c.deck_id = d.id AND c.owner_id = d.owner_id AND c.interval_days >= 21) AS mature,
+            (SELECT COUNT(*) FROM flashcards c WHERE c.deck_id = d.id AND c.owner_id = d.owner_id AND c.last_reviewed_at IS NOT NULL
+               AND (c.lapses >= ${REINFORCE_RULE.minLapses} OR c.ease <= ${REINFORCE_RULE.maxEase})) AS reinforce,
+            (SELECT MIN(c.due_date) FROM flashcards c WHERE c.deck_id = d.id AND c.owner_id = d.owner_id AND c.last_reviewed_at IS NOT NULL) AS next_review,
+            (SELECT MAX(c.last_reviewed_at) FROM flashcards c WHERE c.deck_id = d.id AND c.owner_id = d.owner_id) AS last_studied,
+            g.title AS goal_title,
             ? AS _today
           FROM flashcard_decks d
+          LEFT JOIN goals g ON g.id = d.goal_id AND g.owner_id = d.owner_id
           LEFT JOIN subjects sb ON sb.id = d.subject_id AND sb.owner_id = d.owner_id
           LEFT JOIN courses co ON co.id = d.course_id AND co.owner_id = d.owner_id
           LEFT JOIN books b ON b.id = d.book_id AND b.owner_id = d.owner_id
@@ -156,7 +205,13 @@ export async function listDecks(db: Client, ownerId: string, opts: { includeArch
     newPerDay: Number(row.new_per_day),
     createdAt: String(row.created_at),
     archivedAt: s(row.archived_at),
-    counts: { total: Number(row.total), due: Number(row.due), new: Number(row.fresh), mature: Number(row.mature) },
+    counts: { total: Number(row.total), due: Number(row.due), new: Number(row.fresh), mature: Number(row.mature), reinforce: Number(row.reinforce ?? 0) },
+    goalId: s(row.goal_id),
+    goalTitle: s(row.goal_title),
+    goalSyncMode: (s(row.goal_sync_mode) ?? "study_days") as GoalSyncMode,
+    sources: parseSources(row.sources_json),
+    nextReview: s(row.next_review),
+    lastStudiedAt: s(row.last_studied),
   }));
 }
 
@@ -170,9 +225,21 @@ export async function createDeck(db: Client, ownerId: string, input: DeckInput):
   await assertLinksOwned(db, ownerId, input);
   const id = nanoid();
   await db.execute({
-    sql: `INSERT INTO flashcard_decks (id, owner_id, name, description, subject_id, course_id, book_id, new_per_day)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, ownerId, input.name, input.description ?? null, input.subjectId ?? null, input.courseId ?? null, input.bookId ?? null, input.newPerDay ?? 15],
+    sql: `INSERT INTO flashcard_decks (id, owner_id, name, description, subject_id, course_id, book_id, new_per_day, goal_id, goal_sync_mode, sources_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      ownerId,
+      input.name,
+      input.description ?? null,
+      input.subjectId ?? null,
+      input.courseId ?? null,
+      input.bookId ?? null,
+      input.newPerDay ?? 15,
+      input.goalId ?? null,
+      input.goalSyncMode ?? "study_days",
+      JSON.stringify(input.sources ?? []),
+    ],
   });
   return id;
 }
@@ -180,9 +247,22 @@ export async function createDeck(db: Client, ownerId: string, input: DeckInput):
 export async function updateDeck(db: Client, ownerId: string, deckId: string, patch: Partial<DeckInput> & { archived?: boolean }): Promise<void> {
   await ownedDeck(db, ownerId, deckId);
   await assertLinksOwned(db, ownerId, patch);
-  const map: Record<string, string> = { name: "name", description: "description", subjectId: "subject_id", courseId: "course_id", bookId: "book_id", newPerDay: "new_per_day" };
+  const map: Record<string, string> = {
+    name: "name",
+    description: "description",
+    subjectId: "subject_id",
+    courseId: "course_id",
+    bookId: "book_id",
+    newPerDay: "new_per_day",
+    goalId: "goal_id",
+    goalSyncMode: "goal_sync_mode",
+  };
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
+  if (patch.sources !== undefined) {
+    sets.push("sources_json = ?");
+    args.push(JSON.stringify(patch.sources));
+  }
   for (const [key, col] of Object.entries(map)) {
     if (key in patch) {
       sets.push(`${col} = ?`);
@@ -336,12 +416,22 @@ export async function getDailyQueue(db: Client, ownerId: string, opts: { deckId?
     entry.cards.push({ ...mapCard(row), deckName: String(row.deck_name) });
     byDeck.set(deckId, entry);
   }
-  const cards: Array<Card & { deckName: string }> = [];
+  const cards: Array<Card & { deckName: string; reinforce?: boolean }> = [];
   for (const [deckId, { limit, cards: deckCards }] of byDeck) {
-    cards.push(...buildDailyQueue(deckCards, today, limit - (newToday.get(deckId) ?? 0)));
+    cards.push(...buildDailyQueue(deckCards, today, limit - (newToday.get(deckId) ?? 0)).map((c) => ({ ...c, reinforce: isReinforceCard(c) })));
   }
   // Vencidos primeiro (mais antigos antes), depois os novos.
   cards.sort((a, b) => Number(a.isNew) - Number(b.isNew) || a.dueDate.localeCompare(b.dueDate) || a.createdAt.localeCompare(b.createdAt));
+
+  // Automação "Revisão por prioridade": ordena os vencidos por necessidade e
+  // respeita o limite diário (revisões já feitas hoje contam contra o limite).
+  const reviewedToday = Number(reviewedRes.rows[0]?.n ?? 0);
+  const priority = await getAutomation(db, ownerId, "grimoire", "priority_review").catch(() => null);
+  if (priority?.enabled) {
+    cards.sort((a, b) => Number(a.isNew) - Number(b.isNew) || priorityScore(b, today) - priorityScore(a, today));
+    const limit = Math.max(1, Number(priority.config.dailyLimit ?? 150));
+    cards.splice(Math.max(0, limit - reviewedToday));
+  }
 
   return {
     today,
@@ -349,9 +439,18 @@ export async function getDailyQueue(db: Client, ownerId: string, opts: { deckId?
     cards,
     dueCount: cards.filter((c) => !c.isNew).length,
     newCount: cards.filter((c) => c.isNew).length,
-    reviewedToday: Number(reviewedRes.rows[0]?.n ?? 0),
+    reviewedToday,
     clearedToday: clearedRes.rows.length > 0,
   };
+}
+
+/**
+ * Prioridade de um cartão vencido (maior = revisar antes):
+ * dias de atraso + 2 × lapsos + 4 × (2,5 − facilidade). Usa só o estado SM-2 real.
+ */
+export function priorityScore(c: { dueDate: string; lapses: number; ease: number }, today: string): number {
+  const overdue = Math.max(0, Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.dueDate}T00:00:00Z`)) / 86_400_000));
+  return overdue + 2 * c.lapses + 4 * Math.max(0, 2.5 - c.ease);
 }
 
 export interface ReviewResult {
@@ -363,7 +462,7 @@ export interface ReviewResult {
 }
 
 /** Registra a revisão de um cartão (SM-2) e, se a fila do dia zerou, concede o XP do dia (idempotente). */
-export async function reviewCard(db: Client, ownerId: string, cardId: string, quality: number, now = new Date()): Promise<ReviewResult> {
+export async function reviewCard(db: Client, ownerId: string, cardId: string, quality: number, now = new Date(), durationMs: number | null = null): Promise<ReviewResult> {
   const r = await db.execute({ sql: "SELECT * FROM flashcards WHERE id = ? AND owner_id = ?", args: [cardId, ownerId] });
   const row = r.rows[0] as unknown as Row | undefined;
   if (!row) throw new GrimoireError(404, "Cartão não encontrado.");
@@ -381,13 +480,18 @@ export async function reviewCard(db: Client, ownerId: string, cardId: string, qu
         args: [next.ease, next.intervalDays, next.repetitions, next.lapses, next.dueDate, nowIso, cardId, ownerId],
       },
       {
-        sql: `INSERT INTO flashcard_reviews (id, owner_id, card_id, deck_id, grade, was_new, interval_days, reviewed_at, day_key)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [nanoid(), ownerId, cardId, card.deckId, Math.round(quality), card.isNew ? 1 : 0, next.intervalDays, nowIso, today],
+        sql: `INSERT INTO flashcard_reviews (id, owner_id, card_id, deck_id, grade, was_new, interval_days, reviewed_at, day_key, duration_ms)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        // Duração limitada a 10 min por cartão: além disso é tela parada, não estudo.
+        args: [nanoid(), ownerId, cardId, card.deckId, Math.round(quality), card.isNew ? 1 : 0, next.intervalDays, nowIso, today, durationMs == null ? null : Math.max(0, Math.min(600_000, Math.round(durationMs)))],
       },
     ],
     "write",
   );
+
+  // Grimório ↔ Metas: o estudo do dia avança a meta vinculada (idempotente por dia/baralho).
+  const goalSync = await getAutomation(db, ownerId, "grimoire", "goal_sync").catch(() => null);
+  if (goalSync?.enabled !== false) await syncDeckGoalAfterStudy(db, ownerId, card.deckId, today).catch((err) => console.error("[grimório] falha ao sincronizar meta:", err));
 
   const queue = await getDailyQueue(db, ownerId, {}, now);
   let xpAwarded = 0;
@@ -488,4 +592,62 @@ export async function getStats(db: Client, ownerId: string, opts: { deckId?: str
 /** Converte o instante salvo (UTC) para o dia local — usado ao montar contexto para a IA. */
 export function localDayOf(stored: string, tz: string): string {
   return dayKeyIn(new Date(normalizeStoredUtc(stored)), tz);
+}
+
+// ------------------------------------------------------------
+// Grimório ↔ Metas
+// ------------------------------------------------------------
+
+/**
+ * Atualiza a meta vinculada ao baralho depois de uma revisão.
+ *  - study_days: +1 na meta por DIA estudado (goal_study_log garante uma vez por dia/baralho).
+ *    Vale para metas numéricas; nas demais o dia fica registrado no log (histórico), sem mexer no valor.
+ *  - mastery: metas de percentual recebem o domínio do baralho (maduros/total), só quando muda.
+ * Metas "task_based" seguem as tarefas vinculadas (fonte única) e não são tocadas aqui.
+ * Progresso ≠ conclusão: o status da meta nunca é alterado automaticamente.
+ */
+export async function syncDeckGoalAfterStudy(db: Client, ownerId: string, deckId: string, today: string): Promise<{ updated: boolean; goalId: string | null }> {
+  const r = await db.execute({
+    sql: `SELECT d.goal_id, d.goal_sync_mode, g.kind, g.current_value, g.target_value, g.status
+          FROM flashcard_decks d JOIN goals g ON g.id = d.goal_id AND g.owner_id = d.owner_id
+          WHERE d.id = ? AND d.owner_id = ?`,
+    args: [deckId, ownerId],
+  });
+  const row = r.rows[0] as unknown as { goal_id: string; goal_sync_mode: GoalSyncMode; kind: string; current_value: number; target_value: number | null; status: string } | undefined;
+  if (!row || row.status !== "active" || row.goal_sync_mode === "none") return { updated: false, goalId: row?.goal_id ?? null };
+
+  const reviews = await db.execute({ sql: "SELECT COUNT(*) AS n FROM flashcard_reviews WHERE owner_id = ? AND deck_id = ? AND day_key = ?", args: [ownerId, deckId, today] });
+  const n = Number(reviews.rows[0]?.n ?? 0);
+  const ins = await db.execute({
+    sql: `INSERT INTO goal_study_log (id, owner_id, goal_id, deck_id, day_key, reviews) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT (goal_id, deck_id, day_key) DO UPDATE SET reviews = excluded.reviews`,
+    args: [nanoid(), ownerId, row.goal_id, deckId, today, n],
+  });
+  const firstToday = n <= 1 && ins.rowsAffected > 0;
+
+  let next: number | null = null;
+  if (row.goal_sync_mode === "study_days" && row.kind === "numeric" && firstToday) {
+    next = Number(row.current_value) + 1;
+  } else if (row.goal_sync_mode === "mastery" && row.kind === "percentage") {
+    const m = await db.execute({
+      sql: "SELECT COUNT(*) AS total, SUM(CASE WHEN interval_days >= 21 THEN 1 ELSE 0 END) AS mature FROM flashcards WHERE owner_id = ? AND deck_id = ?",
+      args: [ownerId, deckId],
+    });
+    const total = Number(m.rows[0]?.total ?? 0);
+    const pct = total > 0 ? Math.round((Number(m.rows[0]?.mature ?? 0) / total) * 100) : 0;
+    if (pct !== Math.round(Number(row.current_value))) next = pct;
+  }
+  if (next === null) return { updated: false, goalId: row.goal_id };
+
+  await db.batch(
+    [
+      {
+        sql: "INSERT INTO goal_progress (id, goal_id, owner_id, value, note) VALUES (?, ?, ?, ?, ?)",
+        args: [nanoid(), row.goal_id, ownerId, next, row.goal_sync_mode === "mastery" ? "Grimório: domínio do baralho" : "Grimório: dia de estudo"],
+      },
+      { sql: "UPDATE goals SET current_value = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [next, row.goal_id, ownerId] },
+    ],
+    "write",
+  );
+  return { updated: true, goalId: row.goal_id };
 }

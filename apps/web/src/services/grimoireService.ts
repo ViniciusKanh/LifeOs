@@ -17,7 +17,19 @@ export interface GrimoireDeck {
   newPerDay: number;
   createdAt: string;
   archivedAt: string | null;
-  counts: { total: number; due: number; new: number; mature: number };
+  counts: { total: number; due: number; new: number; mature: number; reinforce: number };
+  goalId: string | null;
+  goalTitle: string | null;
+  goalSyncMode: GoalSyncMode;
+  sources: DeckSource[];
+  nextReview: string | null;
+  lastStudiedAt: string | null;
+}
+
+export type GoalSyncMode = "study_days" | "mastery" | "none";
+export interface DeckSource {
+  title: string;
+  url?: string | null;
 }
 
 export interface GrimoireCard {
@@ -40,7 +52,8 @@ export interface GrimoireCard {
 export interface DailyQueue {
   today: string;
   timezone: string;
-  cards: Array<GrimoireCard & { deckName: string }>;
+  /** reinforce = cartão "a reforçar" (lapsos ou facilidade baixa), etapa própria do ritual. */
+  cards: Array<GrimoireCard & { deckName: string; reinforce?: boolean }>;
   dueCount: number;
   newCount: number;
   reviewedToday: number;
@@ -64,6 +77,9 @@ export interface GrimoireStats {
 }
 
 export interface DeckInput {
+  goalId?: string | null;
+  goalSyncMode?: GoalSyncMode;
+  sources?: DeckSource[];
   name: string;
   description?: string | null;
   subjectId?: string | null;
@@ -85,7 +101,7 @@ export interface CardGenResult {
 
 /** Botões de avaliação → qualidade SM-2 (teclas 1-4 nesta ordem). Mesmo mapa do servidor (srsEngine.GRADE_BUTTONS). */
 export const GRADE_BUTTONS = [
-  { key: "errei", label: "Errei", quality: 1, tone: "red" },
+  { key: "errei", label: "Novamente", quality: 1, tone: "red" },
   { key: "dificil", label: "Difícil", quality: 3, tone: "orange" },
   { key: "bom", label: "Bom", quality: 4, tone: "blue" },
   { key: "facil", label: "Fácil", quality: 5, tone: "green" },
@@ -111,7 +127,83 @@ export const grimoireService = {
   deleteCard: (id: string) => api.delete<void>(`/grimoire/cards/${id}`),
   cardFromNote: (input: { noteId: string; deckId: string; front?: string; back?: string }) => api.post<GrimoireCard>("/grimoire/cards/from-note", input),
   queue: (deckId?: string) => api.get<DailyQueue>(`/grimoire/queue${qs({ deckId })}`),
-  review: (cardId: string, quality: number) => api.post<ReviewResult>(`/grimoire/cards/${cardId}/review`, { quality }),
+  review: (cardId: string, quality: number, durationMs?: number) => api.post<ReviewResult>(`/grimoire/cards/${cardId}/review`, { quality, durationMs }),
+  hub: () => api.get<GrimoireHub>("/grimoire/hub"),
+  explainOracle: () => api.post<{ text: string }>("/grimoire/oracle/explain"),
+  hardCards: (deckId: string) => api.get<Array<GrimoireCard & { deckName: string }>>(`/grimoire/decks/${deckId}/hard`),
+  importContent: (input: { title: string; kind: "text" | "pdf"; text?: string; pdfBase64?: string; deckId?: string | null }) =>
+    api.post<{ ok: true; importId: string; summary: ImportSummary | null; suggested: number }>("/grimoire/import", input),
+  imports: () => api.get<GrimoireImport[]>("/grimoire/imports"),
+  suggestFromJournal: (entryDate: string, deckId: string | null) => api.post<{ added: number }>("/grimoire/suggestions/from-journal", { entryDate, deckId }),
+  suggestions: () => api.get<GrimoireSuggestion[]>("/grimoire/suggestions"),
+  decideSuggestions: (input: { approve: Array<{ id: string; front?: string; back?: string }>; reject: string[]; deckId?: string | null }) =>
+    api.post<{ created: number; rejected: number }>("/grimoire/suggestions/decide", input),
   stats: (deckId?: string, days?: number) => api.get<GrimoireStats>(`/grimoire/stats${qs({ deckId, days: days ? String(days) : undefined })}`),
   generate: (source: CardGenSource, count?: number) => api.post<CardGenResult>("/grimoire/generate", { source, count }),
 };
+
+export interface OracleRec {
+  kind: "focus" | "best_hour" | "reinforce" | "neglected" | "diary" | "start";
+  title: string;
+  detail: string;
+  provenance: "dado" | "inferência" | "sugestão";
+  action: { type: "study_deck" | "open_deck" | "generate_diary" | "new_deck"; deckId?: string; entryDate?: string } | null;
+}
+
+/** Painel central do Grimório 2.0 — tudo calculado no servidor a partir das revisões reais. */
+export interface GrimoireHub {
+  today: string;
+  indicators: {
+    streak: number;
+    bestStreak: number;
+    retention: number | null;
+    retentionSample: number;
+    domain: number | null;
+    studyMinutes7d: number;
+    studyMinutesPrev7d: number;
+    measuredReviews7d: number;
+    studyXp30d: number;
+    studyXpTotal: number;
+    activeDecks: number;
+  };
+  ritual: { due: number; fresh: number; reinforce: number; reviewedToday: number; clearedToday: boolean };
+  oracle: OracleRec[];
+  recent: Array<{ cardId: string; front: string; deckId: string; deckName: string; grade: number; at: string }>;
+  domainMap: Array<{ deckId: string; name: string; subject: string | null; total: number; mature: number; pct: number | null; accuracy30d: number | null }>;
+  calendar: Array<{ day: string; reviews: number }>;
+  achievements: Array<{ code: string; title: string; description: string | null; tier: string; threshold: number; value: number; unlockedAt: string | null }>;
+  pendingSuggestions: number;
+  hasAi: boolean;
+}
+
+export interface ImportSummary {
+  overview: string;
+  sections: Array<{ title: string; points: string[] }>;
+  concepts: Array<{ term: string; definition: string }>;
+  questions: string[];
+  cardsSuggested?: number;
+}
+
+export interface GrimoireImport {
+  id: string;
+  title: string;
+  kind: "text" | "pdf";
+  status: "processing" | "done" | "error";
+  error: string | null;
+  deckId: string | null;
+  deckName: string | null;
+  summary: ImportSummary | null;
+  createdAt: string;
+}
+
+export interface GrimoireSuggestion {
+  id: string;
+  deckId: string | null;
+  deckName: string | null;
+  sourceKind: string;
+  sourceRef: string;
+  sourceLabel: string | null;
+  front: string;
+  back: string;
+  createdAt: string;
+}
