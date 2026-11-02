@@ -826,6 +826,8 @@ export interface JournalEntry {
   /** Organização por IA confirmada (null quando nunca foi salva). */
   ai: JournalAiOrganization | null;
   auto: JournalAutoData;
+  /** updated_at do servidor — usado para detectar conflito entre dispositivos. */
+  updatedAt?: string | null;
 }
 
 /** Vínculo real de uma entrada do Diário a um projeto ou meta do usuário (Fase 17). */

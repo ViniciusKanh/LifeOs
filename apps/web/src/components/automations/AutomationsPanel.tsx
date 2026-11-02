@@ -48,6 +48,7 @@ const LABELS: Record<string, { label: string; suffix?: string; min?: number; max
   dayStartHour: { label: "Início da janela de trabalho", suffix: "h", min: 5, max: 12 },
   dayEndHour: { label: "Fim da janela de trabalho", suffix: "h", min: 13, max: 23 },
   maxPerDay: { label: "Máximo de missões por dia", min: 1, max: 10 },
+  gapDays: { label: "Avisar após dias sem registro", suffix: "dias", min: 1, max: 14 },
 };
 
 const STATUS_UI = {

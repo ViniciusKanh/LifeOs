@@ -21,7 +21,8 @@ export type DailyMetric =
   | "xpOrganic"
   | "journal"
   | "waterMl"
-  | "focusMinutes";
+  | "focusMinutes"
+  | "experimentLogs";
 
 export const ALL_DAILY_METRICS: readonly DailyMetric[] = [
   "missions",
@@ -36,6 +37,7 @@ export const ALL_DAILY_METRICS: readonly DailyMetric[] = [
   "journal",
   "waterMl",
   "focusMinutes",
+  "experimentLogs",
 ];
 
 export type DailySeries = Record<DailyMetric, Map<string, number>>;
@@ -73,7 +75,7 @@ export async function collectDailyMetrics(
   const fromUtc = addDays(from, -1);
   const none = Promise.resolve(null);
 
-  const [tasks, workouts, reading, habits, xp, journal, water, focus] = await Promise.all([
+  const [tasks, workouts, reading, habits, xp, journal, water, focus, labLogs] = await Promise.all([
     has("missions", "projectMissions", "highPriorityMissions")
       ? db.execute({
           sql: "SELECT completed_at AS t, project_id, priority FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at >= ?",
@@ -112,6 +114,9 @@ export async function collectDailyMetrics(
           args: [ownerId, fromUtc],
         })
       : none,
+    has("experimentLogs")
+      ? db.execute({ sql: "SELECT log_date AS d, COUNT(*) AS v FROM personal_experiment_logs WHERE owner_id = ? AND log_date >= ? GROUP BY log_date", args: [ownerId, from] })
+      : none,
   ]);
 
   const out = emptySeries();
@@ -143,5 +148,6 @@ export async function collectDailyMetrics(
   for (const r of journal?.rows ?? []) add("journal", String(r.d), 1);
   for (const r of water?.rows ?? []) if (r.t) add("waterMl", localDay(r.t), Number(r.v));
   for (const r of focus?.rows ?? []) if (r.t) add("focusMinutes", localDay(r.t), Number(r.v));
+  for (const r of labLogs?.rows ?? []) add("experimentLogs", String(r.d), Number(r.v));
   return out;
 }

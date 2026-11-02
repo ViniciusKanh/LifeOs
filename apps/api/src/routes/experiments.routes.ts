@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { protocolSnapshot, recordProtocolChanges } from "../services/chronicleLabService.js";
 import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -257,7 +258,9 @@ experimentsRouter.patch("/:id", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
   try {
     const db = getDb();
+    const before = await protocolSnapshot(db, req.user!.id, req.params.id);
     const updated = await updateExperiment(db, req.user!.id, req.params.id, parsed.data as Parameters<typeof updateExperiment>[3]);
+    await recordProtocolChanges(db, req.user!.id, req.params.id, before).catch((e: unknown) => console.warn("[lab] histórico do protocolo não gravado:", e instanceof Error ? e.message : "erro"));
     return res.json(updated);
   } catch (err) {
     return handleError(res, err);

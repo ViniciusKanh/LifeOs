@@ -19,6 +19,28 @@ import type { ExperimentAISuggestion, ExperimentProposal } from "@/types";
 import { RPGButton, RPGPageHeader } from "@/components/rpg";
 import { RpgLabHUD } from "@/components/experiments/RpgLabHUD";
 import { useTheme } from "@/hooks/useTheme";
+import { useSearchParams } from "react-router-dom";
+import { BookMarked, Bot, ClipboardList, FlaskRound, LayoutGrid, Lightbulb, TestTube2, Zap } from "lucide-react";
+import { useLabHub } from "@/hooks/useChronicleLab";
+import { useGoals } from "@/hooks/useGoals";
+import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
+import { AdvisorPanel, MODULE_ART, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { RPGToast } from "@/components/rpg";
+import {
+  DiscoveriesLibrary,
+  ExperimentsList,
+  FeaturedExperiment,
+  HypothesesList,
+  LabIndicators,
+  LabRankPanel,
+  NextActions,
+  ProtocolChanges,
+  ProtocolLibrary,
+  ResultsList,
+} from "@/components/lab/LabRPG";
+
+const LAB_TABS = ["visao", "experimentos", "hipoteses", "protocolos", "resultados", "descobertas", "automacoes", "ia"] as const;
+type LabTab = (typeof LAB_TABS)[number];
 
 export function ExperimentsPage() {
   const { experiments, isLoading, summary, insights, createExperiment, isCreating, setStatus } = useExperiments();
@@ -28,6 +50,21 @@ export function ExperimentsPage() {
   const [wizardProposal, setWizardProposal] = useState<ExperimentProposal | null>(null);
   const [designerOpen, setDesignerOpen] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
+  // Abas do Laboratório 2.0 (tema RPG) na URL (?aba=).
+  const [labParams, setLabParams] = useSearchParams();
+  const labTab: LabTab = LAB_TABS.includes(labParams.get("aba") as LabTab) ? (labParams.get("aba") as LabTab) : "visao";
+  const setLabTab = (t: LabTab) =>
+    setLabParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (t === "visao") p.delete("aba");
+      else p.set("aba", t);
+      return p;
+    });
+  const labHubQ = useLabHub();
+  const labHub = labHubQ.data;
+  const { goals } = useGoals();
+  const [labToast, setLabToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
+  const labNotify = (msg: string, tone: "success" | "error" = "success") => setLabToast({ msg, tone });
 
   // Com vários experimentos ativos, o usuário escolhe qual fica em destaque (antes só o 1º aparecia).
   const activeExperiments = experiments.filter((e) => e.status === "active");
@@ -99,24 +136,86 @@ export function ExperimentsPage() {
         // Tema RPG: o "Laboratório" — cada experimento é uma criatura que ganha
         // vida, é alimentada com registros e desperta ao ser concluída.
         <>
-          <RPGPageHeader
-            banner="laboratorio"
-            eyebrow="Experimentos Pessoais"
+          <ModuleBanner
+            eyebrow="A Oficina da Evolução"
             title="Laboratório da Jornada"
-            subtitle="Costure hipóteses, dê vida a elas com um raio de disciplina e veja o que desperta nos seus próprios dados."
-            footnote={<span className="italic">&ldquo;Está vivo!&rdquo; — só quando os números confirmam.</span>}
+            subtitle="Teste hipóteses, valide estratégias e descubra o que funciona melhor para a sua vida — com dados reais e método."
+            mage={`${MODULE_ART}/lab/banner-mage.webp`}
+            scene={`${MODULE_ART}/lab/banner-scene.webp`}
             actions={
               <>
                 <RPGButton variant="gold" onClick={() => openWizard()}>
-                  <Plus size={15} aria-hidden /> Nova criatura
+                  <Plus size={15} aria-hidden /> Novo experimento
                 </RPGButton>
-                <RPGButton variant="primary" onClick={() => setDesignerOpen(true)}>
-                  <Wand2 size={15} aria-hidden /> Desenhar com IA
+                <RPGButton variant="primary" onClick={() => setLabTab("ia")}>
+                  <Wand2 size={15} aria-hidden /> IA Cientista
                 </RPGButton>
               </>
             }
+            aside={labHub ? <LabRankPanel hub={labHub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
           />
-          <RpgLabHUD experiments={experiments} />
+          {labHub ? <LabIndicators hub={labHub} /> : <div className="rpg-panel h-24 animate-pulse" aria-busy />}
+          <ModuleTabs
+            label="Seções do Laboratório"
+            value={labTab}
+            onChange={setLabTab}
+            tabs={[
+              { value: "visao", label: "Visão Geral", icon: <LayoutGrid size={15} /> },
+              { value: "experimentos", label: "Meus Experimentos", icon: <FlaskRound size={15} /> },
+              { value: "hipoteses", label: "Hipóteses", icon: <Lightbulb size={15} /> },
+              { value: "protocolos", label: "Protocolos", icon: <ClipboardList size={15} /> },
+              { value: "resultados", label: "Resultados", icon: <TestTube2 size={15} /> },
+              { value: "descobertas", label: "Descobertas", icon: <BookMarked size={15} /> },
+              { value: "automacoes", label: "Automações", icon: <Zap size={15} /> },
+              { value: "ia", label: "IA Cientista", icon: <Bot size={15} /> },
+            ]}
+          />
+          {labHub && labTab === "visao" && (
+            <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <div className="min-w-0 space-y-3">
+                <FeaturedExperiment
+                  hub={labHub}
+                  onLog={(e) => {
+                    setFeaturedId(e.id);
+                    setLogModalOpen(true);
+                  }}
+                  onStatus={(e, status) => setStatus({ id: e.id, status })}
+                />
+                <ExperimentTodayCheckin experiments={experiments} />
+              </div>
+              <div className="min-w-0 space-y-3">
+                <NextActions hub={labHub} />
+                <DiscoveriesLibrary hub={labHub} />
+              </div>
+              <div className="xl:col-span-2">
+                <ProtocolLibrary onPick={(sug) => openWizard(sug)} onCustom={() => openWizard()} />
+              </div>
+            </div>
+          )}
+          {labHub && labTab === "hipoteses" && <HypothesesList hub={labHub} onNew={() => openWizard()} />}
+          {labTab === "protocolos" && <ProtocolLibrary onPick={(sug) => openWizard(sug)} onCustom={() => openWizard()} />}
+          {labHub && labTab === "resultados" && <ResultsList hub={labHub} goals={goals.filter((g) => g.status === "active").map((g) => ({ id: g.id, title: g.title }))} onToast={labNotify} />}
+          {labHub && labTab === "descobertas" && (
+            <div className="grid items-start gap-3 lg:grid-cols-2">
+              <DiscoveriesLibrary hub={labHub} />
+              <ProtocolChanges hub={labHub} />
+            </div>
+          )}
+          {labTab === "automacoes" && (
+            <AutomationsPanel module="lab" title="Automações do Laboratório" intro="Coleta pelos módulos de origem, lembretes e encerramento de ciclo. O conteúdo do Diário nunca é lido automaticamente." />
+          )}
+          {labTab === "ia" && (
+            <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+              <section className="rpg-panel p-3" aria-label="IA Cientista — desenhar experimento">
+                <p className="rpg-title mb-1 text-sm font-bold uppercase">Desenhar experimento com IA</p>
+                <p className="mb-2 text-[11.5px] text-rpg-muted">Descreva seu objetivo. A IA propõe protocolos; você revisa tudo no assistente e o experimento só é criado quando você confirmar.</p>
+                <ExperimentAIDesigner onPick={(pr) => openWizard(undefined, pr)} />
+              </section>
+              <AdvisorPanel module="lab" title="IA Cientista" avatar={`${MODULE_ART}/lab/advisor.webp`} />
+            </div>
+          )}
+          {labHub && labTab === "experimentos" && <ExperimentsList hub={labHub} />}
+          <RPGToast message={labToast?.msg ?? null} tone={labToast?.tone} onClose={() => setLabToast(null)} />
         </>
       ) : (
         <>
@@ -135,9 +234,9 @@ export function ExperimentsPage() {
         </>
       )}
 
-      {designer}
+      {(!isRpg || labTab === "experimentos") && designer}
 
-      {experiments.length === 0 ? (
+      {isRpg && labTab !== "experimentos" ? null : experiments.length === 0 ? (
         <ExperimentsEmptyState onCreate={() => openWizard()} onAskCopilot={() => setDesignerOpen(true)} />
       ) : (
         <>

@@ -17,6 +17,8 @@ export function useAutomations(module: AutomationModule) {
       agenda: ["events"],
       missions: ["tasks"],
       quests: ["gamification", "quests"],
+      diary: ["journal"],
+      lab: ["experiments"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

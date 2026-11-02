@@ -17,6 +17,7 @@ import { syncDeckGoalAfterStudy } from "./grimoireService.js";
 import { runGuildReport, runLoanAlerts, runVaultGoals } from "./bankHubService.js";
 import { runAutoProgress, runGrimoireLink, runSmartDeadlines, runWeeklyStudyPlan } from "./educationHubService.js";
 import { runAgendaDigest, runAutoPlan, runConflictAlerts, runDueAlerts, runQuestReminder, runReplan } from "./planningHubService.js";
+import { runLabCheckin, runLabCycleEnd, runLabMissingData, runMemories, runWeeklyRetro, runWriteReminder } from "./chronicleLabService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
 type Db = ReturnType<typeof getDb>;
@@ -91,6 +92,28 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runDailySummary(db, ownerId, config);
     case "health:consistency_history":
       return runConsistencyHistory(db, ownerId);
+    case "diary:write_reminder":
+      return runWriteReminder(db, ownerId, config);
+    case "diary:weekly_retro":
+      return runWeeklyRetro(db, ownerId, config);
+    case "diary:memories":
+      return runMemories(db, ownerId, config);
+    case "lab:checkin_reminder":
+      return runLabCheckin(db, ownerId, config);
+    case "lab:missing_data":
+      return runLabMissingData(db, ownerId, config);
+    case "lab:cycle_end":
+      return runLabCycleEnd(db, ownerId, config);
+    case "diary:day_context":
+    case "diary:learnings_grimoire":
+    case "diary:goal_links":
+    case "diary:lab_notes":
+    case "lab:integrated_collection":
+    case "lab:auto_progress":
+    case "lab:pre_analysis":
+    case "lab:goal_sync":
+    case "lab:diary_integration":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "agenda:auto_plan":
       return runAutoPlan(db, ownerId, config);
     case "agenda:conflicts":
@@ -154,6 +177,7 @@ export async function runDueAutomationsForAll(db: Db): Promise<{ ran: number; sk
       "SELECT DISTINCT owner_id FROM bank_deposits WHERE status = 'active' AND goal_id IS NOT NULL",
       "SELECT DISTINCT owner_id FROM educations WHERE progress_pct < 100",
       "SELECT DISTINCT owner_id FROM events WHERE starts_at >= date('now', '-1 day')",
+      "SELECT DISTINCT owner_id FROM personal_experiments WHERE status = 'active'",
       "SELECT DISTINCT owner_id FROM sleep_entries WHERE woke_up_at >= date('now', '-14 days')",
       "SELECT DISTINCT owner_id FROM water_entries WHERE recorded_at >= date('now', '-14 days')",
     ];

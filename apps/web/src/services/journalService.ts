@@ -2,6 +2,8 @@ import { api } from "./api";
 import type { JournalEntry, JournalCollection, JournalMedia, JournalAiSuggestion, JournalAiApplyInput, JournalWritingAssist } from "@/types";
 
 export interface JournalUpsertInput {
+  /** Versão que o cliente carregou (409 se o servidor tiver uma mais nova). */
+  baseUpdatedAt?: string | null;
   thoughts?: string | null;
   gratitude?: string[];
   selfCare?: string[];

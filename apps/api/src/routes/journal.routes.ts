@@ -127,6 +127,7 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     locationLat: row?.location_lat ?? null,
     locationLng: row?.location_lng ?? null,
     tags: parseJsonArray(row?.tags),
+    updatedAt: row?.updated_at ? String(row.updated_at) : null,
     links,
     ai: parseAiOrganization(row),
     auto,
@@ -575,10 +576,14 @@ journalRouter.put("/:date", async (req, res) => {
   const ownerId = req.user!.id;
 
   const existing = await db.execute({
-    sql: "SELECT id FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
+    sql: "SELECT id, updated_at FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
     args: [ownerId, date],
   });
-  const existingRow = existing.rows[0] as unknown as { id: string } | undefined;
+  const existingRow = existing.rows[0] as unknown as { id: string; updated_at: string } | undefined;
+  // Conflito: outro dispositivo salvou depois da versão que este cliente carregou.
+  if (existingRow && data.baseUpdatedAt && String(existingRow.updated_at) > data.baseUpdatedAt) {
+    return res.status(409).json({ error: "Esta crônica foi alterada em outro dispositivo.", code: "journal_conflict", serverUpdatedAt: existingRow.updated_at });
+  }
 
   // Desde a 0050 o diário é texto corrido: intention, challenges, lighter_plan,
   // feel_good, night_helped e night_mood não são mais gravados por aqui — o que

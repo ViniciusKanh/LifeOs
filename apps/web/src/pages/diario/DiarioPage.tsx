@@ -40,6 +40,7 @@ import {
   PenLine,
   NotebookPen,
 } from "lucide-react";
+import { Library, Zap, Wand2 } from "lucide-react";
 import {
   useJournal,
   useJournalInsights,
@@ -77,7 +78,24 @@ import { RPGButton } from "@/components/rpg/RPGButton";
 import { useTheme } from "@/hooks/useTheme";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
-import { API_URL } from "@/services/api";
+import { API_URL, ApiError } from "@/services/api";
+import { journalService } from "@/services/journalService";
+import { useChronicleHub } from "@/hooks/useChronicleLab";
+import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
+import { AdvisorPanel, MODULE_ART, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { RPGToast } from "@/components/rpg";
+import {
+  ChronicleIndicators,
+  ChronicleInsights,
+  ChronicleMissions,
+  ChronicleRankPanel,
+  ChronicleTimeline,
+  ClosingRitual,
+  ConsistencyHeatmap,
+  DayStatePanel,
+  LabNoteSender,
+  RetrospectivePanel,
+} from "@/components/chronicle/ChronicleRPG";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -769,6 +787,34 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [justSaved, setJustSaved] = useState(false);
+  // Modo Escrita: só o relato, sem as demais seções (que continuam salvas e acessíveis no modo completo).
+  const [writingMode, setWritingMode] = useState(false);
+  const { data: chronicleHub } = useChronicleHub();
+  const editorQueryClient = useQueryClient();
+  // Controle de conflito: a versão (updated_at) que este dispositivo conhece.
+  const baseUpdatedAt = useRef<string | null>(null);
+  const conflictRef = useRef(false);
+  const [conflict, setConflict] = useState(false);
+  const [draftFound, setDraftFound] = useState<FormState | null>(null);
+  // Rascunho local (sessionStorage: some ao fechar a aba) — evita perder texto se a rede falhar.
+  const draftKey = `lifeos:diario:rascunho:${date}`;
+  const writeDraft = (state: FormState) => {
+    try {
+      window.sessionStorage.setItem(draftKey, JSON.stringify(state));
+    } catch {
+      /* armazenamento indisponível: segue sem rascunho local */
+    }
+  };
+  const clearDraft = () => {
+    try {
+      window.sessionStorage.removeItem(draftKey);
+    } catch {
+      /* idem */
+    }
+  };
+  useEffect(() => {
+    if (entry) baseUpdatedAt.current = entry.updatedAt ?? null;
+  }, [entry?.updatedAt]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const justSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -792,6 +838,21 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.date]);
 
+  // Recuperação de rascunho: se ficou texto não salvo nesta aba, oferece restaurar.
+  useEffect(() => {
+    if (!entry) return;
+    try {
+      const raw = window.sessionStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as FormState;
+      if ((d.thoughts ?? "") !== (entry.thoughts ?? "") || (d.nightTakeaway ?? "") !== (entry.nightTakeaway ?? "")) setDraftFound(d);
+      else window.sessionStorage.removeItem(draftKey);
+    } catch {
+      /* rascunho ilegível: ignora */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.date]);
+
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -799,8 +860,12 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     };
   }, []);
 
-  const persistNow = (state: FormState) =>
-    save({
+  const persistNow = (state: FormState) => {
+    writeDraft(state);
+    // Em conflito não salvamos nada até o usuário decidir (o rascunho local guarda o texto).
+    if (conflictRef.current) return Promise.resolve(undefined);
+    return save({
+      baseUpdatedAt: baseUpdatedAt.current,
       thoughts: state.thoughts || null,
       gratitude: state.gratitude.filter((g) => g.trim().length > 0),
       selfCare: state.selfCare,
@@ -811,7 +876,47 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       locationLat: state.locationLat,
       locationLng: state.locationLng,
       tags: state.tags,
-    }).catch(() => undefined);
+    })
+      .then((saved) => {
+        if (saved && "updatedAt" in saved) baseUpdatedAt.current = saved.updatedAt ?? baseUpdatedAt.current;
+        clearDraft();
+        return saved;
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 409) {
+          conflictRef.current = true;
+          setConflict(true);
+        }
+        return undefined;
+      });
+  };
+
+  /** Conflito: carrega a versão do servidor (descarta a local) ou mantém a local e sobrescreve. */
+  const resolveConflict = async (keepMine: boolean) => {
+    conflictRef.current = false;
+    setConflict(false);
+    if (keepMine) {
+      baseUpdatedAt.current = null;
+      await persistNow(form);
+      return;
+    }
+    clearDraft();
+    const fresh = await journalService.get(date);
+    editorQueryClient.setQueryData(["journal", date], fresh);
+    baseUpdatedAt.current = fresh.updatedAt ?? null;
+    setForm({
+      thoughts: fresh.thoughts ?? "",
+      gratitude: [0, 1, 2].map((i) => fresh.gratitude[i] ?? ""),
+      selfCare: fresh.selfCare,
+      selfCareOther: fresh.selfCareOther ?? "",
+      nightTakeaway: fresh.nightTakeaway ?? "",
+      journalIds: fresh.journalIds,
+      locationLabel: fresh.locationLabel ?? "",
+      locationLat: fresh.locationLat,
+      locationLng: fresh.locationLng,
+      tags: fresh.tags,
+    });
+  };
 
   /** Grava agora o que ainda está no debounce — a IA lê o texto do banco, então precisa da versão mais recente. */
   const flushPendingSave = async () => {
@@ -1153,14 +1258,59 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
         </div>
       ) : (
         <div className="space-y-4">
-          <ChronicleIndex chapters={chapters} />
+          {conflict && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-sm dark:bg-amber-500/10 rpg:rounded-[4px] rpg:border-rpg-orange rpg:bg-rpg-orange/10 rpg:text-rpg-text">
+              <span className="min-w-0 flex-1">Esta crônica foi alterada em outro dispositivo. O salvamento automático foi pausado para não sobrescrever nada.</span>
+              <button type="button" className="rounded-lg border px-2 py-1 text-xs font-semibold" onClick={() => void resolveConflict(false)}>
+                Carregar a versão salva
+              </button>
+              <button type="button" className="rounded-lg border px-2 py-1 text-xs font-semibold" onClick={() => void resolveConflict(true)}>
+                Manter a minha
+              </button>
+            </div>
+          )}
+          {draftFound && !conflict && (
+            <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border border-cat-pink/50 bg-cat-pink/5 p-3 text-sm rpg:rounded-[4px] rpg:border-rpg-pink rpg:bg-rpg-pink/10 rpg:text-rpg-text">
+              <span className="min-w-0 flex-1">Encontramos um rascunho não salvo deste dia.</span>
+              <button
+                type="button"
+                className="rounded-lg border px-2 py-1 text-xs font-semibold"
+                onClick={() => {
+                  setForm(draftFound);
+                  void persistNow(draftFound);
+                  setDraftFound(null);
+                }}
+              >
+                Recuperar
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border px-2 py-1 text-xs font-semibold"
+                onClick={() => {
+                  clearDraft();
+                  setDraftFound(null);
+                }}
+              >
+                Descartar
+              </button>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-end gap-1.5" role="group" aria-label="Modo do editor">
+            <button type="button" aria-pressed={writingMode} onClick={() => setWritingMode(true)} className={`rounded-lg border px-2.5 py-1 text-xs font-semibold rpg:rounded-[3px] ${writingMode ? "border-cat-pink text-cat-pink rpg:border-rpg-gold rpg:text-rpg-gold-light" : "text-slate rpg:border-rpg-border"}`}>
+              Modo Escrita
+            </button>
+            <button type="button" aria-pressed={!writingMode} onClick={() => setWritingMode(false)} className={`rounded-lg border px-2.5 py-1 text-xs font-semibold rpg:rounded-[3px] ${!writingMode ? "border-cat-pink text-cat-pink rpg:border-rpg-gold rpg:text-rpg-gold-light" : "text-slate rpg:border-rpg-border"}`}>
+              Crônica Completa
+            </button>
+          </div>
+          {!writingMode && <ChronicleIndex chapters={chapters} />}
 
           {/* Coluna principal = o que o usuário escreveu/registrou, na ordem em que o
               dia é contado (relato → momentos → gratidão → mídia → voz → fechamento).
               Coluna lateral = contexto (lugar, etiquetas, reflexão, insight, leitura).
               No tablet/mobile a lateral desce para baixo do conteúdo principal. */}
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] gap-4 items-start">
-            <div className="min-w-0 space-y-4">
+          <div className={`grid grid-cols-1 gap-4 items-start ${writingMode ? "" : "xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]"}`}>
+            <div className={`min-w-0 space-y-4 ${writingMode ? "[&>*:not(#cronica-relato)]:hidden" : ""}`}>
               <SectionCard
                 id="cronica-relato"
                 chapter="I"
@@ -1337,7 +1487,9 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
               </div>
             </div>
 
-            <aside aria-label="Contexto do dia" className="min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+            <aside aria-label="Contexto do dia" className={`min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4 ${writingMode ? "hidden" : ""}`}>
+              {isRpg && <DayStatePanel date={date} />}
+              {isRpg && chronicleHub && <LabNoteSender hub={chronicleHub} date={date} onToast={() => undefined} />}
               <SectionCard
                 id="cronica-lugar"
                 icon={<MapPin size={16} />}
@@ -3000,6 +3152,8 @@ function DiarioPageContent() {
     return <DiaryDayEditor date={date} setDate={setDate} onBack={() => setView("feed")} />;
   }
 
+  if (isRpg) return <ChronicleRpgShell openDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={setJournalFilter} />;
+
   return (
     <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
       {isRpg ? (
@@ -3055,6 +3209,143 @@ function DiarioPageContent() {
       )}
       {view === "places" && <JournalPlacesTab onOpenDay={openDay} />}
       {view === "collections" && <JournalCollectionsTab />}
+    </div>
+  );
+}
+
+const RPG_TABS = ["visao", "escrever", "entradas", "insights", "calendario", "lugares", "tematicos", "automacoes", "ia"] as const;
+type RpgTab = (typeof RPG_TABS)[number];
+
+/**
+ * Diário da Jornada 2.0 (tema RPG): Livro das Crônicas com abas. As abas
+ * clássicas (entradas, insights, calendário, lugares e diários temáticos)
+ * continuam as mesmas, só reorganizadas; o editor do dia é o de sempre.
+ */
+function ChronicleRpgShell({
+  openDay,
+  collections,
+  journalFilter,
+  onChangeFilter,
+}: {
+  openDay: (d: string) => void;
+  collections: JournalCollection[];
+  journalFilter: string | null;
+  onChangeFilter: (v: string | null) => void;
+}) {
+  const [params, setParams] = useSearchParams();
+  const tab: RpgTab = RPG_TABS.includes(params.get("aba") as RpgTab) ? (params.get("aba") as RpgTab) : "visao";
+  const setTab = (t: RpgTab) => {
+    if (t === "escrever") return openDay(todayIso());
+    setParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (t === "visao") p.delete("aba");
+      else p.set("aba", t);
+      return p;
+    });
+  };
+  const hubQ = useChronicleHub();
+  const hub = hubQ.data;
+  const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
+  const notify = (msg: string, tone: "success" | "error" = "success") => setToast({ msg, tone });
+
+  return (
+    <div className="w-full space-y-4 px-3 py-4 sm:px-4 md:px-6 lg:px-8">
+      <ModuleBanner
+        eyebrow="O Livro das Crônicas"
+        title="Diário da Jornada"
+        subtitle="Registre pensamentos, aprendizados, desafios e conquistas. Transforme experiências em evolução real."
+        mage={`${MODULE_ART}/diary/banner-mage.webp`}
+        scene={`${MODULE_ART}/diary/banner-scene.webp`}
+        actions={
+          <RPGButton variant="pink" onClick={() => openDay(todayIso())}>
+            <Plus size={15} /> Nova entrada
+          </RPGButton>
+        }
+        aside={hub ? <ChronicleRankPanel hub={hub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
+      />
+      {hubQ.isError && (
+        <div className="rpg-panel p-3 text-sm" role="alert">
+          Não foi possível carregar o resumo do Diário.{" "}
+          <button type="button" className="underline" onClick={() => void hubQ.refetch()}>
+            Tentar de novo
+          </button>
+        </div>
+      )}
+      {hub ? <ChronicleIndicators hub={hub} /> : <div className="rpg-panel h-24 animate-pulse" aria-busy />}
+
+      <ModuleTabs
+        label="Seções do Diário"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "visao", label: "Visão Geral", icon: <Sparkles size={15} /> },
+          { value: "escrever", label: "Escrever", icon: <PenLine size={15} /> },
+          { value: "entradas", label: "Entradas", icon: <BookOpen size={15} /> },
+          { value: "insights", label: "Insights", icon: <Lightbulb size={15} /> },
+          { value: "calendario", label: "Calendário", icon: <CalendarDays size={15} /> },
+          { value: "lugares", label: "Lugares", icon: <MapPin size={15} /> },
+          { value: "tematicos", label: "Diários Temáticos", icon: <Library size={15} /> },
+          { value: "automacoes", label: "Automações", icon: <Zap size={15} /> },
+          { value: "ia", label: "IA Copiloto", icon: <Wand2 size={15} /> },
+        ]}
+      />
+
+      {tab === "visao" && hub && (
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-3">
+            <ClosingRitual hub={hub} onWrite={() => openDay(hub.today)} />
+            <DayStatePanel date={hub.today} />
+          </div>
+          <div className="min-w-0 space-y-3">
+            <ConsistencyHeatmap hub={hub} onOpenDay={openDay} weeks={26} />
+            <ChronicleTimeline hub={hub} onOpenDay={openDay} limit={5} />
+          </div>
+          <div className="min-w-0 space-y-3">
+            <ChronicleMissions hub={hub} />
+            <LabNoteSender hub={hub} date={hub.today} onToast={notify} />
+          </div>
+        </div>
+      )}
+      {tab === "entradas" && hub && (
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <ChronicleTimeline hub={hub} onOpenDay={openDay} />
+          <JournalFeedTab onOpenDay={openDay} onOpenInsights={() => setTab("insights")} collections={collections} journalFilter={journalFilter} onChangeFilter={onChangeFilter} />
+        </div>
+      )}
+      {tab === "insights" && (
+        <div className="space-y-3">
+          {hub && <ChronicleInsights hub={hub} />}
+          {hub && <RetrospectivePanel hub={hub} onToast={notify} />}
+          <JournalInsightsTab collections={collections} onOpenDay={openDay} />
+        </div>
+      )}
+      {tab === "calendario" && (
+        <div className="space-y-3">
+          {hub && <ConsistencyHeatmap hub={hub} onOpenDay={openDay} />}
+          <JournalCalendarTab onOpenDay={openDay} collections={collections} journalFilter={journalFilter} onChangeFilter={onChangeFilter} />
+        </div>
+      )}
+      {tab === "lugares" && <JournalPlacesTab onOpenDay={openDay} />}
+      {tab === "tematicos" && <JournalCollectionsTab />}
+      {tab === "automacoes" && (
+        <div className="space-y-3">
+          <AutomationsPanel module="diary" title="Automações do Diário" intro="O Diário é privado: nenhuma automação envia suas crônicas à IA. Aprendizados para o Grimório e observações para o Laboratório sempre pedem sua aprovação." />
+          <AutomationsPanel module="grimoire" keys={["diary_cards"]} title="D · Cartões do Grimório a partir do Diário" intro="Os cartões sugeridos ficam na fila de aprovação do Grimório." />
+        </div>
+      )}
+      {tab === "ia" && hub && (
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          <AdvisorPanel module="diary" title="Escriba Arcano" avatar={`${MODULE_ART}/diary/advisor.webp`} />
+          <div className="space-y-3">
+            <RetrospectivePanel hub={hub} onToast={notify} />
+            <p className="rpg-panel p-3 text-[12px] text-rpg-muted">
+              Para melhorar a clareza, organizar pensamentos ou gerar perguntas sobre um texto, abra a crônica (aba Escrever): o assistente fica junto do relato, mostra a sugestão separada e só insere o que
+              você aceitar.
+            </p>
+          </div>
+        </div>
+      )}
+      <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />
     </div>
   );
 }

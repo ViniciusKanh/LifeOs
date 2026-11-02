@@ -41,6 +41,14 @@ const METRIC_KEYS = [
   "weekly_plans_sealed",
   "quests_claimed_total",
   "subtasks_done_total",
+  "journal_days_total",
+  "journal_favorites_total",
+  "journal_takeaways_total",
+  "journal_retros_saved",
+  "experiments_with_hypothesis",
+  "experiments_started_total",
+  "experiment_log_days_total",
+  "experiments_documented",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -122,6 +130,15 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
     "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND (COALESCE(early_withdrawn, 0) = 0 OR COALESCE(actual_payout, net_payout) > amount)",
   );
   addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= due_at");
+  addScalar("journal_days_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND thoughts IS NOT NULL AND thoughts <> ''");
+  addScalar("journal_favorites_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND is_favorite = 1");
+  addScalar("journal_takeaways_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND night_takeaway IS NOT NULL AND night_takeaway <> ''");
+  addScalar("journal_retros_saved", "SELECT COUNT(*) FROM journal_retrospectives WHERE owner_id = ? AND saved_at IS NOT NULL");
+  addScalar("experiments_with_hypothesis", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND hypothesis IS NOT NULL AND hypothesis <> ''");
+  addScalar("experiments_started_total", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status <> 'draft'");
+  addScalar("experiment_log_days_total", "SELECT COUNT(DISTINCT log_date) FROM personal_experiment_logs WHERE owner_id = ?");
+  // Conclusão documentada vale igual para hipótese apoiada, não apoiada ou inconclusiva.
+  addScalar("experiments_documented", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND status = 'completed' AND personal_conclusion IS NOT NULL AND personal_conclusion <> ''");
   addScalar("weekly_plans_sealed", "SELECT COUNT(*) FROM weekly_plans WHERE owner_id = ? AND sealed_at IS NOT NULL");
   addScalar("quests_claimed_total", "SELECT COUNT(*) FROM quest_assignments WHERE owner_id = ? AND claimed_at IS NOT NULL");
   addScalar("subtasks_done_total", "SELECT COUNT(*) FROM subtasks WHERE owner_id = ? AND done = 1");

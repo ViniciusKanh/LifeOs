@@ -4,6 +4,7 @@ import { generateText, getGeminiConfig } from "./geminiService.js";
 import { getBankHub } from "./bankHubService.js";
 import { getEducationHub } from "./educationHubService.js";
 import { getHealthHub } from "./healthHubService.js";
+import { getChronicleHub, getLabHub } from "./chronicleLabService.js";
 import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./planningHubService.js";
 
 /**
@@ -16,7 +17,7 @@ import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./plan
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -37,6 +38,8 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   council: "Plano proposto a partir dos seus registros; você decide o que selar.",
   missions: "Subtarefas e prioridades sugeridas só são salvas com a sua aprovação.",
   quests: "As recompensas seguem as regras do Quadro de Avisos — a IA não cria quests nem XP.",
+  diary: "Leitura só com números e etiquetas do Diário (o texto das crônicas não é enviado). Não é avaliação psicológica.",
+  lab: "Estudo pessoal observacional: sem prova de causa e efeito. Nada é criado sem a sua confirmação.",
 };
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -150,6 +153,36 @@ async function questsFacts(db: Client, ownerId: string): Promise<{ items: Adviso
   return { items, insufficient: h.progress.dailyTotal === 0 };
 }
 
+async function diaryFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  // Privacidade: só contagens e etiquetas — nenhum trecho das crônicas vai para a IA.
+  const h = await getChronicleHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [
+    { kind: "dado", text: `Sequência atual: ${i.streak} dia(s) (recorde ${i.bestStreak}). ${h.insights.last30} crônica(s) nos últimos 30 dias, ${h.insights.prev30} nos 30 anteriores.` },
+    { kind: "dado", text: `${i.reflectionsClosed} dia(s) com fechamento e ${i.gratitudes} gratidão(ões) registradas.` },
+  ];
+  const best = [...h.insights.writingByWeekday].sort((a, b) => b.count - a.count)[0];
+  if (best && best.count > 0) items.push({ kind: "inferencia", text: `Dia da semana com mais crônicas nos últimos 90 dias: ${best.label}.` });
+  if (h.insights.themes.length) items.push({ kind: "dado", text: `Temas mais frequentes: ${h.insights.themes.slice(0, 4).map((t) => t.label).join(", ")}.` });
+  const pending = h.ritual.filter((r) => !r.done).map((r) => r.title.toLowerCase());
+  if (pending.length) items.push({ kind: "sugestao", text: `Ritual de hoje: falta ${pending.slice(0, 2).join(" e ")}.` });
+  if (!h.retrospectives.some((r) => r.savedAt)) items.push({ kind: "sugestao", text: "Experimente salvar uma retrospectiva semanal na aba Insights — ela é gerada só com o que você escreveu." });
+  if (h.insights.last30 < h.insights.prev30) items.push({ kind: "sugestao", text: "A frequência caiu em relação ao mês anterior. Um registro curto já mantém o hábito." });
+  return { items, insufficient: i.entries < 3 };
+}
+
+async function labFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const h = await getLabHub(db, ownerId);
+  const i = h.indicators;
+  const items: AdvisorItem[] = [{ kind: "dado", text: `${i.active} experimento(s) ativo(s), ${i.completed} concluído(s), ${i.inAnalysis} aguardando análise, ${i.discoveries} descoberta(s) documentada(s).` }];
+  if (h.featured) items.push({ kind: "dado", text: `Em destaque: ${h.featured.title} — ${h.featured.doneDays} de ${h.featured.elapsedDays} dia(s) cumpridos.` });
+  for (const e of h.experiments.filter((x) => x.status === "active" && x.missingDays >= 2).slice(0, 2)) items.push({ kind: "inferencia", text: `${e.title} tem ${e.missingDays} dia(s) sem registro — a análise ficará menos confiável.` });
+  for (const e of h.experiments.filter((x) => x.stage === "analise" && !x.conclusion).slice(0, 2)) items.push({ kind: "sugestao", text: `${e.title}: o período terminou. Revise os resultados e documente a conclusão (inconclusivo também vale).` });
+  if (i.active === 0) items.push({ kind: "sugestao", text: "Escolha um protocolo da biblioteca ou descreva um objetivo para a IA Cientista propor um experimento." });
+  if (i.active > 2) items.push({ kind: "inferencia", text: "Vários experimentos ao mesmo tempo dificultam separar o efeito de cada um (fatores de confusão)." });
+  return { items, insufficient: h.experiments.length === 0 };
+}
+
 const SCHEMA = {
   type: "object",
   properties: {
@@ -170,6 +203,8 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     council: () => councilFacts(db, ownerId),
     missions: () => missionsFacts(db, ownerId),
     quests: () => questsFacts(db, ownerId),
+    diary: () => diaryFacts(db, ownerId),
+    lab: () => labFacts(db, ownerId),
   };
   const base = await loaders[module]();
   const fallback: AdvisorAnswer = { ai: false, items: base.items, disclaimer: DISCLAIMER[module], insufficient: base.insufficient };
@@ -185,6 +220,8 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     council: "Justifique cada recomendação com os números dados. Não presuma disponibilidade que não esteja nos fatos.",
     missions: "Não invente prazos ou estimativas; baseie a prioridade nos fatos.",
     quests: "Não invente quests, recompensas, participantes ou rankings.",
+    diary: "Você não tem acesso ao texto das crônicas, só a estatísticas. Não interprete sentimentos nem faça diagnósticos; não invente acontecimentos.",
+    lab: "Diferencie correlação de causalidade, aponte amostras pequenas e fatores de confusão. Nunca diga que algo foi comprovado.",
   }[module];
   const prompt = `Você é o conselheiro do LifeOS (módulo ${module}). Responda em português do Brasil, em até 6 itens curtos.
 Use SOMENTE os fatos abaixo (dados reais do usuário). Não crie números novos. ${rules}

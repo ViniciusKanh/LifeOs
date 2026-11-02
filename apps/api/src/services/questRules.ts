@@ -15,7 +15,7 @@ export interface QuestTemplate {
   /** Genérica = sempre alcançável (missões/XP/diário); as demais exigem uso recente do módulo. */
   generic: boolean;
   /** Módulo exibido na interface e usado como link. */
-  module: "missions" | "projects" | "health" | "library" | "habits" | "journal" | "focus" | "xp";
+  module: "missions" | "projects" | "health" | "library" | "habits" | "journal" | "focus" | "xp" | "lab";
   title: (target: number) => string;
   unit: string | null;
   /** Meta mínima e teto (ex.: diário 1x/dia → no máximo 7 na semana). */
@@ -39,6 +39,7 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
   { key: "d_workout", period: "daily", metric: "workouts", generic: false, module: "health", title: (n) => `Registre ${n} ${plural(n, "treino", "treinos")}`, unit: null, min: 1, max: 2, step: 1, xp: 25, fallback: 1 },
   { key: "d_pages", period: "daily", metric: "pages", generic: false, module: "library", title: (n) => `Leia ${n} ${plural(n, "página", "páginas")}`, unit: "pág.", min: 1, max: 150, step: 1, xp: 20, fallback: 5 },
   { key: "d_habits", period: "daily", metric: "habits", generic: false, module: "habits", title: (n) => `Cumpra ${n} ${plural(n, "hábito", "hábitos")}`, unit: null, min: 1, max: 15, step: 1, xp: 20, fallback: 1 },
+  { key: "d_lab_log", period: "daily", metric: "experimentLogs", generic: false, module: "lab", title: () => "Registre a observação de um experimento", unit: null, min: 1, max: 1, step: 1, xp: 15, fallback: 1 },
   { key: "d_journal", period: "daily", metric: "journal", generic: true, module: "journal", title: () => "Escreva no diário", unit: null, min: 1, max: 1, step: 1, xp: 15, fallback: 1 },
   { key: "d_water", period: "daily", metric: "waterMl", generic: false, module: "health", title: (n) => `Beba ${n.toLocaleString("pt-BR")} ml de água`, unit: "ml", min: 250, max: 5000, step: 250, xp: 15, fallback: 1000 },
   { key: "d_focus", period: "daily", metric: "focusMinutes", generic: false, module: "focus", title: (n) => `Foque por ${n} minutos`, unit: "min", min: 15, max: 480, step: 5, xp: 20, fallback: 25 },
@@ -50,6 +51,7 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
   { key: "w_workout_minutes", period: "weekly", metric: "workoutMinutes", generic: false, module: "health", title: (n) => `Acumule ${n} minutos de treino`, unit: "min", min: 30, max: 900, step: 10, xp: 75, fallback: 60 },
   { key: "w_pages", period: "weekly", metric: "pages", generic: false, module: "library", title: (n) => `Leia ${n} páginas na semana`, unit: "pág.", min: 10, max: 1000, step: 5, xp: 75, fallback: 30 },
   { key: "w_habits", period: "weekly", metric: "habits", generic: false, module: "habits", title: (n) => `Cumpra ${n} hábitos na semana`, unit: null, min: 3, max: 100, step: 1, xp: 70, fallback: 5 },
+  { key: "w_lab_logs", period: "weekly", metric: "experimentLogs", generic: false, module: "lab", title: (n) => `Registre observações de experimento em ${n} ${plural(n, "dia", "dias")}`, unit: "dias", min: 2, max: 7, step: 1, xp: 60, fallback: 3 },
   { key: "w_journal", period: "weekly", metric: "journal", generic: true, module: "journal", title: (n) => `Escreva no diário em ${n} ${plural(n, "dia", "dias")}`, unit: "dias", min: 2, max: 7, step: 1, xp: 70, fallback: 3 },
   { key: "w_focus", period: "weekly", metric: "focusMinutes", generic: false, module: "focus", title: (n) => `Foque por ${n} minutos na semana`, unit: "min", min: 60, max: 2400, step: 15, xp: 80, fallback: 120 },
 ];
