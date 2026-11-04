@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Heading2, Heading3, Redo2, Undo2 } from "lucide-react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -54,9 +55,18 @@ function ToolbarButton({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, rich }: { editor: Editor; rich?: boolean }) {
   return (
     <div className="flex items-center gap-0.5 flex-wrap mb-1.5 pb-1.5 border-b border-paper-border dark:border-ink-border">
+      {rich && (
+        <>
+          <ToolbarButton icon={<Undo2 size={14} />} label="Desfazer" onClick={() => editor.chain().focus().undo().run()} />
+          <ToolbarButton icon={<Redo2 size={14} />} label="Refazer" onClick={() => editor.chain().focus().redo().run()} />
+          <ToolbarButton icon={<Heading2 size={14} />} label="Título" active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
+          <ToolbarButton icon={<Heading3 size={14} />} label="Subtítulo" active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
+          <span className="w-px h-4 bg-paper-border dark:bg-ink-border mx-1" />
+        </>
+      )}
       <ToolbarButton icon={<Bold size={14} />} label="Negrito" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} />
       <ToolbarButton icon={<Italic size={14} />} label="Itálico" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} />
       <ToolbarButton
@@ -122,16 +132,22 @@ export function RichTextEditor({
   onBlur,
   placeholder,
   minHeightClass = "min-h-[76px]",
+  rich = false,
+  onReady,
 }: {
   value: string;
   onChange: (html: string) => void;
   onBlur: () => void;
   placeholder?: string;
   minHeightClass?: string;
+  /** Diário 3.0: títulos (H2/H3) e desfazer/refazer na barra. */
+  rich?: boolean;
+  /** Entrega a instância do editor (ex.: inserir inspiração no cursor). */
+  onReady?: (editor: Editor) => void;
 }) {
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, horizontalRule: false }),
+      StarterKit.configure({ heading: rich ? { levels: [2, 3] } : false, codeBlock: false, horizontalRule: false }),
       Underline,
       Link.configure({ openOnClick: false, autolink: true }),
       TaskList,
@@ -158,11 +174,16 @@ export function RichTextEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 
+  useEffect(() => {
+    if (editor && onReady) onReady(editor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
+
   if (!editor) return null;
 
   return (
     <div className="w-full rounded-xl px-3 py-2.5 bg-paper dark:bg-ink border border-paper-border dark:border-ink-border focus-within:border-cat-pink transition-colors">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} rich={rich} />
       <EditorContent editor={editor} />
     </div>
   );

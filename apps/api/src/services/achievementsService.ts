@@ -60,6 +60,12 @@ const METRIC_KEYS = [
   "life_admin_resolved_total",
   "life_admin_with_file_total",
   "life_admin_active_months",
+  "contracts_sealed_total",
+  "contract_seal_kinds",
+  "contract_stages_done_total",
+  "journal_full_closings",
+  "journal_voice_days",
+  "journal_media_days",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -167,6 +173,13 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("life_admin_resolved_total", "SELECT COUNT(*) FROM life_admin_history WHERE owner_id = ? AND (due_date IS NULL OR done_at >= date(due_date, '-60 days'))");
   addScalar("life_admin_with_file_total", "SELECT COUNT(*) FROM life_admin_items WHERE owner_id = ? AND file_data_uri IS NOT NULL");
   addScalar("life_admin_active_months", "SELECT COUNT(DISTINCT substr(done_at, 1, 7)) FROM life_admin_history WHERE owner_id = ?");
+  // Contratos 3.0 e Diário 3.0: práticas concluídas (selar, etapas, fechamento completo, mídia), nunca edição de texto.
+  addScalar("contracts_sealed_total", "SELECT COUNT(*) FROM contracts WHERE owner_id = ? AND sealed_at IS NOT NULL");
+  addScalar("contract_seal_kinds", "SELECT COUNT(DISTINCT seal_code) FROM contract_seals WHERE owner_id = ?");
+  addScalar("contract_stages_done_total", "SELECT COUNT(*) FROM contract_stages WHERE owner_id = ? AND status = 'concluida'");
+  addScalar("journal_full_closings", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND TRIM(COALESCE(closing_reflection, '')) <> '' AND TRIM(COALESCE(closing_learning, '')) <> ''");
+  addScalar("journal_voice_days", "SELECT COUNT(DISTINCT e.entry_date) FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id WHERE e.owner_id = ? AND m.kind = 'audio'");
+  addScalar("journal_media_days", "SELECT COUNT(DISTINCT e.entry_date) FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id WHERE e.owner_id = ? AND m.kind <> 'audio'");
   // Maior sequência de dias (locais) com sessão de leitura.
   if (requested.has("reading_best_streak")) {
     tzPromise ??= userTimezone(db, ownerId);

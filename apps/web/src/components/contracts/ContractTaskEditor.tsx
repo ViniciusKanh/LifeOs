@@ -13,9 +13,11 @@ export interface TaskDraft {
   dueDate: string;
   estimate: string;
   open: boolean;
+  /** Índice da etapa (string para o select); vazio = sem etapa. */
+  stage?: string;
 }
 
-export const emptyDraft = (): TaskDraft => ({ title: "", description: "", difficulty: "", dueDate: "", estimate: "", open: false });
+export const emptyDraft = (): TaskDraft => ({ title: "", description: "", difficulty: "", dueDate: "", estimate: "", open: false, stage: "" });
 
 /** Rascunhos preenchidos → entrada da API. Campos vazios ficam para os padrões do contrato (backend). */
 export function draftsToInput(drafts: TaskDraft[]): ContractTaskInput[] {
@@ -30,6 +32,7 @@ export function draftsToInput(drafts: TaskDraft[]): ContractTaskInput[] {
         difficulty: d.difficulty || null,
         dueDate: d.dueDate || null,
         estimateMinutes: Number.isFinite(est) && est > 0 ? Math.min(480, Math.round(est)) : null,
+        stageIndex: d.stage ? Number(d.stage) : null,
       };
     });
 }
@@ -39,7 +42,7 @@ export function draftsToInput(drafts: TaskDraft[]): ContractTaskInput[] {
  * (descrição, dificuldade, prazo, estimativa). O que ficar vazio herda do
  * contrato no servidor, então nenhuma tarefa nasce "sem dados".
  */
-export function ContractTaskEditor({ drafts, onChange, contractDue }: { drafts: TaskDraft[]; onChange: (d: TaskDraft[]) => void; contractDue?: string | null }) {
+export function ContractTaskEditor({ drafts, onChange, contractDue, stages }: { drafts: TaskDraft[]; onChange: (d: TaskDraft[]) => void; contractDue?: string | null; stages?: string[] }) {
   const set = (i: number, patch: Partial<TaskDraft>) => onChange(drafts.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   return (
     <div className="space-y-2">
@@ -55,6 +58,16 @@ export function ContractTaskEditor({ drafts, onChange, contractDue }: { drafts: 
               style={{ borderRadius: 3 }}
               maxLength={200}
             />
+            {stages && stages.length > 0 && (
+              <select value={d.stage ?? ""} onChange={(e) => set(i, { stage: e.target.value })} className={`${rpgField} !w-32 shrink-0`} style={{ borderRadius: 3 }} aria-label={`Etapa da tarefa ${i + 1}`}>
+                <option value="">Sem etapa</option>
+                {stages.map((s, si) => (
+                  <option key={si} value={String(si)}>
+                    {si + 1}. {s}
+                  </option>
+                ))}
+              </select>
+            )}
             <button type="button" onClick={() => set(i, { open: !d.open })} aria-expanded={d.open} aria-label="Detalhes da tarefa" className="shrink-0 px-2 text-rpg-muted hover:text-rpg-gold-light">
               <ChevronDown size={16} className={d.open ? "rotate-180 transition-transform" : "transition-transform"} />
             </button>

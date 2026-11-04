@@ -134,6 +134,9 @@ export function HeroBanner({ hub }: { hub: Hub }) {
 
 /* ═══════════════════════════════ Status e atributos ═══════════════════════════════ */
 
+const STATUS_BORDER = { purple: "border-rpg-purple/60", gold: "border-rpg-gold/60", pink: "border-rpg-pink/60", orange: "border-rpg-orange/60", green: "border-rpg-green/60", blue: "border-rpg-blue/60", red: "border-rpg-red/60" } as const;
+const STATUS_TEXT = { purple: "text-rpg-purple", gold: "text-rpg-gold", pink: "text-rpg-pink", orange: "text-rpg-orange", green: "text-rpg-green", blue: "text-rpg-blue", red: "text-rpg-red" } as const;
+
 export function HeroStatus({ hub }: { hub: Hub }) {
   const s = hub.status;
   const cards = [
@@ -146,11 +149,25 @@ export function HeroStatus({ hub }: { hub: Hub }) {
     { to: "/hoje", icon: <BarChart3 size={22} />, label: "Life Score", value: `${s.lifeScore}/100`, tone: "purple" as const },
     { to: "/timeline", icon: <Flame size={22} />, label: "Sequência", value: `${s.streakDays} dias`, tone: "red" as const },
   ];
+  // Ficha compacta: no desktop o Status divide a linha com Atributos e Radar (1/3
+  // da largura), então usa 2 colunas e rótulo em até 2 linhas — nada é cortado.
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
       {cards.map((c) => (
-        <Link key={c.label} to={c.to} className="block hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold">
-          <IndicatorCard icon={c.icon} label={c.label} value={c.value} tone={c.tone} />
+        <Link
+          key={c.label}
+          to={c.to}
+          className={`flex min-w-0 items-center gap-2 border-2 bg-rpg-panel px-2 py-2 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold ${STATUS_BORDER[c.tone]}`}
+          style={{ borderRadius: 4 }}
+          aria-label={`${c.label}: ${c.value}`}
+        >
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center [&>svg]:h-[18px] [&>svg]:w-[18px] ${STATUS_TEXT[c.tone]}`} aria-hidden>
+            {c.icon}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 block font-pixel text-[9px] uppercase leading-tight text-rpg-muted">{c.label}</span>
+            <span className="block break-words font-rpg text-base font-bold leading-tight text-rpg-text tabular-nums">{c.value}</span>
+          </span>
         </Link>
       ))}
     </div>

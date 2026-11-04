@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { extractJson, str } from "./aiJson.js";
 import { generateText, getGeminiConfig } from "./geminiService.js";
 import { getDifficultyRewards, isDifficulty, syncContractStatus, todayKeyFor, type DifficultyKey } from "./gamificationService.js";
+import { logContractEvent, stageStatements, syncContractStages, type StageInput } from "./contractStages.js";
 
 /**
  * Contratos: um objetivo com um conjunto de tarefas reais (tabela tasks,
@@ -13,6 +14,7 @@ import { getDifficultyRewards, isDifficulty, syncContractStatus, todayKeyFor, ty
 
 export type ContractStatus = "ativo" | "concluido" | "arquivado";
 type Priority = "Baixa" | "Média" | "Alta";
+const PRIORITIES: Priority[] = ["Baixa", "Média", "Alta"];
 
 export interface ContractTaskInput {
   title: string;
@@ -23,6 +25,10 @@ export interface ContractTaskInput {
   /** Início planejado (cronograma do contrato). */
   startDate?: string | null;
   estimateMinutes?: number | null;
+  /** Índice da etapa em `ContractInput.stages` (criação). */
+  stageIndex?: number | null;
+  /** Etapa já existente do contrato (adição posterior). */
+  stageId?: string | null;
 }
 
 /** Meta nova a criar junto do contrato (quando o usuário não escolheu uma já existente). */
@@ -64,6 +70,13 @@ export interface ContractInput {
   newGoal?: NewGoalInput | null;
   /** Cria o Projeto junto com o contrato e já vincula. */
   newProject?: NewProjectInput | null;
+  category?: string | null;
+  priority?: Priority;
+  successCriteria?: string[];
+  campaignId?: string | null;
+  reminderDays?: number | null;
+  stages?: StageInput[];
+  isDraft?: boolean;
 }
 
 export class ContractError extends Error {
@@ -101,11 +114,33 @@ export interface ContractView {
   /** Projeto vinculado — mesma ideia, para objetivos com várias frentes. */
   projectId: string | null;
   projectName: string | null;
+  category: string | null;
+  priority: Priority;
+  successCriteria: string[];
+  campaignId: string | null;
+  campaignTitle: string | null;
+  reminderDays: number | null;
+  isDraft: boolean;
+  pausedAt: string | null;
+  cancelledAt: string | null;
+  sealedAt: string | null;
+  featured: boolean;
 }
+
+const parseList = (v: unknown): string[] => {
+  if (typeof v !== "string" || !v) return [];
+  try {
+    const x = JSON.parse(v) as unknown;
+    return Array.isArray(x) ? x.filter((i): i is string => typeof i === "string") : [];
+  } catch {
+    return [];
+  }
+};
 
 const CONTRACT_SELECT = `SELECT c.*,
     g.title AS goal_title,
     p.name AS project_name,
+    cp.title AS campaign_title,
     (SELECT COUNT(*) FROM tasks t WHERE t.contract_id = c.id AND t.owner_id = c.owner_id) AS total_tasks,
     (SELECT COUNT(*) FROM tasks t WHERE t.contract_id = c.id AND t.owner_id = c.owner_id AND t.status = 'Concluído') AS done_tasks,
     (SELECT COALESCE(SUM(x.xp), 0) FROM xp_events x WHERE x.owner_id = c.owner_id AND (
@@ -116,7 +151,8 @@ const CONTRACT_SELECT = `SELECT c.*,
         (l.source_type = 'task' AND l.source_id IN (SELECT id FROM tasks t WHERE t.contract_id = c.id AND t.owner_id = c.owner_id)))) AS earned_coins
   FROM contracts c
   LEFT JOIN goals g ON g.id = c.goal_id
-  LEFT JOIN projects p ON p.id = c.project_id`;
+  LEFT JOIN projects p ON p.id = c.project_id
+  LEFT JOIN campaigns cp ON cp.id = c.campaign_id AND cp.owner_id = c.owner_id`;
 
 function mapContract(row: Record<string, unknown>, rewards: Awaited<ReturnType<typeof getDifficultyRewards>>): ContractView {
   const difficulty = isDifficulty(row.difficulty) ? row.difficulty : "medio";
@@ -147,6 +183,17 @@ function mapContract(row: Record<string, unknown>, rewards: Awaited<ReturnType<t
     goalTitle: row.goal_title == null ? null : String(row.goal_title),
     projectId: row.project_id == null ? null : String(row.project_id),
     projectName: row.project_name == null ? null : String(row.project_name),
+    category: row.category == null ? null : String(row.category),
+    priority: (PRIORITIES.includes(row.priority as Priority) ? row.priority : "Média") as Priority,
+    successCriteria: parseList(row.success_criteria),
+    campaignId: row.campaign_id == null ? null : String(row.campaign_id),
+    campaignTitle: row.campaign_title == null ? null : String(row.campaign_title),
+    reminderDays: row.reminder_days == null ? null : Number(row.reminder_days),
+    isDraft: Number(row.is_draft ?? 0) === 1,
+    pausedAt: row.paused_at == null ? null : String(row.paused_at),
+    cancelledAt: row.cancelled_at == null ? null : String(row.cancelled_at),
+    sealedAt: row.sealed_at == null ? null : String(row.sealed_at),
+    featured: Number(row.featured ?? 0) === 1,
   };
 }
 
@@ -214,16 +261,16 @@ export function withTaskDefaults(
 // Tarefa de contrato herda a Meta/Projeto do próprio contrato (quando houver) —
 // sem isso ela nascia "órfã" mesmo com o contrato vinculado, e não aparecia
 // no Kanban do projeto nem contava pra meta.
-function taskInsert(ownerId: string, contractId: string, goalId: string | null, projectId: string | null, t: ReturnType<typeof withTaskDefaults>) {
+function taskInsert(ownerId: string, contractId: string, goalId: string | null, projectId: string | null, t: ReturnType<typeof withTaskDefaults>, stageId: string | null = null) {
   return {
-    sql: `INSERT INTO tasks (id, owner_id, contract_id, goal_id, project_id, title, description, status, priority, difficulty, due_date, start_date, estimate_minutes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?, ?)`,
-    args: [nanoid(), ownerId, contractId, goalId, projectId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.startDate, t.estimateMinutes],
+    sql: `INSERT INTO tasks (id, owner_id, contract_id, goal_id, project_id, title, description, status, priority, difficulty, due_date, start_date, estimate_minutes, contract_stage_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'A Fazer', ?, ?, ?, ?, ?, ?)`,
+    args: [nanoid(), ownerId, contractId, goalId, projectId, t.title, t.description, t.priority, t.difficulty, t.dueDate, t.startDate, t.estimateMinutes, stageId],
   };
 }
 
 /** Confere que o id pertence ao próprio usuário antes de vincular (nunca confia em id vindo do cliente sem checar). */
-async function assertOwned(db: Client, table: "goals" | "projects", ownerId: string, id: string, notFoundMessage: string): Promise<void> {
+async function assertOwned(db: Client, table: "goals" | "projects" | "campaigns", ownerId: string, id: string, notFoundMessage: string): Promise<void> {
   const r = await db.execute({ sql: `SELECT id FROM ${table} WHERE id = ? AND owner_id = ?`, args: [id, ownerId] });
   if (r.rows.length === 0) throw new ContractError(notFoundMessage, 404);
 }
@@ -270,23 +317,76 @@ async function resolveGoalProjectLinks(
 
 export async function createContract(db: Client, ownerId: string, input: ContractInput): Promise<ContractView> {
   const id = nanoid();
-  const { goalId, projectId, extraStatements } = await resolveGoalProjectLinks(db, ownerId, input);
+  if (input.campaignId) await assertOwned(db, "campaigns", ownerId, input.campaignId, "Campanha inválida.");
+  // Rascunho não cria Meta/Projeto/tarefas: tudo fica guardado até a ativação.
+  const links = input.isDraft
+    ? { goalId: input.goalId ?? null, projectId: input.projectId ?? null, extraStatements: [] as Array<{ sql: string; args: Array<string | null> }> }
+    : await resolveGoalProjectLinks(db, ownerId, input);
+  if (input.isDraft) {
+    if (links.goalId) await assertOwned(db, "goals", ownerId, links.goalId, "Meta inválida.");
+    if (links.projectId) await assertOwned(db, "projects", ownerId, links.projectId, "Projeto inválido.");
+  }
+  const { goalId, projectId, extraStatements } = links;
+  const stages = input.isDraft ? { ids: [] as string[], statements: [] } : stageStatements(ownerId, id, input.stages ?? []);
+  const draftJson = input.isDraft ? JSON.stringify({ tasks: input.tasks ?? [], stages: input.stages ?? [], newGoal: input.newGoal ?? null, newProject: input.newProject ?? null }) : null;
   const statements = [
     ...extraStatements,
     {
       sql: `INSERT INTO contracts (id, owner_id, title, description, objective, difficulty, due_date, ai_generated, goal_id, project_id,
-                                   start_date, weekly_hours, why, reward_text, stakes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                   start_date, weekly_hours, why, reward_text, stakes, category, priority, success_criteria, campaign_id, reminder_days, is_draft, draft_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id, ownerId, input.title.trim(), input.description ?? null, input.objective ?? null, input.difficulty, input.dueDate ?? null, input.aiGenerated ? 1 : 0, goalId, projectId,
         input.startDate ?? (await todayKeyFor(db, ownerId)), input.weeklyHours ?? null, input.why ?? null, input.rewardText ?? null, input.stakes ?? null,
+        input.category ?? null, input.priority ?? "Média", input.successCriteria?.length ? JSON.stringify(input.successCriteria) : null, input.campaignId ?? null, input.reminderDays ?? null,
+        input.isDraft ? 1 : 0, draftJson,
       ],
     },
-    ...(input.tasks ?? []).map((t) =>
-      taskInsert(ownerId, id, goalId, projectId, withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null })),
+    ...stages.statements,
+    ...(input.isDraft ? [] : input.tasks ?? []).map((t) =>
+      taskInsert(
+        ownerId, id, goalId, projectId,
+        withTaskDefaults(t, { title: input.title.trim(), objective: input.objective ?? null, difficulty: input.difficulty, dueDate: input.dueDate ?? null }),
+        t.stageIndex != null ? stages.ids[t.stageIndex] ?? null : null,
+      ),
     ),
   ];
   await db.batch(statements, "write");
+  await logContractEvent(db, ownerId, id, input.isDraft ? "draft_saved" : "created", input.isDraft ? "Rascunho salvo." : `Contrato firmado com ${(input.tasks ?? []).length} obrigação(ões).`);
+  return getContract(db, ownerId, id);
+}
+
+/** Ativa um rascunho: cria vínculos, etapas e tarefas guardados no rascunho. */
+export async function activateDraft(db: Client, ownerId: string, id: string): Promise<ContractView> {
+  const c = await getContract(db, ownerId, id);
+  if (!c.isDraft) throw new ContractError("Este contrato já está ativo.", 409);
+  const raw = await db.execute({ sql: "SELECT draft_json FROM contracts WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
+  let draft: { tasks?: ContractTaskInput[]; stages?: StageInput[]; newGoal?: NewGoalInput | null; newProject?: NewProjectInput | null } = {};
+  try {
+    draft = JSON.parse(String(raw.rows[0]?.draft_json ?? "{}")) as typeof draft;
+  } catch {
+    draft = {};
+  }
+  const links = await resolveGoalProjectLinks(db, ownerId, { goalId: c.goalId, projectId: c.projectId, newGoal: draft.newGoal ?? null, newProject: draft.newProject ?? null });
+  const stages = stageStatements(ownerId, id, Array.isArray(draft.stages) ? draft.stages : []);
+  const tasks = Array.isArray(draft.tasks) ? draft.tasks.slice(0, 30) : [];
+  await db.batch(
+    [
+      ...links.extraStatements,
+      {
+        sql: "UPDATE contracts SET is_draft = 0, draft_json = NULL, goal_id = ?, project_id = ?, start_date = COALESCE(start_date, ?), updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+        args: [links.goalId, links.projectId, await todayKeyFor(db, ownerId), id, ownerId],
+      },
+      ...stages.statements,
+      ...tasks
+        .filter((t) => typeof t?.title === "string" && t.title.trim())
+        .map((t) =>
+          taskInsert(ownerId, id, links.goalId, links.projectId, withTaskDefaults(t, { title: c.title, objective: c.objective, difficulty: c.difficulty, dueDate: c.dueDate }), t.stageIndex != null ? stages.ids[t.stageIndex] ?? null : null),
+        ),
+    ],
+    "write",
+  );
+  await logContractEvent(db, ownerId, id, "activated", `Rascunho ativado com ${tasks.length} obrigação(ões).`);
   return getContract(db, ownerId, id);
 }
 
@@ -294,14 +394,22 @@ export async function updateContract(
   db: Client,
   ownerId: string,
   id: string,
-  input: Partial<Pick<ContractInput, "title" | "description" | "objective" | "difficulty" | "dueDate" | "goalId" | "projectId" | "startDate" | "weeklyHours" | "why" | "rewardText" | "stakes">> & {
+  input: Partial<Pick<ContractInput, "title" | "description" | "objective" | "difficulty" | "dueDate" | "goalId" | "projectId" | "startDate" | "weeklyHours" | "why" | "rewardText" | "stakes" | "category" | "priority" | "successCriteria" | "campaignId" | "reminderDays">> & {
     status?: "ativo" | "arquivado";
   },
 ): Promise<ContractView> {
   const current = await getContract(db, ownerId, id);
   if (input.goalId) await assertOwned(db, "goals", ownerId, input.goalId, "Meta inválida.");
   if (input.projectId) await assertOwned(db, "projects", ownerId, input.projectId, "Projeto inválido.");
+  if (input.campaignId) await assertOwned(db, "campaigns", ownerId, input.campaignId, "Campanha inválida.");
+  const values = input as Record<string, unknown>;
+  if ("successCriteria" in input) values.successCriteria = input.successCriteria?.length ? JSON.stringify(input.successCriteria) : null;
   const map: Record<string, string> = {
+    category: "category",
+    priority: "priority",
+    successCriteria: "success_criteria",
+    campaignId: "campaign_id",
+    reminderDays: "reminder_days",
     title: "title",
     description: "description",
     objective: "objective",
@@ -320,17 +428,20 @@ export async function updateContract(
   for (const [key, col] of Object.entries(map)) {
     if (key in input) {
       sets.push(`${col} = ?`);
-      args.push(((input as Record<string, string | number | null | undefined>)[key] ?? null) as string | number | null);
+      args.push(((values as Record<string, string | number | null | undefined>)[key] ?? null) as string | number | null);
     }
   }
   // Arquivar/reativar: "concluido" só é definido pelo próprio motor (todas as tarefas feitas).
   if (input.status === "arquivado" && current.status !== "arquivado") sets.push("status = 'arquivado'");
-  if (input.status === "ativo" && current.status === "arquivado") sets.push("status = 'ativo'");
+  if (input.status === "ativo" && current.status === "arquivado") sets.push("status = 'ativo'", "cancelled_at = NULL");
   if (sets.length > 0) {
     sets.push("updated_at = datetime('now')");
     await db.execute({ sql: `UPDATE contracts SET ${sets.join(", ")} WHERE id = ? AND owner_id = ?`, args: [...args, id, ownerId] });
   }
   if (input.status === "ativo") await syncContractStatus(db, ownerId, id);
+  if (input.status === "arquivado" && current.status !== "arquivado") await logContractEvent(db, ownerId, id, "archived");
+  else if (input.status === "ativo" && current.status === "arquivado") await logContractEvent(db, ownerId, id, "reactivated");
+  else if (sets.length > 0) await logContractEvent(db, ownerId, id, "edited", "Cláusulas atualizadas.");
   return getContract(db, ownerId, id);
 }
 
@@ -348,10 +459,16 @@ export async function deleteContract(db: Client, ownerId: string, id: string, de
 export async function addContractTasks(db: Client, ownerId: string, id: string, tasks: ContractTaskInput[]) {
   const c = await getContract(db, ownerId, id);
   if (c.status === "arquivado") throw new ContractError("Reative o contrato antes de adicionar tarefas.");
+  if (c.isDraft) throw new ContractError("Ative o rascunho antes de adicionar tarefas.");
+  const stageRows = await db.execute({ sql: "SELECT id FROM contract_stages WHERE contract_id = ? AND owner_id = ?", args: [id, ownerId] });
+  const validStages = new Set(stageRows.rows.map((r) => String(r.id)));
   await db.batch(
-    tasks.map((t) => taskInsert(ownerId, id, c.goalId, c.projectId, withTaskDefaults(t, { title: c.title, objective: c.objective, difficulty: c.difficulty, dueDate: c.dueDate }))),
+    tasks.map((t) =>
+      taskInsert(ownerId, id, c.goalId, c.projectId, withTaskDefaults(t, { title: c.title, objective: c.objective, difficulty: c.difficulty, dueDate: c.dueDate }), t.stageId && validStages.has(t.stageId) ? t.stageId : null),
+    ),
     "write",
   );
+  await syncContractStages(db, ownerId, id);
   // Contrato já cumprido volta a "ativo" com tarefas novas (o bônus pago não se repete).
   await syncContractStatus(db, ownerId, id);
   return listContractTasks(db, ownerId, id);
@@ -405,7 +522,6 @@ export interface ContractProposal {
   project: SuggestedProject | null;
 }
 
-const PRIORITIES: Priority[] = ["Baixa", "Média", "Alta"];
 
 export function sanitizeTasks(raw: unknown, fallbackDifficulty: DifficultyKey, max: number): ContractProposal["tasks"] {
   if (!Array.isArray(raw)) return [];

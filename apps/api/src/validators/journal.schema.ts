@@ -15,10 +15,15 @@ export const journalUpsertSchema = z.object({
   baseUpdatedAt: z.string().max(40).nullable().optional(),
   /** "Como foi meu dia" — texto corrido (HTML do editor rico). Teto maior por ser o texto principal. */
   thoughts: z.string().trim().max(40000).optional().nullable(),
-  gratitude: z.array(z.string().trim().max(300)).max(3).optional(),
+  // Diário 3.0: gratidão pode ir além de três itens.
+  gratitude: z.array(z.string().trim().max(300)).max(10).optional(),
   selfCare: z.array(z.string().trim().max(60)).max(20).optional(),
   selfCareOther: z.string().trim().max(300).optional().nullable(),
   nightTakeaway: z.string().trim().max(4000).optional().nullable(),
+  /** Fechamento do dia 3.0 — omitido = não mexe; "" ou null = limpa. */
+  closingReflection: z.string().trim().max(4000).optional().nullable(),
+  closingLearning: z.string().trim().max(4000).optional().nullable(),
+  closingPending: z.string().trim().max(2000).optional().nullable(),
   focusTaskIds: z.array(z.string()).max(10).optional(),
   journalIds: z.array(z.string()).max(20).optional(),
   /** Localização real digitada/escolhida no editor (busca via /api/context/geocode) — nunca inventada. */

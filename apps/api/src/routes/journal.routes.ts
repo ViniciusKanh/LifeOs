@@ -119,6 +119,9 @@ async function buildJournalResponse(db: ReturnType<typeof getDb>, ownerId: strin
     nightMood: row?.night_mood ?? null,
     nightHelped: row?.night_helped ?? null,
     nightTakeaway: row?.night_takeaway ?? null,
+    closingReflection: (row?.closing_reflection as string | null | undefined) ?? null,
+    closingLearning: (row?.closing_learning as string | null | undefined) ?? null,
+    closingPending: (row?.closing_pending as string | null | undefined) ?? null,
     focusTaskIds: parseJsonArray(row?.focus_task_ids),
     journalIds,
     media,
@@ -601,6 +604,10 @@ journalRouter.put("/:date", async (req, res) => {
     location_lat: data.locationLat ?? null,
     location_lng: data.locationLng ?? null,
     tags: JSON.stringify(data.tags ?? []),
+    // Campos do fechamento 3.0: undefined preserva o valor salvo (clientes antigos não apagam nada).
+    closing_reflection: data.closingReflection === undefined ? null : data.closingReflection ?? "",
+    closing_learning: data.closingLearning === undefined ? null : data.closingLearning ?? "",
+    closing_pending: data.closingPending === undefined ? null : data.closingPending ?? "",
   };
 
   const entryId = existingRow?.id ?? nanoid();
@@ -610,6 +617,7 @@ journalRouter.put("/:date", async (req, res) => {
       sql: `UPDATE journal_entries SET
               thoughts = ?, gratitude = ?, self_care = ?, self_care_other = ?, night_takeaway = ?,
               focus_task_ids = COALESCE(?, focus_task_ids), location_label = ?, location_lat = ?, location_lng = ?, tags = ?,
+              closing_reflection = COALESCE(?, closing_reflection), closing_learning = COALESCE(?, closing_learning), closing_pending = COALESCE(?, closing_pending),
               updated_at = datetime('now')
             WHERE id = ? AND owner_id = ?`,
       args: [
@@ -623,6 +631,9 @@ journalRouter.put("/:date", async (req, res) => {
         values.location_lat,
         values.location_lng,
         values.tags,
+        values.closing_reflection,
+        values.closing_learning,
+        values.closing_pending,
         entryId,
         ownerId,
       ],
@@ -631,8 +642,8 @@ journalRouter.put("/:date", async (req, res) => {
     await db.execute({
       sql: `INSERT INTO journal_entries
               (id, owner_id, entry_date, thoughts, gratitude, self_care, self_care_other, night_takeaway,
-               focus_task_ids, location_label, location_lat, location_lng, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               focus_task_ids, location_label, location_lat, location_lng, tags, closing_reflection, closing_learning, closing_pending)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         entryId,
         ownerId,
@@ -647,6 +658,9 @@ journalRouter.put("/:date", async (req, res) => {
         values.location_lat,
         values.location_lng,
         values.tags,
+        values.closing_reflection,
+        values.closing_learning,
+        values.closing_pending,
       ],
     });
   }

@@ -9,6 +9,10 @@ export interface JournalUpsertInput {
   selfCare?: string[];
   selfCareOther?: string | null;
   nightTakeaway?: string | null;
+  /** Fechamento do dia 3.0 (omitido = mantém o valor salvo). */
+  closingReflection?: string | null;
+  closingLearning?: string | null;
+  closingPending?: string | null;
   focusTaskIds?: string[];
   journalIds?: string[];
   locationLabel?: string | null;

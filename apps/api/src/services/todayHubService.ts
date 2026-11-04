@@ -288,7 +288,18 @@ export async function getTodayHub(db: Client, ownerId: string) {
       reward: { xp: base.xp + (due === today ? R.dailyMissionXp : 0) + (isMain ? R.mainMissionXp : 0), coins: base.coins + (isMain ? R.mainMissionCoins : 0) },
     };
   });
-  const mainId = focusIds[0] ?? ranked[0]?.id ?? missions[0]?.id ?? null;
+  // Missão principal é OPCIONAL: só existe quando o usuário fixa uma (bônus oficial).
+  // Sem ela, o dia é guiado por "Foco agora" — as 3 missões mais bem ranqueadas.
+  const mainId = focusIds[0] ?? null;
+  const rankedIds = ranked.map((r) => String(r.id));
+  const focusNow = [...missions]
+    .sort((a, b) => {
+      const ia = rankedIds.indexOf(a.id);
+      const ib = rankedIds.indexOf(b.id);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    })
+    .filter((m) => !m.isMain)
+    .slice(0, 3);
   let main = missions.find((m) => m.id === mainId) ?? null;
   if (!main && mainId) {
     const r = await db.execute({ sql: "SELECT id, title, priority, status, due_date FROM tasks WHERE id = ? AND owner_id = ?", args: [mainId, ownerId] });
@@ -313,7 +324,7 @@ export async function getTodayHub(db: Client, ownerId: string) {
       case "planning":
         return focusIds.length > 0 || !!String(journal.rows[0]?.intention ?? "").trim() || null;
       case "task":
-        return s.refId ? done.rows.some((d) => String(d.id) === s.refId) : !!mainId && done.rows.some((d) => String(d.id) === mainId);
+        return s.refId ? done.rows.some((d) => String(d.id) === s.refId) : mainId ? done.rows.some((d) => String(d.id) === mainId) : done.rows.length > 0;
       case "habit":
         return s.refId ? habits.habits.some((h) => h.id === s.refId && h.doneToday) : habits.ritual.total > 0 && habits.ritual.done >= habits.ritual.total;
       case "focus":
@@ -361,6 +372,8 @@ export async function getTodayHub(db: Client, ownerId: string) {
       missionsDone: done.rows.length,
     },
     main: main ? { ...main, subtaskList: mainSubtasks, manual: focusIds.length > 0 } : null,
+    focusNow,
+    doneToday: done.rows.slice(0, 20).map((d) => ({ id: String(d.id), title: String(d.title) })),
     missions,
     habits: { items: habits.ritual.items.map((i) => ({ ...i, streak: habits.habits.find((h) => h.id === i.id)?.streak ?? 0, frequency: habits.habits.find((h) => h.id === i.id)?.frequency ?? "daily" })), done: habits.ritual.done, total: habits.ritual.total },
     agenda: calendar.map((c) => ({ id: c.id, title: c.title, startsAt: c.startsAt, endsAt: c.endsAt, allDay: c.allDay, sourceType: c.sourceType, sourceId: c.sourceId, link: c.link, category: c.category ?? null, blockTaskId: c.blockTaskId ?? null })),
@@ -386,11 +399,13 @@ export async function getTodayHub(db: Client, ownerId: string) {
 export type TodayHub = Awaited<ReturnType<typeof getTodayHub>>;
 
 /** Próxima melhor ação (determinística): conflito → atrasada → missão principal → hábito pendente → foco. */
-export function nextBestAction(h: Pick<TodayHub, "conflicts" | "missions" | "main" | "habits" | "indicators">): { kind: string; text: string; targetId: string | null } {
+export function nextBestAction(h: Pick<TodayHub, "conflicts" | "missions" | "main" | "habits" | "indicators"> & { focusNow?: TodayHub["focusNow"] }): { kind: string; text: string; targetId: string | null } {
   if (h.conflicts.length) return { kind: "conflict", text: `Resolva o conflito na agenda: ${h.conflicts[0]!.a} × ${h.conflicts[0]!.b}.`, targetId: null };
   const overdue = h.missions.find((m) => m.overdue);
   if (overdue) return { kind: "overdue", text: `Conclua ou reagende a missão atrasada “${overdue.title}”.`, targetId: overdue.id };
   if (h.main && h.main.status !== "Concluído") return { kind: "main", text: `Inicie um bloco de foco na missão principal “${h.main.title}”.`, targetId: h.main.id };
+  const lead = h.focusNow?.[0];
+  if (lead) return { kind: "focus_now", text: `Próxima prioridade: “${lead.title}”.`, targetId: lead.id };
   const habit = h.habits.items.find((i) => !i.done);
   if (habit) return { kind: "habit", text: `Cumpra o hábito “${habit.name}”.`, targetId: habit.id };
   if (h.indicators.focusMinutes < 25) return { kind: "focus", text: "Faça um Pomodoro de 25 minutos em algo importante.", targetId: null };

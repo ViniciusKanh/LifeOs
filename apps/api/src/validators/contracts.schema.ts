@@ -11,7 +11,26 @@ export const contractTaskSchema = z.object({
   dueDate: dateOnly.optional().nullable(),
   startDate: dateOnly.optional().nullable(),
   estimateMinutes: z.number().int().min(1).max(24 * 60).optional().nullable(),
+  /** Etapa do contrato: índice em `stages` (na criação) ou id de uma etapa existente. */
+  stageIndex: z.number().int().min(0).max(9).optional().nullable(),
+  stageId: z.string().trim().min(1).optional().nullable(),
 });
+
+export const CONTRACT_CATEGORIES = ["estudos", "saude", "trabalho", "financas", "habitos", "leitura", "criatividade", "relacionamentos", "casa", "outro"] as const;
+export const stageSchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  name: z.string().trim().min(1, "Dê um nome à etapa.").max(80),
+  objective: z.string().trim().max(300).optional().nullable(),
+  criterion: z.string().trim().max(300).optional().nullable(),
+});
+/** Campos dos Contratos 3.0 (todos opcionais, para não quebrar clientes antigos). */
+const pactFields = {
+  category: z.enum(CONTRACT_CATEGORIES).optional().nullable(),
+  priority: z.enum(["Baixa", "Média", "Alta"]).optional(),
+  successCriteria: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+  campaignId: z.string().trim().min(1).optional().nullable(),
+  reminderDays: z.number().int().min(0).max(30).optional().nullable(),
+};
 
 /** Cláusulas do contrato (todas opcionais). */
 const clauseFields = {
@@ -48,6 +67,10 @@ export const createContractSchema = z.object({
   projectId: z.string().trim().min(1).optional().nullable(),
   newGoal: newGoalSchema.optional().nullable(),
   newProject: newProjectSchema.optional().nullable(),
+  ...pactFields,
+  stages: z.array(stageSchema).max(10).optional(),
+  /** Rascunho: guarda o contrato sem criar tarefas até ser ativado. */
+  isDraft: z.boolean().optional(),
 });
 
 export const updateContractSchema = z.object({
@@ -61,6 +84,7 @@ export const updateContractSchema = z.object({
   // null desvincula; omitido não mexe no vínculo atual.
   goalId: z.string().trim().min(1).optional().nullable(),
   projectId: z.string().trim().min(1).optional().nullable(),
+  ...pactFields,
 });
 
 export const addTasksSchema = z.object({ tasks: z.array(contractTaskSchema).min(1).max(30) });

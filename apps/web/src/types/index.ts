@@ -808,6 +808,10 @@ export interface JournalEntry {
   nightMood: number | null;
   /** "O que levo para amanhã". */
   nightTakeaway: string | null;
+  /** Fechamento do dia 3.0: reflexão, aprendizado e pendência. */
+  closingReflection?: string | null;
+  closingLearning?: string | null;
+  closingPending?: string | null;
   focusTaskIds: string[];
   /** Ids dos diários (coleções) a que a entrada deste dia pertence — ver JournalCollection. */
   journalIds: string[];
@@ -991,7 +995,7 @@ export interface CalendarItem {
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
-  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin";
+  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin" | "contract";
   sourceId: string | null;
   link: string | null;
   /** Categoria visual do evento (estudo, foco, saúde...) — eventos antigos vêm como null. */

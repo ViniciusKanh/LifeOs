@@ -23,6 +23,7 @@ import { runHabitReminders, runHabitWeeklyReview, runStreakAnalysis } from "./ha
 import { runReadingReminder, runReadingSummary } from "./libraryHubService.js";
 import { runAdminSummary, runDocumentCheck, runMissingFiles, runRiskAlerts, runSubscriptionDigest } from "./lifeAdminHubService.js";
 import { runMorningPlan, runSmartAlerts } from "./todayHubService.js";
+import { runPactReminders, runPactReplan, runPactSealReady } from "./contractGuildService.js";
 import { runPerformanceAlerts, runWeeklyEvolution } from "./heroDashboardService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
@@ -161,6 +162,21 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "admin:due_reminders":
     case "admin:recurrence":
     case "admin:agenda_sync":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
+    case "contracts:reminders":
+      return runPactReminders(db, ownerId, config);
+    case "contracts:replan":
+      return runPactReplan(db, ownerId, config);
+    case "contracts:seal_ready":
+      return runPactSealReady(db, ownerId, config);
+    case "contracts:progress":
+    case "contracts:next_stage":
+    case "contracts:achievements":
+    case "contracts:agenda":
+    case "contracts:goals":
+    case "diary:autosave":
+    case "diary:entry_summary":
+    case "diary:extract_tasks":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "today:morning_plan":
       return runMorningPlan(db, ownerId, config);

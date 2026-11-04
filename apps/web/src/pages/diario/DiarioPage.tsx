@@ -78,6 +78,7 @@ import { RPGButton } from "@/components/rpg/RPGButton";
 import { useTheme } from "@/hooks/useTheme";
 import { RPG_SECTION_TITLE } from "@/components/rpg/rpgAssets";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
+import { ChronicleEntry3 } from "@/components/chronicle3/ChronicleEntry3";
 import { API_URL, ApiError } from "@/services/api";
 import { journalService } from "@/services/journalService";
 import { useChronicleHub } from "@/hooks/useChronicleLab";
@@ -175,6 +176,9 @@ async function downloadJournalPdf(date: string) {
   URL.revokeObjectURL(url);
 }
 const AUTOSAVE_DELAY_MS = 900;
+
+/** Diário 3.0: gratidão pode ter mais de 3 itens — sempre mostra ao menos 3 campos. */
+const padGratitude = (g: string[]) => [...g, "", "", ""].slice(0, Math.max(3, g.length));
 
 const SELF_CARE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "meditar", label: "Meditar / respirar" },
@@ -720,6 +724,10 @@ type FormState = {
   selfCare: string[];
   selfCareOther: string;
   nightTakeaway: string;
+  /** Fechamento 3.0 (texto simples). */
+  closingReflection: string;
+  closingLearning: string;
+  closingPending: string;
   journalIds: string[];
   locationLabel: string;
   locationLat: number | null;
@@ -733,6 +741,9 @@ const EMPTY_FORM: FormState = {
   selfCare: [],
   selfCareOther: "",
   nightTakeaway: "",
+  closingReflection: "",
+  closingLearning: "",
+  closingPending: "",
   journalIds: [],
   locationLabel: "",
   locationLat: null,
@@ -825,10 +836,13 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     if (!entry) return;
     setForm({
       thoughts: entry.thoughts ?? "",
-      gratitude: [0, 1, 2].map((i) => entry.gratitude[i] ?? ""),
+      gratitude: padGratitude(entry.gratitude),
       selfCare: entry.selfCare,
       selfCareOther: entry.selfCareOther ?? "",
       nightTakeaway: entry.nightTakeaway ?? "",
+      closingReflection: entry.closingReflection ?? "",
+      closingLearning: entry.closingLearning ?? "",
+      closingPending: entry.closingPending ?? "",
       journalIds: entry.journalIds,
       locationLabel: entry.locationLabel ?? "",
       locationLat: entry.locationLat,
@@ -845,7 +859,9 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       const raw = window.sessionStorage.getItem(draftKey);
       if (!raw) return;
       const d = JSON.parse(raw) as FormState;
-      if ((d.thoughts ?? "") !== (entry.thoughts ?? "") || (d.nightTakeaway ?? "") !== (entry.nightTakeaway ?? "")) setDraftFound(d);
+      // Rascunhos antigos (antes do 3.0) não têm os campos do fechamento.
+      const restored = { ...EMPTY_FORM, ...d, gratitude: padGratitude(d.gratitude ?? []) };
+      if ((d.thoughts ?? "") !== (entry.thoughts ?? "") || (d.nightTakeaway ?? "") !== (entry.nightTakeaway ?? "") || (d.closingReflection ?? "") !== (entry.closingReflection ?? "") || (d.closingLearning ?? "") !== (entry.closingLearning ?? "")) setDraftFound(restored);
       else window.sessionStorage.removeItem(draftKey);
     } catch {
       /* rascunho ilegível: ignora */
@@ -871,6 +887,9 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       selfCare: state.selfCare,
       selfCareOther: state.selfCareOther || null,
       nightTakeaway: state.nightTakeaway || null,
+      closingReflection: state.closingReflection,
+      closingLearning: state.closingLearning,
+      closingPending: state.closingPending,
       journalIds: state.journalIds,
       locationLabel: state.locationLabel || null,
       locationLat: state.locationLat,
@@ -906,10 +925,13 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     baseUpdatedAt.current = fresh.updatedAt ?? null;
     setForm({
       thoughts: fresh.thoughts ?? "",
-      gratitude: [0, 1, 2].map((i) => fresh.gratitude[i] ?? ""),
+      gratitude: padGratitude(fresh.gratitude),
       selfCare: fresh.selfCare,
       selfCareOther: fresh.selfCareOther ?? "",
       nightTakeaway: fresh.nightTakeaway ?? "",
+      closingReflection: fresh.closingReflection ?? "",
+      closingLearning: fresh.closingLearning ?? "",
+      closingPending: fresh.closingPending ?? "",
       journalIds: fresh.journalIds,
       locationLabel: fresh.locationLabel ?? "",
       locationLat: fresh.locationLat,
@@ -1015,11 +1037,11 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   const queryClient = useQueryClient();
   /** Humor do fechamento vai para Saúde (mood_entries) — fonte única de humor/energia no LifeOS. */
-  const registerMood = async (mood: number, energy: number) => {
+  const registerMood = async (mood: number, energy: number, stress?: number | null, note?: string | null) => {
     const nowIso = new Date().toISOString();
     // Fora do dia corrente (ou à noite, quando o UTC já virou), ancora no meio do dia escolhido.
     const recordedAt = nowIso.slice(0, 10) === date ? nowIso : `${date}T12:00:00.000Z`;
-    await healthService.addMood({ mood, energy, recordedAt });
+    await healthService.addMood({ mood, energy, stress: stress ?? null, note: note ?? null, recordedAt });
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["journal"] }),
       queryClient.invalidateQueries({ queryKey: ["health"] }),
@@ -1085,6 +1107,105 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     { id: "cronica-fechamento", icon: <Moon size={14} />, label: "Fechamento", value: hasClosing ? "Registrado" : "Fechar o dia", filled: hasClosing },
     { id: "cronica-lugar", icon: <MapPin size={14} />, label: "Lugar e tags", value: form.locationLabel || (placeCount > 0 ? plural(placeCount, "marcação", "marcações") : "Marcar"), filled: placeCount > 0 },
   ];
+
+  // Tema RPG: Entrada do Diário 3.0 (Crônica Pessoal) — mesma lógica de salvamento acima.
+  if (isRpg) {
+    return (
+      <ChronicleEntry3
+        ctx={{
+          date,
+          goToDate: (d) => setDate(d > todayIso() ? todayIso() : d),
+          onBack,
+          isToday: date >= todayIso(),
+          entry,
+          isLoading,
+          isSaving,
+          justSaved,
+          form,
+          updateField,
+          saveNow,
+          saveAllNow,
+          flushPendingSave,
+          conflict,
+          resolveConflict: (keepMine) => void resolveConflict(keepMine),
+          draftFound: !!draftFound,
+          recoverDraft: () => {
+            if (!draftFound) return;
+            setForm(draftFound);
+            void persistNow(draftFound);
+            setDraftFound(null);
+          },
+          discardDraft: () => {
+            clearDraft();
+            setDraftFound(null);
+          },
+          toggleFavorite: handleToggleFavorite,
+          isTogglingFavorite,
+          deleteEntry: () => void deleteEntry().then(() => onBack()).catch(() => undefined),
+          exportPdf: () => void handleExportPdf(),
+          isExportingPdf,
+          writingMode,
+          setWritingMode,
+          selfCareOptions: SELF_CARE_OPTIONS,
+          combinedSelfCare,
+          autoSelfCare: entry?.auto.autoSelfCare ?? [],
+          toggleSelfCare,
+          registerMood,
+          addAudio: (dataUri, durationSeconds) => addAudioMedia({ dataUri, durationSeconds }),
+          removeMedia: (mediaId) => void removeMedia(mediaId).catch(() => undefined),
+          isAddingAudio: isAddingAudioMedia,
+          streakHighlight,
+          photoError,
+          slots: {
+            moments: <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />,
+            organizer: (
+              <JournalAiOrganizer
+                saved={entry?.ai ?? null}
+                media={entry?.media ?? []}
+                onSuggest={async (includePhotos) => {
+                  await flushPendingSave();
+                  return suggestOrganization(includePhotos);
+                }}
+                onApply={async (input) => {
+                  const updated = await applyOrganization(input);
+                  setForm((prev) => ({ ...prev, tags: updated.tags }));
+                }}
+                onClear={() => clearOrganization()}
+                isSuggesting={isSuggestingOrganization}
+                isApplying={isApplyingOrganization}
+                currentHtml={form.thoughts}
+                onReplaceText={(plain) => saveNow({ thoughts: toParagraphs(plain) })}
+                onRestoreText={(html) => saveNow({ thoughts: html })}
+              />
+            ),
+            media: (
+              <JournalMediaSection
+                media={entry?.media ?? []}
+                onUpload={(input) => addMedia(input)}
+                onUpdate={(mediaId, patch) => updateMedia({ mediaId, ...patch })}
+                onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
+              />
+            ),
+            location: (
+              <LocationTagsLinksSection
+                locationLabel={form.locationLabel}
+                tags={form.tags}
+                links={entry?.links ?? []}
+                onSetLocation={(label, lat, lng) => saveNow({ locationLabel: label, locationLat: lat, locationLng: lng })}
+                onClearLocation={() => saveNow({ locationLabel: "", locationLat: null, locationLng: null })}
+                onChangeTags={(tags) => saveNow({ tags })}
+                onAddLink={(targetType, targetId) => addLink({ targetType, targetId }).catch(() => undefined)}
+                onRemoveLink={(linkId) => removeLink(linkId).catch(() => undefined)}
+              />
+            ),
+            dayState: <DayStatePanel date={date} />,
+            labNote: chronicleHub ? <LabNoteSender hub={chronicleHub} date={date} onToast={() => undefined} /> : null,
+            weekInsights: hasWeekInsights ? <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} /> : null,
+          },
+        }}
+      />
+    );
+  }
 
   return (
     <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">

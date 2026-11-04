@@ -18,6 +18,8 @@ export function useContracts(enabled = true) {
     // reflitam o resultado sem precisar de refresh manual do usuario.
     void qc.invalidateQueries({ queryKey: ["goals"] });
     void qc.invalidateQueries({ queryKey: ["projects"] });
+    void qc.invalidateQueries({ queryKey: ["contract-guild"] });
+    void qc.invalidateQueries({ queryKey: ["events"] });
   };
 
   const create = useMutation({ mutationFn: (input: ContractInput) => contractsService.create(input), onSuccess: invalidate });

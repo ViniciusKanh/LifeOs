@@ -94,6 +94,8 @@ export const GAMIFICATION_RULES = {
     minTasks: 2,
     /** Máximo de contratos premiados por dia (trava contra farm). */
     maxRewardedPerDay: 3,
+    /** Selo da Guilda (Contratos 3.0): pago uma vez por contrato e tipo de selo, ao selar. */
+    seal: { xp: 20, coins: 4 },
   },
   /**
    * Laboratório (Experimentos Pessoais): dar vida a um experimento,

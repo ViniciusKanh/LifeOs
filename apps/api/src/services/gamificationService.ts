@@ -3,6 +3,7 @@ import { maybeAutoInvest } from "./bankService.js";
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
+import { logContractEvent, syncContractStages } from "./contractStages.js";
 
 /**
  * Motor de gamificação do LifeOS ("RPG da vida real").
@@ -443,6 +444,8 @@ export async function syncContractStatus(db: Client, ownerId: string, contractId
     args: [contractId, ownerId],
   });
   const row = c.rows[0];
+  // Etapas (Contratos 3.0) acompanham as tarefas reais; falha aqui nunca bloqueia a recompensa.
+  if (row) await syncContractStages(db, ownerId, contractId).catch(() => undefined);
   if (!row || String(row.status) === "arquivado") return;
   const total = Number(row.total ?? 0);
   const done = Number(row.done ?? 0);
@@ -458,6 +461,7 @@ export async function syncContractStatus(db: Client, ownerId: string, contractId
       sql: "UPDATE contracts SET status = 'concluido', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
       args: [contractId, ownerId],
     });
+    await logContractEvent(db, ownerId, contractId, "ready_to_seal", "Todas as obrigações concluídas.").catch(() => undefined);
   }
   const C = GAMIFICATION_RULES.contract;
   if (!opts.reward || total < C.minTasks) return;

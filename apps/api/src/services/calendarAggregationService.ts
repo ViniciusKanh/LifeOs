@@ -9,7 +9,7 @@ export interface CalendarItem {
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
-  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin";
+  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin" | "contract";
   sourceId: string | null;
   link: string | null;
   /** Categoria visual (estudo, foco, saúde...) — eventos antigos vêm como null. */
@@ -28,7 +28,7 @@ export interface CalendarItem {
  * ser reaproveitado também pelo feed de assinatura .ics (icsFeedService.ts).
  */
 export async function getCalendarItems(db: Db, ownerId: string, from: string, to: string): Promise<CalendarItem[]> {
-  const [manual, tasks, goals, academic, lifeAdmin] = await Promise.all([
+  const [manual, tasks, goals, academic, lifeAdmin, contracts] = await Promise.all([
     db.execute({
       sql: `SELECT * FROM events WHERE owner_id = ? AND starts_at >= date(?) AND starts_at < date(?, '+1 day') ORDER BY starts_at ASC`,
       args: [ownerId, from, to],
@@ -51,6 +51,12 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
     // Administração da Vida: vencimentos ativos entram como compromissos do dia (somente leitura).
     db.execute({
       sql: `SELECT id, title, kind, due_date FROM life_admin_items WHERE owner_id = ? AND status = 'active' AND due_date IS NOT NULL
+            AND due_date >= date(?) AND due_date < date(?, '+1 day')`,
+      args: [ownerId, from, to],
+    }),
+    // Contratos 3.0: prazo de pactos em andamento (rascunho e pausado não entram).
+    db.execute({
+      sql: `SELECT id, title, due_date FROM contracts WHERE owner_id = ? AND status = 'ativo' AND is_draft = 0 AND paused_at IS NULL AND due_date IS NOT NULL
             AND due_date >= date(?) AND due_date < date(?, '+1 day')`,
       args: [ownerId, from, to],
     }),
@@ -139,6 +145,20 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
       sourceType: "life_admin",
       sourceId: row.id,
       link: "/administracao",
+    });
+  }
+
+  for (const row of contracts.rows as unknown as Array<{ id: string; title: string; due_date: string }>) {
+    items.push({
+      id: `contract_${row.id}`,
+      title: `Prazo do pacto: ${row.title}`,
+      description: null,
+      startsAt: String(row.due_date).slice(0, 10),
+      endsAt: null,
+      allDay: true,
+      sourceType: "contract",
+      sourceId: row.id,
+      link: "/contratos",
     });
   }
 

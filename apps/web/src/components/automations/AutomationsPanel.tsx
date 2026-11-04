@@ -26,6 +26,7 @@ const LABELS: Record<string, { label: string; suffix?: string; min?: number; max
   inApp: { label: "Avisar no LifeOS" },
   minDrop: { label: "Avisar a partir de", suffix: "pontos", min: 5, max: 50 },
   minPct: { label: "Avisar a partir de", suffix: "%", min: 50, max: 99 },
+  days: { label: "Avisar quando faltarem", suffix: "dias", min: 1, max: 14 },
   push: { label: "Enviar notificação push" },
   daysBefore: { label: "Avisar quando faltarem", suffix: "dias", min: 1, max: 60 },
   stalledDays: { label: "Considerar parada após", suffix: "dias", min: 3, max: 90 },

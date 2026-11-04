@@ -25,6 +25,7 @@ export function useAutomations(module: AutomationModule) {
       library: ["books"],
       admin: ["life-admin"],
       today: ["today-hub"],
+      contracts: ["contract-guild"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

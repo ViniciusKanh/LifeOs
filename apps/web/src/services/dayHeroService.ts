@@ -38,6 +38,10 @@ export interface TodayHub {
   lifeScore: { overall: number; delta: number | null; dims: Record<"productivity" | "health" | "habits" | "goals" | "reading" | "education" | "professional", number> };
   indicators: { prioritiesDone: number; prioritiesTotal: number; focusMinutes: number; focusSessions: number; missionsDone: number };
   main: (TodayMission & { subtaskList: Array<{ id: string; title: string; done: boolean }>; manual: boolean }) | null;
+  /** Top 3 missões pelo ranking de prazo/prioridade — o guia do dia quando não há principal fixada. */
+  focusNow: TodayMission[];
+  /** Missões concluídas hoje (dado real do dia local). */
+  doneToday: Array<{ id: string; title: string }>;
   missions: TodayMission[];
   habits: { items: Array<{ id: string; name: string; icon: string | null; done: boolean; count: number; target: number; unit: string | null; streak: number; frequency: string }>; done: number; total: number };
   agenda: Array<{ id: string; title: string; startsAt: string; endsAt: string | null; allDay: boolean; sourceType: string; sourceId: string | null; link: string | null; category: string | null; blockTaskId: string | null }>;

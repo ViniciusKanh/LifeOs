@@ -71,7 +71,74 @@ const durMin = (a: string, b: string | null) => (b && a.length > 10 && b.length 
 
 /* ═══════════════════════════════ Banner + indicadores ═══════════════════════════════ */
 
-export function TodayBanner({ hub, onStartMain }: { hub: TodayHub; onStartMain: () => void }) {
+/**
+ * "Foco agora": em dias com várias missões, ninguém precisa eleger UMA principal.
+ * Mostra as 3 prioridades do ranking (prazo + prioridade) e o que já foi concluído
+ * hoje. Fixar uma missão principal é opcional e só serve para o bônus oficial.
+ */
+function FocusNowCard({ hub, onStart }: { hub: TodayHub; onStart: (taskId: string | null) => void }) {
+  const { setMain } = useTodayActions();
+  const [help, setHelp] = useState(false);
+  const m = hub.main;
+  const doneCount = hub.doneToday.length;
+  return (
+    <section className="rpg-panel rpg-panel-gold flex min-w-0 flex-col gap-2 p-3" aria-label="Foco agora">
+      <div className="flex items-center gap-2">
+        <Target size={16} className="text-rpg-gold" aria-hidden />
+        <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-gold">Foco agora</p>
+        <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} className="ml-auto text-[11px] text-rpg-blue hover:underline">
+          Como funciona?
+        </button>
+      </div>
+      {help && (
+        <p className="border border-rpg-border bg-rpg-bg/60 p-2 text-[11px] text-rpg-text/90" style={R}>
+          Você não precisa escolher uma missão principal: conclua quantas quiser, todas rendem XP. As prioridades abaixo vêm do ranking por prazo e prioridade. Fixar uma como principal é opcional e dá o bônus oficial de missão principal ao concluí-la.
+        </p>
+      )}
+      {m && (
+        <div className="border border-rpg-gold/60 bg-rpg-gold/5 p-2" style={R}>
+          <div className="flex items-center gap-1.5">
+            <RPGBadge tone="gold">fixada por você</RPGBadge>
+            <button type="button" className="ml-auto text-[11px] text-rpg-muted hover:text-rpg-red" onClick={() => setMain.mutate(null)}>
+              Desafixar
+            </button>
+          </div>
+          <Link to={`/tarefas?task=${m.id}`} className="mt-1 block font-rpg text-base font-bold leading-tight text-rpg-text hover:underline">
+            {m.title}
+          </Link>
+          {m.subtasks.total > 0 && <RPGProgressBar className="mt-1" label="Etapas" value={m.subtasks.done} max={m.subtasks.total} valueLabel={`${m.subtasks.done}/${m.subtasks.total}`} tone="purple" />}
+          <RPGButton variant="primary" className="mt-1.5 min-h-[34px] text-xs" onClick={() => onStart(m.id)} disabled={!!hub.timer}>
+            <Play size={12} aria-hidden /> {hub.timer ? "Foco em andamento" : "Focar nesta"}
+          </RPGButton>
+        </div>
+      )}
+      {hub.focusNow.length > 0 ? (
+        <ol className="space-y-1.5">
+          {hub.focusNow.map((f, i) => (
+            <li key={f.id} className="flex min-w-0 items-center gap-2 border border-rpg-border bg-rpg-bg-2/60 px-2 py-1.5" style={R}>
+              <span className="font-pixel text-[10px] text-rpg-gold" aria-hidden>{i + 1}</span>
+              <Link to={`/tarefas?task=${f.id}`} className="min-w-0 flex-1 truncate text-sm text-rpg-text hover:underline" title={f.title}>
+                {f.title}
+              </Link>
+              {f.overdue && <RPGBadge tone="red">atrasada</RPGBadge>}
+              <button type="button" disabled={!!hub.timer} onClick={() => onStart(f.id)} className="shrink-0 p-1 text-rpg-purple hover:text-rpg-gold-light disabled:opacity-40" aria-label={`Iniciar foco em ${f.title}`}>
+                <Play size={14} />
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        !m && <p className="text-sm text-rpg-muted">Nenhuma missão pendente para hoje. {doneCount > 0 ? "Dia em ordem!" : "Crie uma missão ou planeje o dia na Agenda."}</p>
+      )}
+      <p className="mt-auto flex items-center gap-1.5 text-[11px] text-rpg-muted">
+        <CheckCircle2 size={12} className="text-rpg-green" aria-hidden />
+        {doneCount === 0 ? "Nenhuma missão concluída hoje ainda." : `${doneCount} missão(ões) concluída(s) hoje${hub.missions.length ? ` · ${hub.missions.length} pendente(s)` : ""}.`}
+      </p>
+    </section>
+  );
+}
+
+export function TodayBanner({ hub, onStart }: { hub: TodayHub; onStart: (taskId: string | null) => void }) {
   const { user } = useAuth();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -83,7 +150,6 @@ export function TodayBanner({ hub, onStartMain }: { hub: TodayHub; onStartMain: 
   const quote = findNavItem("/hoje")?.item.quote ?? DEFAULT_QUOTE;
   const tint = { manha: "from-rpg-orange/25", tarde: "from-rpg-gold/15", noite: "from-rpg-purple/30" }[g.period];
   const PeriodIcon = { manha: Sun, tarde: Sunset, noite: Moon }[g.period];
-  const m = hub.main;
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
       <header className="relative min-h-[170px] overflow-hidden border-2 border-rpg-gold/60 bg-rpg-bg-2" style={R}>
@@ -106,29 +172,7 @@ export function TodayBanner({ hub, onStartMain }: { hub: TodayHub; onStartMain: 
           </div>
         </div>
       </header>
-      <section className="rpg-panel rpg-panel-gold flex flex-col justify-between gap-2 p-3" aria-label="Foco do dia">
-        <div className="flex items-center gap-2">
-          <Target size={16} className="text-rpg-gold" aria-hidden />
-          <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-gold">Foco do dia</p>
-          {m && <RPGBadge tone={m.manual ? "gold" : "muted"}>{m.manual ? "escolhida" : "automática"}</RPGBadge>}
-        </div>
-        {m ? (
-          <>
-            <Link to={`/tarefas?task=${m.id}`} className="font-rpg text-lg font-bold leading-tight text-rpg-text hover:underline">
-              {m.title}
-            </Link>
-            <p className="text-[11px] text-rpg-muted">
-              {m.projectName ?? "Sem projeto"} · {m.dueDate ? `prazo ${new Date(`${m.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}` : "sem prazo"} · prioridade {m.priority}
-            </p>
-            <RPGProgressBar label="Etapas" value={m.subtasks.done} max={Math.max(1, m.subtasks.total)} valueLabel={m.subtasks.total ? `${m.subtasks.done}/${m.subtasks.total} etapas` : "sem subtarefas"} tone="purple" />
-            <RPGButton variant="primary" onClick={onStartMain} disabled={!!hub.timer}>
-              <Play size={14} aria-hidden /> {hub.timer ? "Foco em andamento" : "Iniciar foco na missão"}
-            </RPGButton>
-          </>
-        ) : (
-          <p className="text-sm text-rpg-muted">Nenhuma missão para hoje. Escolha uma missão como foco na aba Missões.</p>
-        )}
-      </section>
+      <FocusNowCard hub={hub} onStart={onStart} />
     </div>
   );
 }
@@ -369,7 +413,7 @@ export function MissionsPanel({ hub, notify, onStart, limit }: { hub: TodayHub; 
           {list.map((m) => (
             <li key={m.id} className={clsx("border-2 p-2.5", m.isMain ? "border-rpg-gold bg-rpg-gold/5" : "border-rpg-border bg-rpg-bg-2/60")} style={R}>
               <div className="flex flex-wrap items-start gap-1.5">
-                <RPGBadge tone={m.isMain ? "gold" : m.overdue ? "red" : "blue"}>{m.isMain ? "Principal" : m.overdue ? "Atrasada" : "Hoje"}</RPGBadge>
+                <RPGBadge tone={m.isMain ? "gold" : m.overdue ? "red" : "blue"}>{m.isMain ? "Principal (fixada)" : m.overdue ? "Atrasada" : "Hoje"}</RPGBadge>
                 <RPGBadge tone={PRIO_TONE[m.priority as keyof typeof PRIO_TONE] ?? "muted"}>{m.priority}</RPGBadge>
                 {hub.timer?.linkId === m.id && <RPGBadge tone="purple">Em foco</RPGBadge>}
                 <span className="ml-auto font-pixel text-[10px]">
@@ -392,9 +436,18 @@ export function MissionsPanel({ hub, notify, onStart, limit }: { hub: TodayHub; 
                 <RPGButton variant="success" className="min-h-[34px] px-2 text-xs" onClick={() => void complete(m)}>
                   <Check size={12} aria-hidden /> Concluir
                 </RPGButton>
-                {!m.isMain && (
-                  <RPGButton variant="secondary" className="min-h-[34px] px-2 text-xs" onClick={() => setMain.mutate(m.id, { onSuccess: () => notify("Missão principal definida — bônus oficial de missão principal ao concluir.") })}>
-                    <Star size={12} aria-hidden /> Principal
+                {m.isMain ? (
+                  <RPGButton variant="ghost" className="min-h-[34px] px-2 text-xs" onClick={() => setMain.mutate(null, { onSuccess: () => notify("Missão desafixada. O dia segue guiado pelo Foco agora.") })}>
+                    <Star size={12} aria-hidden /> Desafixar
+                  </RPGButton>
+                ) : (
+                  <RPGButton
+                    variant="secondary"
+                    className="min-h-[34px] px-2 text-xs"
+                    title="Opcional: a missão fixada rende o bônus oficial de missão principal ao ser concluída."
+                    onClick={() => setMain.mutate(m.id, { onSuccess: () => notify("Missão fixada como principal (opcional) — bônus oficial ao concluir.") })}
+                  >
+                    <Star size={12} aria-hidden /> Fixar como principal
                   </RPGButton>
                 )}
                 <RPGButton variant="ghost" className="min-h-[34px] px-2 text-xs" onClick={() => (setResched(m), setDate(m.dueDate ?? hub.today))}>
@@ -919,7 +972,7 @@ export function TodayCentral() {
     );
   return (
     <div className="w-full space-y-3 px-4 py-6 md:px-6 lg:px-8">
-      <TodayBanner hub={hub} onStartMain={() => startOn(hub.main?.id ?? null)} />
+      <TodayBanner hub={hub} onStart={(id) => startOn(id)} />
       <TodayIndicators hub={hub} />
       {hub.timer && tab !== "foco" && (
         <button type="button" onClick={() => setTab("foco")} className="rpg-panel flex w-full items-center gap-2 border-rpg-purple p-2 text-left text-sm text-rpg-text">

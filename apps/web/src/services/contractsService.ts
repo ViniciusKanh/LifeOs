@@ -31,6 +31,18 @@ export interface Contract {
   goalTitle: string | null;
   projectId: string | null;
   projectName: string | null;
+  /** Contratos 3.0. */
+  category: string | null;
+  priority: TaskPriority;
+  successCriteria: string[];
+  campaignId: string | null;
+  campaignTitle: string | null;
+  reminderDays: number | null;
+  isDraft: boolean;
+  pausedAt: string | null;
+  cancelledAt: string | null;
+  sealedAt: string | null;
+  featured: boolean;
 }
 
 export interface ContractTaskInput {
@@ -41,6 +53,9 @@ export interface ContractTaskInput {
   dueDate?: string | null;
   startDate?: string | null;
   estimateMinutes?: number | null;
+  /** Índice da etapa em ContractInput.stages (criação) ou etapa existente (adição). */
+  stageIndex?: number | null;
+  stageId?: string | null;
 }
 
 /** Dados para criar uma Meta nova diretamente a partir do contrato. */
@@ -74,6 +89,13 @@ export interface ContractInput {
   projectId?: string | null;
   newGoal?: NewGoalInput | null;
   newProject?: NewProjectInput | null;
+  category?: string | null;
+  priority?: TaskPriority;
+  successCriteria?: string[];
+  campaignId?: string | null;
+  reminderDays?: number | null;
+  stages?: Array<{ name: string; objective?: string | null; criterion?: string | null }>;
+  isDraft?: boolean;
 }
 
 /** Tarefa sugerida pela IA (ainda não salva). */
