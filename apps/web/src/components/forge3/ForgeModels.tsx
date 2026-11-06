@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Activity, Archive, ArchiveRestore, Check, ChevronLeft, ChevronRight, Gauge, Hammer, History, Loader2, Play, Plus, Power, PowerOff, Rocket, Trash2, Undo2, Wand2 } from "lucide-react";
-import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
+import { Activity, Archive, ArchiveRestore, Check, ChevronLeft, ChevronRight, Gauge, Hammer, History, Loader2, Play, Plus, Power, PowerOff, Rocket, Settings2, Trash2, Undo2, Wand2 } from "lucide-react";
+import { RPG_TONE_TEXT } from "@/components/rpg/rpgAssets";
+import { RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
 import { IconTile, TEMPLATE_TONE, artifactScore, modelTone } from "./ForgeOverview";
-import { Section as KitSection } from "./ForgeShared";
 import { Modal } from "@/components/ui/Modal";
 import { useForgeActions, useForgeDictionary } from "@/hooks/useForge";
-import { PRIMARY_LABEL, fmtNum, primaryOf, type Alg, type Dictionary, type ForgeModel, type ForgeOverview, type ModelInput, type Primary, type Problem, type Version } from "@/services/forgeService";
-import { Empty, FIELD, R, StatusBadge, errMsg, fmtDate, fmtDateTime, templateIcon, type Notify } from "./ForgeShared";
+import { PRIMARY_LABEL, fmtNum, isReg, primaryOf, type Alg, type Dictionary, type ForgeModel, type ForgeOverview, type ModelInput, type Primary, type Problem, type Version } from "@/services/forgeService";
+import { Empty, FIELD, R, StatusBadge, errMsg, fmtDate, fmtDateTime, templateIcon, type Notify, Section as KitSection, Tag } from "./ForgeShared";
 
 const BASE_ALGS: Alg[] = ["baseline", "persistence"];
+const SOURCE_NAME: Record<string, string> = { saude: "Saúde", habitos: "Hábitos", missoes: "Missões", educacao: "Educação", biblioteca: "Biblioteca", foco: "Foco", calendario: "Calendário" };
 const SCHEDULE_LABEL = { manual: "Manual", weekly: "Semanal (automação)", monthly: "Mensal (automação)" } as const;
 
 /** Resumo da métrica principal no holdout (modelo x baseline), sem misturar escalas. */
@@ -56,7 +57,7 @@ export function ArtifactsTab({ o, notify, onWizard, onOpenVersions }: { o: Forge
                 <IconTile tone={tone}>{templateIcon(t.icon)}</IconTile>
                 <h3 className="font-rpg text-base font-bold text-rpg-text">{t.name}</h3>
                 <p className="flex-1 text-xs text-rpg-muted">{t.description}</p>
-                <RPGBadge tone="muted">{t.problem === "classification" ? "Sim/não" : "Valor"}</RPGBadge>
+                <Tag tone="muted">{t.problem === "classification" ? "Sim/não" : "Valor"}</Tag>
                 {t.created ? (
                   <p className="flex items-center gap-1 text-xs font-semibold text-rpg-gold-light">
                     <Check size={14} aria-hidden /> Forjado
@@ -110,15 +111,15 @@ export function ArtifactsTab({ o, notify, onWizard, onOpenVersions }: { o: Forge
                   <dl className="grid grid-cols-3 border-y border-rpg-border/70 text-center">
                     <div className="border-r border-rpg-border/70 px-2 py-2">
                       <dt className="text-[10px] text-rpg-muted">Versão</dt>
-                      <dd className="font-pixel text-sm text-rpg-purple">{v ? `v${v.version}` : "—"}</dd>
+                      <dd className="font-semibold text-sm text-rpg-purple">{v ? `v${v.version}` : "—"}</dd>
                     </div>
                     <div className="border-r border-rpg-border/70 px-2 py-2">
                       <dt className="text-[10px] text-rpg-muted">Variáveis</dt>
-                      <dd className="font-pixel text-sm text-rpg-text">{m.features.length}</dd>
+                      <dd className="font-semibold text-sm text-rpg-text">{m.features.length}</dd>
                     </div>
                     <div className="px-2 py-2">
                       <dt className="text-[10px] text-rpg-muted">Último treino</dt>
-                      <dd className="font-pixel text-sm text-rpg-text">{m.lastTrainedAt ? fmtDate(m.lastTrainedAt) : "nunca"}</dd>
+                      <dd className="font-semibold text-sm text-rpg-text">{m.lastTrainedAt ? fmtDate(m.lastTrainedAt) : "nunca"}</dd>
                     </div>
                   </dl>
                   <div className="space-y-1 px-3 py-2.5">
@@ -126,7 +127,7 @@ export function ArtifactsTab({ o, notify, onWizard, onOpenVersions }: { o: Forge
                       <>
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="text-rpg-muted">Teste final</span>
-                          <span className="font-pixel text-[11px] text-rpg-text">{s.label}</span>
+                          <span className="font-semibold text-[11px] text-rpg-text">{s.label}</span>
                         </div>
                         <RPGProgressBar tone={ok ? "green" : "orange"} label={`Desempenho de ${m.name}`} value={s.value * 100} showLabel={false} />
                         <p className="text-[11px] text-rpg-muted">
@@ -269,7 +270,7 @@ function WizardBody({ d, onClose, notify }: { d: Dictionary; onClose: () => void
     <div className="space-y-3">
       <ol className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Etapas">
         {WIZ.map((w, i) => (
-          <li key={w} className={clsx("shrink-0 border px-2 py-1 font-pixel text-[9px] uppercase", i === step ? "border-rpg-purple bg-rpg-purple/20 text-rpg-text" : i < step ? "border-rpg-green/60 text-rpg-green" : "border-rpg-border text-rpg-muted")} style={R} aria-current={i === step ? "step" : undefined}>
+          <li key={w} className={clsx("shrink-0 border px-2 py-1 font-semibold text-[9px] uppercase", i === step ? "border-rpg-purple bg-rpg-purple/20 text-rpg-text" : i < step ? "border-rpg-green/60 text-rpg-green" : "border-rpg-border text-rpg-muted")} style={R} aria-current={i === step ? "step" : undefined}>
             {i + 1}. {w}
           </li>
         ))}
@@ -328,7 +329,7 @@ function WizardBody({ d, onClose, notify }: { d: Dictionary; onClose: () => void
             <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
               {groups.map(([src, fs]) => (
                 <fieldset key={src}>
-                  <legend className="font-pixel text-[10px] uppercase text-rpg-purple">{src}</legend>
+                  <legend className="text-xs font-semibold text-rpg-purple">{SOURCE_NAME[src] ?? src}</legend>
                   <div className="grid gap-1 sm:grid-cols-2">
                     {fs.map((f) => (
                       <label key={f.key} className="flex items-start gap-1.5 text-xs" title={f.description}>
@@ -443,102 +444,192 @@ function WizardBody({ d, onClose, notify }: { d: Dictionary; onClose: () => void
   );
 }
 
-/* ═════════════ Modelos: registro de versões ═════════════ */
+/* ═════════════ Modelos: configuração + linha do tempo de versões ═════════════ */
+
+const VERSION_TONE = { ativa: "green", candidata: "blue", arquivada: "muted" } as const;
+
+/** Configuração editável do artefato. Vale a partir do próximo treino; versões já salvas não mudam. */
+function ModelConfig({ m, notify }: { m: ForgeModel; notify: Notify }) {
+  const { update } = useForgeActions();
+  const [name, setName] = useState(m.name);
+  const [horizon, setHorizon] = useState(m.horizon);
+  const [schedule, setSchedule] = useState(m.schedule);
+  const dirty = name.trim() !== m.name || horizon !== m.horizon || schedule !== m.schedule;
+  const save = () =>
+    update.mutate(
+      { id: m.id, input: { name: name.trim(), horizon, schedule } },
+      { onSuccess: () => notify("Configuração salva. Ela vale a partir do próximo treino."), onError: (e) => notify(errMsg(e, "Não foi possível salvar."), "error") },
+    );
+  return (
+    <KitSection title="Configuração" icon={<Settings2 size={15} />}>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block text-xs text-rpg-muted sm:col-span-3">
+          Nome do artefato
+          <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} className={clsx(FIELD, "mt-1")} style={{ borderRadius: 3 }} />
+        </label>
+        <label className="block text-xs text-rpg-muted">
+          Antecedência: {horizon} dia(s)
+          <input type="range" min={1} max={7} value={horizon} onChange={(e) => setHorizon(Number(e.target.value))} className="mt-2 w-full accent-[rgb(var(--rpg-purple))]" />
+        </label>
+        <label className="block text-xs text-rpg-muted sm:col-span-2">
+          Retreino
+          <select value={schedule} onChange={(e) => setSchedule(e.target.value as ModelInput["schedule"])} className={clsx(FIELD, "mt-1")} style={{ borderRadius: 3 }}>
+            {Object.entries(SCHEDULE_LABEL).map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        {(
+          [
+            ["Alvo", m.targetLabel],
+            ["Variáveis", String(m.features.length)],
+            ["Algoritmos", `${m.algorithms.length} + base`],
+            ["Validação", `${m.validation.folds} dobras · ${Math.round(m.validation.holdoutPct * 100)}%`],
+          ] as const
+        ).map(([k, v]) => (
+          <div key={k} className="border border-rpg-border bg-rpg-bg-2/60 p-2" style={R}>
+            <dt className="text-[10px] text-rpg-muted">{k}</dt>
+            <dd className="truncate font-semibold text-rpg-text" title={v}>
+              {v}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <RPGButton variant="gold" disabled={!dirty || name.trim().length < 2 || update.isPending} onClick={save}>
+          {update.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />} Salvar configuração
+        </RPGButton>
+        {dirty && <span className="text-[11px] text-rpg-orange">Alterações não salvas</span>}
+      </div>
+    </KitSection>
+  );
+}
+
+function VersionCard({ m, v, compare, onCompare, notify }: { m: ForgeModel; v: Version; compare: boolean; onCompare: (on: boolean) => void; notify: Notify }) {
+  const a = useForgeActions();
+  const tone = VERSION_TONE[v.status];
+  const h = v.metrics.holdout;
+  const score = h ? (isReg(h.model) && isReg(h.baseline) ? (h.baseline.mae > 0 ? Math.max(0, 1 - h.model.mae / h.baseline.mae) : 0) : !isReg(h.model) ? h.model.balancedAccuracy : 0) : 0;
+  return (
+    <li className="relative pl-9">
+      {/* Gema da versão sobre a linha do tempo */}
+      <span className={clsx("absolute left-0 top-3 flex h-7 w-7 rotate-45 items-center justify-center border-2 bg-rpg-bg", RPG_TONE_TEXT[tone], "border-current shadow-[0_0_10px_-2px_currentColor]")} aria-hidden>
+        <span className="-rotate-45 text-[11px] font-bold">{v.version}</span>
+      </span>
+      <article className={clsx("border-2 bg-rpg-bg-2/60 p-3", v.status === "ativa" ? "border-rpg-green/60" : "border-rpg-border")} style={R} aria-label={`Versão ${v.version}`}>
+        <header className="flex flex-wrap items-center gap-2">
+          <h3 className="font-rpg text-base font-bold text-rpg-text">v{v.version}</h3>
+          <Tag tone={tone}>{v.status}</Tag>
+          <Tag tone={v.metrics.beatsBaseline ? "gold" : "orange"}>{v.metrics.beatsBaseline ? "venceu a base" : "não venceu a base"}</Tag>
+          <span className="ml-auto text-[11px] text-rpg-muted">{fmtDateTime(v.trainedAt)}</span>
+        </header>
+        <p className="mt-1 text-sm text-rpg-text">{v.algorithmLabel}</p>
+        <div className="mt-2">
+          <RPGProgressBar tone={v.metrics.beatsBaseline ? "green" : "orange"} label={`Teste final da versão ${v.version}`} value={score * 100} showLabel={false} />
+          <p className="mt-1 text-[11px] text-rpg-muted">
+            <HoldoutLine v={v} />
+          </p>
+        </div>
+        <p className="mt-1 text-[11px] text-rpg-muted">
+          {v.dataset.samples} dias ({fmtDate(v.dataset.from)} → {fmtDate(v.dataset.to)}) ·{" "}
+          <span className="font-mono" title={`pipeline ${v.pipelineVersion} · semente ${v.seed}`}>
+            dados {v.dataHash.slice(0, 8)} · config {v.configHash.slice(0, 6)}
+          </span>
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {v.status === "candidata" && (
+            <RPGButton
+              variant={m.activeVersionId ? "secondary" : "success"}
+              className="!py-1.5 text-sm"
+              disabled={!v.metrics.beatsBaseline || a.activate.isPending}
+              title={v.metrics.beatsBaseline ? undefined : "Só versões que venceram a linha de base podem ser ativadas."}
+              onClick={() => a.activate.mutate({ id: m.id, vid: v.id }, { onSuccess: () => notify(m.activeVersionId ? `Agora a v${v.version} está em produção.` : `v${v.version} ativada. Profecias geradas.`), onError: (e) => notify(errMsg(e, "Não foi possível ativar."), "error") })}
+            >
+              {m.activeVersionId ? <Undo2 size={14} aria-hidden /> : <Rocket size={14} aria-hidden />} {m.activeVersionId ? "Usar esta versão" : "Ativar"}
+            </RPGButton>
+          )}
+          {v.status === "ativa" && (
+            <RPGButton variant="ghost" className="!py-1.5 text-sm" onClick={() => a.deactivate.mutate(m.id, { onSuccess: () => notify("Artefato desativado. As profecias futuras foram retiradas."), onError: (e) => notify(errMsg(e, "Falha ao desativar."), "error") })}>
+              <Power size={14} aria-hidden /> Desativar
+            </RPGButton>
+          )}
+          {v.status === "candidata" && (
+            <RPGButton variant="ghost" className="!py-1.5 text-xs" onClick={() => a.archiveVersion.mutate({ id: m.id, vid: v.id }, { onSuccess: () => notify(`v${v.version} arquivada.`), onError: (e) => notify(errMsg(e, "Falha ao arquivar."), "error") })}>
+              <Archive size={13} aria-hidden /> Arquivar
+            </RPGButton>
+          )}
+          <label className="ml-auto flex items-center gap-1.5 text-xs text-rpg-muted">
+            <input type="checkbox" checked={compare} onChange={(e) => onCompare(e.target.checked)} /> Comparar
+          </label>
+        </div>
+      </article>
+    </li>
+  );
+}
 
 export function ModelsTab({ o, notify, selected, onSelect, onWizard }: { o: ForgeOverview; notify: Notify; selected: string | null; onSelect: (id: string) => void; onWizard: () => void }) {
-  const a = useForgeActions();
   const [compare, setCompare] = useState<string[]>([]);
   const m = o.models.find((x) => x.id === selected) ?? o.models[0];
   if (!m)
     return (
       <Empty icon={<Hammer size={24} />} title="Nenhum modelo">
-        <RPGButton variant="gold" className="mt-2" onClick={onWizard}><Plus size={14} aria-hidden /> Criar com o assistente</RPGButton>
+        <RPGButton variant="gold" className="mt-2" onClick={onWizard}>
+          <Plus size={14} aria-hidden /> Criar com o assistente
+        </RPGButton>
       </Empty>
     );
   const versions = o.versions.filter((v) => v.modelId === m.id);
   const cmp = versions.filter((v) => compare.includes(v.id));
   return (
-    <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <KitSection title="Modelos" icon={<Hammer size={16} />} action={<RPGButton variant="ghost" aria-label="Novo modelo" onClick={onWizard}><Plus size={14} aria-hidden /></RPGButton>}>
-        <ul className="flex gap-1.5 overflow-x-auto lg:flex-col lg:overflow-visible">
+    <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <KitSection title="Artefatos" icon={<Hammer size={15} />} action={<RPGButton variant="ghost" className="!px-2 !py-1" aria-label="Novo modelo" onClick={onWizard}><Plus size={14} aria-hidden /></RPGButton>}>
+        <ul className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:flex-col lg:overflow-visible">
           {o.models.map((x) => (
             <li key={x.id} className="shrink-0">
-              <button type="button" onClick={() => { onSelect(x.id); setCompare([]); }} className={clsx("w-full border-2 px-2 py-1.5 text-left text-sm", x.id === m.id ? "border-rpg-purple bg-rpg-purple/10 text-rpg-text" : "border-rpg-border text-rpg-muted")} style={R} aria-pressed={x.id === m.id}>
-                {x.name}
-                <span className="block text-[10px]">{x.versions} versões</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(x.id);
+                  setCompare([]);
+                }}
+                className={clsx("flex w-56 items-center gap-2.5 border-2 p-2 text-left lg:w-full", x.id === m.id ? "border-rpg-gold bg-rpg-gold/10" : "border-rpg-border bg-rpg-bg-2/60 hover:border-rpg-bronze")}
+                style={R}
+                aria-pressed={x.id === m.id}
+              >
+                <IconTile tone={modelTone(o, x)} size="sm">
+                  {templateIcon(o.templates.find((t) => t.key === x.templateKey)?.icon)}
+                </IconTile>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-rpg-text">{x.name}</span>
+                  <span className="mt-0.5 flex items-center gap-1">
+                    <StatusBadge m={x} />
+                    <span className="text-[10px] text-rpg-muted">{x.versions} versões</span>
+                  </span>
+                </span>
               </button>
             </li>
           ))}
         </ul>
       </KitSection>
-      <div className="min-w-0 space-y-3">
-        <KitSection title={`Registro de versões · ${m.name}`} icon={<History size={16} />} action={<StatusBadge m={m} />}>
+      <div className="min-w-0 space-y-4">
+        <ModelConfig key={m.id} m={m} notify={notify} />
+        <KitSection title={`Linha do tempo · ${m.name}`} icon={<History size={15} />} tone="legendary">
           {!versions.length ? (
-            <Empty icon={<History size={22} />} title="Sem versões">Treine o modelo em Artefatos para registrar a primeira versão.</Empty>
+            <Empty icon={<History size={22} />} title="Sem versões">
+              Treine o artefato em Artefatos para registrar a primeira versão.
+            </Empty>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-xs">
-                <thead>
-                  <tr className="text-left text-rpg-muted">
-                    <th className="p-1 font-normal">Comparar</th>
-                    <th className="p-1 font-normal">Versão</th>
-                    <th className="p-1 font-normal">Algoritmo</th>
-                    <th className="p-1 font-normal">Holdout</th>
-                    <th className="p-1 font-normal">Dados</th>
-                    <th className="p-1 font-normal">Hash</th>
-                    <th className="p-1 font-normal">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {versions.map((v) => (
-                    <tr key={v.id} className="border-t border-rpg-border/60 align-top">
-                      <td className="p-1">
-                        <input type="checkbox" aria-label={`Comparar versão ${v.version}`} checked={compare.includes(v.id)} onChange={(e) => setCompare((c) => (e.target.checked ? [...c, v.id].slice(-3) : c.filter((x) => x !== v.id)))} />
-                      </td>
-                      <td className="p-1">
-                        v{v.version}{" "}
-                        <RPGBadge tone={v.status === "ativa" ? "green" : v.status === "arquivada" ? "muted" : "blue"}>{v.status}</RPGBadge>
-                        <span className="block text-[10px] text-rpg-muted">{fmtDateTime(v.trainedAt)}</span>
-                      </td>
-                      <td className="p-1">
-                        {v.algorithmLabel}
-                        <span className="block text-[10px] text-rpg-muted">{v.metrics.beatsBaseline ? "superou a base" : "não superou a base"}</span>
-                      </td>
-                      <td className="p-1"><HoldoutLine v={v} /></td>
-                      <td className="p-1 text-rpg-muted">{v.dataset.samples} dias · {fmtDate(v.dataset.from)}→{fmtDate(v.dataset.to)}</td>
-                      <td className="p-1 font-mono text-[10px] text-rpg-muted" title={`pipeline ${v.pipelineVersion} · semente ${v.seed}`}>
-                        {v.dataHash.slice(0, 8)}/{v.configHash.slice(0, 6)}
-                      </td>
-                      <td className="p-1">
-                        <div className="flex flex-wrap gap-1">
-                          {v.status !== "ativa" && v.status !== "arquivada" && (
-                            <RPGButton
-                              variant={m.activeVersionId ? "secondary" : "success"}
-                              disabled={!v.metrics.beatsBaseline || a.activate.isPending}
-                              title={v.metrics.beatsBaseline ? undefined : "Só versões que superaram a linha de base podem ser ativadas."}
-                              onClick={() => a.activate.mutate({ id: m.id, vid: v.id }, { onSuccess: () => notify(m.activeVersionId ? `Rollback/troca para v${v.version} concluído.` : `v${v.version} ativada. Previsões geradas.`), onError: (e) => notify(errMsg(e, "Não foi possível ativar."), "error") })}
-                            >
-                              {m.activeVersionId ? <Undo2 size={13} aria-hidden /> : <Rocket size={13} aria-hidden />} {m.activeVersionId ? "Usar esta" : "Ativar"}
-                            </RPGButton>
-                          )}
-                          {v.status === "ativa" && (
-                            <RPGButton variant="ghost" onClick={() => a.deactivate.mutate(m.id, { onSuccess: () => notify("Modelo desativado."), onError: (e) => notify(errMsg(e, "Falha."), "error") })}>
-                              <Power size={13} aria-hidden /> Desativar
-                            </RPGButton>
-                          )}
-                          {v.status === "candidata" && (
-                            <RPGButton variant="ghost" aria-label={`Arquivar versão ${v.version}`} onClick={() => a.archiveVersion.mutate({ id: m.id, vid: v.id }, { onError: (e) => notify(errMsg(e, "Falha."), "error") })}>
-                              <Archive size={13} aria-hidden />
-                            </RPGButton>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ol className="relative space-y-3 before:absolute before:bottom-3 before:left-[13px] before:top-3 before:w-0.5 before:bg-rpg-border">
+              {versions.map((v) => (
+                <VersionCard key={v.id} m={m} v={v} compare={compare.includes(v.id)} onCompare={(on) => setCompare((c) => (on ? [...c, v.id].slice(-3) : c.filter((x) => x !== v.id)))} notify={notify} />
+              ))}
+            </ol>
           )}
+          <p className="mt-3 text-[11px] text-rpg-muted">Marque 2 ou 3 versões para comparar. Trocar a versão ativa (rollback) gera novas profecias; nada é apagado.</p>
         </KitSection>
         {cmp.length >= 2 && (
           <KitSection title="Comparação de versões" icon={<History size={16} />}>

@@ -342,14 +342,16 @@ export function bottlenecks(days: Day[], today: string) {
   const cur = past.slice(-14);
   const prev = past.slice(-28, -14);
   if (cur.length < 14 || prev.length < 14) return [];
-  const out: Array<{ key: string; label: string; current: number; previous: number; diffPct: number; n: [number, number]; text: string; action: string }> = [];
-  const add = (key: string, label: string, f: (w: Day[]) => { v: number; n: number }, action: string, unit: string) => {
+  // basis: como o valor de cada quinzena é medido (total somado, dias com registro ou média) — a tela precisa dizer isso.
+  type Basis = "total" | "dias" | "media";
+  const out: Array<{ key: string; label: string; current: number; previous: number; diffPct: number; n: [number, number]; text: string; action: string; basis: Basis; unit: string }> = [];
+  const add = (key: string, label: string, f: (w: Day[]) => { v: number; n: number }, action: string, unit: string, basis: Basis) => {
     const a = f(cur);
     const b = f(prev);
     if (a.n < 5 || b.n < 5 || b.v === 0) return;
     const diff = Math.round(((a.v - b.v) / Math.abs(b.v)) * 100);
     if (Math.abs(diff) < 20) return;
-    out.push({ key, label, current: Math.round(a.v * 10) / 10, previous: Math.round(b.v * 10) / 10, diffPct: diff, n: [a.n, b.n], text: `${label} ${diff < 0 ? "menor" : "maior"} que nos 14 dias anteriores (${Math.round(b.v * 10) / 10}${unit} → ${Math.round(a.v * 10) / 10}${unit}).`, action: diff < 0 ? action : "Manter o que mudou para melhor." });
+    out.push({ key, label, current: Math.round(a.v * 10) / 10, previous: Math.round(b.v * 10) / 10, diffPct: diff, n: [a.n, b.n], text: `${label} ${diff < 0 ? "menor" : "maior"} que nos 14 dias anteriores (${Math.round(b.v * 10) / 10}${unit} → ${Math.round(a.v * 10) / 10}${unit}).`, action: diff < 0 ? action : "Manter o que mudou para melhor.", basis, unit: unit.trim() });
   };
   const daysWith = (k: SeriesKey) => (w: Day[]) => ({ v: w.filter((d) => (d.v[k] ?? 0) > 0).length, n: w.length });
   const sum = (k: SeriesKey) => (w: Day[]) => ({ v: w.reduce((s, d) => s + (d.v[k] ?? 0), 0), n: w.length });
@@ -357,11 +359,11 @@ export function bottlenecks(days: Day[], today: string) {
     const v = w.map((d) => d.v[k]).filter((x): x is number => x !== null);
     return { v: v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0, n: v.length };
   };
-  add("training", "Frequência de treino", daysWith("exercise_minutes"), "Reservar dois blocos de treino na Agenda desta semana.", " dias");
-  add("study", "Minutos de estudo", sum("study_minutes"), "Planejar sessões curtas de estudo nos dias livres.", " min");
-  add("habits", "Hábitos cumpridos", sum("habits_done"), "Revisar o ritual de hábitos e reduzir a meta temporariamente.", "");
-  add("tasks", "Missões concluídas", sum("tasks_completed"), "Escolher menos prioridades por dia e protegê-las.", "");
-  add("sleep", "Sono médio", avg("sleep_duration"), "Antecipar o horário de dormir em 30 minutos.", " h");
-  add("energy", "Energia média", avg("energy"), "Observar sono e carga dos dias de energia baixa.", "/5");
+  add("training", "Frequência de treino", daysWith("exercise_minutes"), "Reservar dois blocos de treino na Agenda desta semana.", " dias", "dias");
+  add("study", "Minutos de estudo", sum("study_minutes"), "Planejar sessões curtas de estudo nos dias livres.", " min", "total");
+  add("habits", "Hábitos cumpridos", sum("habits_done"), "Revisar o ritual de hábitos e reduzir a meta temporariamente.", "", "total");
+  add("tasks", "Missões concluídas", sum("tasks_completed"), "Escolher menos prioridades por dia e protegê-las.", "", "total");
+  add("sleep", "Sono médio", avg("sleep_duration"), "Antecipar o horário de dormir em 30 minutos.", " h", "media");
+  add("energy", "Energia média", avg("energy"), "Observar sono e carga dos dias de energia baixa.", "/5", "media");
   return out;
 }

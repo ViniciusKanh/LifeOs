@@ -148,7 +148,7 @@ export interface DataAnalysis {
     alerts: Array<{ level: "alto" | "medio" | "baixo"; text: string }>;
     definitions: Record<string, string>;
   };
-  bottlenecks: Array<{ key: string; label: string; current: number; previous: number; diffPct: number; n: [number, number]; text: string; action: string }>;
+  bottlenecks: Array<{ key: string; label: string; current: number; previous: number; diffPct: number; n: [number, number]; text: string; action: string; basis?: "total" | "dias" | "media"; unit?: string }>;
   sample: Array<Record<string, number | string | null>>;
 }
 export interface ForgeOverview {

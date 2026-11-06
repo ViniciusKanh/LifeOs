@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, Award, BarChart3, BookMarked, Crown, FileText, FlaskConical, Gauge, Gem, Hammer, LayoutDashboard, Loader2, Play, Settings2, Sparkles, Swords, Telescope, TrendingDown, Workflow } from "lucide-react";
-import { RPGButton, RPGStatCard, RPGTabs, RPGToast } from "@/components/rpg";
+import clsx from "clsx";
+import { RPGButton, RPGToast } from "@/components/rpg";
+import type { RpgTone } from "@/components/rpg/rpgAssets";
 import { useUrlTab } from "@/components/hero/HeroShared";
 import { useForgeActions, useForgeOverview } from "@/hooks/useForge";
 import type { ForgeOverview } from "@/services/forgeService";
 import { FORGE_ART, errMsg, type Notify } from "./ForgeShared";
-import { OverviewTab } from "./ForgeOverview";
+import { IconTile, OverviewTab } from "./ForgeOverview";
 import { ArtifactsTab, ModelWizard, ModelsTab } from "./ForgeModels";
 import { ArenaTab, MonitorTab, PredictionsTab, ReportsTab, RunesTab } from "./ForgeAnalysis";
 import { BottlenecksTab, ExperimentsTab, LabTab, ProtocolsTab } from "./ForgeLab";
@@ -48,7 +50,7 @@ function Banner({ o, notify, onWizard, onModels }: { o: ForgeOverview; notify: N
               </li>
             ))}
           </ul>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 grid gap-2 sm:flex sm:flex-wrap">
             <RPGButton variant="primary" disabled={analyze.isPending} onClick={() => analyze.mutate(undefined, { onSuccess: () => notify("Dados analisados: o núcleo foi atualizado."), onError: (e) => notify(errMsg(e, "Falha na análise."), "error") })}>
               {analyze.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Play size={15} aria-hidden />} Analisar meus dados
             </RPGButton>
@@ -68,19 +70,59 @@ function Banner({ o, notify, onWizard, onModels }: { o: ForgeOverview; notify: N
   );
 }
 
+/** Um slot do HUD: ícone emoldurado, valor e o que ele significa. */
+function HudSlot({ icon, tone, value, label, hint }: { icon: ReactNode; tone: RpgTone; value: string; label: string; hint: string }) {
+  return (
+    <div className="rpg-panel rpg-panel-gold flex min-w-0 items-center gap-2.5 p-2.5" title={hint}>
+      <IconTile tone={tone} size="sm">
+        {icon}
+      </IconTile>
+      <div className="min-w-0">
+        <p className="font-rpg text-xl font-bold leading-none tabular-nums text-rpg-text">{value}</p>
+        <p className="mt-1 truncate text-xs leading-tight text-rpg-text/85">{label}</p>
+        <p className="truncate text-[10px] leading-tight text-rpg-muted">{hint}</p>
+      </div>
+    </div>
+  );
+}
+
 /** HUD de indicadores — cada um com significado próprio, nenhuma média entre métricas de escalas diferentes. */
 function Indicators({ o }: { o: ForgeOverview }) {
   const i = o.indicators;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-8">
-      <RPGStatCard layout="wide" dense tone="green" icon={<Sparkles size={22} />} value={String(i.artifactsActive)} label="Artefatos ativos" caption="em produção" />
-      <RPGStatCard layout="wide" dense tone="purple" icon={<Hammer size={22} />} value={`${i.modelsTrained}/${i.models}`} label="Modelos treinados" caption="com versão registrada" />
-      <RPGStatCard layout="wide" dense tone="blue" icon={<FlaskConical size={22} />} value={String(i.experiments)} label="Experimentos" caption="treinos executados" />
-      <RPGStatCard layout="wide" dense tone="cyan" icon={<Gauge size={22} />} value={i.dataQuality == null ? "—" : String(i.dataQuality)} label="Qualidade dos dados" caption={i.dataQuality == null ? "analise o núcleo" : "de 100"} />
-      <RPGStatCard layout="wide" dense tone="gold" icon={<Crown size={22} />} value={String(i.beatBaseline)} label="Acima da base" caption="venceram no teste final" />
-      <RPGStatCard layout="wide" dense tone="pink" icon={<Telescope size={22} />} value={String(i.predictionsToday)} label="Profecias" caption="hoje e amanhã" />
-      <RPGStatCard layout="wide" dense tone={i.alerts ? "red" : "muted"} icon={<AlertTriangle size={22} />} value={String(i.alerts)} label="Alertas" caption={i.alerts ? "ver recomendações" : "tudo em ordem"} />
-      <RPGStatCard layout="wide" dense tone="gold" icon={<Award size={22} />} value={`Nv ${o.researcher.level}`} label="Pesquisador" caption={o.researcher.title} />
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 xl:grid-cols-8">
+      <HudSlot tone="green" icon={<Sparkles size={18} />} value={String(i.artifactsActive)} label="Artefatos ativos" hint="em produção" />
+      <HudSlot tone="purple" icon={<Hammer size={18} />} value={`${i.modelsTrained}/${i.models}`} label="Treinados" hint="modelos com versão" />
+      <HudSlot tone="blue" icon={<FlaskConical size={18} />} value={String(i.experiments)} label="Experimentos" hint="treinos executados" />
+      <HudSlot tone="cyan" icon={<Gauge size={18} />} value={i.dataQuality == null ? "—" : String(i.dataQuality)} label="Qualidade" hint={i.dataQuality == null ? "analise o núcleo" : "dos dados, de 100"} />
+      <HudSlot tone="gold" icon={<Crown size={18} />} value={String(i.beatBaseline)} label="Acima da base" hint="no teste final" />
+      <HudSlot tone="pink" icon={<Telescope size={18} />} value={String(i.predictionsToday)} label="Profecias" hint="hoje e amanhã" />
+      <HudSlot tone={i.alerts ? "red" : "muted"} icon={<AlertTriangle size={18} />} value={String(i.alerts)} label="Alertas" hint={i.alerts ? "ver recomendações" : "tudo em ordem"} />
+      <HudSlot tone="gold" icon={<Award size={18} />} value={`Nv ${o.researcher.level}`} label="Pesquisador" hint={o.researcher.title} />
+    </div>
+  );
+}
+
+/** Abas em grade (2 linhas no desktop) para nenhuma ficar cortada; rolagem horizontal só no celular. */
+function ForgeTabs({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  return (
+    <div role="tablist" aria-label="Seções da Forja" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-6 md:overflow-visible md:px-0 md:pb-0">
+      {TAB_META.map(([v, l, icon]) => (
+        <button
+          key={v}
+          type="button"
+          role="tab"
+          aria-selected={tab === v}
+          onClick={() => onChange(v)}
+          className={clsx(
+            "inline-flex min-h-[42px] shrink-0 items-center justify-center gap-1.5 border-2 px-3 text-sm font-semibold transition-colors",
+            tab === v ? "border-rpg-gold bg-rpg-gold/15 text-rpg-gold-light shadow-[0_0_14px_-4px_rgb(var(--rpg-gold)/0.7)]" : "border-rpg-border bg-rpg-bg-2/70 text-rpg-muted hover:border-rpg-bronze hover:text-rpg-text",
+          )}
+          style={{ borderRadius: 4 }}
+        >
+          {icon} {l}
+        </button>
+      ))}
     </div>
   );
 }
@@ -117,7 +159,7 @@ export function ForgeScreen() {
         <>
           <Banner o={o} notify={notify} onWizard={() => setWizard(true)} onModels={() => setTab("modelos")} />
           <Indicators o={o} />
-          <RPGTabs label="Seções da Forja" tabs={TAB_META.map(([value, label, icon]) => ({ value, label, icon }))} value={tab} onChange={setTab} className="max-w-full" />
+          <ForgeTabs tab={tab} onChange={setTab} />
           {tab === "visao" && <OverviewTab o={o} notify={notify} goTab={setTab} />}
           {tab === "artefatos" && <ArtifactsTab o={o} notify={notify} onWizard={() => setWizard(true)} onOpenVersions={(id) => { setSelected(id); setTab("modelos"); }} />}
           {tab === "modelos" && <ModelsTab {...props} onWizard={() => setWizard(true)} />}

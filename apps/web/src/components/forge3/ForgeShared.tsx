@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import clsx from "clsx";
 import { BookOpen, Dumbbell, Leaf, Sun, Zap, Brain } from "lucide-react";
 import { RPGBadge, RPGPanel } from "@/components/rpg";
+import type { RpgTone } from "@/components/rpg/rpgAssets";
 import { ApiError } from "@/services/api";
 import { STATUS_LABEL, STATUS_TONE, fmtNum, isReg, type ForgeModel, type Metrics, type Primary } from "@/services/forgeService";
 
@@ -25,8 +26,17 @@ const ICONS: Record<string, ReactNode> = {
 };
 export const templateIcon = (k: string | null | undefined) => (k && ICONS[k]) || <Brain size={18} />;
 
+/** Selo das telas da Forja: mesma moldura do RPGBadge, com fonte legível (pixel só em títulos). */
+export function Tag({ tone = "muted", children, className }: { tone?: RpgTone; children: ReactNode; className?: string }) {
+  return (
+    <RPGBadge tone={tone} className={clsx("!font-sans !text-[10px] !font-bold !tracking-wide", className)}>
+      {children}
+    </RPGBadge>
+  );
+}
+
 export function StatusBadge({ m }: { m: ForgeModel }) {
-  return <RPGBadge tone={STATUS_TONE[m.status]}>{STATUS_LABEL[m.status]}</RPGBadge>;
+  return <Tag tone={STATUS_TONE[m.status]}>{STATUS_LABEL[m.status]}</Tag>;
 }
 
 export function Empty({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {

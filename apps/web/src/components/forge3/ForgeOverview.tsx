@@ -24,13 +24,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useReducedMotion } from "motion/react";
-import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar, RPGProgressRing } from "@/components/rpg";
+import { RPGButton, RPGPanel, RPGProgressBar, RPGProgressRing } from "@/components/rpg";
 import { RPG_TONE_TEXT, type RpgTone } from "@/components/rpg/rpgAssets";
 import { AdvisorPanel } from "@/components/rpg-modules/ModuleKit";
 import { Modal } from "@/components/ui/Modal";
 import { useForgeActions } from "@/hooks/useForge";
 import { RUN_KIND, RUN_STATUS, fmtNum, isReg, type ForgeModel, type ForgeOverview, type Prediction, type Run } from "@/services/forgeService";
-import { FORGE_ART, errMsg, fmtDate, fmtDateTime, pct, templateIcon, type Notify } from "./ForgeShared";
+import { FORGE_ART, errMsg, fmtDate, fmtDateTime, pct, templateIcon, type Notify, Tag } from "./ForgeShared";
 
 type Source = NonNullable<ForgeOverview["quality"]>["sources"][number];
 type GoTab = (t: "artefatos" | "modelos" | "arena" | "previsoes" | "experimentos" | "gargalos" | "laboratorio") => void;
@@ -74,28 +74,32 @@ const SOURCE_UI: Record<string, { icon: LucideIcon; tone: RpgTone }> = {
 };
 const HEX = "polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0% 50%)";
 
-function HexNode({ s, onOpen, style }: { s: Source; onOpen: () => void; style: React.CSSProperties }) {
+function HexNode({ s, angle, onOpen, style, inline }: { s: Source; angle: number; onOpen: () => void; style?: React.CSSProperties; inline?: boolean }) {
   const ui = SOURCE_UI[s.key] ?? { icon: Cpu, tone: "muted" as RpgTone };
   const Icon = ui.icon;
   const lit = s.connected && s.eligible;
   const tone = lit ? RPG_TONE_TEXT[ui.tone] : s.connected ? "text-rpg-orange" : "text-rpg-muted";
+  // Rótulo do lado de fora do círculo: acima nos nós de cima, abaixo nos demais — a linha nunca cruza o texto.
+  const above = Math.sin((angle * Math.PI) / 180) < -0.2;
   return (
     <button
       type="button"
       onClick={onOpen}
       style={style}
-      className="group absolute flex w-[76px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 focus-visible:outline-none sm:w-24"
-      aria-label={`${s.label}: ${s.connected ? `${s.records} registros` : "sem registros"}, ${s.eligible ? "elegível para modelos" : "dados insuficientes"}. Ver detalhes.`}
+      className={clsx("group flex items-center gap-1 focus-visible:outline-none", inline ? "w-full flex-col" : clsx("absolute w-28 -translate-x-1/2 -translate-y-1/2", above ? "flex-col-reverse" : "flex-col"))}
+      aria-label={`${s.label}: ${s.connected ? `${s.records} registros` : "sem registros"}, ${s.eligible ? "fonte acesa" : "dados insuficientes"}. Ver detalhes.`}
     >
-      <span className={clsx("relative block h-11 w-12 transition-transform group-hover:scale-110 group-focus-visible:scale-110 sm:h-12 sm:w-14", tone)}>
-        <span className={clsx("absolute inset-0", lit ? "bg-current" : "bg-current/45")} style={{ clipPath: HEX }} />
-        <span className="absolute inset-[2px] flex items-center justify-center bg-rpg-bg" style={{ clipPath: HEX }}>
-          <Icon size={20} strokeWidth={2.2} />
+      <span className={clsx("relative block h-12 w-14 transition-transform duration-150 group-hover:scale-110 group-focus-visible:scale-110 sm:h-14 sm:w-16", tone)}>
+        {lit && <span className="absolute inset-1 rounded-full bg-current opacity-30 blur-lg" aria-hidden />}
+        <span className={clsx("absolute inset-0", lit ? "bg-current" : s.connected ? "bg-current/70" : "bg-current/35")} style={{ clipPath: HEX }} />
+        <span className={clsx("absolute inset-[2px] flex items-center justify-center", lit ? "bg-[radial-gradient(circle_at_50%_35%,rgb(var(--rpg-panel-light)),rgb(var(--rpg-bg)))]" : "bg-rpg-bg")} style={{ clipPath: HEX }}>
+          <Icon size={22} strokeWidth={2.2} className={lit ? "drop-shadow-[0_0_6px_currentColor]" : undefined} />
         </span>
-        {lit && <span className="absolute inset-0 -z-10 rounded-full bg-current opacity-25 blur-md" aria-hidden />}
       </span>
-      <span className={clsx("text-[11px] leading-tight sm:text-xs", lit ? "text-rpg-text" : "text-rpg-muted")}>{s.label}</span>
-      <span className="font-pixel text-[9px] tabular-nums text-rpg-muted">{s.connected ? `${s.recentDays}/120 dias` : "sem dados"}</span>
+      <span className="flex flex-col items-center leading-tight">
+        <span className={clsx("text-xs font-semibold sm:text-[13px]", lit ? "text-rpg-text" : "text-rpg-muted")}>{s.label}</span>
+        <span className={clsx("text-[10px] tabular-nums", lit ? "text-rpg-green" : s.connected ? "text-rpg-orange" : "text-rpg-muted/80")}>{s.connected ? `${s.recentDays} de 120 dias` : "sem registros"}</span>
+      </span>
     </button>
   );
 }
@@ -109,11 +113,13 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
   const sources = q?.sources ?? [];
   const lit = sources.filter((s) => s.connected && s.eligible).length;
   const run = () => analyze.mutate(undefined, { onSuccess: () => notify("Dados analisados: o núcleo foi atualizado."), onError: (e) => notify(errMsg(e, "Não foi possível analisar os dados."), "error") });
-  // Fontes distribuídas numa elipse ao redor do cristal (começa no topo, sentido horário).
-  const pos = (i: number, n: number): React.CSSProperties => {
-    const a = (-90 + (360 / n) * i) * (Math.PI / 180);
-    return { left: `${50 + 41 * Math.cos(a)}%`, top: `${50 + 39 * Math.sin(a)}%` };
-  };
+  // Geometria em % do quadro (proporção 4:3): elipse dos nós e raio do círculo central.
+  const RX = 39;
+  const RY = 37;
+  const CORE_X = 15;
+  const CORE_Y = 20;
+  const ang = (i: number) => -90 + (360 / Math.max(1, sources.length)) * i;
+  const pt = (deg: number, rx: number, ry: number) => [50 + rx * Math.cos((deg * Math.PI) / 180), 50 + ry * Math.sin((deg * Math.PI) / 180)] as const;
   return (
     <RPGPanel
       title="Núcleo de Inteligência"
@@ -126,47 +132,74 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
         </RPGButton>
       }
     >
-      <div className="relative mx-auto aspect-[10/9] w-full max-w-[520px] sm:aspect-[16/11]">
+      {/* Celular: cristal em cima e fontes em grade (o círculo não cabe sem sobrepor rótulos). */}
+      <div className="sm:hidden">
+        <div className="relative mx-auto mb-5 aspect-square w-32" aria-hidden>
+          <div className={clsx("absolute inset-0 rounded-full border-2 border-rpg-gold/70 bg-rpg-bg", lit && "shadow-[0_0_30px_-4px_rgb(var(--rpg-purple)/0.8)]")} />
+          <img src={`${FORGE_ART}/core.webp`} alt="" className={clsx("pixelated absolute inset-[6%] h-[88%] w-[88%] rounded-full object-cover object-[50%_38%]", !lit && "opacity-50 grayscale")} />
+          <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border border-rpg-gold/70 bg-rpg-bg px-2 py-0.5 text-[11px] font-bold tabular-nums text-rpg-gold-light" style={{ borderRadius: 3 }}>
+            {lit}/{sources.length || 8} acesas
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-x-1 gap-y-3">
+          {sources.map((src, i) => (
+            <HexNode key={src.key} s={src} angle={ang(i)} inline onOpen={() => setOpen(src)} />
+          ))}
+        </div>
+      </div>
+      <div className="relative mx-auto hidden aspect-[4/3] w-full max-w-[600px] sm:block">
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
           {sources.map((s, i) => {
-            const a = (-90 + (360 / sources.length) * i) * (Math.PI / 180);
             const on = s.connected && s.eligible;
-            return <line key={s.key} x1="50" y1="50" x2={50 + 41 * Math.cos(a)} y2={50 + 39 * Math.sin(a)} stroke={on ? "rgb(var(--rpg-purple))" : "rgb(var(--rpg-border))"} strokeWidth={on ? 0.5 : 0.3} strokeDasharray={on ? undefined : "1.2 1.2"} vectorEffect="non-scaling-stroke" opacity={on ? 0.9 : 0.6} />;
+            const [x1, y1] = pt(ang(i), CORE_X + 1, CORE_Y + 1);
+            const [x2, y2] = pt(ang(i), RX - 7, RY - 8);
+            return <line key={s.key} x1={x1} y1={y1} x2={x2} y2={y2} stroke={on ? "rgb(var(--rpg-purple))" : "rgb(var(--rpg-border))"} strokeWidth={on ? 2 : 1} strokeDasharray={on ? undefined : "4 4"} vectorEffect="non-scaling-stroke" className={on && !reduce ? "[stroke-dashoffset:0]" : undefined} />;
           })}
         </svg>
-        <div className="absolute left-1/2 top-1/2 w-[34%] max-w-[170px] -translate-x-1/2 -translate-y-1/2" aria-hidden>
+        {/* Cristal central em moldura circular; acende conforme as fontes conectadas. */}
+        <div className="absolute left-1/2 top-1/2 aspect-square w-[30%] -translate-x-1/2 -translate-y-1/2" aria-hidden>
+          <div className={clsx("absolute inset-0 rounded-full border-2 border-rpg-gold/70 bg-rpg-bg shadow-[0_0_0_4px_rgb(var(--rpg-bg)),0_0_0_6px_rgb(var(--rpg-bronze)/0.6),0_0_40px_-4px_rgb(var(--rpg-purple)/0.8)]", !lit && "shadow-none")} />
           <img
             src={`${FORGE_ART}/core.webp`}
             alt=""
-            className={clsx("pixelated w-full object-contain drop-shadow-[0_0_24px_rgb(var(--rpg-purple)/0.7)]", !reduce && lit > 0 && "motion-safe:animate-[pulse_4s_ease-in-out_infinite]", !lit && "opacity-60 grayscale-[60%]")}
-            style={{ maskImage: "radial-gradient(ellipse 50% 46% at 50% 46%, #000 70%, transparent 100%)", WebkitMaskImage: "radial-gradient(ellipse 50% 46% at 50% 46%, #000 70%, transparent 100%)" }}
+            className={clsx("pixelated absolute inset-[6%] h-[88%] w-[88%] rounded-full object-cover object-[50%_38%]", !reduce && lit > 0 && "motion-safe:animate-[pulse_4s_ease-in-out_infinite]", !lit && "opacity-50 grayscale")}
           />
+          <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border border-rpg-gold/70 bg-rpg-bg px-2 py-0.5 text-[11px] font-bold tabular-nums text-rpg-gold-light" style={{ borderRadius: 3 }}>
+            {lit}/{sources.length || 8} acesas
+          </span>
         </div>
-        {sources.map((s, i) => (
-          <HexNode key={s.key} s={s} style={pos(i, sources.length)} onOpen={() => setOpen(s)} />
-        ))}
-        {!q && (
-          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 text-center">
-            <p className="max-w-xs text-sm text-rpg-text/90">O núcleo ainda está apagado. Analise seus registros para acender as fontes que podem alimentar modelos.</p>
-            <RPGButton variant="primary" onClick={run} disabled={analyze.isPending}>
-              <Sparkles size={14} aria-hidden /> Acender o núcleo
-            </RPGButton>
-          </div>
-        )}
+        {sources.map((s, i) => {
+          const [x, y] = pt(ang(i), RX, RY);
+          return <HexNode key={s.key} s={s} angle={ang(i)} style={{ left: `${x}%`, top: `${y}%` }} onOpen={() => setOpen(s)} />;
+        })}
       </div>
+      {!q && (
+        <div className="mt-3 flex flex-col items-center gap-2 text-center">
+          <p className="max-w-xs text-sm text-rpg-text/90">O núcleo ainda está apagado. Analise seus registros para acender as fontes que podem alimentar modelos.</p>
+          <RPGButton variant="primary" onClick={run} disabled={analyze.isPending}>
+            <Sparkles size={14} aria-hidden /> Acender o núcleo
+          </RPGButton>
+        </div>
+      )}
       {q && (
-        <p className="mt-1 text-center text-sm text-rpg-text/85">
-          {lit} de {sources.length} fontes acesas · qualidade dos dados <strong className="font-rpg text-rpg-cyan">{q.quality.scores.overall ?? "—"}</strong>
-          <span className="block text-[11px] text-rpg-muted">Fonte acesa = usada como variável e com registros em 30+ dias distintos nos últimos 120. Análise de {fmtDateTime(q.analyzedAt)}.</span>
+        <p className="mt-2 text-center text-sm text-rpg-text/85">
+          Qualidade dos dados <strong className="font-rpg text-lg text-rpg-cyan">{q.quality.scores.overall ?? "—"}</strong>
+          <span className="text-rpg-muted"> /100</span>
+          <span className="mt-0.5 block text-[11px] text-rpg-muted">Fonte acesa = vira variável e tem registros em 30+ dias dos últimos 120. Toque numa fonte para ver detalhes.</span>
         </p>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-rpg-border/70 pt-3">
-        <span className="text-sm text-rpg-text">
-          Nível da Forja <strong className="font-rpg text-xl text-rpg-gold-light">{r.level}</strong>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-rpg-border/70 pt-3">
+        <span className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center border-2 border-rpg-gold bg-rpg-bg font-rpg text-lg font-bold text-rpg-gold-light" style={{ borderRadius: 3 }} aria-label={`Nível da Forja ${r.level}`}>
+            {r.level}
+          </span>
+          <span className="leading-tight">
+            <span className="block text-xs text-rpg-muted">Nível da Forja</span>
+            <span className="block text-sm font-semibold text-rpg-gold-light">{r.title}</span>
+          </span>
         </span>
-        <span className="text-xs italic text-rpg-gold-light">{r.title}</span>
         <RPGProgressBar className="min-w-[140px] flex-1" tone="purple" label="Pontos de pesquisa" value={r.pct} max={100} showLabel={false} />
-        <span className="font-pixel text-xs tabular-nums text-rpg-text" title={r.rule}>
+        <span className="text-xs font-semibold tabular-nums text-rpg-text" title={r.rule}>
           {r.points} / {r.next ? r.next.min : r.points} pts
         </span>
       </div>
@@ -203,7 +236,7 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
 /* ═════════════ Profecia do Dia ═════════════ */
 
 /** Trilha das últimas profecias já resolvidas do artefato: acerto (limiar 50%) ou erro absoluto — só dias com valor real. */
-function ProphecyTrack({ o, m }: { o: ForgeOverview; m: ForgeModel }) {
+export function ProphecyTrack({ o, m }: { o: ForgeOverview; m: ForgeModel }) {
   const done = o.predictions
     .filter((p) => p.modelId === m.id && p.actual != null)
     .sort((a, b) => a.targetDate.localeCompare(b.targetDate))
@@ -211,10 +244,10 @@ function ProphecyTrack({ o, m }: { o: ForgeOverview; m: ForgeModel }) {
   const cls = m.problem === "classification";
   const hits = cls ? done.filter((p) => (p.value >= 0.5 ? 1 : 0) === p.actual).length : 0;
   return (
-    <div className="mt-4 border-t border-rpg-border/70 pt-3 sm:pr-20">
+    <div className="mt-4 border-t border-rpg-border/70 pt-3">
       <p className="mb-1.5 flex items-baseline justify-between gap-2 text-xs text-rpg-muted">
         <span>Últimas profecias resolvidas</span>
-        {!!done.length && <span className="font-pixel text-[10px] text-rpg-text">{cls ? `${hits}/${done.length} acertos` : `erro médio ${fmtNum(done.reduce((a, p) => a + Math.abs(p.value - (p.actual ?? 0)), 0) / done.length, 2)}`}</span>}
+        {!!done.length && <span className="font-semibold text-[10px] text-rpg-text">{cls ? `${hits}/${done.length} acertos` : `erro médio ${fmtNum(done.reduce((a, p) => a + Math.abs(p.value - (p.actual ?? 0)), 0) / done.length, 2)}`}</span>}
       </p>
       {!done.length ? (
         <p className="text-[11px] text-rpg-muted">Ainda nenhuma: o resultado real de cada dia é conferido automaticamente quando o dia termina.</p>
@@ -225,7 +258,7 @@ function ProphecyTrack({ o, m }: { o: ForgeOverview; m: ForgeModel }) {
             return (
               <li
                 key={p.targetDate}
-                className={clsx("flex h-8 min-w-8 flex-col items-center justify-center border-2 px-1 font-pixel text-[9px] leading-none", ok === null ? "border-rpg-cyan/60 text-rpg-cyan" : ok ? "border-rpg-green/70 bg-rpg-green/10 text-rpg-green" : "border-rpg-red/70 bg-rpg-red/10 text-rpg-red")}
+                className={clsx("flex h-8 min-w-8 flex-col items-center justify-center border-2 px-1 font-semibold text-[9px] leading-none", ok === null ? "border-rpg-cyan/60 text-rpg-cyan" : ok ? "border-rpg-green/70 bg-rpg-green/10 text-rpg-green" : "border-rpg-red/70 bg-rpg-red/10 text-rpg-red")}
                 style={{ borderRadius: 3 }}
                 title={`${fmtDate(p.targetDate)}: previsto ${predText(p, m)}, real ${cls ? (p.actual === 1 ? "sim" : "não") : fmtNum(p.actual, 1)}`}
               >
@@ -250,8 +283,7 @@ function ProphecyPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
   const cls = m?.problem === "classification";
   const likely = cls && p ? p.value >= 0.5 : false;
   return (
-    <RPGPanel title="Profecia do Dia" icon={<Sparkles size={15} className="text-rpg-purple" />} variant="legendary" className="relative h-full overflow-hidden" actions={<span className="font-pixel text-[10px] text-rpg-muted">ML · sem IA externa</span>}>
-      <img src={`${FORGE_ART}/orb.webp`} alt="" aria-hidden className="pixelated pointer-events-none absolute -bottom-2 right-1 hidden w-20 opacity-90 sm:block" />
+    <RPGPanel title="Profecia do Dia" icon={<Sparkles size={15} className="text-rpg-purple" />} variant="legendary" className="relative overflow-hidden" actions={<span className="font-semibold text-[10px] text-rpg-muted">ML · sem IA externa</span>}>
       {!p || !m ? (
         <div className="space-y-3 py-3">
           <p className="text-sm text-rpg-text/90">Nenhuma profecia ativa.</p>
@@ -271,10 +303,10 @@ function ProphecyPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
               ))}
             </div>
           )}
-          <div className="grid items-center gap-4 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+          <div className="grid items-center gap-4 sm:grid-cols-[8.5rem_minmax(0,1fr)] 2xl:grid-cols-[8.5rem_minmax(0,1fr)_88px]">
             <div className="flex flex-col items-center text-center">
               {cls ? (
-                <RPGProgressRing value={p.value * 100} size={124} tone={likely ? "green" : "orange"} label={`Chance de ${m.targetLabel.toLowerCase()}`} valueClassName="text-2xl text-rpg-text" />
+                <RPGProgressRing value={p.value * 100} size={124} tone={likely ? "green" : "orange"} label={`Chance de ${m.targetLabel.toLowerCase()}`} valueClassName="!font-rpg text-3xl text-rpg-text" />
               ) : (
                 <div className="flex h-[124px] w-[124px] flex-col items-center justify-center rounded-full border-4 border-rpg-cyan/70 bg-rpg-bg shadow-[inset_0_0_18px_-4px_rgb(var(--rpg-cyan)/0.7)]">
                   <span className="font-rpg text-3xl font-bold tabular-nums text-rpg-text">{fmtNum(p.value, 1)}</span>
@@ -291,7 +323,7 @@ function ProphecyPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
                 {p.partial && " · preliminar"}
               </p>
             </div>
-            <div className="min-w-0 sm:pr-16">
+            <div className="min-w-0">
               <p className="mb-1.5 text-xs font-semibold text-rpg-muted">Fatores principais</p>
               {!p.explanation.factors.length ? (
                 <p className="text-xs text-rpg-muted">Nenhuma variável afastou a previsão da média.</p>
@@ -307,7 +339,7 @@ function ProphecyPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
                         <span className="truncate text-rpg-text/90" title={f.label}>
                           {f.label}
                         </span>
-                        <span className={clsx("font-pixel text-xs tabular-nums", up ? "text-rpg-green" : "text-rpg-red")}>
+                        <span className={clsx("font-semibold text-xs tabular-nums", up ? "text-rpg-green" : "text-rpg-red")}>
                           {up ? "+" : "−"}
                           {cls ? `${fmtNum(Math.abs(f.effect) * 100, 0)} p.p.` : fmtNum(Math.abs(f.effect), 2)}
                         </span>
@@ -317,6 +349,7 @@ function ProphecyPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
                 </ul>
               )}
             </div>
+            <img src={`${FORGE_ART}/orb.webp`} alt="" aria-hidden className="pixelated hidden w-[88px] self-end 2xl:block" />
           </div>
           <ProphecyTrack o={o} m={m} />
           <RPGButton variant="secondary" className="mt-3 w-full sm:w-auto" onClick={() => goTab("previsoes")}>
@@ -361,15 +394,15 @@ function ArtifactsPanel({ o, goTab, notify }: { o: ForgeOverview; goTab: GoTab; 
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-rpg-text">{m.name}</p>
                 <p className="mt-0.5 flex flex-wrap gap-1">
-                  <RPGBadge tone="purple">{m.versions ? `v${m.latest?.version ?? m.versions}` : "v0"}</RPGBadge>
-                  <RPGBadge tone={m.status === "ativo" ? "green" : m.status === "degradado" ? "red" : m.status === "aprovado" ? "gold" : m.status === "aguardando_dados" ? "orange" : "muted"}>{m.status.replace("_", " ")}</RPGBadge>
+                  <Tag tone="purple">{m.versions ? `v${m.latest?.version ?? m.versions}` : "v0"}</Tag>
+                  <Tag tone={m.status === "ativo" ? "green" : m.status === "degradado" ? "red" : m.status === "aprovado" ? "gold" : m.status === "aguardando_dados" ? "orange" : "muted"}>{m.status.replace("_", " ")}</Tag>
                 </p>
               </div>
               <div className="min-w-0 text-right">
                 {s ? (
                   <>
                     <RPGProgressBar tone={ok ? "green" : "orange"} label={`Desempenho de ${m.name}`} value={s.value * 100} showLabel={false} />
-                    <p className="mt-0.5 truncate font-pixel text-[10px] tabular-nums text-rpg-muted">{s.label}</p>
+                    <p className="mt-0.5 truncate font-semibold text-[10px] tabular-nums text-rpg-muted">{s.label}</p>
                   </>
                 ) : (
                   <p className="text-[11px] text-rpg-muted">não treinado</p>
@@ -431,12 +464,12 @@ function ArenaPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
                     <tr key={e.algorithm} className={clsx("border-t border-rpg-border/50", sel && "bg-rpg-gold/10")}>
                       <td className="py-1 pr-2">
                         <span className="flex items-center gap-1.5">
-                          {sel ? <Trophy size={13} className="text-rpg-gold" aria-hidden /> : <span className="w-[13px] text-center font-pixel text-[10px] text-rpg-muted">{i + 1}</span>}
+                          {sel ? <Trophy size={13} className="text-rpg-gold" aria-hidden /> : <span className="w-[13px] text-center font-semibold text-[10px] text-rpg-muted">{i + 1}</span>}
                           <span className={clsx("truncate", sel ? "text-rpg-gold-light" : "text-rpg-text")}>{e.label}</span>
-                          {e.isBaseline && <RPGBadge tone="muted">base</RPGBadge>}
+                          {e.isBaseline && <Tag tone="muted">base</Tag>}
                         </span>
                       </td>
-                      <td className="py-1 text-right font-pixel text-xs tabular-nums text-rpg-text">{fmtNum(e.cvMean)}</td>
+                      <td className="py-1 text-right font-semibold text-xs tabular-nums text-rpg-text">{fmtNum(e.cvMean)}</td>
                       <td className="py-1 text-right text-xs">
                         {sel ? <span className={mt.beatsBaseline ? "text-rpg-green" : "text-rpg-orange"}>{mt.beatsBaseline ? "Campeão" : "Referência"}</span> : <span className="text-rpg-muted">—</span>}
                       </td>
@@ -458,26 +491,42 @@ function ArenaPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
 const runTone = (r: Run): RpgTone => (r.status === "done" ? "green" : r.status === "failed" ? "red" : r.status === "insufficient" ? "orange" : "muted");
 
 function BottlenecksPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
-  const b = o.quality?.bottlenecks ?? [];
+  const all = o.quality?.bottlenecks ?? [];
+  // O detector compara quinzenas nos dois sentidos: quedas são gargalos; altas aparecem como conquista.
+  const drops = all.filter((x) => x.diffPct < 0);
+  const rises = all.filter((x) => x.diffPct > 0);
   return (
     <RPGPanel title="Gargalos Identificados" icon={<AlertTriangle size={15} className="text-rpg-red" />} className="h-full" actions={<button type="button" className="text-xs text-rpg-gold-light hover:underline" onClick={() => goTab("gargalos")}>Detalhes</button>}>
       {!o.quality ? (
         <p className="text-sm text-rpg-muted">Analise os dados no Núcleo para procurar gargalos.</p>
-      ) : !b.length ? (
-        <p className="flex items-center gap-2 text-sm text-rpg-green">
-          <CheckCircle2 size={16} aria-hidden /> Nenhuma queda ≥ 20% nas últimas duas semanas.
-        </p>
       ) : (
         <ul className="space-y-2">
-          {b.slice(0, 4).map((x) => (
+          {!drops.length && (
+            <li className="flex items-center gap-2 text-sm text-rpg-green">
+              <CheckCircle2 size={16} aria-hidden /> Nenhuma queda ≥ 20% nas últimas duas semanas.
+            </li>
+          )}
+          {drops.slice(0, 4).map((x) => (
             <li key={x.key} className="flex items-center gap-2 text-sm">
-              <AlertTriangle size={15} className="shrink-0 text-rpg-red" aria-hidden />
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-rpg-red/70 bg-rpg-red/10 text-rpg-red" style={{ borderRadius: 3 }} aria-hidden>
+                <ArrowDown size={13} />
+              </span>
               <span className="min-w-0 flex-1 truncate text-rpg-text">{x.label}</span>
-              <span className="font-pixel text-xs tabular-nums text-rpg-red">{x.diffPct}%</span>
+              <span className="text-xs font-bold tabular-nums text-rpg-red">{x.diffPct}%</span>
+            </li>
+          ))}
+          {rises.slice(0, 2).map((x) => (
+            <li key={x.key} className="flex items-center gap-2 text-sm">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-rpg-green/70 bg-rpg-green/10 text-rpg-green" style={{ borderRadius: 3 }} aria-hidden>
+                <ArrowUp size={13} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-rpg-text">{x.label}</span>
+              <span className="text-xs font-bold tabular-nums text-rpg-green">+{x.diffPct}%</span>
             </li>
           ))}
         </ul>
       )}
+      <p className="mt-3 text-[11px] text-rpg-muted">Últimos 14 dias × 14 anteriores, variação ≥ 20%.</p>
     </RPGPanel>
   );
 }
@@ -497,7 +546,7 @@ function RunsPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
               <span className="min-w-0 flex-1 truncate text-rpg-text">
                 {RUN_KIND[r.kind]} · {r.modelId ? (names.get(r.modelId) ?? "modelo removido") : "dados"}
               </span>
-              <RPGBadge tone={runTone(r)}>{RUN_STATUS[r.status]}</RPGBadge>
+              <Tag tone={runTone(r)}>{RUN_STATUS[r.status]}</Tag>
             </li>
           ))}
         </ul>
@@ -507,11 +556,16 @@ function RunsPanel({ o, goTab }: { o: ForgeOverview; goTab: GoTab }) {
 }
 
 function RecommendationsPanel({ o }: { o: ForgeOverview }) {
-  // Recomendações são derivadas de estados reais: alertas e próximos marcos do pesquisador.
+  // Recomendações derivadas só de estados reais: alertas, artefatos que ainda não venceram a base, fontes apagadas e próximo marco.
+  const experimental = o.models.filter((m) => m.status === "experimental" || m.status === "aguardando_dados");
+  const dark = (o.quality?.sources ?? []).filter((s) => !s.connected && s.usedAsFeature);
+  const next = o.milestones.find((m) => !m.done);
   const items: Array<{ text: string; tone: RpgTone }> = [
-    ...o.alerts.slice(0, 3).map((a) => ({ text: a.text, tone: (a.level === "alto" ? "red" : a.level === "medio" ? "orange" : "blue") as RpgTone })),
-    ...o.milestones.filter((m) => !m.done).slice(0, Math.max(0, 3 - o.alerts.length)).map((m) => ({ text: `Próximo marco: ${m.title} — ${m.description}`, tone: "gold" as RpgTone })),
-  ];
+    ...o.alerts.slice(0, 2).map((a) => ({ text: a.text, tone: (a.level === "alto" ? "red" : a.level === "medio" ? "orange" : "blue") as RpgTone })),
+    ...(experimental.length ? [{ text: `${experimental.length} artefato(s) ainda sem vitória sobre a base: continue registrando e retreine — mais dias aumentam a chance de padrão real.`, tone: "orange" as RpgTone }] : []),
+    ...(dark.length ? [{ text: `Registre ${dark.map((d) => d.label.toLowerCase()).join(", ")} para acender mais fontes do núcleo.`, tone: "blue" as RpgTone }] : []),
+    ...(next ? [{ text: `Próximo marco: ${next.title}.`, tone: "gold" as RpgTone }] : []),
+  ].slice(0, 4);
   return (
     <RPGPanel
       title="Recomendações da Forja"
@@ -543,7 +597,7 @@ function RecommendationsPanel({ o }: { o: ForgeOverview }) {
 function MilestonesPanel({ o }: { o: ForgeOverview }) {
   const done = o.milestones.filter((m) => m.done).length;
   return (
-    <RPGPanel title="Marcos do Pesquisador" icon={<Medal size={15} />} variant="gold" className="h-full">
+    <RPGPanel title="Marcos do Pesquisador" icon={<Medal size={15} />} variant="gold" className="flex-1">
       <div className="mb-3 flex items-center gap-3">
         <img src={`${FORGE_ART}/emblem.webp`} alt="" aria-hidden className="pixelated h-16 w-auto" />
         <div className="min-w-0">
@@ -570,7 +624,10 @@ export function OverviewTab({ o, notify, goTab }: { o: ForgeOverview; notify: No
     <div className="space-y-4">
       <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] [&>*]:min-w-0">
         <NucleusPanel o={o} notify={notify} />
-        <ProphecyPanel o={o} goTab={goTab} />
+        <div className="flex min-w-0 flex-col gap-4">
+          <ProphecyPanel o={o} goTab={goTab} />
+          <MilestonesPanel o={o} />
+        </div>
       </div>
       <div className="grid items-stretch gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <ArtifactsPanel o={o} goTab={goTab} notify={notify} />
@@ -583,9 +640,8 @@ export function OverviewTab({ o, notify, goTab }: { o: ForgeOverview; notify: No
           <RecommendationsPanel o={o} />
         </div>
       </div>
-      <div id="forja-mestre" className="grid items-start gap-4 scroll-mt-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] [&>*]:min-w-0">
+      <div id="forja-mestre" className="scroll-mt-4">
         <AdvisorPanel module="forge" title="Mestre da Inteligência" avatar={`${FORGE_ART}/orb.webp`} />
-        <MilestonesPanel o={o} />
       </div>
     </div>
   );
