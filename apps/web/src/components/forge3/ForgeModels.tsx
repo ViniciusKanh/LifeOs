@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Archive, ArchiveRestore, Check, ChevronLeft, ChevronRight, Hammer, History, Loader2, Play, Plus, Power, PowerOff, Rocket, Trash2, Undo2, Wand2 } from "lucide-react";
-import { RPGBadge, RPGButton } from "@/components/rpg";
-import { KitSection } from "@/components/rpg-modules/ModuleKit";
+import { Activity, Archive, ArchiveRestore, Check, ChevronLeft, ChevronRight, Gauge, Hammer, History, Loader2, Play, Plus, Power, PowerOff, Rocket, Trash2, Undo2, Wand2 } from "lucide-react";
+import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
+import { IconTile, TEMPLATE_TONE, artifactScore, modelTone } from "./ForgeOverview";
+import { Section as KitSection } from "./ForgeShared";
 import { Modal } from "@/components/ui/Modal";
 import { useForgeActions, useForgeDictionary } from "@/hooks/useForge";
 import { PRIMARY_LABEL, fmtNum, primaryOf, type Alg, type Dictionary, type ForgeModel, type ForgeOverview, type ModelInput, type Primary, type Problem, type Version } from "@/services/forgeService";
@@ -35,99 +36,148 @@ export function ArtifactsTab({ o, notify, onWizard, onOpenVersions }: { o: Forge
   const train = (m: ForgeModel) =>
     a.train.mutate(m.id, { onSuccess: (r) => notify(r.message, r.status === "insufficient" ? "error" : "success"), onError: (e) => notify(errMsg(e, "O treino falhou."), "error") });
   return (
-    <div className="space-y-3">
-      <KitSection title="Modelos prontos" icon={<Wand2 size={16} />} action={<RPGButton variant="gold" onClick={onWizard}><Plus size={14} aria-hidden /> Novo modelo</RPGButton>}>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          {o.templates.map((t) => (
-            <div key={t.key} className="flex flex-col gap-1.5 border-2 border-rpg-border bg-rpg-bg-2/60 p-2.5" style={R}>
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-rpg-text">
-                <span className="text-rpg-purple" aria-hidden>{templateIcon(t.icon)}</span>
-                {t.name}
-              </p>
-              <p className="flex-1 text-[11px] text-rpg-muted">{t.description}</p>
-              <RPGBadge tone="muted">{t.problem === "classification" ? "Classificação" : "Regressão"}</RPGBadge>
-              <RPGButton
-                variant={t.created ? "ghost" : "secondary"}
-                disabled={t.created || a.fromTemplate.isPending}
-                onClick={() => a.fromTemplate.mutate(t.key, { onSuccess: () => notify(`${t.name} criado. Treine quando quiser.`), onError: (e) => notify(errMsg(e, "Não foi possível criar."), "error") })}
-              >
-                {t.created ? <><Check size={14} aria-hidden /> Criado</> : <><Hammer size={14} aria-hidden /> Forjar</>}
-              </RPGButton>
-            </div>
-          ))}
+    <div className="space-y-4">
+      <RPGPanel
+        title="Receitas de Forja"
+        icon={<Wand2 size={15} />}
+        variant="gold"
+        actions={
+          <RPGButton variant="gold" className="!py-1 text-xs" onClick={onWizard}>
+            <Plus size={13} aria-hidden /> Modelo personalizado
+          </RPGButton>
+        }
+      >
+        <p className="mb-3 text-sm text-rpg-muted">Artefatos pré-configurados: escolha um alvo e a Forja monta variáveis, validação e arena. Forjar não treina — você decide quando.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {o.templates.map((t) => {
+            const tone = TEMPLATE_TONE[t.icon] ?? "purple";
+            return (
+              <article key={t.key} className={clsx("flex flex-col items-center gap-2 border-2 p-3 text-center", t.created ? "border-rpg-gold/50 bg-rpg-gold/5" : "border-rpg-border bg-rpg-bg-2/60")} style={R}>
+                <IconTile tone={tone}>{templateIcon(t.icon)}</IconTile>
+                <h3 className="font-rpg text-base font-bold text-rpg-text">{t.name}</h3>
+                <p className="flex-1 text-xs text-rpg-muted">{t.description}</p>
+                <RPGBadge tone="muted">{t.problem === "classification" ? "Sim/não" : "Valor"}</RPGBadge>
+                {t.created ? (
+                  <p className="flex items-center gap-1 text-xs font-semibold text-rpg-gold-light">
+                    <Check size={14} aria-hidden /> Forjado
+                  </p>
+                ) : (
+                  <RPGButton
+                    variant="secondary"
+                    className="w-full"
+                    disabled={a.fromTemplate.isPending}
+                    onClick={() => a.fromTemplate.mutate(t.key, { onSuccess: () => notify(`${t.name} forjado. Treine quando quiser.`), onError: (e) => notify(errMsg(e, "Não foi possível forjar."), "error") })}
+                  >
+                    <Hammer size={14} aria-hidden /> Forjar
+                  </RPGButton>
+                )}
+              </article>
+            );
+          })}
         </div>
-      </KitSection>
-      <KitSection
-        title="Seus artefatos"
-        icon={<Hammer size={16} />}
-        action={
+      </RPGPanel>
+
+      <RPGPanel
+        title="Seus Artefatos"
+        icon={<Hammer size={15} />}
+        actions={
           <label className="flex items-center gap-1.5 text-xs text-rpg-muted">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Mostrar arquivados
           </label>
         }
       >
         {!models.length ? (
-          <Empty icon={<Hammer size={24} />} title="Nenhum modelo ainda">Use um modelo pronto acima ou crie o seu com o assistente.</Empty>
+          <Empty icon={<Hammer size={24} />} title="Nenhum artefato forjado">Escolha uma receita acima ou crie um modelo personalizado.</Empty>
         ) : (
-          <div className="grid gap-2 lg:grid-cols-2">
-            {models.map((m) => (
-              <article key={m.id} className="flex min-w-0 flex-col gap-2 border-2 border-rpg-border bg-rpg-panel p-3" style={R} aria-label={m.name}>
-                <header className="flex items-start gap-2">
-                  <span className="text-rpg-purple" aria-hidden>{templateIcon(o.templates.find((t) => t.key === m.templateKey)?.icon)}</span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-semibold text-rpg-text">{m.name}</h3>
-                    <p className="truncate text-[11px] text-rpg-muted">
-                      {m.targetLabel} · D+{m.horizon} · {m.features.length} variáveis · {SCHEDULE_LABEL[m.schedule]}
-                    </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {models.map((m) => {
+              const tone = modelTone(o, m);
+              const s = artifactScore(m);
+              const v = m.active ?? m.latest;
+              const ok = m.status === "ativo" || m.status === "aprovado";
+              return (
+                <article key={m.id} className={clsx("flex min-w-0 flex-col border-2 bg-rpg-bg-2/60", m.status === "ativo" ? "border-rpg-green/60" : m.status === "degradado" ? "border-rpg-red/60" : "border-rpg-border")} style={R} aria-label={m.name}>
+                  <header className="flex items-start gap-3 p-3">
+                    <IconTile tone={tone}>{templateIcon(o.templates.find((t) => t.key === m.templateKey)?.icon)}</IconTile>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate font-rpg text-lg font-bold leading-tight text-rpg-text">{m.name}</h3>
+                      <p className="truncate text-xs text-rpg-muted">
+                        Prevê {m.targetLabel.toLowerCase()} com {m.horizon} dia(s) de antecedência
+                      </p>
+                    </div>
+                    <StatusBadge m={m} />
+                  </header>
+                  <dl className="grid grid-cols-3 border-y border-rpg-border/70 text-center">
+                    <div className="border-r border-rpg-border/70 px-2 py-2">
+                      <dt className="text-[10px] text-rpg-muted">Versão</dt>
+                      <dd className="font-pixel text-sm text-rpg-purple">{v ? `v${v.version}` : "—"}</dd>
+                    </div>
+                    <div className="border-r border-rpg-border/70 px-2 py-2">
+                      <dt className="text-[10px] text-rpg-muted">Variáveis</dt>
+                      <dd className="font-pixel text-sm text-rpg-text">{m.features.length}</dd>
+                    </div>
+                    <div className="px-2 py-2">
+                      <dt className="text-[10px] text-rpg-muted">Último treino</dt>
+                      <dd className="font-pixel text-sm text-rpg-text">{m.lastTrainedAt ? fmtDate(m.lastTrainedAt) : "nunca"}</dd>
+                    </div>
+                  </dl>
+                  <div className="space-y-1 px-3 py-2.5">
+                    {s ? (
+                      <>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-rpg-muted">Teste final</span>
+                          <span className="font-pixel text-[11px] text-rpg-text">{s.label}</span>
+                        </div>
+                        <RPGProgressBar tone={ok ? "green" : "orange"} label={`Desempenho de ${m.name}`} value={s.value * 100} showLabel={false} />
+                        <p className="text-[11px] text-rpg-muted">
+                          <HoldoutLine v={v} />
+                          {m.monitor && ` · monitor: ${m.monitor.status.replace("_", " ")}`}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-rpg-muted">Ainda não treinado. O treino mede o artefato contra a linha de base antes de liberar previsões.</p>
+                    )}
                   </div>
-                  <StatusBadge m={m} />
-                </header>
-                <p className="text-xs">
-                  <HoldoutLine v={m.active ?? m.latest} />
-                </p>
-                <p className="text-[11px] text-rpg-muted">
-                  {m.versions} versões · último treino {fmtDateTime(m.lastTrainedAt)}
-                  {m.active && ` · ativa v${m.active.version} (${m.active.algorithmLabel})`}
-                  {m.monitor && ` · monitor: ${m.monitor.status.replace("_", " ")}`}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <RPGButton variant="primary" disabled={busy(m.id) || m.status === "arquivado"} onClick={() => train(m)}>
-                    {a.train.isPending && a.train.variables === m.id ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Play size={14} aria-hidden />} Treinar
-                  </RPGButton>
-                  <RPGButton variant="secondary" disabled={!m.versions} onClick={() => onOpenVersions(m.id)}>
-                    <History size={14} aria-hidden /> Versões
-                  </RPGButton>
-                  <RPGButton
-                    variant="ghost"
-                    disabled={busy(m.id) || !m.latest}
-                    onClick={() => a.backtest.mutate(m.id, { onSuccess: (r) => notify(r?.status === "done" ? "Backtest concluído (ver Relatórios)." : "Dados insuficientes para backtest.", r?.status === "done" ? "success" : "error"), onError: (e) => notify(errMsg(e, "Backtest falhou."), "error") })}
-                  >
-                    Backtest
-                  </RPGButton>
-                  <RPGButton
-                    variant="ghost"
-                    disabled={busy(m.id) || !m.activeVersionId}
-                    onClick={() => a.monitor.mutate(m.id, { onSuccess: () => notify("Monitoramento atualizado."), onError: (e) => notify(errMsg(e, "Falha no monitoramento."), "error") })}
-                  >
-                    Monitorar
-                  </RPGButton>
-                  {m.activeVersionId && (
-                    <RPGButton variant="ghost" onClick={() => a.deactivate.mutate(m.id, { onSuccess: () => notify("Modelo desativado. As previsões futuras foram retiradas."), onError: (e) => notify(errMsg(e, "Falha ao desativar."), "error") })}>
-                      <PowerOff size={14} aria-hidden /> Desativar
+                  <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-rpg-border/70 p-2.5">
+                    <RPGButton variant="primary" className="!py-1.5 text-sm" disabled={busy(m.id) || m.status === "arquivado"} onClick={() => train(m)}>
+                      {a.train.isPending && a.train.variables === m.id ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Play size={14} aria-hidden />} {m.versions ? "Retreinar" : "Treinar"}
                     </RPGButton>
-                  )}
-                  <RPGButton variant="ghost" aria-label={m.status === "arquivado" ? "Restaurar modelo" : "Arquivar modelo"} onClick={() => a.archive.mutate({ id: m.id, archived: m.status !== "arquivado" }, { onError: (e) => notify(errMsg(e, "Falha ao arquivar."), "error") })}>
-                    {m.status === "arquivado" ? <ArchiveRestore size={14} aria-hidden /> : <Archive size={14} aria-hidden />}
-                  </RPGButton>
-                  <RPGButton variant="danger" aria-label="Excluir modelo" onClick={() => setConfirmDel(m)}>
-                    <Trash2 size={14} aria-hidden />
-                  </RPGButton>
-                </div>
-              </article>
-            ))}
+                    <RPGButton variant="secondary" className="!py-1.5 text-sm" disabled={!m.versions} onClick={() => onOpenVersions(m.id)}>
+                      <History size={14} aria-hidden /> Versões
+                    </RPGButton>
+                    <RPGButton
+                      variant="ghost"
+                      className="!px-2 !py-1.5 text-xs"
+                      disabled={busy(m.id) || !m.latest}
+                      onClick={() => a.backtest.mutate(m.id, { onSuccess: (r) => notify(r?.status === "done" ? "Backtest concluído (ver Relatórios)." : "Dados insuficientes para backtest.", r?.status === "done" ? "success" : "error"), onError: (e) => notify(errMsg(e, "Backtest falhou."), "error") })}
+                    >
+                      <Activity size={13} aria-hidden /> Backtest
+                    </RPGButton>
+                    {m.activeVersionId && (
+                      <>
+                        <RPGButton variant="ghost" className="!px-2 !py-1.5 text-xs" disabled={busy(m.id)} onClick={() => a.monitor.mutate(m.id, { onSuccess: () => notify("Monitoramento atualizado."), onError: (e) => notify(errMsg(e, "Falha no monitoramento."), "error") })}>
+                          <Gauge size={13} aria-hidden /> Monitorar
+                        </RPGButton>
+                        <RPGButton variant="ghost" className="!px-2 !py-1.5 text-xs" onClick={() => a.deactivate.mutate(m.id, { onSuccess: () => notify("Artefato desativado. As profecias futuras foram retiradas."), onError: (e) => notify(errMsg(e, "Falha ao desativar."), "error") })}>
+                          <PowerOff size={13} aria-hidden /> Desativar
+                        </RPGButton>
+                      </>
+                    )}
+                    <span className="ml-auto flex gap-1">
+                      <RPGButton variant="ghost" className="!px-2 !py-1.5" aria-label={m.status === "arquivado" ? `Restaurar ${m.name}` : `Arquivar ${m.name}`} title={m.status === "arquivado" ? "Restaurar" : "Arquivar"} onClick={() => a.archive.mutate({ id: m.id, archived: m.status !== "arquivado" }, { onError: (e) => notify(errMsg(e, "Falha ao arquivar."), "error") })}>
+                        {m.status === "arquivado" ? <ArchiveRestore size={14} aria-hidden /> : <Archive size={14} aria-hidden />}
+                      </RPGButton>
+                      <RPGButton variant="ghost" className="!px-2 !py-1.5 text-rpg-red" aria-label={`Excluir ${m.name}`} title="Excluir" onClick={() => setConfirmDel(m)}>
+                        <Trash2 size={14} aria-hidden />
+                      </RPGButton>
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
-      </KitSection>
+      </RPGPanel>
       <Modal
         open={!!confirmDel}
         onClose={() => setConfirmDel(null)}

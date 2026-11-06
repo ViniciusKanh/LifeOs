@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import clsx from "clsx";
 import { BookOpen, Dumbbell, Leaf, Sun, Zap, Brain } from "lucide-react";
-import { RPGBadge } from "@/components/rpg";
+import { RPGBadge, RPGPanel } from "@/components/rpg";
 import { ApiError } from "@/services/api";
 import { STATUS_LABEL, STATUS_TONE, fmtNum, isReg, type ForgeModel, type Metrics, type Primary } from "@/services/forgeService";
 
@@ -104,3 +104,12 @@ export function MetricsGrid({ m, compare, compareLabel = "Baseline" }: { m: Metr
 }
 
 export const lowerBetter = (p: Primary) => p !== "balanced_accuracy";
+
+/** Painel das abas da Forja: mesmo cabeçalho do RPGPanel usado na Visão Geral (consistência visual). */
+export function Section({ title, icon, action, tone, className, children }: { title: string; icon: ReactNode; action?: ReactNode; tone?: "gold" | "legendary"; className?: string; children: ReactNode }) {
+  return (
+    <RPGPanel title={title} icon={icon} actions={action} variant={tone ?? "default"} className={className}>
+      {children}
+    </RPGPanel>
+  );
+}

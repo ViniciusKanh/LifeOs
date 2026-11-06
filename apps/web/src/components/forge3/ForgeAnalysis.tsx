@@ -4,15 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, Crown, Download, FileJson, FileSpreadsheet, Gem, Loader2, RefreshCw, ScrollText, Swords, Telescope } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
-import { KitSection } from "@/components/rpg-modules/ModuleKit";
+import { Section as KitSection } from "./ForgeShared";
 import { useForgeActions } from "@/hooks/useForge";
 import { PRIMARY_LABEL, forgeService, fmtNum, primaryOf, type ForgeModel, type ForgeOverview, type Metrics, type Primary } from "@/services/forgeService";
 import { Empty, MetricsGrid, ModelPicker, R, errMsg, fmtDate, fmtDateTime, lowerBetter, pct, type Notify } from "./ForgeShared";
 import { predText } from "./ForgeOverview";
 import { HoldoutLine } from "./ForgeModels";
 
-const C = { purple: "rgb(var(--rpg-purple))", gold: "rgb(var(--rpg-gold))", muted: "rgb(var(--rpg-muted))", green: "rgb(var(--rpg-green))", blue: "rgb(var(--rpg-blue))", grid: "rgb(var(--rpg-border))" };
-const TIP = { contentStyle: { background: "rgb(var(--rpg-bg-2))", border: "1px solid rgb(var(--rpg-border))", fontSize: 12 } };
+const C = { purple: "rgb(var(--rpg-purple))", gold: "rgb(var(--rpg-gold))", muted: "rgb(var(--rpg-text-muted))", green: "rgb(var(--rpg-green))", blue: "rgb(var(--rpg-blue))", grid: "rgb(var(--rpg-border))" };
+const TIP = { contentStyle: { background: "rgb(var(--rpg-bg-secondary))", border: "1px solid rgb(var(--rpg-border))", fontSize: 12 } };
 
 type Props = { o: ForgeOverview; notify: Notify; selected: string | null; onSelect: (id: string) => void };
 

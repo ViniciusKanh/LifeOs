@@ -2,7 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { Archive, BookMarked, ChevronDown, FlaskConical, Gauge, Loader2, RefreshCw, RotateCcw, ScrollText, ShieldCheck, TrendingDown, Workflow } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
-import { KitSection } from "@/components/rpg-modules/ModuleKit";
+import { Section as KitSection } from "./ForgeShared";
 import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
 import { useForgeActions, useForgeDictionary } from "@/hooks/useForge";
 import { RUN_KIND, RUN_STATUS, fmtNum, type ForgeOverview, type Run } from "@/services/forgeService";
