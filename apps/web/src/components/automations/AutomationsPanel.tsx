@@ -44,6 +44,7 @@ const LABELS: Record<string, { label: string; suffix?: string; min?: number; max
   sessionMinutes: { label: "Duração da sessão", suffix: "min", min: 15, max: 180 },
   // Saúde (limites prudentes — o backend também valida)
   bedtimeHour: { label: "Horário do ritual noturno", suffix: "h", min: 18, max: 23 },
+  reminderHour: { label: "Horário do lembrete", suffix: "h", min: 17, max: 23 },
   waterGoalMl: { label: "Meta diária de água", suffix: "ml", min: 1500, max: 4000 },
   sleepGoalMinutes: { label: "Meta de sono", suffix: "min", min: 360, max: 600 },
   weeklyWorkouts: { label: "Treinos por semana", min: 1, max: 7 },

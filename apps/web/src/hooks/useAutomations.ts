@@ -26,6 +26,8 @@ export function useAutomations(module: AutomationModule) {
       admin: ["life-admin"],
       today: ["today-hub"],
       contracts: ["contract-guild"],
+      tavern: ["tavern3"],
+      forge: ["forge"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

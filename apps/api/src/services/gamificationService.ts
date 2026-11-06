@@ -17,7 +17,7 @@ import { logContractEvent, syncContractStages } from "./contractStages.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest" | "bank";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest" | "bank" | "tavern" | "forge";
 
 export interface XpGrant {
   sourceType: XpSourceType;

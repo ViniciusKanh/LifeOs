@@ -66,6 +66,10 @@ const METRIC_KEYS = [
   "journal_full_closings",
   "journal_voice_days",
   "journal_media_days",
+  "tavern_rituals_total",
+  "forge_versions_total",
+  "forge_beat_baseline",
+  "forge_models_total",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -179,6 +183,10 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("contract_stages_done_total", "SELECT COUNT(*) FROM contract_stages WHERE owner_id = ? AND status = 'concluida'");
   addScalar("journal_full_closings", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND TRIM(COALESCE(closing_reflection, '')) <> '' AND TRIM(COALESCE(closing_learning, '')) <> ''");
   addScalar("journal_voice_days", "SELECT COUNT(DISTINCT e.entry_date) FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id WHERE e.owner_id = ? AND m.kind = 'audio'");
+  addScalar("tavern_rituals_total", "SELECT COUNT(*) FROM tavern_rituals WHERE owner_id = ? AND completed_at IS NOT NULL");
+  addScalar("forge_versions_total", "SELECT COUNT(*) FROM ml_model_versions WHERE owner_id = ?");
+  addScalar("forge_beat_baseline", "SELECT COUNT(*) FROM ml_model_versions WHERE owner_id = ? AND metrics_json LIKE '%\"beatsBaseline\":true%'");
+  addScalar("forge_models_total", "SELECT COUNT(*) FROM ml_models WHERE owner_id = ?");
   addScalar("journal_media_days", "SELECT COUNT(DISTINCT e.entry_date) FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id WHERE e.owner_id = ? AND m.kind <> 'audio'");
   // Maior sequência de dias (locais) com sessão de leitura.
   if (requested.has("reading_best_streak")) {

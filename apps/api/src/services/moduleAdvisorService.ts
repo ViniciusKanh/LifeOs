@@ -13,6 +13,8 @@ import { getLibraryHub } from "./libraryHubService.js";
 import { getAdminHub } from "./lifeAdminHubService.js";
 import { focusBlocks, getTodayHub, nextBestAction } from "./todayHubService.js";
 import { getGuildHub as getPactGuildHub } from "./contractGuildService.js";
+import { getTavern3 } from "./tavern3Service.js";
+import { getForgeOverview } from "./forgeService.js";
 import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./planningHubService.js";
 
 /**
@@ -25,7 +27,7 @@ import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./plan
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin" | "today" | "contracts";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin" | "today" | "contracts" | "tavern" | "forge";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -55,6 +57,8 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   admin: "Valores em dinheiro real são só informativos e não se misturam às moedas do LifeOS. Nada é pago ou cancelado automaticamente.",
   today: "Sugestões para o seu dia — nenhum compromisso ou tarefa é criado ou alterado sem a sua aprovação.",
   contracts: "Conselhos da Guilda — nenhum contrato é criado, alterado, cancelado ou selado sem a sua aprovação.",
+  tavern: "O Taverneiro só sugere: Diário, Agenda e Missões não são alterados sem a sua aprovação.",
+  forge: "O Mestre da Inteligência lê apenas resultados reais da Forja. Ele não treina nem ativa modelos — isso é sempre uma ação sua.",
 };
 
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
@@ -304,6 +308,41 @@ async function contractsFacts(db: Client, ownerId: string): Promise<{ items: Adv
   return { items, insufficient: h.contracts.length === 0 };
 }
 
+async function tavernFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const t = await getTavern3(db, ownerId);
+  const i = t.indicators;
+  const items: AdvisorItem[] = [];
+  items.push({ kind: "dado", text: `Hoje: ${i.missionsDone} missão(ões), hábitos ${i.habits.done}/${i.habits.total}, ${i.focusMinutes} min de foco, +${i.xpToday} XP, Life Score ${i.lifeScore}${i.lifeScoreAvg7 != null ? ` (média 7 dias ${i.lifeScoreAvg7})` : ""}.` });
+  if (t.achievements.length) items.push({ kind: "dado", text: `Conquistas de hoje: ${t.achievements.map((a) => a.title).join(", ")}.` });
+  const pend = t.stepsState.filter((s) => s.required && !s.done).length;
+  items.push({ kind: "dado", text: t.ritual.completedAt ? "Ritual de hoje já encerrado." : `${pend} etapa(s) obrigatória(s) do ritual pendente(s).` });
+  for (const ins of t.insights.slice(0, 2)) items.push({ kind: "inferencia", text: `${ins.title}: ${ins.text}` });
+  if (t.tomorrowPlan.conflicts.length) items.push({ kind: "dado", text: `Amanhã há ${t.tomorrowPlan.conflicts.length} conflito(s) na agenda.` });
+  if (t.tomorrowPlan.mission.primary) items.push({ kind: "sugestao", text: `Missão sugerida para amanhã: ${t.tomorrowPlan.mission.primary.title} (${t.tomorrowPlan.mission.primary.reasons.join(", ")}).` });
+  if (t.tomorrowPlan.freeWindows[0]) items.push({ kind: "sugestao", text: `Janela livre para foco amanhã: ${t.tomorrowPlan.freeWindows[0].start}–${t.tomorrowPlan.freeWindows[0].end}.` });
+  for (const f of t.forecasts.slice(0, 2)) items.push({ kind: "inferencia", text: `Forja (${f.name}, v${f.version}): ${f.problem === "classification" ? `${Math.round(f.value * 100)}% estimados` : `${f.value.toFixed(1)} estimado`} para amanhã${f.partial ? " (preliminar)" : ""}.` });
+  return { items, insufficient: i.missionsDone === 0 && i.habits.total === 0 && i.xpToday === 0 };
+}
+
+async function forgeFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
+  const o = await getForgeOverview(db, ownerId);
+  const items: AdvisorItem[] = [];
+  items.push({ kind: "dado", text: `${o.indicators.models} modelo(s) configurado(s), ${o.indicators.modelsTrained} treinado(s), ${o.indicators.artifactsActive} ativo(s); ${o.indicators.beatBaseline} superaram a linha de base.` });
+  if (o.quality) items.push({ kind: "dado", text: `Qualidade dos dados: ${o.quality.quality.scores.overall ?? "—"}% (${o.quality.quality.range.days} dias). Alertas: ${o.quality.quality.alerts.slice(0, 2).map((a) => a.text).join(" ") || "nenhum"}` });
+  else items.push({ kind: "dado", text: "Os dados ainda não foram analisados — use “Analisar meus dados”." });
+  for (const m of o.models.filter((x) => x.latest).slice(0, 4)) {
+    const mt = m.latest!.metrics as { primary?: string; holdout?: { model: Record<string, number>; baseline: Record<string, number> } | null; beatsBaseline?: boolean; leakage?: string[] };
+    const p = mt.primary === "mae" || mt.primary === "rmse" ? mt.primary : mt.primary === "brier" ? "brier" : "balancedAccuracy";
+    if (mt.holdout) items.push({ kind: "dado", text: `${m.name} v${m.latest!.version} (${m.latest!.algorithmLabel}): teste final ${p} ${mt.holdout.model[p]} × linha de base ${mt.holdout.baseline[p]}${mt.beatsBaseline ? " — superou a base" : " — não superou a base"}.` });
+    if (mt.leakage?.length) items.push({ kind: "inferencia", text: `${m.name}: variáveis quase idênticas ao alvo (${mt.leakage.join(", ")}) — investigar vazamento.` });
+  }
+  for (const a of o.alerts.slice(0, 3)) items.push({ kind: "dado", text: a.text });
+  const waiting = o.models.find((m) => m.status === "aguardando_dados");
+  if (waiting) items.push({ kind: "sugestao", text: `${waiting.name} aguarda dados: siga registrando ${waiting.targetLabel.toLowerCase()} e as variáveis principais antes de treinar de novo.` });
+  if (!o.models.length) items.push({ kind: "sugestao", text: "Comece criando um artefato sugerido (ex.: Chama do Treino) e treine com validação temporal." });
+  return { items, insufficient: false };
+}
+
 const SCHEMA = {
   type: "object",
   properties: {
@@ -333,6 +372,8 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     admin: () => adminFacts(db, ownerId),
     today: () => todayFacts(db, ownerId),
     contracts: () => contractsFacts(db, ownerId),
+    tavern: () => tavernFacts(db, ownerId),
+    forge: () => forgeFacts(db, ownerId),
   };
   const base = await loaders[module]();
   const fallback: AdvisorAnswer = { ai: false, items: base.items, disclaimer: DISCLAIMER[module], insufficient: base.insufficient };
@@ -356,6 +397,8 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     library: "Não invente livros, autores, trechos ou conteúdo de obras. Use apenas títulos e números dados.",
     admin: "Diferencie valores em dinheiro real (R$) das moedas virtuais. Não recomende pagamentos ou cancelamentos automáticos.",
     today: "Baseie a ordem do dia em prazos, prioridades e horários dados. Não invente compromissos nem mova eventos; apenas sugira.",
+    tavern: "Use só os números do dia e as observações dadas. Não invente acontecimentos nem diagnósticos. Pontuação baixa não é fracasso pessoal: sugira um passo pequeno.",
+    forge: "Use somente métricas, versões, alertas e qualidade fornecidos. Nunca diga que treinou algo. Importância de variável não é causa. Se a base não foi superada, diga isso claramente.",
     contracts: "Use apenas prazos, etapas, riscos e selos dados. Não invente probabilidades. Nunca proponha selar, cancelar ou alterar sem a confirmação do usuário.",
   }[module];
   const prompt = `Você é o conselheiro do LifeOS (módulo ${module}). Responda em português do Brasil, em até 6 itens curtos.

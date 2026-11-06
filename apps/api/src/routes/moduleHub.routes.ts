@@ -25,7 +25,7 @@ moduleHubRouter.get("/education", async (req, res) => res.json(await getEducatio
 moduleHubRouter.get("/health", async (req, res) => res.json(await getHealthHub(getDb(), req.user!.id)));
 
 const advisorSchema = z.object({ useAi: z.boolean().default(false), question: z.string().max(400).optional(), research: z.boolean().optional() });
-moduleHubRouter.post("/:module(bank|education|health|agenda|council|missions|quests|diary|lab|hero|treasure|habits|library|admin|today|contracts)/advisor", aiRateLimit(), async (req, res) => {
+moduleHubRouter.post("/:module(bank|education|health|agenda|council|missions|quests|diary|lab|hero|treasure|habits|library|admin|today|contracts|tavern|forge)/advisor", aiRateLimit(), async (req, res) => {
   const body = advisorSchema.safeParse(req.body ?? {});
   if (!body.success) return res.status(400).json({ error: "Pergunta inválida." });
   const module = req.params.module as AdvisorModule;

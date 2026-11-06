@@ -24,6 +24,8 @@ import { runReadingReminder, runReadingSummary } from "./libraryHubService.js";
 import { runAdminSummary, runDocumentCheck, runMissingFiles, runRiskAlerts, runSubscriptionDigest } from "./lifeAdminHubService.js";
 import { runMorningPlan, runSmartAlerts } from "./todayHubService.js";
 import { runPactReminders, runPactReplan, runPactSealReady } from "./contractGuildService.js";
+import { runTavernReminder, runTomorrowPrep } from "./tavern3Service.js";
+import { runBacktests, runForgeAlerts, runInference, runMonitoring, runQualityCheck, runScheduledTraining } from "./forgeService.js";
 import { runPerformanceAlerts, runWeeklyEvolution } from "./heroDashboardService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
@@ -162,6 +164,35 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "admin:due_reminders":
     case "admin:recurrence":
     case "admin:agenda_sync":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
+    case "tavern:reminder":
+      return runTavernReminder(db, ownerId, config);
+    case "tavern:prepare_tomorrow":
+      return runTomorrowPrep(db, ownerId, config);
+    case "forge:quality_check":
+      return runQualityCheck(db, ownerId, config);
+    case "forge:scheduled_training":
+      return runScheduledTraining(db, ownerId);
+    case "forge:backtest":
+      return runBacktests(db, ownerId);
+    case "forge:scheduled_inference":
+      return runInference(db, ownerId);
+    case "forge:monitoring":
+      return runMonitoring(db, ownerId, config);
+    case "forge:alerts":
+      return runForgeAlerts(db, ownerId, config);
+    case "tavern:balance":
+    case "tavern:ai_summary":
+    case "tavern:diary_link":
+    case "tavern:grimoire":
+    case "tavern:forge_predictions":
+    case "tavern:chronicle":
+    case "tavern:rewards":
+    case "forge:dataset_refresh":
+    case "forge:drift":
+    case "forge:artifact_update":
+    case "forge:recommendations":
+    case "forge:tavern_integration":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "contracts:reminders":
       return runPactReminders(db, ownerId, config);

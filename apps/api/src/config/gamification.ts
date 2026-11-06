@@ -97,6 +97,17 @@ export const GAMIFICATION_RULES = {
     /** Selo da Guilda (Contratos 3.0): pago uma vez por contrato e tipo de selo, ao selar. */
     seal: { xp: 20, coins: 4 },
   },
+  /** Taverna 3.0: encerramento do ritual — uma vez por dia local (ledger idempotente). */
+  tavern: {
+    close: { xp: 30, coins: 6 },
+  },
+  /**
+   * Forja 3.0: só marcos únicos (primeiro modelo válido, primeira base
+   * superada…). Nunca por métrica alta nem por reexecutar um treino.
+   */
+  forge: {
+    milestone: { xp: 40, coins: 8 },
+  },
   /**
    * Laboratório (Experimentos Pessoais): dar vida a um experimento,
    * registrar o check-in do dia e concluir com uma conclusão escrita.
