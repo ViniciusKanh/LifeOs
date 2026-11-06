@@ -25,7 +25,6 @@ import { DEFAULT_QUOTE, findNavItem, navLabel, visibleGroups } from "./navConfig
 import { AppScrollContext } from "./AppScrollContext";
 import { OfflineStatus } from "./OfflineStatus";
 import { HubTabs } from "./HubTabs";
-import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
 import { IS_DESKTOP } from "@/platform";
 import { useDesktopNotifications } from "@/hooks/useDesktopNotifications";
@@ -49,7 +48,6 @@ const DesktopUpdatePrompt = IS_DESKTOP ? lazy(() => import("@/components/desktop
  * mesmo tocando no X. Fechada, ela fica `inert` (sem foco nem toque).
  */
 function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClose: () => void; isAdmin: boolean; badges?: Record<string, number> }) {
-  const { mode, cycle } = useTheme();
   const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -112,19 +110,14 @@ function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClo
         <nav className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
           <NavGroups groups={visibleGroups(isAdmin)} compact={false} onNavigate={onClose} layoutPrefix="drawer" badges={badges} animated={false} />
         </nav>
-        <div className="shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={cycle} className="w-full min-h-[44px] flex items-center gap-2.5 rounded-xl px-3 text-sm text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.05]" aria-label={themeCycleLabel(mode)}>
-            <ThemeCycleIcon mode={mode} size={17} />
-            <span className="truncate">{themeCycleLabel(mode)}</span>
-          </button>
-        </div>
+        <div className="shrink-0 pb-[env(safe-area-inset-bottom)]" />
       </aside>
     </div>
   );
 }
 
 export function AppShell() {
-  const { mode, cycle, isRpg } = useTheme();
+  const { isRpg } = useTheme();
   const { isAdmin } = useAuth();
   const location = useLocation();
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
@@ -202,13 +195,6 @@ export function AppShell() {
 
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto lg:ml-0">
             <MobileGlobalSearch />
-            <button
-              onClick={cycle}
-              className="hidden sm:flex lg:hidden w-9 h-9 rounded-full items-center justify-center border border-paper-border dark:border-ink-border"
-              aria-label={themeCycleLabel(mode)}
-            >
-              <ThemeCycleIcon mode={mode} size={16} />
-            </button>
             {isRpg && <HeroClassChip />}
             {isRpg && <RPGPlayerHUD compact />}
             {/* Em telas muito estreitas o troféu sai do cabeçalho (continua em Conquistas) para o título não ser esmagado. */}

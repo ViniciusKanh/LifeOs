@@ -3,7 +3,6 @@ import { NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
-import { ThemeCycleIcon, themeCycleLabel } from "./themeToggle";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
 import { navLabel, findNavItem, type NavGroup } from "./navConfig";
 
@@ -245,7 +244,7 @@ export function NavGroups({
 }
 
 export function Sidebar({ groups, collapsed, canToggle, onToggle, badges }: { groups: NavGroup[]; collapsed: boolean; canToggle: boolean; onToggle: () => void; badges?: Record<string, number> }) {
-  const { mode, cycle, isRpg } = useTheme();
+  const { isRpg } = useTheme();
 
   return (
     <motion.aside
@@ -280,17 +279,7 @@ export function Sidebar({ groups, collapsed, canToggle, onToggle, badges }: { gr
         <NavGroups groups={groups} compact={collapsed} layoutPrefix="sidebar" badges={badges} />
       </nav>
 
-      <div className={`relative shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 flex ${collapsed ? "flex-col items-center gap-1" : "items-center gap-1"}`}>
-        <button
-          type="button"
-          onClick={cycle}
-          className={`flex items-center gap-2.5 rounded-xl text-sm text-slate hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors ${collapsed ? "w-10 h-10 justify-center" : "flex-1 px-3 py-2"}`}
-          aria-label={themeCycleLabel(mode)}
-          title={themeCycleLabel(mode)}
-        >
-          <ThemeCycleIcon mode={mode} size={17} />
-          {!collapsed && <span className="truncate">{themeCycleLabel(mode)}</span>}
-        </button>
+      <div className={`relative shrink-0 border-t border-paper-border dark:border-ink-border rpg:border-rpg-border p-3 flex ${collapsed ? "flex-col items-center gap-1" : "items-center justify-end gap-1"} ${canToggle ? "" : "hidden"}`}>
         {canToggle && (
         <button
           type="button"

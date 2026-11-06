@@ -25,13 +25,13 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
       },
       registerType: "autoUpdate",
-      includeAssets: ["logo/favicon-32.png", "logo/icon-192.png", "logo/icon-512.png"],
+      includeAssets: ["logo/favicon-32.png", "logo/icon-192.png", "logo/icon-512.png", "logo/icon-maskable-192.png", "logo/icon-maskable-512.png", "logo/apple-touch-icon.png"],
       manifest: {
         name: "LifeOS — Transforme sua rotina em progresso",
         short_name: "LifeOS",
         description: "Transforme sua rotina em progresso.",
-        theme_color: "#14181F",
-        background_color: "#14181F",
+        theme_color: "#070B1C",
+        background_color: "#070B1C",
         display: "standalone",
         start_url: "/dashboard",
         // Compartilhar do celular (menu "Compartilhar" do Android/Windows) → /compartilhar
@@ -49,8 +49,8 @@ export default defineConfig({
         icons: [
           { src: "/logo/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
           { src: "/logo/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "/logo/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-          { src: "/logo/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "/logo/icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "/logo/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
     }),

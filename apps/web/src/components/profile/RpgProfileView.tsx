@@ -36,12 +36,10 @@ import { platformFeatures } from "@/platform";
 import { DesktopAppCard } from "@/components/desktop/DesktopAppCard";
 import { MfaSettingsCard } from "@/components/profile/MfaSettingsCard";
 import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
-import { AppearanceCard } from "@/components/profile/AppearanceCard";
 import { RpgAvatarStudio } from "@/components/profile/RpgAvatarStudio";
 import { DifficultyRewardsPanel } from "@/components/profile/DifficultyRewardsPanel";
 import { PriorityRewardsPanel } from "@/components/profile/PriorityRewardsPanel";
 import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGPortrait, RPGProgressBar, RPGStatCard, RPGTabs, RPGWallet, rpgButtonClass } from "@/components/rpg";
-import { useTheme, THEME_LABEL } from "@/hooks/useTheme";
 import { useProfile } from "@/hooks/useProfile";
 import { useGamificationProfile, useGamificationRules, useXpHistory } from "@/hooks/useGamification";
 import { useAchievements } from "@/hooks/useAchievements";
@@ -95,7 +93,6 @@ export function RpgProfileView({
   const [tab, setTab] = useState<Tab>(initialTab && ["overview", "stats", "custom", "rewards", "security", "integrations", "prefs"].includes(initialTab) ? (initialTab as Tab) : "overview");
   const [editing, setEditing] = useState(false);
   const [statsDays, setStatsDays] = useState(30);
-  const { mode } = useTheme();
   const { prefs, update } = useRpgPreferences();
   const { data: hud } = useHeroHud();
   const { updateProfile, isUpdatingProfile } = useProfile();
@@ -242,8 +239,7 @@ export function RpgProfileView({
               )}
             </RPGPanel>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <RPGStatCard icon={<Palette size={18} />} label="Tema do LifeOS" value={THEME_LABEL[mode]} tone="purple" caption="Altere em Personalização" />
+            <div className="grid gap-3 md:grid-cols-2">
               <RPGStatCard icon={<ShieldCheck size={18} />} label="Perfil de acesso" value={user.role === "admin" ? "Administrador" : "Usuário"} tone="gold" caption={user.role === "admin" ? "Acesso total à plataforma" : "Acesso à sua conta"} />
               <RPGStatCard icon={<Link2 size={18} />} label="Login com Google" value={user.google_linked ? "Conectado" : "Não conectado"} tone={user.google_linked ? "green" : "orange"} />
             </div>
@@ -293,7 +289,6 @@ export function RpgProfileView({
 
       {tab === "custom" && (
         <div className="grid gap-4 xl:grid-cols-2 items-start">
-          <div className="min-w-0"><AppearanceCard hideAvatar /></div>
           <div className="space-y-4 min-w-0">
             <RpgAvatarStudio radio={radio} />
 

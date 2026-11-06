@@ -96,7 +96,7 @@ function SourceCard({ s, onOpen }: { s: Source; onOpen: () => void }) {
   const lit = s.connected && s.eligible;
   const fill = Math.min(100, (s.recentDays / 120) * 100);
   const missing = Math.max(0, LIT_DAYS - s.recentDays);
-  const status = lit ? "Acesa" : !s.connected ? "Sem registros" : missing > 0 ? `Faltam ${missing} dia(s)` : "Não vira variável";
+  const status = lit ? "Acesa" : !s.connected ? "Sem registros" : missing > 0 ? (missing === 1 ? "Falta 1 dia" : `Faltam ${missing} dias`) : "Não vira variável";
   const statusTone = lit ? "border-rpg-green/60 bg-rpg-green/10 text-rpg-green" : s.connected ? "border-rpg-orange/60 bg-rpg-orange/10 text-rpg-orange" : "border-rpg-border text-rpg-muted";
   return (
     <button
@@ -113,9 +113,10 @@ function SourceCard({ s, onOpen }: { s: Source; onOpen: () => void }) {
         <Icon size={19} strokeWidth={2.2} className={lit ? "drop-shadow-[0_0_6px_currentColor]" : undefined} />
       </SourceRune>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className={clsx("truncate text-[13px] font-semibold", lit ? "text-rpg-text" : "text-rpg-text/80")}>{s.label}</span>
-          <span className={clsx("ml-auto shrink-0 border px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wide", statusTone)} style={{ borderRadius: 2 }}>
+        {/* Nome e estado quebram de linha em cartões estreitos (nada de "Experimen…"). */}
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className={clsx("text-[13px] font-semibold leading-tight", lit ? "text-rpg-text" : "text-rpg-text/80")}>{s.label}</span>
+          <span className={clsx("ml-auto shrink-0 whitespace-nowrap border px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wide", statusTone)} style={{ borderRadius: 2 }}>
             {status}
           </span>
         </span>
@@ -146,8 +147,8 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
       variant="gold"
       className="h-full"
       actions={
-        <RPGButton variant="secondary" className="!py-1 text-xs" disabled={analyze.isPending} onClick={run}>
-          {analyze.isPending ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Sparkles size={13} aria-hidden />} {q ? "Reanalisar" : "Analisar"}
+        <RPGButton variant="secondary" className="!py-1 text-xs" disabled={analyze.isPending} onClick={run} aria-label={q ? "Reanalisar os dados" : "Analisar os dados"}>
+          {analyze.isPending ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Sparkles size={13} aria-hidden />} <span className="hidden sm:inline">{q ? "Reanalisar" : "Analisar"}</span>
         </RPGButton>
       }
     >
@@ -175,9 +176,9 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
           </svg>
           <div className={clsx("absolute inset-[11%] rounded-full border-2 border-rpg-gold/70 bg-rpg-bg", lit > 0 && "shadow-[0_0_34px_-4px_rgb(var(--rpg-purple)/0.85)]")} />
           <img
-            src={`${FORGE_ART}/core.webp`}
+            src={`${FORGE_ART}/core-centered.webp`}
             alt=""
-            className={clsx("pixelated absolute inset-[15%] h-[70%] w-[70%] rounded-full object-cover object-[50%_38%]", !reduce && lit > 0 && "motion-safe:animate-[pulse_4s_ease-in-out_infinite]", !lit && "opacity-50 grayscale")}
+            className={clsx("pixelated absolute inset-[15%] h-[70%] w-[70%] rounded-full object-cover object-center", !reduce && lit > 0 && "motion-safe:animate-[pulse_4s_ease-in-out_infinite]", !lit && "opacity-50 grayscale")}
           />
         </div>
         <div className="min-w-0 flex-1 text-center sm:text-left">
