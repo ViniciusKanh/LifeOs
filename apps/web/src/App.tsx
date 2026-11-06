@@ -87,6 +87,7 @@ const QuestsPage = lazy(() => import("@/pages/quests/QuestsPage").then((m) => ({
 const GrimorioPage = lazy(() => import("@/pages/grimorio/GrimorioPage").then((m) => ({ default: m.GrimorioPage })));
 const ConselhoPage = lazy(() => import("@/pages/conselho/ConselhoPage").then((m) => ({ default: m.ConselhoPage })));
 const ForjaInteligenciaPage = lazy(() => import("@/pages/forja-inteligencia/ForjaInteligenciaPage").then((m) => ({ default: m.ForjaInteligenciaPage })));
+const ArvoreHabilidadesPage = lazy(() => import("@/pages/arvore/ArvoreHabilidadesPage").then((m) => ({ default: m.ArvoreHabilidadesPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const BancoPage = lazy(() => import("@/pages/banco/BancoPage").then((m) => ({ default: m.BancoPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
@@ -177,6 +178,7 @@ export default function App() {
           <Route path="/protocolos" element={<ProtocolosPage />} />
           <Route path="/detector-gargalos" element={<DetectorGargalosPage />} />
           <Route path="/forja-inteligencia" element={<ForjaInteligenciaPage />} />
+          <Route path="/arvore-habilidades" element={<ArvoreHabilidadesPage />} />
           {/* A antiga Loja virou o Tesouro & Recompensas. */}
           <Route path="/loja" element={<Navigate to="/tesouro" replace />} />
           <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />

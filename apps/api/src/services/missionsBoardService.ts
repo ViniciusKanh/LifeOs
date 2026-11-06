@@ -1,4 +1,5 @@
 import type { Client } from "@libsql/client";
+import { notifyFromAutomation } from "./automationService.js";
 import { nanoid } from "nanoid";
 import { userDayContext } from "./localDayService.js";
 import { moveTaskStatus, TASK_STATUSES } from "./taskWriteService.js";
@@ -176,10 +177,10 @@ export async function setTaskArchived(db: Client, ownerId: string, taskId: strin
 
 type Outcome = { status: "ok" | "skipped" | "error"; summary: string };
 
-async function notify(db: Client, ownerId: string, kind: string, title: string, body: string, dedupKey: string) {
-  const dup = await db.execute({ sql: "SELECT 1 FROM notifications WHERE owner_id = ? AND kind = ? AND title = ? AND substr(created_at, 1, 10) = date('now')", args: [ownerId, kind, title] });
+async function notify(db: Client, ownerId: string, kind: string, title: string, body: string, dedupKey: string, push = false) {
+  const dup = await db.execute({ sql: "SELECT 1 FROM in_app_notifications WHERE owner_id = ? AND event_type = ? AND title = ? AND substr(created_at, 1, 10) = date('now')", args: [ownerId, kind, title] });
   if (dup.rows.length) return false;
-  await db.execute({ sql: "INSERT INTO notifications (id, owner_id, kind, title, body) VALUES (?, ?, ?, ?, ?)", args: [nanoid(), ownerId, kind, title, `${body}`.slice(0, 500)] });
+  await notifyFromAutomation(db, ownerId, { eventType: kind, title, body: `${body}`.slice(0, 500), url: "/tarefas", inApp: true, push });
   void dedupKey;
   return true;
 }

@@ -1,3 +1,4 @@
+import { useSkillDiaryPrompts } from "@/components/skilltree/SkillIntegrations";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
@@ -388,6 +389,8 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [transcript, setTranscript] = useState<{ text: string } | null>(null);
   const [promptPage, setPromptPage] = useState(0);
+  const skillPrompts = useSkillDiaryPrompts();
+  const allPrompts = useMemo(() => [...PROMPTS, ...skillPrompts.filter((p) => !PROMPTS.includes(p))], [skillPrompts]);
   const notify = (m: string, err?: boolean) => {
     setToast({ m, err });
     window.setTimeout(() => setToast(null), 3500);
@@ -422,7 +425,7 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
     } else ctx.saveNow({ thoughts: `${f.thoughts}<h3>${esc(q)}</h3><p></p>` });
   };
   const setGratitude = (i: number, v: string) => ctx.updateField({ gratitude: f.gratitude.map((g, j) => (j === i ? v : g)) });
-  const visiblePrompts = PROMPTS.slice((promptPage * 4) % PROMPTS.length, ((promptPage * 4) % PROMPTS.length) + 4);
+  const visiblePrompts = allPrompts.slice((promptPage * 4) % allPrompts.length, ((promptPage * 4) % allPrompts.length) + 4);
   const goTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     document.getElementById(`${id}-t`)?.focus({ preventScroll: true });

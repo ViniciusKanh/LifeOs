@@ -76,6 +76,12 @@ const METRIC_KEYS = [
   "journey_annual_sealed",
   "journey_kinds_sealed",
   "advisor_missions_created",
+  "skills_unlocked",
+  "skills_maxed",
+  "skill_branches_touched",
+  "skill_branches_deep",
+  "skill_branches_mastered",
+  "skill_presets_created",
 ] as const;
 
 async function scalar(db: Db, sql: string, args: Array<string | number>): Promise<number> {
@@ -195,6 +201,13 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("journey_annual_sealed", "SELECT COUNT(*) FROM journey_reviews WHERE owner_id = ? AND status = 'sealed' AND kind = 'annual'");
   addScalar("journey_kinds_sealed", "SELECT COUNT(DISTINCT kind) FROM journey_reviews WHERE owner_id = ? AND status = 'sealed'");
   addScalar("advisor_missions_created", "SELECT COALESCE(SUM(json_array_length(task_ids_json)), 0) FROM mission_advisor_sessions WHERE owner_id = ? AND status = 'applied' AND mode IN ('create', 'sequence')");
+  // Árvore de Habilidades: escolhas de progressão (nunca métricas reais de vida).
+  addScalar("skills_unlocked", "SELECT COUNT(*) FROM user_skills WHERE owner_id = ?");
+  addScalar("skills_maxed", "SELECT COUNT(*) FROM user_skills WHERE owner_id = ? AND current_level >= max_level");
+  addScalar("skill_branches_touched", "SELECT COUNT(DISTINCT branch) FROM user_skills WHERE owner_id = ? AND branch <> 'avancada'");
+  addScalar("skill_branches_deep", "SELECT COUNT(*) FROM (SELECT branch FROM user_skills WHERE owner_id = ? AND branch <> 'avancada' GROUP BY branch HAVING COUNT(*) >= 3)");
+  addScalar("skill_branches_mastered", "SELECT COUNT(*) FROM (SELECT branch FROM user_skills WHERE owner_id = ? AND branch <> 'avancada' AND current_level >= max_level GROUP BY branch HAVING COUNT(*) >= 8)");
+  addScalar("skill_presets_created", "SELECT COUNT(*) FROM skill_presets WHERE owner_id = ?");
   addScalar("tavern_rituals_total", "SELECT COUNT(*) FROM tavern_rituals WHERE owner_id = ? AND completed_at IS NOT NULL");
   addScalar("forge_versions_total", "SELECT COUNT(*) FROM ml_model_versions WHERE owner_id = ?");
   addScalar("forge_beat_baseline", "SELECT COUNT(*) FROM ml_model_versions WHERE owner_id = ? AND metrics_json LIKE '%\"beatsBaseline\":true%'");

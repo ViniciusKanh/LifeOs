@@ -6,7 +6,7 @@ import { periodRange, periodKeyForDay, shiftPeriodKey, isReviewRewardEligible, s
 import { loadDirectionGoals } from "./directionService.js";
 import { computeLifeScore, computeRangeMetrics } from "./metricsService.js";
 import { validateFocus, type FocusRef } from "./warCouncilService.js";
-import { automationConfig } from "./automationService.js";
+import { automationConfig, notifyFromAutomation } from "./automationService.js";
 import { evaluateAchievements } from "./achievementsService.js";
 import { generateText, getGeminiConfig } from "./geminiService.js";
 import { extractJson, str } from "./aiJson.js";
@@ -928,7 +928,7 @@ export async function runReviewReminder(db: Client, ownerId: string, config: Rec
   }
   if (!pending.length) return { status: "skipped", summary: "As revisões dos períodos encerrados já estão seladas." };
   if (config.inApp !== false) {
-    await db.execute({ sql: "INSERT INTO notifications (id, owner_id, kind, title, body) VALUES (?, ?, 'review_reminder', ?, ?)", args: [nanoid(), ownerId, "Hora de revisar a jornada", `Revisão pendente: ${pending.join(", ")}.`] });
+    await notifyFromAutomation(db, ownerId, { eventType: "review_reminder", title: "Hora de revisar a jornada", body: `Revisão pendente: ${pending.join(", ")}.`, url: "/revisoes", inApp: true, push: config.push === true });
   }
   return { status: "ok", summary: `Lembrete enviado: ${pending.join(", ")}.` };
 }

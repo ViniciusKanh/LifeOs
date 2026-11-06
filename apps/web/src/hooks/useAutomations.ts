@@ -29,6 +29,7 @@ export function useAutomations(module: AutomationModule) {
       tavern: ["tavern3"],
       forge: ["forge"],
       reviews: ["journey-review"],
+      skills: ["skill-tree"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };

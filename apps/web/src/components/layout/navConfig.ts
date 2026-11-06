@@ -18,6 +18,7 @@ import {
   Inbox,
   LayoutGrid,
   ListChecks,
+  TreeDeciduous,
   NotebookPen,
   FolderLock,
   Radar,
@@ -175,6 +176,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/build", label: "Build" },
         ],
       },
+      { to: "/arvore-habilidades", label: "Árvore de Habilidades", icon: TreeDeciduous, quote: "Cada escolha de evolução muda as ferramentas da sua jornada.", searchPlaceholder: "Buscar habilidades, bônus, ramos…" },
       {
         to: "/banco",
         label: "Banco",
