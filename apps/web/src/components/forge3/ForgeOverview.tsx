@@ -73,32 +73,58 @@ const SOURCE_UI: Record<string, { icon: LucideIcon; tone: RpgTone }> = {
   experimentos: { icon: FlaskConical, tone: "green" },
 };
 const HEX = "polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0% 50%)";
+/** Mínimo de dias com registro (nos últimos 120) para a fonte acender — mesma regra do servidor. */
+const LIT_DAYS = 30;
 
-function HexNode({ s, angle, onOpen, style, inline }: { s: Source; angle: number; onOpen: () => void; style?: React.CSSProperties; inline?: boolean }) {
+/** Runa da fonte: hexágono com contorno real (duas camadas recortadas) e ícone no centro. */
+function SourceRune({ tone, lit, dim, children }: { tone: RpgTone; lit: boolean; dim: boolean; children: ReactNode }) {
+  return (
+    <span className={clsx("relative block h-11 w-12 shrink-0", dim ? "text-rpg-muted/60" : RPG_TONE_TEXT[tone])} aria-hidden>
+      {lit && <span className="absolute inset-1 rounded-full bg-current opacity-25 blur-md" />}
+      <span className="absolute inset-0 bg-current" style={{ clipPath: HEX, opacity: lit ? 1 : 0.45 }} />
+      <span className="absolute inset-[2px] flex items-center justify-center bg-[radial-gradient(circle_at_50%_30%,rgb(var(--rpg-panel-light)),rgb(var(--rpg-bg)))]" style={{ clipPath: HEX }}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
+/** Cartão de uma fonte de dados: estado, dias com registro e a marca dos 30 dias que acendem a fonte. */
+function SourceCard({ s, onOpen }: { s: Source; onOpen: () => void }) {
   const ui = SOURCE_UI[s.key] ?? { icon: Cpu, tone: "muted" as RpgTone };
   const Icon = ui.icon;
   const lit = s.connected && s.eligible;
-  const tone = lit ? RPG_TONE_TEXT[ui.tone] : s.connected ? "text-rpg-orange" : "text-rpg-muted";
-  // Rótulo do lado de fora do círculo: acima nos nós de cima, abaixo nos demais — a linha nunca cruza o texto.
-  const above = Math.sin((angle * Math.PI) / 180) < -0.2;
+  const fill = Math.min(100, (s.recentDays / 120) * 100);
+  const missing = Math.max(0, LIT_DAYS - s.recentDays);
+  const status = lit ? "Acesa" : !s.connected ? "Sem registros" : missing > 0 ? `Faltam ${missing} dia(s)` : "Não vira variável";
+  const statusTone = lit ? "border-rpg-green/60 bg-rpg-green/10 text-rpg-green" : s.connected ? "border-rpg-orange/60 bg-rpg-orange/10 text-rpg-orange" : "border-rpg-border text-rpg-muted";
   return (
     <button
       type="button"
       onClick={onOpen}
-      style={style}
-      className={clsx("group flex items-center gap-1 focus-visible:outline-none", inline ? "w-full flex-col" : clsx("absolute w-28 -translate-x-1/2 -translate-y-1/2", above ? "flex-col-reverse" : "flex-col"))}
-      aria-label={`${s.label}: ${s.connected ? `${s.records} registros` : "sem registros"}, ${s.eligible ? "fonte acesa" : "dados insuficientes"}. Ver detalhes.`}
+      className={clsx(
+        "group flex h-full w-full min-w-0 items-center gap-2.5 border-2 p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rpg-gold",
+        lit ? "border-rpg-purple/50 bg-gradient-to-r from-rpg-purple/15 to-rpg-bg-2/80 hover:border-rpg-purple" : "border-rpg-border bg-rpg-bg-2/60 hover:border-rpg-gold/60",
+      )}
+      style={{ borderRadius: 4 }}
+      aria-label={`${s.label}: ${status}. ${s.connected ? `${s.recentDays} de 120 dias com registro` : "sem registros"}. Ver detalhes.`}
     >
-      <span className={clsx("relative block h-12 w-14 transition-transform duration-150 group-hover:scale-110 group-focus-visible:scale-110 sm:h-14 sm:w-16", tone)}>
-        {lit && <span className="absolute inset-1 rounded-full bg-current opacity-30 blur-lg" aria-hidden />}
-        <span className={clsx("absolute inset-0", lit ? "bg-current" : s.connected ? "bg-current/70" : "bg-current/35")} style={{ clipPath: HEX }} />
-        <span className={clsx("absolute inset-[2px] flex items-center justify-center", lit ? "bg-[radial-gradient(circle_at_50%_35%,rgb(var(--rpg-panel-light)),rgb(var(--rpg-bg)))]" : "bg-rpg-bg")} style={{ clipPath: HEX }}>
-          <Icon size={22} strokeWidth={2.2} className={lit ? "drop-shadow-[0_0_6px_currentColor]" : undefined} />
+      <SourceRune tone={ui.tone} lit={lit} dim={!s.connected}>
+        <Icon size={19} strokeWidth={2.2} className={lit ? "drop-shadow-[0_0_6px_currentColor]" : undefined} />
+      </SourceRune>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className={clsx("truncate text-[13px] font-semibold", lit ? "text-rpg-text" : "text-rpg-text/80")}>{s.label}</span>
+          <span className={clsx("ml-auto shrink-0 border px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wide", statusTone)} style={{ borderRadius: 2 }}>
+            {status}
+          </span>
         </span>
-      </span>
-      <span className="flex flex-col items-center leading-tight">
-        <span className={clsx("text-xs font-semibold sm:text-[13px]", lit ? "text-rpg-text" : "text-rpg-muted")}>{s.label}</span>
-        <span className={clsx("text-[10px] tabular-nums", lit ? "text-rpg-green" : s.connected ? "text-rpg-orange" : "text-rpg-muted/80")}>{s.connected ? `${s.recentDays} de 120 dias` : "sem registros"}</span>
+        {/* Barra dos últimos 120 dias; o traço dourado marca os 30 dias que acendem a fonte. */}
+        <span className="relative mt-1.5 block h-1.5 overflow-hidden border border-rpg-border bg-rpg-bg" style={{ borderRadius: 2 }}>
+          <span className={clsx("block h-full", lit ? "bg-gradient-to-r from-rpg-purple to-rpg-cyan" : "bg-rpg-orange/70")} style={{ width: `${fill}%` }} />
+          <span className="absolute inset-y-0 w-px bg-rpg-gold" style={{ left: `${(LIT_DAYS / 120) * 100}%` }} />
+        </span>
+        <span className="mt-0.5 block text-[10.5px] tabular-nums text-rpg-muted">{s.connected ? `${s.recentDays}/120 dias · ${s.records.toLocaleString("pt-BR")} registros` : "Nenhum registro ainda"}</span>
       </span>
     </button>
   );
@@ -113,13 +139,6 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
   const sources = q?.sources ?? [];
   const lit = sources.filter((s) => s.connected && s.eligible).length;
   const run = () => analyze.mutate(undefined, { onSuccess: () => notify("Dados analisados: o núcleo foi atualizado."), onError: (e) => notify(errMsg(e, "Não foi possível analisar os dados."), "error") });
-  // Geometria em % do quadro (proporção 4:3): elipse dos nós e raio do círculo central.
-  const RX = 39;
-  const RY = 37;
-  const CORE_X = 15;
-  const CORE_Y = 20;
-  const ang = (i: number) => -90 + (360 / Math.max(1, sources.length)) * i;
-  const pt = (deg: number, rx: number, ry: number) => [50 + rx * Math.cos((deg * Math.PI) / 180), 50 + ry * Math.sin((deg * Math.PI) / 180)] as const;
   return (
     <RPGPanel
       title="Núcleo de Inteligência"
@@ -132,61 +151,73 @@ function NucleusPanel({ o, notify }: { o: ForgeOverview; notify: Notify }) {
         </RPGButton>
       }
     >
-      {/* Celular: cristal em cima e fontes em grade (o círculo não cabe sem sobrepor rótulos). */}
-      <div className="sm:hidden">
-        <div className="relative mx-auto mb-5 aspect-square w-32" aria-hidden>
-          <div className={clsx("absolute inset-0 rounded-full border-2 border-rpg-gold/70 bg-rpg-bg", lit && "shadow-[0_0_30px_-4px_rgb(var(--rpg-purple)/0.8)]")} />
-          <img src={`${FORGE_ART}/core.webp`} alt="" className={clsx("pixelated absolute inset-[6%] h-[88%] w-[88%] rounded-full object-cover object-[50%_38%]", !lit && "opacity-50 grayscale")} />
-          <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border border-rpg-gold/70 bg-rpg-bg px-2 py-0.5 text-[11px] font-bold tabular-nums text-rpg-gold-light" style={{ borderRadius: 3 }}>
-            {lit}/{sources.length || 8} acesas
-          </span>
-        </div>
-        <div className="grid grid-cols-4 gap-x-1 gap-y-3">
-          {sources.map((src, i) => (
-            <HexNode key={src.key} s={src} angle={ang(i)} inline onOpen={() => setOpen(src)} />
-          ))}
-        </div>
-      </div>
-      <div className="relative mx-auto hidden aspect-[4/3] w-full max-w-[600px] sm:block">
-        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-          {sources.map((s, i) => {
-            const on = s.connected && s.eligible;
-            const [x1, y1] = pt(ang(i), CORE_X + 1, CORE_Y + 1);
-            const [x2, y2] = pt(ang(i), RX - 7, RY - 8);
-            return <line key={s.key} x1={x1} y1={y1} x2={x2} y2={y2} stroke={on ? "rgb(var(--rpg-purple))" : "rgb(var(--rpg-border))"} strokeWidth={on ? 2 : 1} strokeDasharray={on ? undefined : "4 4"} vectorEffect="non-scaling-stroke" className={on && !reduce ? "[stroke-dashoffset:0]" : undefined} />;
-          })}
-        </svg>
-        {/* Cristal central em moldura circular; acende conforme as fontes conectadas. */}
-        <div className="absolute left-1/2 top-1/2 aspect-square w-[30%] -translate-x-1/2 -translate-y-1/2" aria-hidden>
-          <div className={clsx("absolute inset-0 rounded-full border-2 border-rpg-gold/70 bg-rpg-bg shadow-[0_0_0_4px_rgb(var(--rpg-bg)),0_0_0_6px_rgb(var(--rpg-bronze)/0.6),0_0_40px_-4px_rgb(var(--rpg-purple)/0.8)]", !lit && "shadow-none")} />
+      {/* Cabeçalho: cristal com anel de 8 segmentos (um por fonte) + placar da qualidade. */}
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+        <div className="relative aspect-square w-36 shrink-0 sm:w-40" aria-hidden>
+          <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
+            {sources.map((src, i) => {
+              const n = Math.max(1, sources.length);
+              const len = (2 * Math.PI * 46) / n;
+              return (
+                <circle
+                  key={src.key}
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  strokeWidth="5"
+                  stroke={src.connected && src.eligible ? "rgb(var(--rpg-purple))" : src.connected ? "rgb(var(--rpg-orange) / 0.55)" : "rgb(var(--rpg-border))"}
+                  strokeDasharray={`${len - 3} ${2 * Math.PI * 46 - len + 3}`}
+                  strokeDashoffset={-len * i}
+                />
+              );
+            })}
+          </svg>
+          <div className={clsx("absolute inset-[11%] rounded-full border-2 border-rpg-gold/70 bg-rpg-bg", lit > 0 && "shadow-[0_0_34px_-4px_rgb(var(--rpg-purple)/0.85)]")} />
           <img
             src={`${FORGE_ART}/core.webp`}
             alt=""
-            className={clsx("pixelated absolute inset-[6%] h-[88%] w-[88%] rounded-full object-cover object-[50%_38%]", !reduce && lit > 0 && "motion-safe:animate-[pulse_4s_ease-in-out_infinite]", !lit && "opacity-50 grayscale")}
+            className={clsx("pixelated absolute inset-[15%] h-[70%] w-[70%] rounded-full object-cover object-[50%_38%]", !reduce && lit > 0 && "motion-safe:animate-[pulse_4s_ease-in-out_infinite]", !lit && "opacity-50 grayscale")}
           />
-          <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border border-rpg-gold/70 bg-rpg-bg px-2 py-0.5 text-[11px] font-bold tabular-nums text-rpg-gold-light" style={{ borderRadius: 3 }}>
-            {lit}/{sources.length || 8} acesas
-          </span>
         </div>
-        {sources.map((s, i) => {
-          const [x, y] = pt(ang(i), RX, RY);
-          return <HexNode key={s.key} s={s} angle={ang(i)} style={{ left: `${x}%`, top: `${y}%` }} onOpen={() => setOpen(s)} />;
-        })}
+        <div className="min-w-0 flex-1 text-center sm:text-left">
+          <p className="text-xs uppercase tracking-wide text-rpg-muted">Fontes acesas</p>
+          <p className="font-rpg text-4xl font-bold leading-none text-rpg-text">
+            {lit}
+            <span className="text-xl text-rpg-muted">/{sources.length || 8}</span>
+          </p>
+          {q ? (
+            <>
+              <p className="mt-2 text-xs uppercase tracking-wide text-rpg-muted">Qualidade dos dados</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-rpg text-2xl font-bold leading-none text-rpg-cyan">{q.quality.scores.overall ?? "—"}</span>
+                <RPGProgressBar className="min-w-[100px] flex-1" tone="blue" label="Qualidade dos dados" value={q.quality.scores.overall ?? 0} max={100} showLabel={false} />
+              </div>
+              <p className="mt-2 text-[11px] text-rpg-muted">
+                Uma fonte acende quando gera variáveis e tem registros em {LIT_DAYS}+ dos últimos 120 dias. Toque numa fonte para ver os detalhes.
+              </p>
+            </>
+          ) : (
+            <div className="mt-2 flex flex-col items-center gap-2 sm:items-start">
+              <p className="max-w-xs text-sm text-rpg-text/90">O núcleo ainda está apagado. Analise seus registros para acender as fontes que podem alimentar modelos.</p>
+              <RPGButton variant="primary" onClick={run} disabled={analyze.isPending}>
+                <Sparkles size={14} aria-hidden /> Acender o núcleo
+              </RPGButton>
+            </div>
+          )}
+        </div>
       </div>
-      {!q && (
-        <div className="mt-3 flex flex-col items-center gap-2 text-center">
-          <p className="max-w-xs text-sm text-rpg-text/90">O núcleo ainda está apagado. Analise seus registros para acender as fontes que podem alimentar modelos.</p>
-          <RPGButton variant="primary" onClick={run} disabled={analyze.isPending}>
-            <Sparkles size={14} aria-hidden /> Acender o núcleo
-          </RPGButton>
-        </div>
-      )}
-      {q && (
-        <p className="mt-2 text-center text-sm text-rpg-text/85">
-          Qualidade dos dados <strong className="font-rpg text-lg text-rpg-cyan">{q.quality.scores.overall ?? "—"}</strong>
-          <span className="text-rpg-muted"> /100</span>
-          <span className="mt-0.5 block text-[11px] text-rpg-muted">Fonte acesa = vira variável e tem registros em 30+ dias dos últimos 120. Toque numa fonte para ver detalhes.</span>
-        </p>
+
+      {sources.length > 0 && (
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Fontes de dados">
+          {[...sources]
+            .sort((x, y) => Number(y.connected && y.eligible) - Number(x.connected && x.eligible) || y.recentDays - x.recentDays)
+            .map((src) => (
+              <li key={src.key} className="min-w-0">
+                <SourceCard s={src} onOpen={() => setOpen(src)} />
+              </li>
+            ))}
+        </ul>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-rpg-border/70 pt-3">
         <span className="flex items-center gap-2">
