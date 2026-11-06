@@ -136,6 +136,10 @@ export interface Task {
   /** Dificuldade (define XP/moedas pelos valores do usuário) e contrato a que pertence. */
   difficulty?: Difficulty | null;
   contract_id?: string | null;
+  /** Missões 3.0: ordem manual no quadro e arquivamento de concluídas. */
+  board_order?: number | null;
+  archived_at?: string | null;
+  planned_date?: string | null;
 }
 
 export type Difficulty = "facil" | "medio" | "dificil" | "epico";

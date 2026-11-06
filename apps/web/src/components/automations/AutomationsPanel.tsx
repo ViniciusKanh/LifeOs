@@ -13,6 +13,9 @@ import type { Automation, AutomationModule } from "@/services/automationsService
 
 const LABELS: Record<string, { label: string; suffix?: string; min?: number; max?: number }> = {
   minWords: { label: "Mínimo de palavras na entrada", min: 20, max: 1000 },
+  minMinutes: { label: "Missões a partir de", suffix: "min", min: 30, max: 600 },
+  maxItems: { label: "Missões por aviso", min: 1, max: 20 },
+  staleDays: { label: "Parada em revisão há", suffix: "dias", min: 1, max: 30 },
   lookbackDays: { label: "Olhar entradas dos últimos", suffix: "dias", min: 1, max: 14 },
   maxEntries: { label: "Entradas por execução", min: 1, max: 5 },
   cardsPerEntry: { label: "Cartões por entrada", min: 3, max: 10 },

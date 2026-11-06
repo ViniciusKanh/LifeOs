@@ -26,6 +26,8 @@ import { runMorningPlan, runSmartAlerts } from "./todayHubService.js";
 import { runPactReminders, runPactReplan, runPactSealReady } from "./contractGuildService.js";
 import { runTavernReminder, runTomorrowPrep } from "./tavern3Service.js";
 import { runBacktests, runForgeAlerts, runInference, runMonitoring, runQualityCheck, runScheduledTraining } from "./forgeService.js";
+import { runReplanOverdue, runReviewCheck } from "./missionsBoardService.js";
+import { runPreAnalysis, runReviewReminder } from "./journeyReviewService.js";
 import { runPerformanceAlerts, runWeeklyEvolution } from "./heroDashboardService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
@@ -242,6 +244,31 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runAgendaDigest(db, ownerId, config);
     case "agenda:replan":
       return runReplan(db, ownerId, config);
+    case "missions:replan_overdue":
+      return runReplanOverdue(db, ownerId, config);
+    case "missions:review_check":
+      return runReviewCheck(db, ownerId, config);
+    case "reviews:reminder":
+      return runReviewReminder(db, ownerId, config);
+    case "reviews:pre_analysis":
+      return runPreAnalysis(db, ownerId);
+    case "missions:smart_links":
+    case "missions:deadline_planning":
+    case "missions:breakdown_offer":
+    case "missions:chronicle_marks":
+    case "missions:reviews_feed":
+    case "missions:focus_timer":
+    case "reviews:ai_draft":
+    case "reviews:comparison":
+    case "reviews:bottlenecks":
+    case "reviews:suggestions":
+    case "reviews:mission_seeds":
+    case "reviews:next_plan":
+    case "reviews:achievements":
+    case "reviews:chronicle":
+    case "reviews:war_council":
+    case "reviews:agenda_blocks":
+      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "missions:due_alerts":
       return runDueAlerts(db, ownerId, config);
     case "quests:quest_reminder":

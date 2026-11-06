@@ -15,7 +15,7 @@ export function useAutomations(module: AutomationModule) {
       education: ["educations", "hub"],
       health: ["health", "hub"],
       agenda: ["events"],
-      missions: ["tasks"],
+      missions: ["tasks", "missions3"],
       quests: ["gamification", "quests"],
       diary: ["journal"],
       lab: ["experiments"],
@@ -28,6 +28,7 @@ export function useAutomations(module: AutomationModule) {
       contracts: ["contract-guild"],
       tavern: ["tavern3"],
       forge: ["forge"],
+      reviews: ["journey-review"],
     };
     void qc.invalidateQueries({ queryKey: related[module] });
   };
