@@ -31,6 +31,7 @@ export const TYPE_MODULE: Record<string, string> = {
   reward: "Tesouro",
   inventory: "Coleção",
   level_up: "Perfil",
+  skill: "Árvore de Habilidades",
   archetype: "Build",
   season: "Temporada",
   protocol: "Protocolos",
@@ -42,6 +43,8 @@ export const moduleOf = (e: TimelineEvent) => TYPE_MODULE[e.type] ?? "Outros";
 /** Eventos especiais (destaque na linha do tempo e nos Marcos). */
 export function isSpecial(e: TimelineEvent): boolean {
   if (["level_up", "archetype", "season", "project"].includes(e.type)) return true;
+  // Nível comprovado a partir do 3 é marco da jornada.
+  if (e.type === "skill") return Number(e.level ?? 0) >= 3;
   if (e.type === "achievement") return e.tier === "gold" || e.tier === "platinum" || String(e.id).startsWith("custom-");
   if (e.type === "campaign") return e.kind === "completed" || e.kind === "milestone";
   if (e.type === "experiment") return /conclu/i.test(e.label);

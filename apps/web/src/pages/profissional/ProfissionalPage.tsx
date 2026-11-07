@@ -1,3 +1,4 @@
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle, BarChart3, Briefcase, CalendarClock, CheckCircle2, Clock, Flame, FolderKanban, Grid3x3, Hourglass, NotebookPen, Plus, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -109,6 +110,7 @@ export function ProfissionalPage() {
       />
       )}
 
+      <MySkillsCard domain="trabalho" className="mb-4" />
       {isRpg ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <RPGStatCard

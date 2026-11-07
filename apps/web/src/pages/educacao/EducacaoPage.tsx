@@ -1,3 +1,4 @@
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { GraduationCap, Plus, X } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
@@ -108,6 +109,7 @@ export function EducacaoPage() {
             aside={hub ? <EducationRankPanel hub={hub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
           />
           {hub && hub.educations.length > 0 && <EducationIndicators hub={hub} />}
+          <MySkillsCard domain="educacao" />
         </div>
       ) : (
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">

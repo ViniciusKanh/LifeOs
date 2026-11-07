@@ -35,7 +35,14 @@ const model = (obj: unknown): Reply => ({ status: 200, body: { candidates: [{ co
 const choice = (n: number) => ({ type: "choice", prompt: `Questão ${n} sobre pandas?`, options: ["A", "B", "C", "D"], answerIndex: n % 4, explanation: "Porque sim." });
 const open = (n: number) => ({ type: "open", prompt: `Explique o conceito ${n}.`, rubric: ["Define o conceito", "Dá um exemplo"], expected: "Resposta modelo." });
 const CHOICES = Array.from({ length: 12 }, (_, i) => i + 1);
-const quiz = () => model({ items: CHOICES.map(choice).concat([open(1), open(2), open(3)]) });
+// A prova é gerada em blocos paralelos: 3 blocos de 4 objetivas + 1 bloco de discursivas (nível 1, quiz).
+const quizReplies = () => [
+  model({ items: [1, 2, 3, 4].map((n) => ({ ...choice(n), correct: "ABCD"[n % 4] })) }),
+  model({ items: [5, 6, 7, 8].map((n) => ({ ...choice(n), correct: "ABCD"[n % 4] })) }),
+  model({ items: [9, 10, 11, 12].map((n) => ({ ...choice(n), correct: "ABCD"[n % 4] })) }),
+  model({ items: [open(1), open(2), open(3)] }),
+];
+const grade = (id: string, score: number, feedback = "") => model({ grades: [{ id, score, feedback }] });
 type Agent = Awaited<ReturnType<typeof createAuthenticatedAgent>>["agent"];
 const create = (agent: Agent, body: Record<string, unknown>) => agent.post("/api/habilidades").send(body);
 
@@ -67,6 +74,10 @@ describe("Árvore de Habilidades 2.0 — regras puras", () => {
     // Alternativas repetidas, menos de 4 opções ou enunciado duplicado são descartados.
     expect(sanitizeItems([{ ...choice(1), options: ["A", "a", "B", "C"] }], "quiz", 1)).toBeNull();
     expect(sanitizeItems([...CHOICES.map(() => choice(1)), open(1), open(2), open(3)], "quiz", 1)).toBeNull();
+    // Gabarito conferido pelo texto da correta: índice errado é corrigido; texto inexistente descarta a questão.
+    const fixed = sanitizeItems([...CHOICES.map((n) => ({ ...choice(n), answerIndex: 0, correct: "C" })), open(1), open(2), open(3)], "quiz", 1) as ProofItem[];
+    expect(fixed.filter((i) => i.type === "choice").every((i) => i.options![i.answerIndex!] === "C")).toBe(true);
+    expect(sanitizeItems([...CHOICES.map((n) => ({ ...choice(n), correct: "Z" })), open(1), open(2), open(3)], "quiz", 1)).toBeNull();
     // Nível alto exige mais desafios e nota maior.
     expect(proofLayout("desafio", 5)).toEqual({ choice: 0, open: 1, challenge: 4 });
     expect([passScoreFor(1), passScoreFor(3), passScoreFor(5)]).toEqual([70, 75, 80]);
@@ -124,35 +135,42 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     expect((await agent.get("/api/habilidades")).body.skills).toHaveLength(0);
   });
 
-  it("IA propõe o galho sem gravar; a confirmação cria tudo de uma vez", async () => {
+  it("IA propõe o galho em duas fases sem gravar; a confirmação cria tudo de uma vez", async () => {
     const { agent } = await createAuthenticatedAgent();
+    const node = (name: string, extra: Record<string, unknown> = {}) => ({ name, description: "x", icon: "code", proofMode: "quiz", levels: [], ...extra });
     replies = [
+      // Fase 1: estrutura com os nomes dos tópicos.
       model({
         domain: "pessoal",
         summary: "Trilha de ML.",
-        nodes: [
-          { ref: "n1", parent: "", name: "Machine Learning", description: "Modelos preditivos.", icon: "brain", proofMode: "misto", levels: [{ title: "Iniciante", criteria: "Explica o que é ML." }] },
-          { ref: "n2", parent: "n1", name: "Python", description: "Linguagem.", icon: "code", proofMode: "desafio", levels: [] },
-          { ref: "n3", parent: "n1", name: "pandas", description: "Dados tabulares.", icon: "database", proofMode: "desafio", levels: [] },
-          { ref: "n4", parent: "n1", name: "scikit-learn", description: "Modelos.", icon: "inexistente", proofMode: "quiz", levels: [] },
-          { ref: "n5", parent: "n1", name: "Python", description: "Duplicado.", icon: "code", proofMode: "quiz", levels: [] },
+        root: node("Machine Learning", { icon: "brain", proofMode: "misto", levels: [{ title: "Iniciante", criteria: "Explica o que é ML." }] }),
+        modules: [
+          node("Python", { topics: ["Sintaxe", "Funções"] }),
+          node("pandas", { icon: "database", topics: ["groupby"] }),
+          node("scikit-learn", { icon: "inexistente", topics: [] }),
+          node("Python", { topics: [] }),
         ],
       }),
+      // Fase 2 (paralela): Python detalhado; pandas falha e mantém o tópico com critérios padrão.
+      model({ topics: [node("Sintaxe", { levels: [{ title: "Básico", criteria: "Escreve expressões." }] }), node("Funções")] }),
     ];
     const plan = await agent.post("/api/habilidades/ia/galho").send({ goal: "Quero aprender machine learning" });
     expect(plan.status).toBe(200);
-    expect(plan.body).toMatchObject({ domain: "pessoal", count: 4 });
-    // Abaixo do mínimo do tamanho "completo": o servidor pediu uma versão maior (que falhou) e ficou com a melhor.
-    expect(prompts[0]).toContain("entre 18 e 35");
-    expect(prompts.some((p) => p.includes("abaixo do mínimo de 18"))).toBe(true);
-    expect(plan.body.nodes[0].children.map((c: { name: string }) => c.name)).toEqual(["Python", "pandas", "scikit-learn"]);
-    expect(plan.body.nodes[0].children[2].icon).toBe("sparkles");
-    expect(plan.body.nodes[0].levels).toHaveLength(5);
+    expect(plan.body).toMatchObject({ domain: "pessoal", count: 7, summary: "Trilha de ML." });
+    expect(prompts[0]).toContain("de 5 a 7 módulos");
+    expect(prompts[1]).toContain("Sintaxe; Funções");
+    const root = plan.body.nodes[0];
+    expect(root.children.map((c: { name: string }) => c.name)).toEqual(["Python", "pandas", "scikit-learn"]);
+    expect(root.children[0].children.map((c: { name: string }) => c.name)).toEqual(["Sintaxe", "Funções"]);
+    expect(root.children[0].children[0].levels[0]).toMatchObject({ title: "Básico", criteria: "Escreve expressões." });
+    expect(root.children[1].children[0]).toMatchObject({ name: "groupby" });
+    expect(root.children[1].children[0].levels).toHaveLength(5);
+    expect(root.children[2].icon).toBe("sparkles");
     expect((await agent.get("/api/habilidades")).body.skills).toHaveLength(0);
 
     const saved = await agent.post("/api/habilidades/galho").send({ domain: plan.body.domain, source: "ia", nodes: plan.body.nodes });
     expect(saved.status).toBe(201);
-    expect(saved.body.created).toBe(4);
+    expect(saved.body.created).toBe(7);
     const skills = (await agent.get("/api/habilidades")).body.skills;
     expect(skills.every((s: { source: string }) => s.source === "ia")).toBe(true);
     // Sem IA → 503 com mensagem clara (criação manual continua).
@@ -162,25 +180,23 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     expect((await create(agent, { domain: "educacao", name: "Português para concurso" })).status).toBe(201);
   });
 
-  it("galho pequeno demais: pede uma versão completa e usa a maior; tamanho é configurável", async () => {
+  it("tamanho do galho muda a estrutura pedida; sub-habilidades de uma existente não recriam a mãe", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const node = (ref: string, parent: string, name: string) => ({ ref, parent, name, description: "x", icon: "book", proofMode: "quiz", levels: [] });
-    const topics = Array.from({ length: 11 }, (_, i) => node(`t${i}`, "r", `Tópico ${i + 1}`));
-    replies = [
-      model({ domain: "educacao", summary: "Curta.", nodes: [node("r", "", "Português"), node("a", "r", "Crase")] }),
-      model({ domain: "educacao", summary: "Completa.", nodes: [node("r", "", "Português"), ...topics] }),
-    ];
-    const plan = await agent.post("/api/habilidades/ia/galho").send({ goal: "Português para concurso", detail: "essencial" });
+    const pt = (await create(agent, { domain: "educacao", name: "Português" })).body;
+    replies = [model({ domain: "saude", summary: "Módulos.", root: { name: "Português" }, modules: [{ name: "Crase", topics: [] }, { name: "Regência", topics: [] }] })];
+    const plan = await agent.post("/api/habilidades/ia/galho").send({ goal: "Português para concurso", detail: "essencial", parentId: pt.id });
     expect(plan.status).toBe(200);
-    expect(plan.body).toMatchObject({ domain: "educacao", count: 12, summary: "Completa." });
-    expect(prompts[0]).toContain("entre 8 e 15");
+    expect(prompts[0]).toContain("de 3 a 4 módulos");
+    // Tronco da mãe prevalece; os módulos entram direto sob a habilidade existente.
+    expect(plan.body).toMatchObject({ domain: "educacao", parentId: pt.id, count: 2 });
+    expect(plan.body.nodes.map((n: { name: string }) => n.name)).toEqual(["Crase", "Regência"]);
     expect((await agent.post("/api/habilidades/ia/galho").send({ goal: "x y z", detail: "gigante" })).status).toBe(400);
   });
 
   it("prova aprovada sobe 1 nível, concede XP, Crônica, conquista e título; envio duplo é bloqueado", async () => {
     const { agent } = await createAuthenticatedAgent();
     const pandas = (await create(agent, { domain: "pessoal", name: "pandas" })).body;
-    replies = [quiz()];
+    replies = quizReplies();
     const start = await agent.post(`/api/habilidades/${pandas.id}/provas`).send({});
     expect(start.status).toBe(201);
     expect(start.body).toMatchObject({ targetLevel: 1, status: "aberta", kind: "quiz" });
@@ -194,7 +210,7 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     expect((await agent.post(`/api/habilidades/${pandas.id}/provas`).send({})).body.id).toBe(start.body.id);
 
     const answers = await answerAll(start.body.id, true);
-    replies = [model({ grades: [{ id: "q13", score: 90, feedback: "Bom." }, { id: "q14", score: 80, feedback: "Ok.", gaps: ["Exemplo"] }, { id: "q15", score: 80, feedback: "Ok." }] })];
+    replies = [grade("q13", 90, "Bom."), grade("q14", 80, "Ok."), grade("q15", 80, "Ok.")];
     const done = await agent.post(`/api/habilidades/provas/${start.body.id}/entregar`).send({ answers });
     expect(done.status).toBe(200);
     // (12×100 + 2×90 + 2×80 + 2×80) / 18 = 94
@@ -216,23 +232,35 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     const summary = (await agent.get("/api/habilidades/resumo")).body;
     expect(summary.top[0]).toMatchObject({ name: "pandas", level: 1 });
     expect(summary.recent[0]).toMatchObject({ level: 1, score: 94 });
+    // Histórico e evolução derivados das provas.
+    const hist = (await agent.get("/api/habilidades/historico")).body;
+    expect(hist.summary).toMatchObject({ total: 1, approved: 1, failed: 0, passRate: 100, avgScore: 94, bestScore: 94, avgAttemptsToPass: 1 });
+    expect(hist.series[0]).toMatchObject({ score: 94, passed: true, skillName: "pandas", level: 1, passScore: 70 });
+    expect(hist.bySkill[0]).toMatchObject({ name: "pandas", attempts: 1, approved: 1, best: 94 });
+    expect(hist.items[0]).toMatchObject({ skillName: "pandas", levelTitle: "Iniciante", status: "aprovada" });
+    expect((await agent.get("/api/habilidades/historico?tronco=saude")).body.items).toHaveLength(0);
+    expect((await agent.get("/api/habilidades/historico?tronco=xx")).status).toBe(400);
+    // Timeline: o nível comprovado vira um evento com o XP real concedido.
+    const tl = (await agent.get("/api/analytics/timeline")).body;
+    const ev = tl.events.find((e: { type: string }) => e.type === "skill");
+    expect(ev).toMatchObject({ label: "Nível 1 comprovado em pandas (94/100)", xp: 50 });
   });
 
   it("reprovação aplica espera; falha da correção devolve a prova aberta com as respostas", async () => {
     const { agent } = await createAuthenticatedAgent();
     const pt = (await create(agent, { domain: "educacao", name: "Português" })).body;
-    replies = [quiz()];
+    replies = quizReplies();
     const p = (await agent.post(`/api/habilidades/${pt.id}/provas`).send({})).body;
     const answers = await answerAll(p.id, false);
     // Correção da IA falha → 502, prova volta a "aberta" com as respostas guardadas.
-    replies = [{ status: 500 }, { status: 500 }];
+    replies = [];
     const failed = await agent.post(`/api/habilidades/provas/${p.id}/entregar`).send({ answers });
     expect(failed.status).toBe(502);
     const again = (await agent.get(`/api/habilidades/provas/${p.id}`)).body;
     expect(again.status).toBe("aberta");
     expect(again.answers.q13).toBe(answers.q13);
     // Nova entrega: todas as objetivas erradas → reprovada.
-    replies = [model({ grades: [{ id: "q13", score: 60, feedback: "" }, { id: "q14", score: 40, feedback: "" }, { id: "q15", score: 40, feedback: "" }] })];
+    replies = [grade("q13", 60), grade("q14", 40), grade("q15", 40)];
     const done = await agent.post(`/api/habilidades/provas/${p.id}/entregar`).send({ answers });
     // (0 + 2×60 + 2×40 + 2×40) / 18 = 16
     expect(done.body).toMatchObject({ status: "reprovada", score: 16, passScore: 70 });

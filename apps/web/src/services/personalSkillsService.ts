@@ -123,13 +123,28 @@ export interface SkillsSummary {
   domains: Array<{ key: SkillDomain; label: string; levels: number; skills: number }>;
   top: Array<{ id: string; name: string; domain: SkillDomain; icon: string; level: number; maxLevel: number; title: string | null }>;
   recent: Array<{ name: string; domain: SkillDomain; level: number; score: number; at: string }>;
+  openProofs: Array<{ id: string; skillId: string; name: string; domain: SkillDomain; level: number; expiresAt: string }>;
+}
+export interface ProofHistory {
+  summary: { total: number; approved: number; failed: number; open: number; passRate: number | null; avgScore: number | null; bestScore: number | null; avgAttemptsToPass: number | null; firstAt: string | null; lastAt: string | null };
+  series: Array<{ id: string; at: string; score: number; passScore: number; passed: boolean; skillName: string; domain: SkillDomain; level: number }>;
+  months: Array<{ month: string; approved: number; failed: number; avgScore: number | null }>;
+  bySkill: Array<{ skillId: string; name: string; path: string[]; domain: SkillDomain; level: number; maxLevel: number; attempts: number; approved: number; best: number; avg: number | null; last: string | null }>;
+  items: Array<{ id: string; skillId: string; skillName: string; path: string[]; domain: SkillDomain; targetLevel: number; levelTitle: string | null; kind: ProofKind; status: Proof["status"]; score: number | null; passScore: number; createdAt: string; submittedAt: string | null; minutes: number | null }>;
 }
 export type LinkOptions = Record<LinkKind, Array<{ id: string; label: string }>>;
 
 export const personalSkillsService = {
   tree: () => api.get<SkillTreeView>("/habilidades"),
-  summary: () => api.get<SkillsSummary>("/habilidades/resumo"),
+  summary: (domain?: SkillDomain | null) => api.get<SkillsSummary>(`/habilidades/resumo${domain ? `?tronco=${domain}` : ""}`),
   links: () => api.get<LinkOptions>("/habilidades/vinculos"),
+  history: (f: { skillId?: string | null; domain?: SkillDomain | null } = {}) => {
+    const q = new URLSearchParams();
+    if (f.skillId) q.set("habilidade", f.skillId);
+    if (f.domain) q.set("tronco", f.domain);
+    const qs = q.toString();
+    return api.get<ProofHistory>(`/habilidades/historico${qs ? `?${qs}` : ""}`);
+  },
   create: (input: SkillInput & { domain: SkillDomain; parentId?: string | null }) => api.post<PersonalSkill>("/habilidades", input),
   createBranch: (input: { domain: SkillDomain; parentId?: string | null; source: "manual" | "ia"; nodes: BranchNode[] }) => api.post<{ created: number; ids: string[] }>("/habilidades/galho", input),
   update: (id: string, patch: Partial<SkillInput> & { parentId?: string | null; domain?: SkillDomain }) => api.patch<PersonalSkill>(`/habilidades/${id}`, patch),

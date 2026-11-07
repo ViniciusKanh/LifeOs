@@ -158,60 +158,101 @@ export function EmptyTree({ aiAvailable, aiMessage, onAi, onManual }: { aiAvaila
   );
 }
 
-/** Resumo para Perfil do Herói, Build e outras telas — só níveis comprovados por prova. */
-export function MySkillsCard({ className }: { className?: string }) {
-  const q = useSkillsSummary();
+/**
+ * Resumo da Árvore para outras telas (Perfil, Build, Códex, Hoje, Educação,
+ * Profissional, Saúde). Com `domain`, mostra só aquele tronco. Só níveis
+ * comprovados por prova — nenhum número é estimado.
+ */
+export function MySkillsCard({ className, domain, compact }: { className?: string; domain?: SkillDomain; compact?: boolean }) {
+  const q = useSkillsSummary(domain ?? null);
   const d = q.data;
+  const base = domain ? `/arvore-habilidades` : "/arvore-habilidades";
+  const title = domain ? `Habilidades · ${DOMAIN_LABEL[domain]}` : "Árvore de Habilidades";
+  // Compacto (ex.: Hoje): só aparece quando há algo a fazer — prova em andamento.
+  if (compact && (!d || !d.openProofs.length)) return null;
   return (
-    <section className={clsx("rpg-panel p-3", className)} aria-label="Árvore de Habilidades">
+    <section className={clsx("rpg-panel p-3", className)} aria-label={title}>
       <header className="mb-2 flex items-center gap-2">
         <GitBranch size={14} className="text-rpg-gold" aria-hidden />
-        <h2 className="font-pixel text-[12px] uppercase tracking-wider text-rpg-gold-light">Árvore de Habilidades</h2>
-        <Link to="/arvore-habilidades" className="ml-auto text-xs font-semibold text-rpg-blue hover:underline">
-          Abrir árvore →
+        <h2 className="font-pixel text-[12px] uppercase tracking-wider text-rpg-gold-light">{compact ? "Provas em andamento" : title}</h2>
+        <Link to={`${base}${compact ? "" : "?aba=provas"}`} className="ml-auto text-xs font-semibold text-rpg-blue hover:underline">
+          {compact ? "Abrir árvore →" : "Ver evolução →"}
         </Link>
       </header>
       {q.isLoading ? (
         <div className="h-24 animate-pulse bg-rpg-bg-2" />
       ) : !d || !d.stats.skills ? (
-        <p className="text-sm text-rpg-muted">Nenhuma habilidade criada ainda. Monte seus galhos (ex.: Machine Learning, Português, Muay Thai) e comprove cada nível em provas.</p>
+        <p className="text-sm text-rpg-muted">
+          {domain ? `Nenhuma habilidade no tronco ${DOMAIN_LABEL[domain]} ainda.` : "Nenhuma habilidade criada ainda."} Monte seus galhos na Árvore e comprove cada nível em provas.{" "}
+          <Link to="/arvore-habilidades" className="text-rpg-blue hover:underline">
+            Criar habilidade
+          </Link>
+        </p>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-1.5 text-center">
-            {d.domains.map((x) => {
-              const Icon = DOMAIN_ICON[x.key];
-              return (
-                <div key={x.key} className="border border-rpg-border bg-rpg-bg-2/60 px-1 py-1.5" style={{ borderRadius: 3 }} title={`${x.label}: ${x.skills} habilidade(s)`}>
-                  <Icon size={14} className={clsx("mx-auto", DOMAIN_TEXT[x.key])} aria-hidden />
-                  <p className="font-bold tabular-nums text-rpg-text">{x.levels}</p>
-                  <p className="truncate text-[10px] text-rpg-muted">{x.label}</p>
-                </div>
-              );
-            })}
-          </div>
-          {d.top.length ? (
-            <ul className="mt-2 space-y-1">
-              {d.top.slice(0, 4).map((s) => {
-                const Icon = skillIcon(s.icon);
-                return (
-                  <li key={s.id} className="flex items-center gap-2 text-sm">
-                    <Icon size={14} className={DOMAIN_TEXT[s.domain]} aria-hidden />
-                    <span className="min-w-0 flex-1 truncate text-rpg-text">{s.name}</span>
-                    <span className="text-xs text-rpg-muted">{s.title}</span>
-                    <span className="w-16 shrink-0">
-                      <Segments value={s.level} max={s.maxLevel} tone={DOMAIN_VAR[s.domain]} />
+          {d.openProofs.length > 0 && (
+            <ul className={clsx("space-y-1", !compact && "mb-2")}>
+              {d.openProofs.map((p) => (
+                <li key={p.id}>
+                  <Link to={`/arvore-habilidades?habilidade=${p.skillId}`} className="flex items-center gap-2 border border-rpg-gold/50 bg-rpg-gold/10 px-2 py-1 text-xs text-rpg-text hover:border-rpg-gold" style={{ borderRadius: 3 }}>
+                    <ScrollText size={13} className="text-rpg-gold" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">
+                      Prova de <strong>{p.name}</strong> nível {p.level} em andamento
                     </span>
-                  </li>
-                );
-              })}
+                    <span className="shrink-0 text-rpg-muted">até {fmtDate(p.expiresAt)}</span>
+                  </Link>
+                </li>
+              ))}
             </ul>
-          ) : (
-            <p className="mt-2 text-xs text-rpg-muted">Nenhum nível comprovado ainda — faça a primeira prova na árvore.</p>
           )}
-          {d.recent[0] && (
-            <p className="mt-2 border-t border-rpg-border pt-1.5 text-[11px] text-rpg-muted">
-              Última prova aprovada: <strong className="text-rpg-text">{d.recent[0].name}</strong> nv. {d.recent[0].level} ({d.recent[0].score}/100) · {fmtDate(d.recent[0].at)}
-            </p>
+          {!compact && (
+            <>
+              {!domain && (
+                <div className="grid grid-cols-4 gap-1.5 text-center">
+                  {d.domains.map((x) => {
+                    const Icon = DOMAIN_ICON[x.key];
+                    return (
+                      <div key={x.key} className="border border-rpg-border bg-rpg-bg-2/60 px-1 py-1.5" style={{ borderRadius: 3 }} title={`${x.label}: ${x.skills} habilidade(s)`}>
+                        <Icon size={14} className={clsx("mx-auto", DOMAIN_TEXT[x.key])} aria-hidden />
+                        <p className="font-bold tabular-nums text-rpg-text">{x.levels}</p>
+                        <p className="truncate text-[10px] text-rpg-muted">{x.label}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {domain && (
+                <p className="text-xs text-rpg-muted">
+                  <strong className="text-rpg-text">{d.stats.verifiedLevels}</strong> nível(is) comprovado(s) em <strong className="text-rpg-text">{d.stats.skills}</strong> habilidade(s) deste tronco.
+                </p>
+              )}
+              {d.top.length ? (
+                <ul className="mt-2 space-y-1">
+                  {d.top.slice(0, domain ? 5 : 4).map((s) => {
+                    const Icon = skillIcon(s.icon);
+                    return (
+                      <li key={s.id}>
+                        <Link to={`/arvore-habilidades?habilidade=${s.id}`} className="flex items-center gap-2 text-sm hover:underline">
+                          <Icon size={14} className={DOMAIN_TEXT[s.domain]} aria-hidden />
+                          <span className="min-w-0 flex-1 truncate text-rpg-text">{s.name}</span>
+                          <span className="hidden text-xs text-rpg-muted sm:inline">{s.title}</span>
+                          <span className="w-16 shrink-0">
+                            <Segments value={s.level} max={s.maxLevel} tone={DOMAIN_VAR[s.domain]} />
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-rpg-muted">Nenhum nível comprovado ainda — faça a primeira prova na árvore.</p>
+              )}
+              {d.recent[0] && (
+                <p className="mt-2 border-t border-rpg-border pt-1.5 text-[11px] text-rpg-muted">
+                  Última prova aprovada: <strong className="text-rpg-text">{d.recent[0].name}</strong> nv. {d.recent[0].level} ({d.recent[0].score}/100) · {fmtDate(d.recent[0].at)}
+                </p>
+              )}
+            </>
           )}
         </>
       )}

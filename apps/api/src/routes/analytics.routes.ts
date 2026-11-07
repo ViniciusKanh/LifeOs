@@ -1,5 +1,6 @@
 import { itemDef } from "../config/items.js";
 import { buildTimelineEvents } from "../services/heroHubService.js";
+import { skillTimelineEvents } from "../services/personalSkillsService.js";
 import { Router } from "express";
 import { KNOWLEDGE, RELICS, TITLES } from "../config/codex.js";
 import { getDb } from "../db/client.js";
@@ -409,9 +410,12 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const warCouncilEvents = await warCouncilTimelineEvents(db, ownerId, qFrom, qTo);
   // Build do Personagem: troca de arquétipo entre fotografias semanais.
   const archetypeEvents = await buildTimelineEvents(db, ownerId, qFrom, qTo);
+  // Árvore de Habilidades: um evento por nível comprovado em prova.
+  const skillEvents = await skillTimelineEvents(db, ownerId, qFrom, qTo);
 
   const events = [
     ...guildEvents,
+    ...skillEvents,
     ...warCouncilEvents,
     ...archetypeEvents,
     ...asRows(tasks.rows).map((r) => ({ type: "task", icon: "✅", ...r })),
@@ -528,6 +532,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
       : e.type === "life_admin" ? `life_admin:${e.item_id}:${e.due_date}`
       : e.type === "achievement" && e.achievement_id ? `achievement:${e.achievement_id}`
       : e.type === "contract" ? `contract:${e.id}`
+      : e.type === "skill" ? `skill:${e.source_id}`
       : e.type === "bank" ? `bank:${String(e.id).replace(/^bank-(deposit|loan)-/, "")}`
       : e.type === "campaign" && e.kind === "milestone" ? `campaign:${e.campaign_id}:${e.ref_id}`
       : e.type === "campaign" && e.kind === "completed" ? `campaign:${e.campaign_id}`

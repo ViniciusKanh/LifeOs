@@ -4,8 +4,10 @@ import { triggerAchievementsCheck } from "@/services/achievementsService";
 
 export const SKILLS_KEY = ["habilidades"] as const;
 export const useSkillTree = () => useQuery({ queryKey: SKILLS_KEY, queryFn: personalSkillsService.tree, staleTime: 15_000 });
-export const useSkillsSummary = () => useQuery({ queryKey: [...SKILLS_KEY, "resumo"], queryFn: personalSkillsService.summary, staleTime: 60_000 });
+export const useSkillsSummary = (domain?: SkillDomain | null) => useQuery({ queryKey: [...SKILLS_KEY, "resumo", domain ?? null], queryFn: () => personalSkillsService.summary(domain), staleTime: 60_000 });
 export const useSkillLinks = (enabled = true) => useQuery({ queryKey: [...SKILLS_KEY, "vinculos"], queryFn: personalSkillsService.links, staleTime: 5 * 60_000, enabled });
+export const useProofHistory = (f: { skillId?: string | null; domain?: SkillDomain | null } = {}) =>
+  useQuery({ queryKey: [...SKILLS_KEY, "historico", f.skillId ?? null, f.domain ?? null], queryFn: () => personalSkillsService.history(f), staleTime: 30_000 });
 export const useSkillProofs = (skillId: string | null) => useQuery({ queryKey: [...SKILLS_KEY, "provas", skillId], queryFn: () => personalSkillsService.proofs(skillId!), enabled: !!skillId });
 
 export function useSkillActions() {

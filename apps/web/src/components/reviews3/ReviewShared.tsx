@@ -17,6 +17,8 @@ import {
   Timer,
   Trophy,
   Zap,
+  GitBranch,
+  ScrollText,
 } from "lucide-react";
 import type { RpgTone } from "@/components/rpg/rpgAssets";
 import { fmtMin } from "@/services/missions3Service";
@@ -52,6 +54,8 @@ export const IND_META: Record<string, { icon: ReactNode; tone: RpgTone }> = {
   goalsCompleted: { icon: <Target size={17} />, tone: "green" },
   contractsFulfilled: { icon: <FileSignature size={17} />, tone: "gold" },
   projectsCompleted: { icon: <FolderCheck size={17} />, tone: "orange" },
+  skillLevels: { icon: <GitBranch size={17} />, tone: "green" },
+  skillProofs: { icon: <ScrollText size={17} />, tone: "purple" },
   lifeScore: { icon: <Trophy size={17} />, tone: "gold" },
 };
 

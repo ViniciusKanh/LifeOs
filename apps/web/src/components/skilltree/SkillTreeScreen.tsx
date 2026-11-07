@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import clsx from "clsx";
-import { BookOpenCheck, Coins, Hourglass, List, Network, Plus, ScrollText, Search, Sparkles, Wand2, Workflow } from "lucide-react";
+import { BookOpenCheck, Coins, Hourglass, LineChart, List, Network, Plus, ScrollText, Search, Sparkles, Trees, Wand2, Workflow } from "lucide-react";
+import { useUrlTab } from "@/components/hero/HeroShared";
 import { RPGButton, RPGToast } from "@/components/rpg";
 import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
 import { MissionAdvisor, type AdvisorSeed } from "@/components/missions3/MissionAdvisor";
@@ -13,7 +14,15 @@ import { SkillDetail } from "./SkillDetail";
 import { DomainProgress, EmptyTree, JourneyCard, SkillList } from "./SkillPanels";
 import { AiBranchModal, SkillEditor } from "./SkillTools";
 import { ProofModal } from "./ProofModal";
+import { ProofHistoryPanel } from "./ProofHistoryPanel";
 import { Box, DOMAIN_ICON, DOMAIN_TEXT, SKILL_ART, errMsg } from "./skillShared";
+
+const SECTIONS = ["troncos", "provas", "automacoes"] as const;
+const SECTION_META: Array<[(typeof SECTIONS)[number], string, ReactNode]> = [
+  ["troncos", "Troncos", <Trees key="i" size={14} />],
+  ["provas", "Provas e evolução", <LineChart key="i" size={14} />],
+  ["automacoes", "Automações", <Workflow key="i" size={14} />],
+];
 
 /**
  * Árvore de Habilidades 2.0 — o usuário (ou a IA, com confirmação) cria os
@@ -36,7 +45,8 @@ export function SkillTreeScreen() {
   const [proofId, setProofId] = useState<string | null>(null);
   const [seed, setSeed] = useState<AdvisorSeed | null>(null);
   const [burst, setBurst] = useState<string | null>(null);
-  const [showAutomations, setShowAutomations] = useState(false);
+  const [section, setSection] = useUrlTab(SECTIONS, "troncos");
+  const sectionsRef = useRef<HTMLDivElement>(null);
   const v = q.data;
 
   // Seleção inicial: a habilidade do link (?habilidade=) ou a primeira com prova aberta / mais evoluída.
@@ -203,24 +213,32 @@ export function SkillTreeScreen() {
         </div>
       )}
 
-      <div className="mt-3">
-        <DomainProgress v={v} onDomain={(d) => setDomain(d)} />
-      </div>
-
-      <div className="mt-3">
-        <button type="button" onClick={() => setShowAutomations((x) => !x)} aria-expanded={showAutomations} className="flex items-center gap-1.5 text-sm font-semibold text-rpg-muted hover:text-rpg-text">
-          <Workflow size={14} aria-hidden /> Automações da árvore {showAutomations ? "▲" : "▼"}
-        </button>
-        {showAutomations && (
-          <div className="mt-2">
-            <AutomationsPanel module="skills" title="Automações da Árvore" icon={<Workflow size={18} />} intro="A IA gera e corrige as provas; recompensas, conquistas e avisos acompanham cada nível comprovado. Nada sobe de nível sem prova aprovada." />
-          </div>
+      <div ref={sectionsRef} className="mt-4 scroll-mt-4">
+        <nav className="mb-3 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Seções da árvore">
+          {SECTION_META.map(([k, label, icon]) => (
+            <button key={k} role="tab" aria-selected={section === k} onClick={() => setSection(k)} className={clsx("flex shrink-0 items-center gap-1.5 border-2 px-3 py-1.5 text-sm font-semibold", section === k ? "border-rpg-gold bg-rpg-gold/15 text-rpg-gold-light" : "border-transparent text-rpg-muted hover:text-rpg-text")} style={{ borderRadius: 4 }}>
+              {icon}
+              {label}
+            </button>
+          ))}
+        </nav>
+        {section === "troncos" && <DomainProgress v={v} onDomain={(d) => setDomain(d)} />}
+        {section === "provas" && (
+          <ProofHistoryPanel
+            skills={v.skills}
+            onOpenProof={setProofId}
+            onSelectSkill={(id) => {
+              pick(id);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
         )}
+        {section === "automacoes" && <AutomationsPanel module="skills" title="Automações da Árvore" icon={<Workflow size={18} />} intro="A IA gera e corrige as provas; recompensas, conquistas e avisos acompanham cada nível comprovado. Nada sobe de nível sem prova aprovada." />}
       </div>
 
       <SkillEditor open={!!editor} view={v} skill={editor?.skill ?? null} domain={editor?.domain ?? "pessoal"} parentId={editor?.parentId ?? null} onClose={() => setEditor(null)} onSaved={(id) => (setEditor(null), setSelected(id))} notify={notify} />
       <AiBranchModal open={!!ai} view={v} initial={ai} onClose={() => setAi(null)} onCreated={(id) => (setAi(null), id && setSelected(id))} notify={notify} />
-      {proofId && <ProofModal proofId={proofId} skill={v.skills.find((s) => s.openProof?.id === proofId || s.lastProof?.id === proofId) ?? skill} onClose={() => setProofId(null)} onLeveled={leveled} notify={notify} />}
+      {proofId && <ProofModal proofId={proofId} skills={v.skills} onClose={() => setProofId(null)} onLeveled={leveled} notify={notify} />}
       {seed && <MissionAdvisor tasks={tasks} seed={seed} layout="drawer" onClose={() => setSeed(null)} onCreated={() => (setSeed(null), notify("Missão de estudo criada."))} notify={notify} />}
       <RPGToast message={toast?.m ?? null} tone={toast?.tone} onClose={() => setToast(null)} />
     </div>

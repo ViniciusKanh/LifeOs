@@ -1,3 +1,4 @@
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, ChevronLeft, ChevronRight, Dumbbell, Droplets, FlaskRound, HeartPulse, Loader2, Moon, Sun, Zap } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -460,8 +461,9 @@ export function SaudePage() {
       <div className="mt-4">
         <StrengthAttributeCard />
       </div>
-      <div className="mt-4">
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <TechniqueCard />
+        <MySkillsCard domain="saude" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">

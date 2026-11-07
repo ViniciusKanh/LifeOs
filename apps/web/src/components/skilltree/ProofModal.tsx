@@ -15,7 +15,7 @@ const TYPE_LABEL: Record<ProofItem["type"], string> = { choice: "Múltipla escol
  * confirmação e ver a correção. Gabarito e resposta-modelo só chegam depois
  * da entrega.
  */
-export function ProofModal({ proofId, skill, onClose, onLeveled, notify }: { proofId: string; skill: PersonalSkill | null; onClose: () => void; onLeveled: (skillId: string) => void; notify: Notify }) {
+export function ProofModal({ proofId, skills, onClose, onLeveled, notify }: { proofId: string; skills: PersonalSkill[]; onClose: () => void; onLeveled: (skillId: string) => void; notify: Notify }) {
   const q = useQuery({ queryKey: [...SKILLS_KEY, "prova", proofId], queryFn: () => personalSkillsService.proof(proofId), staleTime: 0 });
   const act = useSkillActions();
   const [answers, setAnswers] = useState<Record<string, string | number>>({});
@@ -66,6 +66,7 @@ export function ProofModal({ proofId, skill, onClose, onLeveled, notify }: { pro
     window.confirm("Abandonar esta prova? Ela não conta como reprovação, mas as respostas serão descartadas.") &&
     act.abandon.mutate(proofId, { onSuccess: () => (notify("Prova abandonada."), onClose()), onError: (e) => notify(errMsg(e, "Não consegui abandonar."), "error") });
 
+  const skill = proof ? skills.find((s) => s.id === proof.skillId) ?? null : null;
   const title = proof ? `Prova · ${skill?.name ?? "Habilidade"} · nível ${proof.targetLevel}` : "Prova";
   return (
     <Modal

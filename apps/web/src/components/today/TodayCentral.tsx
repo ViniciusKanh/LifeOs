@@ -1,3 +1,4 @@
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
@@ -979,6 +980,7 @@ export function TodayCentral() {
           <Timer size={16} className="text-rpg-purple" aria-hidden /> Foco em andamento{hub.timer.linkLabel ? `: ${hub.timer.linkLabel}` : ""} — abrir cronômetro
         </button>
       )}
+      <MySkillsCard compact />
       <ModuleTabs label="Seções do dia" value={tab} onChange={setTab} tabs={tabs} />
       {tab === "visao" && (
         <>

@@ -516,25 +516,167 @@ export async function deleteSkill(db: Client, ownerId: string, id: string) {
 }
 
 /** Resumo compacto para Perfil do Herói, Build e Códex. */
-export async function skillsSummary(db: Client, ownerId: string) {
-  const skills = await loadSkills(db, ownerId);
+export async function skillsSummary(db: Client, ownerId: string, domain: SkillDomain | null = null) {
+  const all = await loadSkills(db, ownerId);
+  const skills = domain ? all.filter((s) => s.domain === domain) : all;
   const stats = skillStats(skills);
   const top = [...skills]
     .filter((s) => s.level > 0)
     .sort((a, b) => b.level - a.level || (b.lastLevelAt ?? "").localeCompare(a.lastLevelAt ?? ""))
     .slice(0, 6)
     .map((s) => ({ id: s.id, name: s.name, domain: s.domain, icon: s.icon, level: s.level, maxLevel: s.maxLevel, title: s.levels[s.level - 1]?.title ?? null }));
-  const recent = await db.execute({
-    sql: `SELECT a.target_level, a.score, a.submitted_at, s.name, s.domain FROM skill_assessments a JOIN personal_skills s ON s.id = a.skill_id AND s.owner_id = a.owner_id
-           WHERE a.owner_id = ? AND a.status = 'aprovada' ORDER BY a.submitted_at DESC LIMIT 3`,
-    args: [ownerId],
-  });
+  const domainSql = domain ? " AND s.domain = ?" : "";
+  const extra = domain ? [domain] : [];
+  const [recent, open] = await Promise.all([
+    db.execute({
+      sql: `SELECT a.target_level, a.score, a.submitted_at, s.name, s.domain FROM skill_assessments a JOIN personal_skills s ON s.id = a.skill_id AND s.owner_id = a.owner_id
+             WHERE a.owner_id = ? AND a.status = 'aprovada'${domainSql} ORDER BY a.submitted_at DESC LIMIT 3`,
+      args: [ownerId, ...extra],
+    }),
+    db.execute({
+      sql: `SELECT a.id, a.target_level, a.expires_at, s.id AS skill_id, s.name, s.domain FROM skill_assessments a JOIN personal_skills s ON s.id = a.skill_id AND s.owner_id = a.owner_id
+             WHERE a.owner_id = ? AND a.status = 'aberta' AND a.expires_at > datetime('now')${domainSql} ORDER BY a.expires_at LIMIT 5`,
+      args: [ownerId, ...extra],
+    }),
+  ]);
   return {
     stats,
-    domains: SKILL_DOMAINS.map((d) => ({ key: d, label: DOMAIN_META[d].label, levels: skills.filter((s) => s.domain === d).reduce((a, s) => a + s.level, 0), skills: skills.filter((s) => s.domain === d).length })),
+    domains: SKILL_DOMAINS.map((d) => ({ key: d, label: DOMAIN_META[d].label, levels: all.filter((s) => s.domain === d).reduce((a, s) => a + s.level, 0), skills: all.filter((s) => s.domain === d).length })),
     top,
     recent: recent.rows.map((r) => ({ name: String(r.name), domain: String(r.domain), level: Number(r.target_level), score: Number(r.score ?? 0), at: String(r.submitted_at) })),
+    openProofs: open.rows.map((r) => ({ id: String(r.id), skillId: String(r.skill_id), name: String(r.name), domain: String(r.domain) as SkillDomain, level: Number(r.target_level), expiresAt: String(r.expires_at) })),
   };
 }
 
 export const linkKindValid = (v: unknown): v is LinkKind => (LINK_KINDS as readonly string[]).includes(String(v));
+
+/* ─────────────────────────── histórico e evolução ─────────────────────────── */
+
+const minutesBetween = (a: string | null, b: string | null) => (a && b ? Math.max(0, Math.round((sqlTimeMs(b) - sqlTimeMs(a)) / 60_000)) : null);
+
+/**
+ * Todas as provas entregues (e as abertas) com a evolução derivada delas:
+ * resumo, série de notas no tempo, desempenho por habilidade e por tronco.
+ * Tudo calculado a partir de skill_assessments — nada é copiado.
+ */
+export async function proofHistory(db: Client, ownerId: string, filter: { skillId?: string | null; domain?: SkillDomain | null } = {}) {
+  const skills = await loadSkills(db, ownerId);
+  const byId = new Map(skills.map((s) => [s.id, s]));
+  const pathOf = (s: SkillRecord) => {
+    const p: string[] = [];
+    let cur: SkillRecord | undefined = s;
+    while (cur && p.length < 12) {
+      p.unshift(cur.name);
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    return p;
+  };
+  const rows = await db.execute({
+    sql: `SELECT id, skill_id, target_level, kind, status, score, pass_score, created_at, submitted_at FROM skill_assessments
+           WHERE owner_id = ? AND status <> 'expirada' ORDER BY COALESCE(submitted_at, created_at) DESC LIMIT 500`,
+    args: [ownerId],
+  });
+  const items = rows.rows
+    .map((r) => {
+      const s = byId.get(String(r.skill_id));
+      if (!s) return null;
+      return {
+        id: String(r.id),
+        skillId: s.id,
+        skillName: s.name,
+        path: pathOf(s),
+        domain: s.domain,
+        targetLevel: Number(r.target_level),
+        levelTitle: s.levels[Number(r.target_level) - 1]?.title ?? null,
+        kind: String(r.kind) as ProofKind,
+        status: String(r.status) as "aberta" | "corrigindo" | "aprovada" | "reprovada",
+        score: r.score == null ? null : Number(r.score),
+        passScore: Number(r.pass_score),
+        createdAt: String(r.created_at),
+        submittedAt: r.submitted_at ? String(r.submitted_at) : null,
+        minutes: minutesBetween(String(r.created_at), r.submitted_at ? String(r.submitted_at) : null),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x)
+    .filter((x) => (!filter.skillId || x.skillId === filter.skillId) && (!filter.domain || x.domain === filter.domain));
+
+  const done = items.filter((i) => i.status === "aprovada" || i.status === "reprovada");
+  const passed = done.filter((i) => i.status === "aprovada");
+  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  // Tentativas até aprovar cada nível (média): mede a dificuldade real de cada degrau.
+  const attemptsToPass: number[] = [];
+  const byLevel = new Map<string, number>();
+  for (const i of [...done].reverse()) {
+    const k = `${i.skillId}:${i.targetLevel}`;
+    byLevel.set(k, (byLevel.get(k) ?? 0) + 1);
+    if (i.status === "aprovada") attemptsToPass.push(byLevel.get(k)!);
+  }
+
+  const bySkill = [...new Set(done.map((i) => i.skillId))].map((id) => {
+    const list = done.filter((i) => i.skillId === id);
+    const s = byId.get(id)!;
+    return {
+      skillId: id,
+      name: s.name,
+      path: pathOf(s),
+      domain: s.domain,
+      level: s.level,
+      maxLevel: s.maxLevel,
+      attempts: list.length,
+      approved: list.filter((i) => i.status === "aprovada").length,
+      best: Math.max(...list.map((i) => i.score ?? 0)),
+      avg: avg(list.map((i) => i.score ?? 0)),
+      last: list[0]!.submittedAt,
+    };
+  });
+
+  const months = new Map<string, { month: string; approved: number; failed: number; scores: number[] }>();
+  for (const i of done) {
+    const m = (i.submittedAt ?? i.createdAt).slice(0, 7);
+    const e = months.get(m) ?? { month: m, approved: 0, failed: 0, scores: [] };
+    if (i.status === "aprovada") e.approved += 1;
+    else e.failed += 1;
+    e.scores.push(i.score ?? 0);
+    months.set(m, e);
+  }
+
+  return {
+    summary: {
+      total: done.length,
+      approved: passed.length,
+      failed: done.length - passed.length,
+      open: items.filter((i) => i.status === "aberta" || i.status === "corrigindo").length,
+      passRate: done.length ? Math.round((passed.length / done.length) * 100) : null,
+      avgScore: avg(done.map((i) => i.score ?? 0)),
+      bestScore: done.length ? Math.max(...done.map((i) => i.score ?? 0)) : null,
+      avgAttemptsToPass: attemptsToPass.length ? Math.round((attemptsToPass.reduce((a, b) => a + b, 0) / attemptsToPass.length) * 10) / 10 : null,
+      firstAt: done.length ? done[done.length - 1]!.submittedAt : null,
+      lastAt: done.length ? done[0]!.submittedAt : null,
+    },
+    series: [...done].reverse().map((i) => ({ id: i.id, at: i.submittedAt!, score: i.score ?? 0, passScore: i.passScore, passed: i.status === "aprovada", skillName: i.skillName, domain: i.domain, level: i.targetLevel })),
+    months: [...months.values()].sort((a, b) => a.month.localeCompare(b.month)).map((m) => ({ month: m.month, approved: m.approved, failed: m.failed, avgScore: avg(m.scores) })),
+    bySkill: bySkill.sort((a, b) => (b.last ?? "").localeCompare(a.last ?? "")),
+    items,
+  };
+}
+
+/** Eventos da Timeline: um por nível comprovado (prova aprovada). */
+export async function skillTimelineEvents(db: Client, ownerId: string, from: string, to: string) {
+  const r = await db.execute({
+    sql: `SELECT a.id, a.skill_id, a.target_level, a.score, a.submitted_at AS at, s.name, s.domain FROM skill_assessments a
+            JOIN personal_skills s ON s.id = a.skill_id AND s.owner_id = a.owner_id
+           WHERE a.owner_id = ? AND a.status = 'aprovada' AND a.submitted_at >= date(?) AND a.submitted_at < date(?, '+1 day')`,
+    args: [ownerId, from, to],
+  });
+  return r.rows.map((x) => ({
+    type: "skill",
+    icon: "🌳",
+    id: `skill-proof-${String(x.id)}`,
+    label: `Nível ${Number(x.target_level)} comprovado em ${String(x.name)} (${Number(x.score)}/100)`,
+    skill_id: String(x.skill_id),
+    source_id: `${String(x.skill_id)}:${Number(x.target_level)}`,
+    level: Number(x.target_level),
+    domain: String(x.domain),
+    at: String(x.at),
+  }));
+}

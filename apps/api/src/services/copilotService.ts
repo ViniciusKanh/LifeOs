@@ -29,7 +29,7 @@ async function buildContext(ownerId: string) {
   const score = await computeLifeScore(ownerId, today);
   const waterToday = localDaysWhere("recorded_at", today, today, tz);
 
-  const [tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, currentBook, nextMilestone] = await Promise.all([
+  const [tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, currentBook, nextMilestone, skills] = await Promise.all([
     scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status != 'Concluído'", [ownerId]),
     scalar(
       db,
@@ -52,16 +52,23 @@ async function buildContext(ownerId: string) {
       sql: "SELECT title, next_action, next_action_due FROM goals WHERE owner_id = ? AND status = 'active' AND next_action IS NOT NULL ORDER BY next_action_due ASC LIMIT 1",
       args: [ownerId],
     }),
+    // Árvore de Habilidades: as mais recentes em evolução (nível comprovado por prova).
+    db.execute({
+      sql: `SELECT s.name, s.level, s.max_level, (SELECT COUNT(*) FROM skill_assessments a WHERE a.owner_id = s.owner_id AND a.skill_id = s.id AND a.status = 'aberta') AS open
+              FROM personal_skills s WHERE s.owner_id = ? AND s.level < s.max_level ORDER BY COALESCE(s.last_level_at, s.updated_at) DESC LIMIT 3`,
+      args: [ownerId],
+    }),
   ]);
 
   const book = currentBook.rows[0] as { title?: string; current_page?: number; total_pages?: number } | undefined;
   const milestone = nextMilestone.rows[0] as { title?: string; next_action?: string; next_action_due?: string } | undefined;
 
-  return { score, tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, book, milestone };
+  const skillLine = skills.rows.map((r) => `${String(r.name)} nv. ${Number(r.level)}/${Number(r.max_level)}${Number(r.open) ? " (prova em andamento)" : ""}`).join("; ");
+  return { score, tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, book, milestone, skillLine };
 }
 
 function buildPrompt(ctx: Awaited<ReturnType<typeof buildContext>>): string {
-  const { score, tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, book, milestone } = ctx;
+  const { score, tasksOpen, tasksOverdue, habitsTotal, habitsDoneToday, waterMl, book, milestone, skillLine } = ctx;
 
   const lines = [
     `Life Score geral: ${score.overall}/100.`,
@@ -73,6 +80,7 @@ function buildPrompt(ctx: Awaited<ReturnType<typeof buildContext>>): string {
       ? `Lendo agora: "${book.title}"${book.total_pages ? ` (página ${book.current_page} de ${book.total_pages})` : ""}.`
       : "Nenhum livro em andamento.",
     milestone?.title ? `Próxima meta com ação definida: "${milestone.title}" — próximo passo: ${milestone.next_action}.` : "",
+    skillLine ? `Habilidades em evolução (nível comprovado por prova): ${skillLine}.` : "",
   ].filter(Boolean);
 
   return [

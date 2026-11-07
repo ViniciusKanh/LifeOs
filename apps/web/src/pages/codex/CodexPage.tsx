@@ -1,3 +1,4 @@
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -210,7 +211,12 @@ export function CodexPage() {
                     </div>
                   )}
                   {tab === "relics" && <CodexRelics codex={codex} onSelect={setSelection} />}
-                  {tab === "areas" && <CodexLifeAreas codex={codex} />}
+                  {tab === "areas" && (
+                    <div className="space-y-3">
+                      <MySkillsCard />
+                      <CodexLifeAreas codex={codex} />
+                    </div>
+                  )}
                 </div>
                 {/* A coluna lateral só aparece no desktop largo; no celular ela empurraria o conteúdo da aba. */}
                 <div className="hidden xl:block">

@@ -86,6 +86,9 @@ export interface WindowMetrics {
   goalsCompleted: number;
   contractsFulfilled: number;
   projectsCompleted: number;
+  /** Árvore de Habilidades: níveis comprovados e provas feitas no período. */
+  skillLevels: number;
+  skillProofs: number;
   lifeScore: number | null;
   lifeScoreDays: number;
   dims: Record<Dim, number | null>;
@@ -105,7 +108,7 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     return db.execute({ sql: `${head} AND ${f.sql}`, args: [ownerId, ...f.args] });
   };
   const a = [ownerId, from, to];
-  const [xp, coins, tasks, habits, habitDays, workouts, pages, readDays, study, focus, sleep, mood, journal, goals, contracts, projects, life] = await Promise.all([
+  const [xp, coins, tasks, habits, habitDays, workouts, pages, readDays, study, focus, sleep, mood, journal, goals, contracts, projects, life, proofs] = await Promise.all([
     db.execute({ sql: "SELECT COALESCE(SUM(xp), 0) AS n FROM xp_events WHERE owner_id = ? AND day_key BETWEEN ? AND ?", args: a }),
     q("SELECT COALESCE(SUM(amount), 0) AS n FROM coin_ledger WHERE owner_id = ? AND amount > 0", "created_at"),
     q("SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído'", "COALESCE(completed_at, updated_at)"),
@@ -128,6 +131,7 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
             FROM life_scores WHERE owner_id = ? AND score_date BETWEEN ? AND ?`,
       args: a,
     }),
+    q("SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END), 0) AS ok FROM skill_assessments WHERE owner_id = ? AND status IN ('aprovada', 'reprovada')", "submitted_at"),
   ]);
   const lr = life.rows[0] as Record<string, unknown> | undefined;
   const dims = Object.fromEntries(DIMS.map((d) => [d, lr?.[d] == null ? null : Math.round(Number(lr[d]))])) as Record<Dim, number | null>;
@@ -150,6 +154,8 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     goalsCompleted: one(goals.rows),
     contractsFulfilled: one(contracts.rows),
     projectsCompleted: one(projects.rows),
+    skillLevels: one(proofs.rows, "ok"),
+    skillProofs: one(proofs.rows),
     lifeScore: lr?.v == null ? null : Math.round(Number(lr.v)),
     lifeScoreDays: one(life.rows),
     dims,
@@ -185,6 +191,8 @@ const INDICATORS: Array<{ key: keyof WindowMetrics; label: string; unit: string;
   { key: "goalsCompleted", label: "Metas concluídas", unit: "metas", kind: "sum" },
   { key: "contractsFulfilled", label: "Contratos cumpridos", unit: "contratos", kind: "sum" },
   { key: "projectsCompleted", label: "Projetos concluídos", unit: "projetos", kind: "sum" },
+  { key: "skillLevels", label: "Níveis comprovados", unit: "níveis", kind: "sum" },
+  { key: "skillProofs", label: "Provas de habilidade", unit: "provas", kind: "sum" },
   { key: "lifeScore", label: "Life Score médio", unit: "/100", kind: "avg" },
 ];
 

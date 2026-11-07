@@ -4,7 +4,7 @@ import { LINK_KINDS, PLAN_DETAILS, PROOF_KINDS, SKILL_DOMAINS, SKILL_ICONS, SKIL
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { SkillError, createSkill, createTree, deleteSkill, getSkill, linkOptions, skillsSummary, treeView, updateSkill, type TreeNodeInput } from "../services/personalSkillsService.js";
+import { SkillError, proofHistory, createSkill, createTree, deleteSkill, getSkill, linkOptions, skillsSummary, treeView, updateSkill, type TreeNodeInput } from "../services/personalSkillsService.js";
 import { abandonProof, aiStatus, getProof, listProofs, planTree, saveDraft, startProof, submitProof, suggestLevels } from "../services/skillProofService.js";
 
 /**
@@ -71,7 +71,17 @@ personalSkillsRouter.get("/", async (req, res) => {
   return res.json(await treeView(db, owner(req), await aiStatus(db, owner(req))));
 });
 
-personalSkillsRouter.get("/resumo", async (req, res) => res.json(await skillsSummary(getDb(), owner(req))));
+personalSkillsRouter.get("/resumo", async (req, res) => {
+  const t = z.enum(SKILL_DOMAINS).optional().safeParse(req.query.tronco);
+  if (!t.success) return res.status(400).json({ error: "Tronco inválido." });
+  return res.json(await skillsSummary(getDb(), owner(req), t.data ?? null));
+});
+
+personalSkillsRouter.get("/historico", async (req, res) => {
+  const q = z.object({ habilidade: z.string().max(40).optional(), tronco: z.enum(SKILL_DOMAINS).optional() }).safeParse(req.query);
+  if (!q.success) return res.status(400).json({ error: "Filtro inválido." });
+  return res.json(await proofHistory(getDb(), owner(req), { skillId: q.data.habilidade ?? null, domain: q.data.tronco ?? null }));
+});
 
 personalSkillsRouter.get("/vinculos", async (req, res) => res.json(await linkOptions(getDb(), owner(req))));
 
