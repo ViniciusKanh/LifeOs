@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Dumbbell, Swords, Trophy } from "lucide-react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Dumbbell, Trophy } from "lucide-react";
 import clsx from "clsx";
 import { useHealthStrength } from "@/hooks/useHealth";
 import { RPGBadge, RPGButton, RPGPanel, RPGProgressBar } from "@/components/rpg";
-import { fightModalityLabel } from "@/components/health/workoutCatalog";
 import { dateKeyToLocalDate } from "@/utils/localDate";
 import type { StrengthExercise, StrengthReport } from "@/types";
 
@@ -35,8 +34,9 @@ function hasNewPr(e: StrengthExercise) {
 
 /**
  * "Atributo Força" da tela Saúde: nível derivado de sessões e PRs reais,
- * recordes por exercício de musculação, evolução de carga/1RM e volume de
- * luta. Todos os números vêm de GET /api/health/strength (strengthService.ts).
+ * recordes por exercício de musculação e evolução de carga/1RM. Luta e dança
+ * ficam no card "Treino técnico" (tempo de prática, não Força).
+ * Todos os números vêm de GET /api/health/strength (strengthService.ts).
  */
 export function StrengthAttributeCard() {
   const { report, isLoading, isError, refetch } = useHealthStrength(180);
@@ -88,7 +88,6 @@ function StrengthBody({ report }: { report: StrengthReport }) {
           {selected && <ExerciseChart exercises={exercises} exercise={selected} onSelect={setSelectedKey} />}
         </div>
       )}
-      <FightBlock fight={report.fight} />
     </div>
   );
 }
@@ -97,7 +96,6 @@ function LevelBlock({ report }: { report: StrengthReport }) {
   const { level } = report;
   const chips = [
     { label: "Musculação", value: level.strengthSessions },
-    { label: "Luta", value: level.fightSessions },
     { label: "PRs", value: level.prs },
   ];
   return (
@@ -272,65 +270,6 @@ function PrStat({ label, value, date, highlight }: { label: string; value: strin
       <dt className="font-pixel text-[9px] uppercase text-rpg-muted">{label}</dt>
       <dd className={clsx("truncate text-sm font-semibold tabular-nums", highlight ? "text-rpg-gold-light" : "text-rpg-text")}>{value}</dd>
       <dd className="text-[10px] text-rpg-muted">{highlight ? "Novo PR!" : shortDate(date)}</dd>
-    </div>
-  );
-}
-
-function FightBlock({ fight }: { fight: StrengthReport["fight"] }) {
-  const data = fight.weeks.map((w) => ({ label: shortDate(w.weekStart), Rounds: w.rounds, minutos: w.minutes, sessões: w.sessions }));
-  const big = fight.biggestSession;
-  return (
-    <div className="border-2 border-rpg-border bg-rpg-bg/50 p-3" style={{ borderRadius: 3 }}>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 font-pixel text-[11px] uppercase tracking-wide text-rpg-gold-light">
-          <Swords size={13} aria-hidden /> Luta · rounds por semana (8 semanas)
-        </p>
-        {fight.totalSessions > 0 && (
-          <p className="text-[11px] text-rpg-muted">
-            <strong className="text-rpg-text">{fight.totalSessions}</strong> treinos · <strong className="text-rpg-text">{fight.totalRounds}</strong> rounds ·{" "}
-            <strong className="text-rpg-text">{fight.totalMinutes}</strong> min
-          </p>
-        )}
-      </div>
-      {fight.totalSessions === 0 ? (
-        <p className="py-3 text-xs text-rpg-muted">Nenhum treino de luta nas últimas 8 semanas. Registre um com modalidade e rounds para acompanhar aqui.</p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
-          <div className="h-36" role="img" aria-label="Rounds de luta por semana nas últimas 8 semanas">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: -26 }}>
-                <CartesianGrid vertical={false} stroke={COLOR.grid} strokeDasharray="3 3" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tick={{ fill: COLOR.tick }} interval="preserveStartEnd" minTickGap={6} />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={10} tick={{ fill: COLOR.tick }} />
-                <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
-                  labelStyle={{ color: "rgb(var(--rpg-gold-light))" }}
-                  labelFormatter={(label) => `Semana de ${String(label)}`}
-                  formatter={(value, _name, item) => {
-                    const p = item.payload as (typeof data)[number];
-                    return [`${Number(value)} · ${p.minutos} min · ${p.sessões} ${p.sessões === 1 ? "treino" : "treinos"}`, "Rounds"];
-                  }}
-                  cursor={{ fill: "rgb(var(--rpg-gold) / 0.08)" }}
-                />
-                <Bar dataKey="Rounds" fill={COLOR.rounds} radius={[2, 2, 0, 0]} maxBarSize={28} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {big && (
-            <div className="border border-rpg-border bg-rpg-panel px-3 py-2" style={{ borderRadius: 2 }}>
-              <p className="font-pixel text-[9px] uppercase text-rpg-muted">Maior sessão</p>
-              <p className="text-sm font-semibold text-rpg-text">
-                {big.rounds ? `${big.rounds} rounds` : `${big.minutes} min`}
-                {big.rounds ? <span className="font-normal text-rpg-muted"> · {big.minutes} min</span> : null}
-              </p>
-              <p className="text-[11px] text-rpg-muted">
-                {shortDate(big.date)}
-                {big.modality ? ` · ${fightModalityLabel(big.modality)}` : ""}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

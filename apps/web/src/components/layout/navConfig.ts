@@ -176,7 +176,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/build", label: "Build" },
         ],
       },
-      { to: "/arvore-habilidades", label: "Árvore de Habilidades", icon: TreeDeciduous, quote: "Cada escolha de evolução muda as ferramentas da sua jornada.", searchPlaceholder: "Buscar habilidades, bônus, ramos…" },
+      { to: "/arvore-habilidades", label: "Árvore de Habilidades", icon: TreeDeciduous, quote: "Plante o que quer aprender e comprove cada nível.", searchPlaceholder: "Buscar habilidades, troncos, provas…" },
       {
         to: "/banco",
         label: "Banco",

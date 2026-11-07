@@ -2,7 +2,10 @@ import type { Client } from "@libsql/client";
 import { inferWorkoutCategory, localDateKeyOf, localDayBoundsUtc, normalizeStoredUtc, todayInTz } from "./healthService.js";
 
 /* ============================================================
- * Atributo Força — evolução de musculação e volume de luta.
+ * Atributo Força — evolução de musculação (séries, repetições e carga).
+ *
+ * Luta e dança NÃO contam aqui: são treino técnico, medido por tempo de
+ * prática, rounds e esforço em techniqueService.ts.
  *
  * Tudo é derivado das fontes originais (`workouts` + `workout_sets`) a cada
  * requisição: nenhuma cópia de PR ou de nível é gravada. As funções puras
@@ -13,7 +16,7 @@ const DAY_MS = 86_400_000;
 
 /** Janela fixa do nível de Força (dias locais, incluindo hoje). */
 export const STRENGTH_LEVEL_WINDOW_DAYS = 28;
-/** Pontos por sessão de musculação/luta na janela do nível. */
+/** Pontos por sessão de musculação na janela do nível. */
 export const POINTS_PER_SESSION = 10;
 /** Pontos por PR (carga ou 1RM) batido na janela do nível. */
 export const POINTS_PER_PR = 5;
@@ -23,7 +26,7 @@ export const POINTS_PER_LEVEL = 40;
 export const FIGHT_WEEKS = 8;
 
 export const STRENGTH_LEVEL_FORMULA =
-  `Pontos = ${POINTS_PER_SESSION} × sessões de musculação/luta nos últimos ${STRENGTH_LEVEL_WINDOW_DAYS} dias ` +
+  `Pontos = ${POINTS_PER_SESSION} × sessões de musculação nos últimos ${STRENGTH_LEVEL_WINDOW_DAYS} dias ` +
   `+ ${POINTS_PER_PR} × PRs (carga ou 1RM) batidos nesses ${STRENGTH_LEVEL_WINDOW_DAYS} dias. ` +
   `Nível = 1 + ⌊pontos ÷ ${POINTS_PER_LEVEL}⌋.`;
 
@@ -244,14 +247,13 @@ export interface StrengthLevel {
   pointsPerLevel: number;
   windowDays: number;
   strengthSessions: number;
-  fightSessions: number;
   prs: number;
   formula: string;
 }
 
 /** Nível de Força — fórmula em STRENGTH_LEVEL_FORMULA (mostrada também na UI). */
-export function computeStrengthLevel(strengthSessions: number, fightSessions: number, prs: number): StrengthLevel {
-  const points = POINTS_PER_SESSION * (strengthSessions + fightSessions) + POINTS_PER_PR * prs;
+export function computeStrengthLevel(strengthSessions: number, prs: number): StrengthLevel {
+  const points = POINTS_PER_SESSION * strengthSessions + POINTS_PER_PR * prs;
   return {
     level: 1 + Math.floor(points / POINTS_PER_LEVEL),
     points,
@@ -259,7 +261,6 @@ export function computeStrengthLevel(strengthSessions: number, fightSessions: nu
     pointsPerLevel: POINTS_PER_LEVEL,
     windowDays: STRENGTH_LEVEL_WINDOW_DAYS,
     strengthSessions,
-    fightSessions,
     prs,
     formula: STRENGTH_LEVEL_FORMULA,
   };
@@ -270,7 +271,6 @@ export interface StrengthReport {
   today: string;
   level: StrengthLevel;
   exercises: StrengthExercise[];
-  fight: FightSummary;
 }
 
 /**
@@ -279,11 +279,10 @@ export interface StrengthReport {
  */
 export async function getStrengthReport(db: Client, ownerId: string, days: number, tzOffsetMinutes: number): Promise<StrengthReport> {
   const today = todayInTz(tzOffsetMinutes);
-  const fightStart = addDays(weekStartOf(today), -7 * (FIGHT_WEEKS - 1));
   const periodStart = addDays(today, -(days - 1));
   const levelStart = addDays(today, -(STRENGTH_LEVEL_WINDOW_DAYS - 1));
   // Uma única leitura de `workouts` cobre a maior das janelas.
-  const earliest = [periodStart, fightStart, levelStart].sort()[0];
+  const earliest = [periodStart, levelStart].sort()[0];
   const sinceUtc = localDayBoundsUtc(earliest, tzOffsetMinutes).start;
 
   const [setsResult, workoutsResult] = await Promise.all([
@@ -340,14 +339,7 @@ export async function getStrengthReport(db: Client, ownerId: string, days: numbe
 
   const inLevelWindow = (date: string) => date >= levelStart && date <= today;
   const strengthSessions = workouts.filter((w) => w.category === "musculacao" && inLevelWindow(w.date)).length;
-  const fightSessions = workouts.filter((w) => w.category === "luta" && inLevelWindow(w.date)).length;
   const prs = exercises.reduce((sum, e) => sum + e.prDates.filter(inLevelWindow).length, 0);
 
-  const fight = buildFightSummary(
-    workouts.filter((w) => w.category === "luta").map((w) => w.row),
-    tzOffsetMinutes,
-    today
-  );
-
-  return { days, today, level: computeStrengthLevel(strengthSessions, fightSessions, prs), exercises, fight };
+  return { days, today, level: computeStrengthLevel(strengthSessions, prs), exercises };
 }

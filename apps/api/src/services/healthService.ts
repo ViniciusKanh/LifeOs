@@ -113,6 +113,7 @@ export function utcRangeFilter(column: string, start: string, end: string) {
 export const WORKOUT_CATEGORIES = [
   "musculacao",
   "luta",
+  "danca",
   "corrida",
   "caminhada",
   "bike",
@@ -132,6 +133,7 @@ export type WorkoutCategory = (typeof WORKOUT_CATEGORIES)[number];
 export const WORKOUT_CATEGORY_LABELS: Record<WorkoutCategory, string> = {
   musculacao: "Musculação",
   luta: "Luta",
+  danca: "Dança",
   corrida: "Corrida",
   caminhada: "Caminhada",
   bike: "Bike",
@@ -146,7 +148,15 @@ export const WORKOUT_CATEGORY_LABELS: Record<WorkoutCategory, string> = {
   outro: "Outro",
 };
 
-export const FIGHT_MODALITIES = ["muay_thai", "jiu_jitsu", "boxe", "mma", "judo", "kickboxing", "karate", "wrestling", "outra"] as const;
+export const FIGHT_MODALITIES = ["muay_thai", "jiu_jitsu", "boxe", "mma", "judo", "kickboxing", "karate", "wrestling", "capoeira", "outra"] as const;
+export const DANCE_MODALITIES = ["forro", "samba", "salsa", "zouk", "bachata", "hip_hop", "ballet", "jazz", "contemporanea", "danca_outra"] as const;
+/**
+ * Modalidades de treino técnico (luta e dança): medidas por tempo de prática,
+ * rounds e esforço — nunca contam como Força, que é musculação (séries, reps, carga).
+ */
+export const TECHNIQUE_MODALITIES = [...FIGHT_MODALITIES, ...DANCE_MODALITIES] as const;
+export type TechniqueModality = (typeof TECHNIQUE_MODALITIES)[number];
+export const TECHNIQUE_CATEGORIES = ["luta", "danca"] as const;
 
 /**
  * Intensidade legada (leve/moderada/intensa) derivada do esforço percebido
@@ -222,7 +232,8 @@ export function inferWorkoutCategory(kind: string): WorkoutCategory {
   const k = normalizeLabel(kind);
   const rules: Array<[WorkoutCategory, RegExp]> = [
     ["musculacao", /muscula|academia|gym|peso|forca/],
-    ["luta", /luta|muay|jiu|boxe|box|mma|judo|karate|kick|wrestling/],
+    ["luta", /luta|muay|jiu|boxe|box|mma|judo|karate|kick|wrestling|capoeira/],
+    ["danca", /danc|forro|samba|salsa|zouk|bachata|hip ?hop|ballet|bale|zumba/],
     ["corrida", /corrid|run/],
     ["caminhada", /caminhad|walk/],
     ["bike", /bike|cicl|pedal|bicicleta|spinning/],
@@ -271,6 +282,8 @@ export function normalizeWorkoutPayload(d: WorkoutPayload) {
   const category = d.category ?? (d.kind ? inferWorkoutCategory(d.kind) : undefined);
   const kind = d.category ? WORKOUT_CATEGORY_LABELS[d.category] : d.kind;
   // Tipo conhecido e diferente de luta/musculação → zera os campos que não se aplicam.
+  // Luta e dança guardam a modalidade; rounds só fazem sentido em luta.
+  const notTechnique = category !== undefined && category !== "luta" && category !== "danca";
   const notFight = category !== undefined && category !== "luta";
   const notStrength = category !== undefined && category !== "musculacao";
   const intensity = d.rpe ? intensityFromRpe(d.rpe) : d.intensity;
@@ -278,7 +291,7 @@ export function normalizeWorkoutPayload(d: WorkoutPayload) {
     category,
     kind,
     intensity,
-    modality: notFight ? null : d.modality,
+    modality: notTechnique ? null : d.modality,
     rounds: notFight ? null : d.rounds,
     roundMinutes: notFight ? null : d.roundMinutes,
     muscleGroups: notStrength ? null : d.muscleGroups,

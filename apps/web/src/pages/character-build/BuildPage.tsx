@@ -1,4 +1,4 @@
-import { SkillTreeSummaryCard } from "@/components/skilltree/SkillPanels";
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Compass } from "lucide-react";
@@ -176,7 +176,7 @@ export function BuildPage() {
           </>
         }
       />
-      <SkillTreeSummaryCard />
+      <MySkillsCard />
       {isError ? (
         <div className="rpg-panel p-6 text-center">
           <p className="text-sm text-rpg-red">Não foi possível carregar sua build.</p>

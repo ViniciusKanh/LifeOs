@@ -13,7 +13,8 @@ export function workoutCategoryOf(workout: Pick<Workout, "kind" | "category">): 
   const k = workout.kind.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const rules: Array<[WorkoutCategory, RegExp]> = [
     ["musculacao", /muscula|academia|gym|peso|forca/],
-    ["luta", /luta|muay|jiu|boxe|box|mma|judo|karate|kick|wrestling/],
+    ["luta", /luta|muay|jiu|boxe|box|mma|judo|karate|kick|wrestling|capoeira/],
+    ["danca", /danc|forro|samba|salsa|zouk|bachata|hip ?hop|ballet|bale|zumba/],
     ["corrida", /corrid|run/],
     ["caminhada", /caminhad|walk/],
     ["bike", /bike|cicl|pedal|bicicleta|spinning/],

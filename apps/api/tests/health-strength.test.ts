@@ -105,9 +105,9 @@ describe("Atributo Força — regras (unitário)", () => {
   });
 
   it("nível de Força segue a fórmula documentada", () => {
-    expect(computeStrengthLevel(0, 0, 0)).toMatchObject({ level: 1, points: 0 });
-    // 3 musculação + 2 luta + 2 PRs = 50 + 10 = 60 → nível 2, 20 pts no nível
-    expect(computeStrengthLevel(3, 2, 2)).toMatchObject({ level: 2, points: 60, pointsIntoLevel: 20, pointsPerLevel: 40 });
+    expect(computeStrengthLevel(0, 0)).toMatchObject({ level: 1, points: 0 });
+    // 5 musculação + 2 PRs = 50 + 10 = 60 → nível 2, 20 pts no nível (luta/dança não contam como Força)
+    expect(computeStrengthLevel(5, 2)).toMatchObject({ level: 2, points: 60, pointsIntoLevel: 20, pointsPerLevel: 40 });
   });
 });
 
@@ -137,15 +137,20 @@ describe("Atributo Força — API", () => {
     expect(supino.prLoad.value).toBe(100);
     // Nem a carga (70kg) nem o 1RM da última sessão batem o recorde real de 100kg → não é "novo recorde".
     expect(supino.lastSession).toMatchObject({ newPrLoad: false, newPr1rm: false });
-    // 2 musculação + 1 luta nos últimos 28 dias + 0 PR de verdade (o PR é de 60 dias atrás) = 30 + 0 = 30 → nível 1
-    expect(res.body.level).toMatchObject({ strengthSessions: 2, fightSessions: 1, prs: 0, points: 30, level: 1 });
-    expect(res.body.fight.totalRounds).toBe(6);
+    // 2 musculação nos últimos 28 dias + 0 PR de verdade (o PR é de 60 dias atrás) = 20 → nível 1.
+    // A luta é treino técnico: não soma Força, aparece em /technique.
+    expect(res.body.level).toMatchObject({ strengthSessions: 2, prs: 0, points: 20, level: 1 });
+    expect(res.body.fight).toBeUndefined();
+    const tech = await agent.get("/api/health/technique?tz=180");
+    expect(tech.status).toBe(200);
+    expect(tech.body.totals).toMatchObject({ sessions: 1, minutes: 60, rounds: 6 });
+    expect(tech.body.modalities[0]).toMatchObject({ modality: "muay_thai", category: "luta", allTimeMinutes: 60 });
 
     const otherRes = await other.agent.get("/api/health/strength?tz=180");
     expect(otherRes.status).toBe(200);
     expect(otherRes.body.exercises).toEqual([]);
     expect(otherRes.body.level).toMatchObject({ points: 0, level: 1 });
-    expect(otherRes.body.fight.totalSessions).toBe(0);
+    expect((await other.agent.get("/api/health/technique?tz=180")).body.totals.sessions).toBe(0);
 
     expect((await agent.get("/api/health/strength?days=3")).status).toBe(400);
   });

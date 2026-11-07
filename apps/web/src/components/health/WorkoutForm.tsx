@@ -2,11 +2,11 @@ import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { Plus, Save, Trash2, X } from "lucide-react";
 import clsx from "clsx";
 import { Button, Field } from "@/components/ui/primitives";
-import type { Workout, WorkoutCategory, FightModality } from "@/types";
+import type { Workout, WorkoutCategory, TechniqueModality } from "@/types";
 import type { WorkoutInput } from "@/services/healthService";
 import { formatPace, paceMinPerKm, workoutCategoryOf } from "@/utils/workoutStats";
 import { dateTimeLocalToIso, toDateTimeLocal, todayKey } from "@/utils/localDate";
-import { FIGHT_MODALITIES, STRENGTH_SPLIT_SUGGESTIONS, WORKOUT_TYPES, rpeLabel, workoutTypeMeta } from "./workoutCatalog";
+import { DANCE_MODALITIES, FIGHT_MODALITIES, STRENGTH_SPLIT_SUGGESTIONS, WORKOUT_TYPES, rpeLabel, workoutTypeMeta } from "./workoutCatalog";
 
 type SetRow = { exercise: string; sets: string; reps: string; loadKg: string };
 
@@ -14,7 +14,7 @@ interface FormState {
   category: WorkoutCategory;
   durationMinutes: string;
   rpe: number | null;
-  modality: FightModality | "";
+  modality: TechniqueModality | "";
   rounds: string;
   roundMinutes: string;
   muscleGroups: string;
@@ -106,7 +106,7 @@ function toInput(form: FormState, opts: { untouchedWhen: boolean; legacyIntensit
     rpe: form.rpe,
     // Sem RPE, preserva a intensidade antiga do registro (a API deriva do RPE quando houver).
     intensity: form.rpe ? undefined : opts.legacyIntensity ?? null,
-    modality: group === "fight" ? form.modality || null : null,
+    modality: group === "fight" || group === "dance" ? form.modality || null : null,
     rounds: group === "fight" ? rounds : null,
     roundMinutes: group === "fight" ? roundMinutes : null,
     muscleGroups: group === "strength" ? textOrNull(form.muscleGroups) : null,
@@ -205,7 +205,7 @@ export function WorkoutForm({
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() => patch({ category: type.key })}
+                onClick={() => patch({ category: type.key, ...(type.key !== form.category ? { modality: "" } : {}) })}
                 className={clsx(
                   "flex min-h-[50px] flex-col items-center justify-center gap-1 rounded-xl border px-1 py-1.5 text-[10px] font-semibold leading-tight transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500",
                   "rpg:rounded-[3px] rpg:border-2",
@@ -342,7 +342,7 @@ export function WorkoutForm({
             <label htmlFor={`${uid}-modality`} className="text-xs text-slate">
               Modalidade
             </label>
-            <select id={`${uid}-modality`} value={form.modality} onChange={(e) => patch({ modality: e.target.value as FightModality | "" })} className={clsx(inputClass, "mt-1.5")}>
+            <select id={`${uid}-modality`} value={form.modality} onChange={(e) => patch({ modality: e.target.value as TechniqueModality | "" })} className={clsx(inputClass, "mt-1.5")}>
               <option value="">Não informar</option>
               {FIGHT_MODALITIES.map((m) => (
                 <option key={m.key} value={m.key}>
@@ -354,6 +354,23 @@ export function WorkoutForm({
           <Field label="Rounds" type="number" inputMode="numeric" min={1} value={form.rounds} onChange={(e) => patch({ rounds: e.target.value })} />
           <Field label="Min por round" type="number" inputMode="decimal" min={0.5} step="0.5" value={form.roundMinutes} onChange={(e) => patch({ roundMinutes: e.target.value })} />
           {fightMinutes > 0 && <p className="col-span-2 text-[11px] text-slate sm:col-span-3">Tempo de luta/sparring: {Math.round(fightMinutes * 10) / 10} min</p>}
+        </div>
+      )}
+
+      {meta.group === "dance" && (
+        <div className="rounded-xl border border-paper-border p-3 dark:border-ink-border rpg:rounded-[3px] rpg:border-rpg-border">
+          <label htmlFor={`${uid}-dance`} className="text-xs text-slate">
+            Estilo
+          </label>
+          <select id={`${uid}-dance`} value={form.modality} onChange={(e) => patch({ modality: e.target.value as TechniqueModality | "" })} className={clsx(inputClass, "mt-1.5")}>
+            <option value="">Não informar</option>
+            {DANCE_MODALITIES.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-[11px] text-slate">Dança é treino técnico: conta pelo tempo de prática e pelo esforço (PSE), não como Força.</p>
         </div>
       )}
 

@@ -38,6 +38,11 @@ export const attributeMappings = {
   JOURNAL_ENTRY: { wellbeing: 0.6, creativity: 0.4 },
   REVIEW: { discipline: 0.6, wellbeing: 0.4 },
   EXPERIMENT: { creativity: 0.6, knowledge: 0.4 },
+  // Nível comprovado na Árvore de Habilidades, conforme o tronco (event_type = level_<tronco>).
+  SKILL_SAUDE: { health: 0.6, discipline: 0.4 },
+  SKILL_EDUCACAO: { knowledge: 0.7, discipline: 0.3 },
+  SKILL_PESSOAL: { creativity: 0.5, knowledge: 0.5 },
+  SKILL_TRABALHO: { focus: 0.4, knowledge: 0.4, discipline: 0.2 },
   LIFE_ADMIN: { discipline: 1 },
   PROJECT: { discipline: 0.5, focus: 0.5 },
   CAMPAIGN: { discipline: 0.5, focus: 0.3, knowledge: 0.2 },
@@ -87,7 +92,7 @@ export type UnlockRule =
   | { type: "tasks_done"; min: number }
   | { type: "campaigns_completed"; min: number }
   | { type: "habit_streak_days"; min: number }
-  | { type: "skill_tree"; metric: "skills" | "invested" | "branches" | "skill"; min: number; key?: string }
+  | { type: "skills"; metric: "verifiedLevels" | "topLevel" | "domainsVerified" | "proofsPassed" | "maxed"; min: number }
   | { type: "all"; rules: UnlockRule[] };
 
 export interface RelicDef { id: string; name: string; description: string; rarity: Rarity; obtainedBy: string; rule: UnlockRule }
@@ -113,19 +118,13 @@ export const TITLES: TitleDef[] = [
   { id: "alquimista-foco", name: "Alquimista do Ritmo", description: "Transforma intenção em ação.", rarity: "rare", rule: { type: "all", rules: [{ type: "xp_source_count", source: "focus", min: 20 }, { type: "xp_source_count", source: "experiment", eventType: "concluded", min: 1 }] } },
   { id: "mestre", name: "Mestre da Consistência", description: "Doze níveis de constância.", rarity: "epic", rule: { type: "global_level", min: 12 } },
   { id: "lenda", name: "Lenda da Jornada", description: "Seu nome já é história.", rarity: "legendary", rule: { type: "global_level", min: 20 } },
-  // Árvore de Habilidades: títulos por PH investidos e pelas habilidades finais de cada caminho.
-  { id: "aprendiz-habilidades", name: "Aprendiz das Habilidades", description: "Investiu o primeiro Ponto de Habilidade.", rarity: "common", rule: { type: "skill_tree", metric: "invested", min: 1 } },
-  { id: "especialista-jornada", name: "Especialista da Jornada", description: "10 PH investidos na Árvore.", rarity: "uncommon", rule: { type: "skill_tree", metric: "invested", min: 10 } },
-  { id: "mestre-runas", name: "Mestre das Runas", description: "30 PH investidos na Árvore.", rarity: "rare", rule: { type: "skill_tree", metric: "invested", min: 30 } },
-  { id: "guardiao-talentos", name: "Guardião dos Talentos", description: "60 PH investidos na Árvore.", rarity: "epic", rule: { type: "skill_tree", metric: "invested", min: 60 } },
-  { id: "arquiteto-evolucao", name: "Arquiteto da Evolução", description: "Desbloqueou o Arquiteto da Jornada.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "adv_arquiteto", min: 2 } },
-  { id: "lenda-produtividade", name: "Lenda da Produtividade", description: "Habilidade final do caminho da Produtividade.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "prod_lenda", min: 1 } },
-  { id: "mestre-vitalidade", name: "Mestre da Vitalidade", description: "Habilidade final do caminho da Saúde.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "saude_mestre", min: 1 } },
-  { id: "arquimago", name: "Arquimago do Conhecimento", description: "Habilidade final do caminho do Aprendizado.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "apr_arquimago", min: 1 } },
-  { id: "guardiao-foco", name: "Guardião do Foco", description: "Habilidade final do caminho do Foco.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "foco_guardiao", min: 1 } },
-  { id: "governante", name: "Governante da Jornada", description: "Habilidade final do caminho da Gestão.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "gest_governante", min: 1 } },
-  { id: "sabio-equilibrio", name: "Sábio do Equilíbrio", description: "Habilidade final do caminho do Bem-estar.", rarity: "legendary", rule: { type: "skill_tree", metric: "skill", key: "bem_sabio", min: 1 } },
-  { id: "guardiao-equilibrio", name: "Guardião do Equilíbrio", description: "Especialização Saúde + Bem-estar no nível máximo.", rarity: "epic", rule: { type: "skill_tree", metric: "skill", key: "adv_equilibrio", min: 2 } },
+  // Árvore de Habilidades: títulos por níveis comprovados em prova.
+  { id: "aprendiz-comprovado", name: "Aprendiz Comprovado", description: "Passou na primeira prova de nível da Árvore.", rarity: "common", rule: { type: "skills", metric: "proofsPassed", min: 1 } },
+  { id: "estudioso-dedicado", name: "Estudioso Dedicado", description: "10 níveis comprovados por provas.", rarity: "uncommon", rule: { type: "skills", metric: "verifiedLevels", min: 10 } },
+  { id: "especialista", name: "Especialista", description: "Uma habilidade no nível 4 comprovado.", rarity: "rare", rule: { type: "skills", metric: "topLevel", min: 4 } },
+  { id: "mestre-oficio", name: "Mestre do Ofício", description: "Uma habilidade levada ao nível máximo por provas.", rarity: "epic", rule: { type: "skills", metric: "maxed", min: 1 } },
+  { id: "polimata", name: "Polímata", description: "Nível comprovado nos quatro troncos: Saúde, Educação, Pessoal e Trabalho.", rarity: "epic", rule: { type: "skills", metric: "domainsVerified", min: 4 } },
+  { id: "sabio-arvore", name: "Sábio da Árvore", description: "40 níveis comprovados por provas.", rarity: "legendary", rule: { type: "skills", metric: "verifiedLevels", min: 40 } },
 ];
 
 export interface KnowledgeDef {

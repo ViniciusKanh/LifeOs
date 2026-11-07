@@ -1,58 +1,31 @@
 import type { ReactNode } from "react";
 import clsx from "clsx";
 import {
-  AlarmClock, BarChart3, BatteryCharging, BatteryMedium, BedDouble, BookOpen, Brain, CalendarCheck, Castle, ClipboardList, Compass, Crown, Droplets, Dumbbell, Eye, Feather,
-  FileSignature, Flag, Flower, Flower2, FolderKanban, Footprints, Gem, GraduationCap, Heart, HeartPulse, Hourglass, Landmark, LayoutGrid, Leaf, Library, ListOrdered, Map as MapIcon,
-  Microscope, Moon, Network, RefreshCw, Repeat, Scale, Shield, ShieldPlus, Sparkle, Sparkles, Sun, Swords, Target, Timer, Wand2, Waves, Workflow, Zap, type LucideIcon,
+  BarChart3, BookOpen, Brain, Briefcase, Calculator, Camera, Code2, Compass, Cpu, Database, Dumbbell, Flame, FlaskConical, Footprints, Globe, GraduationCap, Heart, Languages,
+  Leaf, Lightbulb, Mic, Music, Palette, PenLine, Presentation, Rocket, Scale, Shield, Sparkles, Swords, Target, Terminal, Users, Wrench, type LucideIcon,
 } from "lucide-react";
 import { ApiError } from "@/services/api";
-import type { SkillBranch, SkillState } from "@/services/skillTreeService";
+import type { SkillDomain } from "@/services/personalSkillsService";
 
 export const SKILL_ART = "/assets/rpg/modules/skilltree";
 export type Notify = (m: string, tone?: "success" | "error") => void;
 export const errMsg = (e: unknown, fb: string) => (e instanceof ApiError ? e.message : fb);
 export const FIELD = "w-full border border-rpg-border bg-rpg-bg-2 px-2 py-1.5 text-sm text-rpg-text outline-none focus:border-rpg-gold";
 
+/** Mesmos nomes de config/personalSkills.ts (SKILL_ICONS) no servidor. */
 export const SKILL_ICONS: Record<string, LucideIcon> = {
-  Zap, CalendarCheck, Repeat, ListOrdered, AlarmClock, Swords, Workflow, Crown, HeartPulse, Droplets, Footprints, Moon, Dumbbell, BatteryCharging, Scale, Sparkles, BookOpen, Library, Compass,
-  Brain, RefreshCw, Microscope, BarChart3, Wand2, Target, Timer, Hourglass, LayoutGrid, Shield, Waves, Eye, Gem, Map: MapIcon, Flag, FolderKanban, FileSignature, Castle, ClipboardList, Network,
-  Flower2, Heart, BedDouble, Feather, Sun, BatteryMedium, Leaf, Flower, ShieldPlus, Sparkle, Landmark, GraduationCap,
+  sparkles: Sparkles, brain: Brain, code: Code2, terminal: Terminal, database: Database, chart: BarChart3, cpu: Cpu, book: BookOpen, languages: Languages, pen: PenLine,
+  graduation: GraduationCap, scale: Scale, calculator: Calculator, flask: FlaskConical, globe: Globe, music: Music, palette: Palette, camera: Camera, swords: Swords,
+  dumbbell: Dumbbell, footprints: Footprints, heart: Heart, flame: Flame, shield: Shield, briefcase: Briefcase, users: Users, presentation: Presentation, target: Target,
+  rocket: Rocket, lightbulb: Lightbulb, wrench: Wrench, leaf: Leaf, mic: Mic, compass: Compass,
 };
 export const skillIcon = (name: string) => SKILL_ICONS[name] ?? Sparkles;
 
-/** Cor de cada ramo como variável do tema (usada no SVG e nas barras). */
-export const BRANCH_VAR: Record<SkillBranch, string> = { produtividade: "--rpg-blue", saude: "--rpg-pink", aprendizado: "--rpg-purple", foco: "--rpg-red", gestao: "--rpg-green", bemestar: "--rpg-cyan", avancada: "--rpg-gold" };
-export const branchColor = (b: SkillBranch, alpha = 1) => `rgb(var(${BRANCH_VAR[b]}) / ${alpha})`;
-export const BRANCH_ICON: Record<SkillBranch, LucideIcon> = { produtividade: Zap, saude: Heart, aprendizado: BookOpen, foco: Target, gestao: Network, bemestar: Flower2, avancada: Sparkles };
-export const BRANCH_TEXT: Record<SkillBranch, string> = {
-  produtividade: "text-rpg-blue",
-  saude: "text-rpg-pink",
-  aprendizado: "text-rpg-purple",
-  foco: "text-rpg-red",
-  gestao: "text-rpg-green",
-  bemestar: "text-rpg-cyan",
-  avancada: "text-rpg-gold-light",
-};
-export const STATE_TONE: Record<SkillState, string> = {
-  bloqueada: "border-rpg-border text-rpg-muted",
-  disponivel: "border-rpg-gold/70 bg-rpg-gold/10 text-rpg-gold-light",
-  indisponivel: "border-rpg-orange/60 bg-rpg-orange/10 text-rpg-orange",
-  desbloqueada: "border-rpg-blue/60 bg-rpg-blue/10 text-rpg-blue",
-  em_evolucao: "border-rpg-green/60 bg-rpg-green/10 text-rpg-green",
-  maximizada: "border-rpg-gold bg-rpg-gold/20 text-rpg-gold-light",
-};
-export const TYPE_LABEL: Record<string, string> = {
-  "focus.preset": "Ritual de foco",
-  "missions.template": "Modelo de missão",
-  "habits.template": "Modelo de hábito",
-  "goals.template": "Modelo de meta",
-  "projects.template": "Modelo de projeto",
-  "diary.prompts": "Reflexões guiadas",
-  "grimoire.session": "Sessão do Grimório",
-  "agenda.blocks": "Planejador de blocos",
-  "analysis.panel": "Análise",
-  "codex.title": "Título",
-};
+/** Cor de cada tronco como variável do tema (usada no SVG e nas barras). */
+export const DOMAIN_VAR: Record<SkillDomain, string> = { saude: "--rpg-green", educacao: "--rpg-blue", pessoal: "--rpg-purple", trabalho: "--rpg-orange" };
+export const domainColor = (d: SkillDomain, alpha = 1) => `rgb(var(${DOMAIN_VAR[d]}) / ${alpha})`;
+export const DOMAIN_ICON: Record<SkillDomain, LucideIcon> = { saude: Heart, educacao: GraduationCap, pessoal: Lightbulb, trabalho: Briefcase };
+export const DOMAIN_TEXT: Record<SkillDomain, string> = { saude: "text-rpg-green", educacao: "text-rpg-blue", pessoal: "text-rpg-purple", trabalho: "text-rpg-orange" };
 
 export function Chip({ className, children }: { className?: string; children: ReactNode }) {
   return (
@@ -89,3 +62,16 @@ export function Box({ title, icon, action, children, className, gold }: { title:
     </section>
   );
 }
+
+/** Minutos → "3 h 20 min". */
+export function fmtMinutes(min: number) {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+}
+
+export const fmtDate = (v: string | null) => {
+  if (!v) return "—";
+  const d = new Date(v.includes("T") ? v : `${v.replace(" ", "T")}Z`);
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+};

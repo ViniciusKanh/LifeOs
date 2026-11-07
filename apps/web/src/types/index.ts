@@ -494,7 +494,7 @@ export interface Workout {
   performed_at: string;
   /** Campos detalhados (migration 0066) — null em registros antigos. */
   category?: WorkoutCategory | null;
-  modality?: FightModality | null;
+  modality?: TechniqueModality | null;
   rpe?: number | null;
   muscle_groups?: string | null;
   rounds?: number | null;
@@ -505,6 +505,7 @@ export interface Workout {
 export type WorkoutCategory =
   | "musculacao"
   | "luta"
+  | "danca"
   | "corrida"
   | "caminhada"
   | "bike"
@@ -518,7 +519,17 @@ export type WorkoutCategory =
   | "esporte_coletivo"
   | "outro";
 
-export type FightModality = "muay_thai" | "jiu_jitsu" | "boxe" | "mma" | "judo" | "kickboxing" | "karate" | "wrestling" | "outra";
+export type FightModality = "muay_thai" | "jiu_jitsu" | "boxe" | "mma" | "judo" | "kickboxing" | "karate" | "wrestling" | "capoeira" | "outra";
+export type DanceModality = "forro" | "samba" | "salsa" | "zouk" | "bachata" | "hip_hop" | "ballet" | "jazz" | "contemporanea" | "danca_outra";
+/** Treino técnico (luta e dança): medido por tempo, rounds e esforço — não conta como Força. */
+export type TechniqueModality = FightModality | DanceModality;
+
+export interface TechniqueReport {
+  weeks: Array<{ weekStart: string; sessions: number; minutes: number; rounds: number; load: number }>;
+  modalities: Array<{ modality: TechniqueModality; category: "luta" | "danca"; sessions: number; minutes: number; rounds: number; load: number; avgRpe: number | null; lastDate: string | null; allTimeMinutes: number; allTimeSessions: number }>;
+  totals: { sessions: number; minutes: number; rounds: number; load: number; activeWeeks: number };
+  skills: Array<{ id: string; name: string; level: number; maxLevel: number; modality: string }>;
+}
 
 export interface WorkoutSet {
   id: string;
@@ -2372,7 +2383,6 @@ export interface StrengthLevel {
   pointsPerLevel: number;
   windowDays: number;
   strengthSessions: number;
-  fightSessions: number;
   prs: number;
   formula: string;
 }
@@ -2382,11 +2392,5 @@ export interface StrengthReport {
   today: string;
   level: StrengthLevel;
   exercises: StrengthExercise[];
-  fight: {
-    weeks: StrengthFightWeek[];
-    totalSessions: number;
-    totalRounds: number;
-    totalMinutes: number;
-    biggestSession: { date: string; rounds: number | null; minutes: number; modality: FightModality | null } | null;
-  };
+
 }

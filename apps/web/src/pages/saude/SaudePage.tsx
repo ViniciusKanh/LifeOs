@@ -17,6 +17,7 @@ import {
 } from "@/components/health/HealthCards";
 import { WorkoutCard } from "@/components/health/WorkoutCard";
 import { StrengthAttributeCard } from "@/components/health/StrengthAttributeCard";
+import { TechniqueCard } from "@/components/health/TechniqueCard";
 import { useTodayKey } from "@/hooks/useTodayKey";
 import { addDaysKey, dateKeyToLocalDate } from "@/utils/localDate";
 import { weeklyWorkoutSummary } from "@/utils/workoutStats";
@@ -455,9 +456,12 @@ export function SaudePage() {
         />
       </div>
 
-      {/* Atributo Força: evolução de musculação (PRs, 1RM) e volume de luta. */}
+      {/* Atributo Força (musculação: PRs, 1RM) e Treino técnico (lutas e danças: tempo, rounds, carga). */}
       <div className="mt-4">
         <StrengthAttributeCard />
+      </div>
+      <div className="mt-4">
+        <TechniqueCard />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">

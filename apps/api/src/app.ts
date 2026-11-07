@@ -22,7 +22,6 @@ import { healthRouter } from "./routes/health.routes.js";
 import { goalsRouter } from "./routes/goals.routes.js";
 import { reviewsRouter } from "./routes/reviews.routes.js";
 import { journeyReviewsRouter, missionAdvisorRouter, missionsBoardRouter } from "./routes/missionsReviews3.routes.js";
-import { skillTreeRouter } from "./routes/skillTree.routes.js";
 import { analyticsRouter } from "./routes/analytics.routes.js";
 import { notificationsRouter } from "./routes/notifications.routes.js";
 import { copilotRouter } from "./routes/copilot.routes.js";
@@ -81,6 +80,7 @@ import { readingYearRouter } from "./routes/readingYear.routes.js";
 import { warCouncilRouter } from "./routes/war-council.routes.js";
 import { rhythmRouter } from "./routes/rhythm.routes.js";
 import { bankRouter } from "./routes/bank.routes.js";
+import { personalSkillsRouter } from "./routes/personalSkills.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -187,9 +187,9 @@ app.use("/api/health", healthRouter);
 app.use("/api/goals", goalsRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/journey-reviews", journeyReviewsRouter);
+app.use("/api/habilidades", personalSkillsRouter);
 app.use("/api/mission-advisor", missionAdvisorRouter);
 app.use("/api/missions3", missionsBoardRouter);
-app.use("/api/skill-tree", skillTreeRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/copilot", copilotRouter);

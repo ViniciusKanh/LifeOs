@@ -171,14 +171,13 @@ function attributeViews(agg: AttributeAggregate) {
 /* ------------------------------ Desbloqueios ------------------------------ */
 
 async function unlockFacts(db: Client, ownerId: string, agg: AttributeAggregate): Promise<UnlockFacts> {
-  const [tasks, camps, skills, invested] = await Promise.all([
+  const [tasks, camps, skills, proofs] = await Promise.all([
     db.execute({ sql: "SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído'", args: [ownerId] }),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM campaigns WHERE owner_id = ? AND status = 'completed'", args: [ownerId] }),
-    db.execute({ sql: "SELECT skill_key, branch, current_level FROM user_skills WHERE owner_id = ?", args: [ownerId] }),
-    db.execute({ sql: "SELECT COALESCE(SUM(CASE WHEN source = 'spend' THEN -amount WHEN source = 'refund' THEN -amount ELSE 0 END), 0) AS n FROM skill_point_ledger WHERE owner_id = ?", args: [ownerId] }),
+    db.execute({ sql: "SELECT COALESCE(SUM(level), 0) AS lv, COALESCE(MAX(level), 0) AS top, COUNT(DISTINCT CASE WHEN level > 0 THEN domain END) AS doms, SUM(CASE WHEN level > 0 AND level >= max_level THEN 1 ELSE 0 END) AS maxed FROM personal_skills WHERE owner_id = ?", args: [ownerId] }),
+    db.execute({ sql: "SELECT COUNT(*) AS n FROM skill_assessments WHERE owner_id = ? AND status = 'aprovada'", args: [ownerId] }),
   ]);
-  const skillLevels: Record<string, number> = {};
-  for (const r of skills.rows) skillLevels[String(r.skill_key)] = Number(r.current_level);
+  const sk = skills.rows[0];
   return {
     globalLevel: levelForXp(agg.totalXp).level,
     attributeXp: agg.xp,
@@ -186,7 +185,7 @@ async function unlockFacts(db: Client, ownerId: string, agg: AttributeAggregate)
     tasksDone: n(tasks.rows[0]?.n),
     campaignsCompleted: n(camps.rows[0]?.n),
     bestHabitStreak: agg.bestHabitStreak,
-    skillTree: { skills: skills.rows.length, invested: Math.max(0, n(invested.rows[0]?.n)), branches: new Set(skills.rows.map((r) => String(r.branch)).filter((b) => b !== "avancada")).size, levels: skillLevels },
+    skills: { verifiedLevels: n(sk?.lv), topLevel: n(sk?.top), domainsVerified: n(sk?.doms), proofsPassed: n(proofs.rows[0]?.n), maxed: n(sk?.maxed) },
   };
 }
 

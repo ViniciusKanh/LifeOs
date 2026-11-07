@@ -54,7 +54,6 @@ import { TASK_STATUSES } from "@/utils/taskStatus";
 import { previewTaskReward } from "@/utils/gamification";
 import type { Task } from "@/types";
 import { MissionAdvisor, type AdvisorSeed } from "./MissionAdvisor";
-import { SkillMissionTemplatesButton } from "@/components/skilltree/SkillIntegrations";
 import { MissionBoard, type SortMode } from "./MissionBoard";
 import { MissionAnalytics, MissionCalendar, MissionDeadlines, MissionList, MissionLoadView } from "./MissionViews";
 import { DONE, Frame, MISSIONS_ART, addDaysIso, isForToday, isOverdue, type BoardTask } from "./MissionsShared";
@@ -306,7 +305,7 @@ export function MissionsScreen() {
             ))}
           </nav>
 
-          <Banner onNew={() => setModal({ task: null })} onAi={() => openAdvisor()} onImport={() => setImportOpen(true)} onRewards={() => setValuesOpen(true)} extra={<SkillMissionTemplatesButton notify={notify} />} />
+          <Banner onNew={() => setModal({ task: null })} onAi={() => openAdvisor()} onImport={() => setImportOpen(true)} onRewards={() => setValuesOpen(true)} />
 
           <Indicators o={overview} loading={overviewQ.isLoading} error={overviewQ.isError} active={indicator} onFilter={(f) => {
             setIndicator((cur) => (cur === f ? null : f));
@@ -425,7 +424,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
 
 /* ═════════════ Banner ═════════════ */
 
-function Banner({ onNew, onAi, onImport, onRewards, extra }: { onNew: () => void; onAi: () => void; onImport: () => void; onRewards: () => void; extra?: ReactNode }) {
+function Banner({ onNew, onAi, onImport, onRewards }: { onNew: () => void; onAi: () => void; onImport: () => void; onRewards: () => void }) {
   return (
     <header className="rpg-panel rpg-panel-gold relative overflow-hidden">
       <img src={`${MISSIONS_ART}/banner-castle.webp`} alt="" aria-hidden decoding="async" className="pixelated pointer-events-none absolute bottom-0 right-0 hidden h-full w-auto max-w-[40%] object-contain object-right-bottom opacity-80 lg:block" />
@@ -452,7 +451,6 @@ function Banner({ onNew, onAi, onImport, onRewards, extra }: { onNew: () => void
             <RPGButton variant="secondary" onClick={onRewards} title="Valor de XP e moedas por prioridade e dificuldade">
               <Scale size={15} aria-hidden /> Recompensas
             </RPGButton>
-            {extra}
           </div>
         </div>
       </div>

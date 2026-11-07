@@ -50,7 +50,6 @@ import { useHabits } from "@/hooks/useHabits";
 import { usePlanningActions } from "@/hooks/usePlanningHub";
 import { useAdvisor } from "@/hooks/useModuleHub";
 import { useGrimoireDecks } from "@/hooks/useGrimoire";
-import { SkillFocusPresets } from "@/components/skilltree/SkillIntegrations";
 import { useUrlTab } from "@/components/hero/HeroShared";
 import { eventsService } from "@/services/eventsService";
 import { useJourneySync, useTodayActions, useTodayHub } from "@/hooks/useDayHero";
@@ -553,7 +552,6 @@ export function FocusTimer({ hub, notify, preset }: { hub: TodayHub; notify: Not
         </div>
       ) : (
         <div className="space-y-2">
-          <SkillFocusPresets onPick={(p) => (setMode(p.mode), setMinutes(p.minutes))} />
           <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Modo">
             {(["pomodoro", "block", "free"] as const).map((m) => (
               <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => (setMode(m), setMinutes(m === "pomodoro" ? 25 : 50))} className={clsx("min-h-[40px] border-2 text-xs", mode === m ? "border-rpg-gold bg-rpg-gold/15 text-rpg-gold-light" : "border-rpg-border text-rpg-muted")} style={R}>

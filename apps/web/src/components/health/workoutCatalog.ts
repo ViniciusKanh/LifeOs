@@ -7,6 +7,7 @@ import {
   Flame,
   Flower2,
   Footprints,
+  Music,
   PersonStanding,
   Swords,
   Target,
@@ -15,17 +16,18 @@ import {
   Wind,
   Zap,
 } from "lucide-react";
-import type { FightModality, Workout, WorkoutCategory, WorkoutSet } from "@/types";
+import type { DanceModality, FightModality, TechniqueModality, Workout, WorkoutCategory, WorkoutSet } from "@/types";
 import { formatPace, paceMinPerKm, strengthVolumeKg, workoutCategoryOf } from "@/utils/workoutStats";
 
 /**
  * Catálogo de tipos de exercício: rótulo, ícone e quais campos opcionais
  * fazem sentido. O formulário mostra só os campos do grupo escolhido.
  *  - strength: treino/grupo muscular + lista de séries
- *  - fight:    modalidade + rounds
+ *  - fight:    modalidade + rounds (treino técnico: tempo, não Força)
+ *  - dance:    estilo de dança (treino técnico)
  *  - cardio:   distância (e pace calculado)
  */
-export type WorkoutFieldGroup = "strength" | "fight" | "cardio" | "general";
+export type WorkoutFieldGroup = "strength" | "fight" | "dance" | "cardio" | "general";
 
 export interface WorkoutTypeMeta {
   key: WorkoutCategory;
@@ -37,6 +39,7 @@ export interface WorkoutTypeMeta {
 export const WORKOUT_TYPES: WorkoutTypeMeta[] = [
   { key: "musculacao", label: "Musculação", icon: Dumbbell, group: "strength" },
   { key: "luta", label: "Luta", icon: Swords, group: "fight" },
+  { key: "danca", label: "Dança", icon: Music, group: "dance" },
   { key: "corrida", label: "Corrida", icon: Footprints, group: "cardio" },
   { key: "caminhada", label: "Caminhada", icon: PersonStanding, group: "cardio" },
   { key: "bike", label: "Bike", icon: Bike, group: "cardio" },
@@ -66,8 +69,27 @@ export const FIGHT_MODALITIES: Array<{ key: FightModality; label: string }> = [
   { key: "kickboxing", label: "Kickboxing" },
   { key: "karate", label: "Karatê" },
   { key: "wrestling", label: "Wrestling" },
+  { key: "capoeira", label: "Capoeira" },
   { key: "outra", label: "Outra" },
 ];
+
+export const DANCE_MODALITIES: Array<{ key: DanceModality; label: string }> = [
+  { key: "forro", label: "Forró" },
+  { key: "samba", label: "Samba" },
+  { key: "salsa", label: "Salsa" },
+  { key: "zouk", label: "Zouk" },
+  { key: "bachata", label: "Bachata" },
+  { key: "hip_hop", label: "Hip hop" },
+  { key: "ballet", label: "Balé" },
+  { key: "jazz", label: "Jazz" },
+  { key: "contemporanea", label: "Contemporânea" },
+  { key: "danca_outra", label: "Outra dança" },
+];
+
+/** Rótulo de qualquer modalidade técnica (luta ou dança). */
+export function techniqueModalityLabel(modality: TechniqueModality | string | null | undefined) {
+  return FIGHT_MODALITIES.find((m) => m.key === modality)?.label ?? DANCE_MODALITIES.find((m) => m.key === modality)?.label ?? null;
+}
 
 export function fightModalityLabel(modality: FightModality | null | undefined) {
   return FIGHT_MODALITIES.find((m) => m.key === modality)?.label ?? null;
@@ -89,7 +111,7 @@ export const STRENGTH_SPLIT_SUGGESTIONS = ["Treino A", "Treino B", "Treino C", "
 export function describeWorkout(w: Workout): { title: string; details: string[] } {
   const category = workoutCategoryOf(w);
   const meta = workoutTypeMeta(category);
-  const modality = fightModalityLabel(w.modality);
+  const modality = techniqueModalityLabel(w.modality);
   const title = [meta.label === "Outro" && w.kind && w.kind !== "Outro" ? w.kind : meta.label, modality, w.muscle_groups].filter(Boolean).join(" · ");
   const details: string[] = [];
   if (w.duration_minutes) details.push(`${w.duration_minutes} min`);

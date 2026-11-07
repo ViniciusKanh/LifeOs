@@ -1,5 +1,6 @@
 import type { getDb } from "../db/client.js";
 import { todayKeyFor } from "./gamificationService.js";
+import { runProofReady, runStaleSkills } from "./skillProofService.js";
 import {
   AUTOMATION_DEFS,
   beginRun,
@@ -28,7 +29,6 @@ import { runTavernReminder, runTomorrowPrep } from "./tavern3Service.js";
 import { runBacktests, runForgeAlerts, runInference, runMonitoring, runQualityCheck, runScheduledTraining } from "./forgeService.js";
 import { runReplanOverdue, runReviewCheck } from "./missionsBoardService.js";
 import { runPreAnalysis, runReviewReminder } from "./journeyReviewService.js";
-import { runAvailability, runDesiredBuild, runNextUnlock, runSkillPoints, runSuggestedMissions } from "./skillTreeService.js";
 import { runPerformanceAlerts, runWeeklyEvolution } from "./heroDashboardService.js";
 import { runConsistencyHistory, runDailySummary, runHydration, runMoodCheckin, runSleepRoutine } from "./healthHubService.js";
 
@@ -253,6 +253,14 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runReviewReminder(db, ownerId, config);
     case "reviews:pre_analysis":
       return runPreAnalysis(db, ownerId);
+    case "skills:proof_ready":
+      return runProofReady(db, ownerId, config);
+    case "skills:stale":
+      return runStaleSkills(db, ownerId, config);
+    case "skills:ai":
+    case "skills:level_rewards":
+    case "skills:achievements":
+      return { status: "ok", summary: "Ativa: roda junto da prova ou da criação na Árvore." };
     case "missions:smart_links":
     case "missions:deadline_planning":
     case "missions:breakdown_offer":
@@ -270,22 +278,6 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "reviews:war_council":
     case "reviews:agenda_blocks":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
-    case "skills:level_points":
-      return runSkillPoints(db, ownerId);
-    case "skills:available":
-      return runAvailability(db, ownerId, config);
-    case "skills:next_unlock":
-      return runNextUnlock(db, ownerId, config);
-    case "skills:desired_build":
-      return runDesiredBuild(db, ownerId, config);
-    case "skills:suggested_missions":
-      return runSuggestedMissions(db, ownerId, config);
-    case "skills:requirements":
-    case "skills:effects_sync":
-    case "skills:recommendations":
-    case "skills:chronicle":
-    case "skills:achievements":
-      return { status: "ok", summary: "Ativa: roda junto da ação correspondente na Árvore." };
     case "missions:due_alerts":
       return runDueAlerts(db, ownerId, config);
     case "quests:quest_reminder":

@@ -12,6 +12,7 @@ const KEYS = {
   correlations: ["health", "correlations"],
   // Entra em KEYS para ser invalidado junto com criar/editar/excluir treino.
   strength: ["health", "strength"],
+  technique: ["health", "technique"],
   // Camada RPG (/api/hub/health): vitalidade, pulso e rank — recalculada a cada registro.
   hub: ["health", "hub"],
 };
@@ -35,7 +36,13 @@ export function useHealthCorrelations() {
   return { correlations: query.data ?? [], isLoading: query.isLoading };
 }
 
-/** Atributo Força (musculação + luta) — ver strengthService.ts na API. */
+/** Treino técnico (lutas e danças): tempo, rounds e carga por modalidade — ver techniqueService.ts na API. */
+export function useHealthTechnique() {
+  const query = useQuery({ queryKey: KEYS.technique, queryFn: () => healthService.technique(browserTzOffset()) });
+  return { report: query.data ?? null, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch };
+}
+
+/** Atributo Força (musculação: séries, reps e carga) — ver strengthService.ts na API. */
 export function useHealthStrength(days = 180) {
   const query = useQuery({
     queryKey: [...KEYS.strength, days],

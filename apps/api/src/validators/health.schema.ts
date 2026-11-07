@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FIGHT_MODALITIES, WORKOUT_CATEGORIES } from "../services/healthService.js";
+import { TECHNIQUE_MODALITIES, WORKOUT_CATEGORIES } from "../services/healthService.js";
 
 /**
  * Validação da área de Saúde e Bem-estar. Propositalmente sem
@@ -67,7 +67,7 @@ const workoutSetSchema = z.object({
 
 const workoutDetailFields = {
   category: z.enum(WORKOUT_CATEGORIES, { errorMap: () => ({ message: "Tipo de exercício inválido." }) }),
-  modality: z.enum(FIGHT_MODALITIES, { errorMap: () => ({ message: "Modalidade inválida." }) }).nullable().optional(),
+  modality: z.enum(TECHNIQUE_MODALITIES, { errorMap: () => ({ message: "Modalidade inválida." }) }).nullable().optional(),
   rpe: z.number().int().min(1, "Esforço vai de 1 a 10.").max(10, "Esforço vai de 1 a 10.").nullable().optional(),
   muscleGroups: z.string().trim().max(120).nullable().optional(),
   rounds: z.number().int().positive().max(100).nullable().optional(),

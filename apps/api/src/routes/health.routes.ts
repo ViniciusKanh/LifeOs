@@ -17,6 +17,7 @@ import {
 import { computeHealthCorrelations } from "../services/correlationService.js";
 import { syncAutoHabitsAfterWrite } from "../services/habitAutoService.js";
 import { getStrengthReport } from "../services/strengthService.js";
+import { getTechniqueReport } from "../services/techniqueService.js";
 import {
   attachWorkoutSets,
   insertMoodEntry,
@@ -432,8 +433,8 @@ healthRouter.get("/correlations", async (req, res) => {
 
 /**
  * GET /api/health/strength?days=180&tz=180 — "Atributo Força": evolução por
- * exercício de musculação (carga, 1RM Epley, volume, PRs), resumo de luta e
- * nível de Força. Regras e fórmula em services/strengthService.ts.
+ * exercício de musculação (carga, 1RM Epley, volume, PRs) e nível de Força.
+ * Luta e dança ficam em /technique (treino técnico, não conta como Força). Regras e fórmula em services/strengthService.ts.
  */
 healthRouter.get("/strength", async (req, res) => {
   const raw = req.query.days;
@@ -445,6 +446,18 @@ healthRouter.get("/strength", async (req, res) => {
   const ownerId = req.user!.id;
   const tzOffsetMinutes = await resolveTzOffset(db, ownerId, req.query.tz);
   return res.json(await getStrengthReport(db, ownerId, parsedDays, tzOffsetMinutes));
+});
+
+/**
+ * GET /api/health/technique?tz=180 — treino técnico (lutas e danças): tempo de
+ * prática, rounds, carga interna (min × PSE) por modalidade e semana, e as
+ * habilidades da Árvore vinculadas a cada modalidade.
+ */
+healthRouter.get("/technique", async (req, res) => {
+  const db = getDb();
+  const ownerId = req.user!.id;
+  const tzOffsetMinutes = await resolveTzOffset(db, ownerId, req.query.tz);
+  return res.json(await getTechniqueReport(db, ownerId, tzOffsetMinutes));
 });
 
 /* ---------------------------- Resumo ---------------------------- */

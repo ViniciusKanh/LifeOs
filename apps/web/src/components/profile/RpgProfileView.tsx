@@ -1,4 +1,4 @@
-import { SkillTreeSummaryCard } from "@/components/skilltree/SkillPanels";
+import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -210,7 +210,7 @@ export function RpgProfileView({
       {tab === "overview" && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start">
           <div className="space-y-4 min-w-0">
-            <SkillTreeSummaryCard />
+            <MySkillsCard />
             {hud && (
               <RPGPanel title="Classe e build" icon={<Shield size={16} />}>
                 <HeroBuild hud={hud} />

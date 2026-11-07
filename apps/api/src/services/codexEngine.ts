@@ -70,6 +70,8 @@ export function distributionFor(e: XpEventLike, ctx: ClassifyContext = {}): Dist
       return M.CONTRACT;
     case "bank":
       return M.BANK;
+    case "skill":
+      return e.eventType === "level_saude" ? M.SKILL_SAUDE : e.eventType === "level_educacao" ? M.SKILL_EDUCACAO : e.eventType === "level_trabalho" ? M.SKILL_TRABALHO : M.SKILL_PESSOAL;
     case "achievement":
       return M.ACHIEVEMENT[ctx.achievementCategory ?? "outros"] ?? M.ACHIEVEMENT.outros;
     default:
@@ -154,15 +156,8 @@ export interface UnlockFacts {
   tasksDone: number;
   campaignsCompleted: number;
   bestHabitStreak: number;
-  /** Árvore de Habilidades (opcional: ausente = sem progresso na árvore). */
-  skillTree?: { skills: number; invested: number; branches: number; levels: Record<string, number> };
-}
-
-function skillTreeValue(rule: Extract<UnlockRule, { type: "skill_tree" }>, f: UnlockFacts): number {
-  const t = f.skillTree;
-  if (!t) return 0;
-  if (rule.metric === "skill") return t.levels[rule.key ?? ""] ?? 0;
-  return t[rule.metric];
+  /** Árvore de Habilidades (opcional: ausente = sem habilidades). */
+  skills?: { verifiedLevels: number; topLevel: number; domainsVerified: number; proofsPassed: number; maxed: number };
 }
 
 export function ruleMet(rule: UnlockRule, f: UnlockFacts): boolean {
@@ -179,8 +174,8 @@ export function ruleMet(rule: UnlockRule, f: UnlockFacts): boolean {
       return f.campaignsCompleted >= rule.min;
     case "habit_streak_days":
       return f.bestHabitStreak >= rule.min;
-    case "skill_tree":
-      return skillTreeValue(rule, f) >= rule.min;
+    case "skills":
+      return (f.skills?.[rule.metric] ?? 0) >= rule.min;
     case "all":
       return rule.rules.every((r) => ruleMet(r, f));
   }
@@ -202,8 +197,8 @@ export function ruleProgress(rule: UnlockRule, f: UnlockFacts): number {
       return ratio(f.campaignsCompleted, rule.min);
     case "habit_streak_days":
       return ratio(f.bestHabitStreak, rule.min);
-    case "skill_tree":
-      return ratio(skillTreeValue(rule, f), rule.min);
+    case "skills":
+      return ratio(f.skills?.[rule.metric] ?? 0, rule.min);
     case "all":
       return rule.rules.reduce((s, r) => s + ruleProgress(r, f), 0) / rule.rules.length;
   }
