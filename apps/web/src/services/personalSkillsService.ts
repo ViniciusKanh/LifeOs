@@ -44,7 +44,7 @@ export interface SkillTreeView {
   skills: PersonalSkill[];
   stats: { skills: number; verifiedLevels: number; maxed: number; domainsVerified: number; branched: number; topLevel: number; proofsTaken: number; proofsPassed: number };
   ai: { available: boolean; enabled: boolean; message: string };
-  rules: { passScore: number; expiresHours: number; retryCooldownHours: number; maxPerDay: number; maxDepth: number; maxSkills: number };
+  rules: { passScore: number; passScores: number[]; expiresHours: number; retryCooldownHours: number; maxPerDay: number; maxDepth: number; maxSkills: number };
 }
 
 export interface SkillInput {
@@ -134,7 +134,7 @@ export const personalSkillsService = {
   createBranch: (input: { domain: SkillDomain; parentId?: string | null; source: "manual" | "ia"; nodes: BranchNode[] }) => api.post<{ created: number; ids: string[] }>("/habilidades/galho", input),
   update: (id: string, patch: Partial<SkillInput> & { parentId?: string | null; domain?: SkillDomain }) => api.patch<PersonalSkill>(`/habilidades/${id}`, patch),
   remove: (id: string) => api.delete<{ removed: number }>(`/habilidades/${id}`),
-  planBranch: (input: { goal: string; domain?: SkillDomain | null; parentId?: string | null }) => api.post<BranchProposal>("/habilidades/ia/galho", input),
+  planBranch: (input: { goal: string; domain?: SkillDomain | null; parentId?: string | null; detail?: PlanDetail }) => api.post<BranchProposal>("/habilidades/ia/galho", input),
   suggestLevels: (input: { name: string; description?: string | null; domain: SkillDomain; maxLevel: number; path?: string[] }) => api.post<{ levels: LevelDef[] }>("/habilidades/ia/niveis", input),
   proofs: (skillId: string) => api.get<ProofSummary[]>(`/habilidades/${skillId}/provas`),
   startProof: (skillId: string, kind?: ProofKind) => api.post<Proof>(`/habilidades/${skillId}/provas`, kind ? { kind } : {}),
@@ -146,5 +146,11 @@ export const personalSkillsService = {
 
 export const DOMAINS: SkillDomain[] = ["saude", "educacao", "pessoal", "trabalho"];
 export const DOMAIN_LABEL: Record<SkillDomain, string> = { saude: "Saúde", educacao: "Educação", pessoal: "Pessoal", trabalho: "Trabalho" };
+export type PlanDetail = "essencial" | "completo" | "detalhado";
+export const PLAN_DETAIL_META: Record<PlanDetail, { label: string; hint: string }> = {
+  essencial: { label: "Essencial", hint: "8–15 habilidades: só o núcleo" },
+  completo: { label: "Completo", hint: "18–35: módulos e tópicos" },
+  detalhado: { label: "Detalhado", hint: "35–65: trilha de curso inteira" },
+};
 export const PROOF_LABEL: Record<ProofKind, string> = { quiz: "Quiz (teoria)", desafio: "Desafio prático", misto: "Misto" };
 export const LINK_LABEL: Record<LinkKind, string> = { modalidade: "Treino (luta/dança)", formacao: "Formação (Educação)", disciplina: "Disciplina (Educação)", projeto: "Projeto (Foco)" };

@@ -32,18 +32,29 @@ export const SKILL_ICONS = [
 export type SkillIcon = (typeof SKILL_ICONS)[number];
 
 export const SKILL_LIMITS = {
-  maxSkills: 200,
+  maxSkills: 300,
   maxDepth: 4,
   maxChildren: 20,
   nameMax: 60,
   descriptionMax: 400,
   criteriaMax: 400,
-  aiMaxNodes: 24,
-  goalMax: 500,
+  aiMaxNodes: 70,
+  goalMax: 800,
 } as const;
 
+/**
+ * Tamanho do galho proposto pela IA. "min" é cobrado: se a IA devolver menos,
+ * o servidor pede uma segunda versão mais completa antes de mostrar a proposta.
+ */
+export const PLAN_DETAIL = {
+  essencial: { min: 8, max: 15, label: "Essencial" },
+  completo: { min: 18, max: 35, label: "Completo" },
+  detalhado: { min: 35, max: 65, label: "Detalhado" },
+} as const;
+export type PlanDetail = keyof typeof PLAN_DETAIL;
+export const PLAN_DETAILS = Object.keys(PLAN_DETAIL) as PlanDetail[];
+
 export const PROOF_RULES = {
-  passScore: 70,
   expiresHours: 48,
   /** Espera depois de uma reprovação antes de tentar o mesmo nível de novo. */
   retryCooldownHours: 6,
@@ -51,13 +62,34 @@ export const PROOF_RULES = {
   answerMax: 6000,
   /** Peso de cada tipo de questão na nota final. */
   weights: { choice: 1, open: 2, challenge: 4 },
-  /** Quantidade de questões por tipo de prova. */
-  layout: {
-    quiz: { choice: 6, open: 2, challenge: 0 },
-    desafio: { choice: 0, open: 0, challenge: 2 },
-    misto: { choice: 4, open: 0, challenge: 1 },
-  },
+  /** Nunca aceita prova com menos que esta fração das questões pedidas de cada tipo. */
+  minFill: 0.8,
 } as const;
+
+/** Nota mínima sobe com o nível: provar o nível 5 exige mais que o nível 1. */
+export function passScoreFor(level: number) {
+  return level <= 2 ? 70 : level <= 4 ? 75 : 80;
+}
+
+/**
+ * Quantidade de questões por formato e nível. Níveis altos têm mais questões
+ * abertas e desafios (aplicar/criar), níveis baixos mais objetivas (lembrar/entender).
+ */
+export function proofLayout(kind: "quiz" | "desafio" | "misto", level: number): { choice: number; open: number; challenge: number } {
+  const hi = level >= 4;
+  if (kind === "quiz") return { choice: hi ? 10 : 12, open: hi ? 4 : 3, challenge: 0 };
+  if (kind === "desafio") return { choice: 0, open: 1, challenge: hi ? 4 : 3 };
+  return { choice: hi ? 6 : 8, open: 2, challenge: hi ? 3 : 2 };
+}
+
+/** Taxonomia de Bloom por nível — guia a profundidade cognitiva das questões. */
+export const BLOOM_BY_LEVEL = [
+  "lembrar e compreender: definições, vocabulário, para que serve cada conceito, identificar exemplos",
+  "aplicar: usar o conceito em exercícios diretos e guiados, prever resultados simples",
+  "aplicar e analisar: resolver problemas comuns sem ajuda, interpretar resultados, encontrar erros",
+  "analisar e avaliar: casos complexos, comparar abordagens, justificar escolhas, identificar erros sutis",
+  "avaliar e criar: projetar soluções completas, otimizar, ensinar, criticar trabalho alheio",
+];
 
 /** Recompensa oficial (xp_events/coin_ledger) por nível comprovado — uma vez por nível. */
 export const levelReward = (level: number) => ({ xp: 30 + 20 * level, coins: 3 * level });

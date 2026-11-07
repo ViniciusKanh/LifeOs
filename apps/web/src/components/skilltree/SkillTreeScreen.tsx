@@ -270,7 +270,7 @@ function RulesCard({ v }: { v: SkillTreeView }) {
           <ScrollText size={13} className="mt-px shrink-0 text-rpg-gold" aria-hidden /> A IA gera a prova a partir do critério do próximo nível: quiz, desafio prático ou misto.
         </li>
         <li className="flex gap-2">
-          <Sparkles size={13} className="mt-px shrink-0 text-rpg-purple" aria-hidden /> Nota mínima {v.rules.passScore}/100. Objetivas são corrigidas pelo sistema; abertas e desafios pela IA, com rubrica.
+          <Sparkles size={13} className="mt-px shrink-0 text-rpg-purple" aria-hidden /> Nota mínima de {v.rules.passScores[0]} (níveis 1–2) a {v.rules.passScores[4]} (nível 5). Objetivas são corrigidas pelo sistema; abertas e desafios pela IA, com rubrica.
         </li>
         <li className="flex gap-2">
           <Hourglass size={13} className="mt-px shrink-0 text-rpg-orange" aria-hidden /> Reprovou? Nova tentativa do mesmo nível em {v.rules.retryCooldownHours} h. Até {v.rules.maxPerDay} provas por dia.

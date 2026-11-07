@@ -36,7 +36,7 @@ export function JourneyCard({ v }: { v: SkillTreeView }) {
         ))}
       </dl>
       <p className="mt-3 border-t border-rpg-border pt-2 text-[11px] leading-snug text-rpg-muted">
-        O nível só sobe com prova aprovada (nota ≥ {v.rules.passScore}). Cada nível comprovado rende XP e moedas oficiais e conta para conquistas e títulos do Códex.
+        O nível só sobe com prova aprovada (nota mínima de {v.rules.passScores[0]} a {v.rules.passScores[4]}, conforme o nível). Cada nível comprovado rende XP e moedas oficiais e conta para conquistas e títulos do Códex.
       </p>
     </Box>
   );

@@ -5,6 +5,7 @@ import {
   LINK_KINDS,
   PROOF_KINDS,
   PROOF_RULES,
+  passScoreFor,
   SKILL_DOMAINS,
   SKILL_ICONS,
   SKILL_LIMITS,
@@ -292,7 +293,7 @@ export async function treeView(db: Client, ownerId: string, aiStatus: { availabl
     skills: views,
     stats: { ...stats, proofsTaken: Number(passed.rows[0]?.n ?? 0), proofsPassed: Number(passed.rows[0]?.ok ?? 0) },
     ai: aiStatus,
-    rules: { passScore: PROOF_RULES.passScore, expiresHours: PROOF_RULES.expiresHours, retryCooldownHours: PROOF_RULES.retryCooldownHours, maxPerDay: PROOF_RULES.maxPerDay, maxDepth: SKILL_LIMITS.maxDepth, maxSkills: SKILL_LIMITS.maxSkills },
+    rules: { passScore: passScoreFor(1), passScores: Array.from({ length: 10 }, (_, i) => passScoreFor(i + 1)), expiresHours: PROOF_RULES.expiresHours, retryCooldownHours: PROOF_RULES.retryCooldownHours, maxPerDay: PROOF_RULES.maxPerDay, maxDepth: SKILL_LIMITS.maxDepth, maxSkills: SKILL_LIMITS.maxSkills },
   };
 }
 

@@ -1,6 +1,6 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
-import { LINK_KINDS, PROOF_KINDS, SKILL_DOMAINS, SKILL_ICONS, SKILL_LIMITS, PROOF_RULES } from "../config/personalSkills.js";
+import { LINK_KINDS, PLAN_DETAILS, PROOF_KINDS, SKILL_DOMAINS, SKILL_ICONS, SKILL_LIMITS, PROOF_RULES, type PlanDetail } from "../config/personalSkills.js";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
@@ -119,7 +119,7 @@ personalSkillsRouter.delete("/:id", rateLimit({ windowMs: 60_000, max: 30 }), as
 /* ───────────── IA: propostas (nada é gravado aqui) ───────────── */
 
 personalSkillsRouter.post("/ia/galho", rateLimit({ windowMs: 60 * 60_000, max: 15 }), async (req, res) => {
-  const d = parse(z.object({ goal: z.string().trim().min(3, "Descreva o que você quer aprender.").max(SKILL_LIMITS.goalMax), domain: z.enum(SKILL_DOMAINS).nullable().optional(), parentId: z.string().max(40).nullable().optional() }), req.body, res);
+  const d = parse(z.object({ goal: z.string().trim().min(3, "Descreva o que você quer aprender.").max(SKILL_LIMITS.goalMax), domain: z.enum(SKILL_DOMAINS).nullable().optional(), parentId: z.string().max(40).nullable().optional(), detail: z.enum(PLAN_DETAILS as [PlanDetail, ...PlanDetail[]]).optional() }), req.body, res);
   if (!d) return;
   try {
     return res.json(await planTree(getDb(), owner(req), d));

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createAuthenticatedAgent } from "./helpers.js";
 import { runProofReady, sanitizeItems, weightedScore, type ProofItem } from "../src/services/skillProofService.js";
+import { passScoreFor, proofLayout } from "../src/config/personalSkills.js";
 import { getDb } from "../src/db/client.js";
 import { skillStats } from "../src/services/personalSkillsService.js";
 
@@ -33,30 +34,45 @@ afterEach(() => vi.unstubAllGlobals());
 const model = (obj: unknown): Reply => ({ status: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] } });
 const choice = (n: number) => ({ type: "choice", prompt: `Questão ${n} sobre pandas?`, options: ["A", "B", "C", "D"], answerIndex: n % 4, explanation: "Porque sim." });
 const open = (n: number) => ({ type: "open", prompt: `Explique o conceito ${n}.`, rubric: ["Define o conceito", "Dá um exemplo"], expected: "Resposta modelo." });
-const quiz = () => model({ items: [1, 2, 3, 4, 5, 6].map(choice).concat([open(1), open(2)]) });
+const CHOICES = Array.from({ length: 12 }, (_, i) => i + 1);
+const quiz = () => model({ items: CHOICES.map(choice).concat([open(1), open(2), open(3)]) });
 type Agent = Awaited<ReturnType<typeof createAuthenticatedAgent>>["agent"];
 const create = (agent: Agent, body: Record<string, unknown>) => agent.post("/api/habilidades").send(body);
 
-async function answerAll(agent: Agent, proofId: string, right: boolean) {
-  const p = (await agent.get(`/api/habilidades/provas/${proofId}`)).body;
+// O gabarito não sai pela API antes da entrega: o teste lê do banco.
+async function answerAll(proofId: string, right: boolean) {
+  const row = await getDb().execute({ sql: "SELECT items_json FROM skill_assessments WHERE id = ?", args: [proofId] });
+  const items = JSON.parse(String(row.rows[0]!.items_json)) as ProofItem[];
   const answers: Record<string, string | number> = {};
-  p.items.forEach((i: { id: string; type: string }, n: number) => {
-    answers[i.id] = i.type === "choice" ? (right ? (n + 1) % 4 : ((n + 1) % 4 + 1) % 4) : "Resposta com exemplo prático e definição.";
-  });
+  for (const i of items) answers[i.id] = i.type === "choice" ? (right ? i.answerIndex! : (i.answerIndex! + 1) % 4) : "Resposta com exemplo prático e definição.";
   return answers;
 }
 
 describe("Árvore de Habilidades 2.0 — regras puras", () => {
   it("valida o layout da prova e calcula a nota ponderada", () => {
-    expect(sanitizeItems([choice(1)], "quiz")).toBeNull();
-    const items = sanitizeItems([1, 2, 3, 4, 5, 6].map(choice).concat([open(1), open(2), open(3)]), "quiz") as ProofItem[];
-    expect(items).toHaveLength(8);
-    expect(items[0]).toMatchObject({ id: "q1", answerIndex: 1 });
-    // Alternativas repetidas ou gabarito fora do intervalo são descartados.
-    expect(sanitizeItems([{ ...choice(1), options: ["A", "a", "B"] }], "quiz")).toBeNull();
-    // 6 choice ×1 com 100 e 2 open ×2 com 50 → (600 + 200) / 10 = 80
+    expect(sanitizeItems([choice(1)], "quiz", 1)).toBeNull();
+    // Nível 1 (quiz): 12 objetivas + 3 discursivas; abertas vêm depois das objetivas.
+    const raw = [open(1), ...CHOICES.map(choice), open(2), open(3), open(4)];
+    const items = sanitizeItems(raw, "quiz", 1, () => 0.99) as ProofItem[];
+    expect(items).toHaveLength(15);
+    expect(items[0]).toMatchObject({ id: "q1", type: "choice" });
+    expect(items[14]).toMatchObject({ id: "q15", type: "open" });
+    // Alternativas embaralhadas sem perder o gabarito.
+    const shuffled = sanitizeItems(raw, "quiz", 1, () => 0) as ProofItem[];
+    expect(shuffled[0]!.options![shuffled[0]!.answerIndex!]).toBe("B");
+    expect(shuffled[0]!.options).not.toEqual(["A", "B", "C", "D"]);
+    // Tolerância: até 80% de cada tipo; menos que isso é rejeitado.
+    expect(sanitizeItems([...CHOICES.slice(0, 10).map(choice), open(1), open(2), open(3)], "quiz", 1)).toHaveLength(13);
+    expect(sanitizeItems([...CHOICES.slice(0, 9).map(choice), open(1), open(2), open(3)], "quiz", 1)).toBeNull();
+    // Alternativas repetidas, menos de 4 opções ou enunciado duplicado são descartados.
+    expect(sanitizeItems([{ ...choice(1), options: ["A", "a", "B", "C"] }], "quiz", 1)).toBeNull();
+    expect(sanitizeItems([...CHOICES.map(() => choice(1)), open(1), open(2), open(3)], "quiz", 1)).toBeNull();
+    // Nível alto exige mais desafios e nota maior.
+    expect(proofLayout("desafio", 5)).toEqual({ choice: 0, open: 1, challenge: 4 });
+    expect([passScoreFor(1), passScoreFor(3), passScoreFor(5)]).toEqual([70, 75, 80]);
+    // 12 choice ×1 com 100 e 3 open ×2 com 50 → (1200 + 300) / 18 = 83
     const res = items.map((i) => ({ id: i.id, score: i.type === "choice" ? 100 : 50, feedback: "", gaps: [] }));
-    expect(weightedScore(items, res)).toBe(80);
+    expect(weightedScore(items, res)).toBe(83);
   });
 
   it("fatos agregados da árvore", () => {
@@ -126,6 +142,9 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     const plan = await agent.post("/api/habilidades/ia/galho").send({ goal: "Quero aprender machine learning" });
     expect(plan.status).toBe(200);
     expect(plan.body).toMatchObject({ domain: "pessoal", count: 4 });
+    // Abaixo do mínimo do tamanho "completo": o servidor pediu uma versão maior (que falhou) e ficou com a melhor.
+    expect(prompts[0]).toContain("entre 18 e 35");
+    expect(prompts.some((p) => p.includes("abaixo do mínimo de 18"))).toBe(true);
     expect(plan.body.nodes[0].children.map((c: { name: string }) => c.name)).toEqual(["Python", "pandas", "scikit-learn"]);
     expect(plan.body.nodes[0].children[2].icon).toBe("sparkles");
     expect(plan.body.nodes[0].levels).toHaveLength(5);
@@ -141,6 +160,21 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     const off = await agent.post("/api/habilidades/ia/galho").send({ goal: "Português para concurso" });
     expect(off.status).toBe(503);
     expect((await create(agent, { domain: "educacao", name: "Português para concurso" })).status).toBe(201);
+  });
+
+  it("galho pequeno demais: pede uma versão completa e usa a maior; tamanho é configurável", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const node = (ref: string, parent: string, name: string) => ({ ref, parent, name, description: "x", icon: "book", proofMode: "quiz", levels: [] });
+    const topics = Array.from({ length: 11 }, (_, i) => node(`t${i}`, "r", `Tópico ${i + 1}`));
+    replies = [
+      model({ domain: "educacao", summary: "Curta.", nodes: [node("r", "", "Português"), node("a", "r", "Crase")] }),
+      model({ domain: "educacao", summary: "Completa.", nodes: [node("r", "", "Português"), ...topics] }),
+    ];
+    const plan = await agent.post("/api/habilidades/ia/galho").send({ goal: "Português para concurso", detail: "essencial" });
+    expect(plan.status).toBe(200);
+    expect(plan.body).toMatchObject({ domain: "educacao", count: 12, summary: "Completa." });
+    expect(prompts[0]).toContain("entre 8 e 15");
+    expect((await agent.post("/api/habilidades/ia/galho").send({ goal: "x y z", detail: "gigante" })).status).toBe(400);
   });
 
   it("prova aprovada sobe 1 nível, concede XP, Crônica, conquista e título; envio duplo é bloqueado", async () => {
@@ -159,11 +193,11 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     // Retomar a mesma prova não gera outra.
     expect((await agent.post(`/api/habilidades/${pandas.id}/provas`).send({})).body.id).toBe(start.body.id);
 
-    const answers = await answerAll(agent, start.body.id, true);
-    replies = [model({ grades: [{ id: "q7", score: 90, feedback: "Bom." }, { id: "q8", score: 80, feedback: "Ok.", gaps: ["Exemplo"] }] })];
+    const answers = await answerAll(start.body.id, true);
+    replies = [model({ grades: [{ id: "q13", score: 90, feedback: "Bom." }, { id: "q14", score: 80, feedback: "Ok.", gaps: ["Exemplo"] }, { id: "q15", score: 80, feedback: "Ok." }] })];
     const done = await agent.post(`/api/habilidades/provas/${start.body.id}/entregar`).send({ answers });
     expect(done.status).toBe(200);
-    // (6×100 + 2×90 + 2×80) / 10 = 94
+    // (12×100 + 2×90 + 2×80 + 2×80) / 18 = 94
     expect(done.body).toMatchObject({ status: "aprovada", score: 94 });
     expect(done.body.result.newLevel).toBe(1);
     expect(done.body.items[0].answerIndex).toBeDefined();
@@ -189,18 +223,19 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     const pt = (await create(agent, { domain: "educacao", name: "Português" })).body;
     replies = [quiz()];
     const p = (await agent.post(`/api/habilidades/${pt.id}/provas`).send({})).body;
-    const answers = await answerAll(agent, p.id, false);
+    const answers = await answerAll(p.id, false);
     // Correção da IA falha → 502, prova volta a "aberta" com as respostas guardadas.
     replies = [{ status: 500 }, { status: 500 }];
     const failed = await agent.post(`/api/habilidades/provas/${p.id}/entregar`).send({ answers });
     expect(failed.status).toBe(502);
     const again = (await agent.get(`/api/habilidades/provas/${p.id}`)).body;
     expect(again.status).toBe("aberta");
-    expect(again.answers.q7).toBe(answers.q7);
+    expect(again.answers.q13).toBe(answers.q13);
     // Nova entrega: todas as objetivas erradas → reprovada.
-    replies = [model({ grades: [{ id: "q7", score: 60, feedback: "" }, { id: "q8", score: 40, feedback: "" }] })];
+    replies = [model({ grades: [{ id: "q13", score: 60, feedback: "" }, { id: "q14", score: 40, feedback: "" }, { id: "q15", score: 40, feedback: "" }] })];
     const done = await agent.post(`/api/habilidades/provas/${p.id}/entregar`).send({ answers });
-    expect(done.body).toMatchObject({ status: "reprovada", score: 20 });
+    // (0 + 2×60 + 2×40 + 2×40) / 18 = 16
+    expect(done.body).toMatchObject({ status: "reprovada", score: 16, passScore: 70 });
     expect((await agent.get("/api/habilidades")).body.skills[0]).toMatchObject({ level: 0 });
     expect((await agent.get("/api/habilidades")).body.skills[0].retryAt).toBeTruthy();
     const retry = await agent.post(`/api/habilidades/${pt.id}/provas`).send({});

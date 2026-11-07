@@ -8,10 +8,12 @@ import {
   DOMAINS,
   DOMAIN_LABEL,
   LINK_LABEL,
+  PLAN_DETAIL_META,
   PROOF_LABEL,
   type BranchNode,
   type BranchProposal,
   type LinkKind,
+  type PlanDetail,
   type PersonalSkill,
   type ProofKind,
   type SkillDomain,
@@ -256,6 +258,7 @@ export function AiBranchModal({
   const parent = initial?.parentId ? view.skills.find((s) => s.id === initial.parentId) ?? null : null;
   const [goal, setGoal] = useState("");
   const [domain, setDomain] = useState<SkillDomain | "">("");
+  const [detail, setDetail] = useState<PlanDetail>("completo");
   const [proposal, setProposal] = useState<BranchProposal | null>(null);
   const [draft, setDraft] = useState<Draft[]>([]);
 
@@ -269,7 +272,7 @@ export function AiBranchModal({
 
   const generate = () =>
     act.planBranch.mutate(
-      { goal: goal.trim(), domain: domain || null, parentId: parent?.id ?? null },
+      { goal: goal.trim(), domain: domain || null, parentId: parent?.id ?? null, detail },
       {
         onSuccess: (p) => {
           setProposal(p);
@@ -342,7 +345,7 @@ export function AiBranchModal({
         <div className="space-y-3">
           <label className="block text-xs text-rpg-muted">
             O que você quer aprender ou evoluir?
-            <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} maxLength={500} className={clsx(FIELD, "mt-1")} placeholder="Ex.: Quero aprender Machine Learning — Python, pandas, scikit-learn" autoFocus />
+            <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} maxLength={800} className={clsx(FIELD, "mt-1")} placeholder="Ex.: Quero aprender Machine Learning — Python, pandas, scikit-learn" autoFocus />
           </label>
           <label className="block text-xs text-rpg-muted">
             Tronco
@@ -355,7 +358,18 @@ export function AiBranchModal({
               ))}
             </select>
           </label>
-          <p className="text-[11px] text-rpg-muted">A IA propõe habilidades, sub-habilidades e critérios de cada nível. Nada é salvo até você revisar e confirmar.</p>
+          <fieldset>
+            <legend className="text-xs text-rpg-muted">Tamanho do galho</legend>
+            <div className="mt-1 grid gap-1.5 sm:grid-cols-3">
+              {(Object.keys(PLAN_DETAIL_META) as PlanDetail[]).map((k) => (
+                <button key={k} type="button" onClick={() => setDetail(k)} aria-pressed={detail === k} className={clsx("border px-2 py-1.5 text-left", detail === k ? "border-rpg-gold bg-rpg-gold/10" : "border-rpg-border hover:border-rpg-gold/50")} style={{ borderRadius: 3 }}>
+                  <span className="block text-sm font-semibold text-rpg-text">{PLAN_DETAIL_META[k].label}</span>
+                  <span className="block text-[11px] text-rpg-muted">{PLAN_DETAIL_META[k].hint}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <p className="text-[11px] text-rpg-muted">A IA propõe a trilha completa — módulos, tópicos e o critério de cada nível. Galhos grandes podem levar até um minuto. Nada é salvo até você revisar e confirmar.</p>
           {!view.ai.available && <p className="text-xs text-rpg-orange">{view.ai.message}</p>}
         </div>
       ) : (

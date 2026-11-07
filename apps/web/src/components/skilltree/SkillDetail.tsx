@@ -141,7 +141,7 @@ export function SkillDetail({
                   </p>
                 )}
                 <p className="mt-1.5 text-[10.5px] text-rpg-muted">
-                  Nota mínima {view.rules.passScore}/100 · válida por {view.rules.expiresHours} h · após reprovar, nova tentativa em {view.rules.retryCooldownHours} h.
+                  Nota mínima {view.rules.passScores[s.level] ?? view.rules.passScore}/100 · válida por {view.rules.expiresHours} h · após reprovar, nova tentativa em {view.rules.retryCooldownHours} h.
                 </p>
               </>
             )}
