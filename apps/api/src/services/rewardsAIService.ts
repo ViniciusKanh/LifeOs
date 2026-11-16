@@ -25,6 +25,10 @@ export const STARTER_REWARDS: RewardInput[] = [
   { name: "Passeio no fim de semana", icon: "🌳", art: "trail", category: "social", rarity: "raro", cost: 30, limitPeriod: "week", description: "Sair, explorar e recarregar as energias." },
   { name: "Spa em casa", icon: "🛁", art: "spa", category: "autocuidado", rarity: "epico", cost: 35, limitPeriod: "week", description: "Um momento só seu: máscara, banho e relaxamento." },
   { name: "Viagem de um dia", icon: "🏔️", art: "travel", category: "premium", rarity: "lendario", cost: 100, limitPeriod: "month", requiredLevel: 3, description: "Escolha um lugar especial para conhecer." },
+  // Estilo e personalização — recompensas de autocuidado focadas em imagem pessoal (não são itens do inventário: continuam honor-system, sem compra com dinheiro real).
+  { name: "Peça de roupa ou acessório novo", icon: "👕", art: "gift", category: "personalizado", rarity: "incomum", cost: 22, limitPeriod: "month", description: "Permita-se comprar algo que combine com o seu estilo." },
+  { name: "Trocar o visual (cabelo, skincare ou make)", icon: "💇", art: "spa", category: "personalizado", rarity: "raro", cost: 28, limitPeriod: "month", description: "Um corte novo, um ritual de skincare ou cuidado pessoal." },
+  { name: "Personalizar seu cantinho", icon: "🪴", art: "gift", category: "personalizado", rarity: "incomum", cost: 18, limitPeriod: "month", description: "Decore ou ajuste seu espaço de trabalho/estudo do seu jeito." },
 ];
 
 export async function addStarterRewards(db: Client, ownerId: string): Promise<{ created: number }> {

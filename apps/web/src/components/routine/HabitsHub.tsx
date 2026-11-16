@@ -38,7 +38,7 @@ export function HabitsIndicators({ hub }: { hub: HabitsHub }) {
 export function RitualPanel({ hub, onCheck, busyId }: { hub: HabitsHub; onCheck: (h: { id: string; target: number; count: number }, full: boolean) => void; busyId: string | null }) {
   const r = hub.ritual;
   return (
-    <section className="rpg-panel rpg-panel-gold grid items-center gap-3 p-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,260px)]" aria-label="Ritual de hoje">
+    <section className="rpg-panel rpg-panel-gold grid items-center gap-3 p-3 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,260px)]" aria-label="Ritual de hoje">
       <div className="flex items-center gap-3">
         <img src={`${ART}/fire.webp`} alt="" aria-hidden className="pixelated hidden h-24 w-auto sm:block" />
         <ProgressRing value={r.done} max={Math.max(1, r.total)} label="Hábitos concluídos hoje">
@@ -55,17 +55,19 @@ export function RitualPanel({ hub, onCheck, busyId }: { hub: HabitsHub; onCheck:
         ) : (
           <ul className="mt-1 grid gap-1.5 sm:grid-cols-2">
             {r.items.map((it) => (
-              <li key={it.id} className={clsx("flex items-center gap-2 border px-2 py-1.5", it.done ? "border-rpg-green/60 bg-rpg-green/10" : "border-rpg-border bg-rpg-bg-2/60")} style={R}>
-                <span aria-hidden>{it.icon ?? "🔁"}</span>
-                <span className="min-w-0 flex-1 truncate text-sm text-rpg-text">{it.name}</span>
-                <span className="shrink-0 font-pixel text-[10px] text-rpg-muted tabular-nums">
-                  {it.count}/{it.target}
-                  {it.unit ? ` ${it.unit}` : ""}
-                </span>
+              <li key={it.id} className={clsx("flex items-start gap-2 border px-2 py-1.5", it.done ? "border-rpg-green/60 bg-rpg-green/10" : "border-rpg-border bg-rpg-bg-2/60")} style={R}>
+                <span className="mt-0.5 shrink-0" aria-hidden>{it.icon ?? "🔁"}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm leading-snug text-rpg-text" title={it.name}>{it.name}</p>
+                  <p className="font-pixel text-[10px] text-rpg-muted tabular-nums">
+                    {it.count}/{it.target}
+                    {it.unit ? ` ${it.unit}` : ""}
+                  </p>
+                </div>
                 {it.done ? (
-                  <Check size={16} className="text-rpg-green" aria-label="Cumprido" />
+                  <Check size={16} className="mt-0.5 shrink-0 text-rpg-green" aria-label="Cumprido" />
                 ) : (
-                  <button type="button" disabled={busyId === it.id} onClick={() => onCheck({ id: it.id, target: it.target, count: it.count }, true)} className="flex h-9 min-w-9 items-center justify-center border border-rpg-green/60 px-2 text-xs text-rpg-green hover:bg-rpg-green/15" style={R} aria-label={`Concluir ${it.name}`}>
+                  <button type="button" disabled={busyId === it.id} onClick={() => onCheck({ id: it.id, target: it.target, count: it.count }, true)} className="flex h-9 min-w-9 shrink-0 items-center justify-center border border-rpg-green/60 px-2 text-xs text-rpg-green hover:bg-rpg-green/15" style={R} aria-label={`Concluir ${it.name}`}>
                     <Check size={14} aria-hidden />
                   </button>
                 )}
@@ -74,7 +76,7 @@ export function RitualPanel({ hub, onCheck, busyId }: { hub: HabitsHub; onCheck:
           </ul>
         )}
       </div>
-      <div className="flex items-center gap-2 border-t border-rpg-border/60 pt-2 md:border-l md:border-t-0 md:pl-3 md:pt-0">
+      <div className="flex items-center gap-2 border-t border-rpg-border/60 pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
         <img src={`${ART}/chest.webp`} alt="" aria-hidden className="pixelated h-14 w-14 shrink-0" />
         {r.nextReward ? (
           <div className="min-w-0">

@@ -422,8 +422,8 @@ export function PlanEditor({ d, draft, set, readOnly, onSuggestBlocks, onApplyPl
         <RPGButton variant="secondary" onClick={onSuggestBlocks} disabled={p.priorities.length === 0} title="Procura horários livres na Agenda (só cria eventos se você confirmar)">
           <CalendarPlus size={14} aria-hidden /> Sugerir blocos na Agenda
         </RPGButton>
-        <RPGButton variant="primary" onClick={onApplyPlan} disabled={applying || readOnly || p.priorities.length + p.focus.length === 0} title={d.kind === "weekly" ? "Leva prioridades e focos ao Conselho de Guerra da próxima semana (rascunho)" : "Registra o plano como aplicado"}>
-          {applying ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ArrowRight size={14} aria-hidden />} {d.kind === "weekly" ? "Enviar ao Conselho de Guerra" : "Aplicar no planejamento"}
+        <RPGButton variant="primary" onClick={onApplyPlan} disabled={applying || readOnly || p.priorities.length + p.focus.length === 0} title="Leva prioridades e focos ao Conselho de Guerra da próxima semana (rascunho) — vale para qualquer ciclo, não só a revisão semanal">
+          {applying ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ArrowRight size={14} aria-hidden />} Enviar ao Conselho de Guerra
         </RPGButton>
       </div>
     </Panel>

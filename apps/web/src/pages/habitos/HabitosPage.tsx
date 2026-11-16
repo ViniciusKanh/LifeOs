@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   Activity,
+  ChevronLeft,
+  ChevronRight,
   History,
   ScrollText,
   BookOpen,
@@ -77,13 +79,13 @@ function diasLabel(n: number) {
   return `${n} ${n === 1 ? "dia" : "dias"}`;
 }
 
-/** Segunda a domingo da semana ATUAL (datas reais, não uma janela rolante). */
-function currentWeekDates() {
+/** Segunda a domingo da semana atual deslocada por weekOffset semanas (0 = atual, -1 = anterior...). Permite registrar hábitos atrasados de semanas passadas. */
+function currentWeekDates(weekOffset = 0) {
   const now = new Date();
   const dow = now.getDay(); // 0 = domingo
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
   const monday = new Date(now);
-  monday.setDate(now.getDate() + mondayOffset);
+  monday.setDate(now.getDate() + mondayOffset + weekOffset * 7);
   const days: Array<{ iso: string; weekday: string; dayNum: string }> = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
@@ -105,6 +107,8 @@ export function HabitosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<HabitWithAuto | null>(null);
   const [filterTab, setFilterTab] = useState<FilterTab>("Todos");
+  // Semana exibida no checklist (0 = atual; negativo = semanas passadas) — permite registrar hábitos atrasados.
+  const [weekOffset, setWeekOffset] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -139,7 +143,7 @@ export function HabitosPage() {
     return result;
   }
   const today = todayStr();
-  const week = useMemo(() => currentWeekDates(), []);
+  const week = useMemo(() => currentWeekDates(weekOffset), [weekOffset]);
   const entriesByHabitId = useHabitEntriesRange(habits, week[0].iso, week[6].iso);
   const habitNamesById = useMemo(() => new Map(habits.map((h) => [h.id, h.name])), [habits]);
 
@@ -398,8 +402,33 @@ export function HabitosPage() {
             {/* Coluna principal: tabela de hábitos + categorias + horários */}
             <div className="space-y-4 min-w-0">
               <Card className="p-5">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <p className={`text-sm font-semibold ${RPG_SECTION_TITLE}`}>Meus hábitos</p>
+                  {/* Navegação de semana: deixa registrar check-ins atrasados de semanas passadas, não só da semana atual. */}
+                  <div className="flex items-center gap-1.5 text-xs text-slate">
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset((o) => o - 1)}
+                      className="p-1 rounded hover:bg-black/[0.04] dark:hover:bg-white/[0.08]"
+                      aria-label="Semana anterior"
+                      title="Semana anterior — registrar hábitos atrasados"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="min-w-[92px] text-center tabular-nums">
+                      {weekOffset === 0 ? "Esta semana" : `${new Date(`${week[0].iso}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – ${new Date(`${week[6].iso}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
+                      disabled={weekOffset >= 0}
+                      className="p-1 rounded hover:bg-black/[0.04] dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label="Próxima semana"
+                      title="Próxima semana"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {(["Todos", "Hoje", "Concluidos", "EmRisco"] as FilterTab[]).map((tab) => {

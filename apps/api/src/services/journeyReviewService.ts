@@ -645,7 +645,10 @@ export async function sealReview(db: Client, ownerId: string, kind: ReviewKind, 
       .catch(() => undefined);
   }
   let warCouncil: { weekStart: string; focus: number; priorities: number } | null = null;
-  if (kind === "weekly" && council.enabled) warCouncil = await prefillWarCouncil(db, ownerId, key, stored.plan);
+  if (council.enabled) {
+    const today = await todayKeyFor(db, ownerId);
+    warCouncil = await prefillWarCouncil(db, ownerId, nextCouncilWeek(kind, key, today), stored.plan);
+  }
   if (ach.enabled) await evaluateAchievements(ownerId).catch(() => undefined);
   return { alreadySealed: false, sealedAt: new Date().toISOString(), warCouncil };
 }
@@ -654,14 +657,18 @@ export async function sealReview(db: Client, ownerId: string, kind: ReviewKind, 
  * K — Conselho de Guerra: as prioridades da revisão semanal viram rascunho do
  * plano da semana seguinte (sem selar e sem sobrescrever plano já selado).
  */
-async function prefillWarCouncil(db: Client, ownerId: string, weekKey: string, plan: ReviewPlan) {
-  const nextWeek = addDays(weekKey, 7);
+/** Semana a pré-preencher no Conselho de Guerra: a semana seguinte à revisão (semanal) ou a próxima semana a partir de hoje (ciclos maiores, que não são semana-a-semana). */
+function nextCouncilWeek(kind: ReviewKind, key: string, today: string): string {
+  return kind === "weekly" ? addDays(key, 7) : addDays(mondayOf(today), 7);
+}
+
+async function prefillWarCouncil(db: Client, ownerId: string, nextWeek: string, plan: ReviewPlan) {
   const today = await todayKeyFor(db, ownerId);
   if (nextWeek < mondayOf(today)) return null;
   const existing = await db.execute({ sql: "SELECT sealed_at FROM weekly_plans WHERE owner_id = ? AND week_start = ?", args: [ownerId, nextWeek] });
   if (existing.rows[0]?.sealed_at) return null;
   const focus = await validateFocus(db, ownerId, plan.focus.slice(0, 3));
-  const notes = plan.priorities.length ? `Prioridades da revisão semanal: ${plan.priorities.join("; ")}` : null;
+  const notes = plan.priorities.length ? `Prioridades da revisão: ${plan.priorities.join("; ")}` : null;
   await db.execute({
     sql: `INSERT INTO weekly_plans (id, owner_id, week_start, focus, notes, sealed_at) VALUES (?, ?, ?, ?, ?, NULL)
           ON CONFLICT (owner_id, week_start) DO UPDATE SET focus = excluded.focus, notes = COALESCE(excluded.notes, weekly_plans.notes), updated_at = datetime('now')
@@ -691,7 +698,8 @@ export async function applyPlan(db: Client, ownerId: string, kind: ReviewKind, k
   if (!s.id) throw new ReviewError("Salve a revisão antes de aplicar o plano.");
   if (!s.plan.objective && !s.plan.priorities.length && !s.plan.focus.length) throw new ReviewError("O plano está vazio.");
   await db.execute({ sql: "UPDATE journey_reviews SET plan_applied_at = COALESCE(plan_applied_at, datetime('now')) WHERE owner_id = ? AND kind = ? AND period_key = ?", args: [ownerId, kind, key] });
-  const council = kind === "weekly" && (await automationConfig(db, ownerId, "reviews", "war_council")).enabled ? await prefillWarCouncil(db, ownerId, key, s.plan) : null;
+  const councilOn = (await automationConfig(db, ownerId, "reviews", "war_council")).enabled;
+  const council = councilOn ? await prefillWarCouncil(db, ownerId, nextCouncilWeek(kind, key, await todayKeyFor(db, ownerId)), s.plan) : null;
   return { applied: true, warCouncil: council };
 }
 

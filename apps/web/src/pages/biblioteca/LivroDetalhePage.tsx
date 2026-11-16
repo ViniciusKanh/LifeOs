@@ -6,7 +6,7 @@ import { Button, Card, Field } from "@/components/ui/primitives";
 import type { BookNote, BookStatus } from "@/types";
 import { QuoteToCardModal, type QuoteForCard } from "@/components/grimorio/QuoteToCardModal";
 import { InlineToast } from "@/components/grimorio/grimoireUi";
-import { todayKey } from "@/utils/localDate";
+import { todayKey, localDateKey, dateKeyToLocalDate } from "@/utils/localDate";
 
 const NOTE_KINDS: Array<{ value: BookNote["kind"]; label: string }> = [
   { value: "note", label: "Nota" },
@@ -29,6 +29,8 @@ export function LivroDetalhePage() {
   const [toast, setToast] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [sessionPages, setSessionPages] = useState("");
   const [sessionMinutes, setSessionMinutes] = useState("");
+  // Data da sessão — padrão hoje, mas editável pra registrar leitura atrasada sem distorcer o dia real.
+  const [sessionDate, setSessionDate] = useState(() => todayKey());
 
   if (!book) {
     return <div className="px-4 py-8 text-sm text-slate">Carregando...</div>;
@@ -48,9 +50,12 @@ export function LivroDetalhePage() {
     const pages = Number(sessionPages) || 0;
     const minutes = Number(sessionMinutes) || 0;
     if (!minutes) return;
-    await addSession({ startedAt: new Date().toISOString(), durationMinutes: minutes, pagesRead: pages });
+    // Hoje mantém o horário exato de agora; um dia passado vira meio-dia local desse dia (registro retroativo).
+    const startedAt = sessionDate === todayKey() ? new Date().toISOString() : new Date(dateKeyToLocalDate(sessionDate).getTime() + 12 * 60 * 60 * 1000).toISOString();
+    await addSession({ startedAt, durationMinutes: minutes, pagesRead: pages });
     setSessionPages("");
     setSessionMinutes("");
+    setSessionDate(todayKey());
   };
 
   const handleDelete = async () => {
@@ -83,7 +88,7 @@ export function LivroDetalhePage() {
               aria-label="Status do livro"
               onChange={(e) => {
                 const status = e.target.value as BookStatus;
-                // Concluir registra a data (dia local) — base da meta anual de leitura.
+                // Concluir registra a data (dia local) — base da meta anual de leitura. Dá pra corrigir depois no campo "Concluído em" se o livro foi terminado em outro dia.
                 updateBook({ id: book.id, patch: status === "Concluído" && !book.finished_at ? { status, finishedAt: todayKey() } : { status } });
               }}
               className="text-xs rounded-lg px-3 py-2 bg-transparent border border-paper-border dark:border-ink-border"
@@ -94,6 +99,20 @@ export function LivroDetalhePage() {
                 </option>
               ))}
             </select>
+            {book.status === "Concluído" && (
+              <label className="flex items-center gap-1.5 text-xs text-slate">
+                Concluído em
+                <input
+                  type="date"
+                  aria-label="Data de conclusão"
+                  title="Corrija aqui se terminou o livro em outro dia — ajusta a meta anual e a Timeline."
+                  value={book.finished_at ? localDateKey(book.finished_at) : todayKey()}
+                  max={todayKey()}
+                  onChange={(e) => updateBook({ id: book.id, patch: { finishedAt: dateKeyToLocalDate(e.target.value).toISOString() } })}
+                  className="rounded-lg px-2 py-1.5 bg-transparent border border-paper-border dark:border-ink-border"
+                />
+              </label>
+            )}
             <button onClick={handleDelete} className="text-xs flex items-center gap-1 text-drop">
               <Trash2 size={13} /> Remover livro
             </button>
@@ -137,7 +156,16 @@ export function LivroDetalhePage() {
                 onChange={(e) => setSessionMinutes(e.target.value)}
               />
             </div>
+            <div className="flex-1 min-w-0">
+              {/* Padrão é hoje, mas dá pra voltar e registrar uma sessão que esqueceu de lançar. */}
+              <Field label="Dia" type="date" max={todayKey()} value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} />
+            </div>
           </div>
+          {sessionDate !== todayKey() && (
+            <p className="text-[10px] text-signal-deep mb-2">
+              Registro retroativo — será salvo em {new Date(`${sessionDate}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.
+            </p>
+          )}
           <Button onClick={handleAddSession} className="w-full">
             <Plus size={14} /> Registrar sessão
           </Button>
