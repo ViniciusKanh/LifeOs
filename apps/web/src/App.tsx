@@ -77,6 +77,8 @@ const WeeklyReviewPage = lazy(() =>
 );
 const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
 const InventarioPage = lazy(() => import("@/pages/inventario/InventarioPage").then((m) => ({ default: m.InventarioPage })));
+const LojaArcanaPage = lazy(() => import("@/pages/loja-arcana/LojaArcanaPage").then((m) => ({ default: m.LojaArcanaPage })));
+const InventarioHeroiPage = lazy(() => import("@/pages/inventario-heroi/InventarioHeroiPage").then((m) => ({ default: m.InventarioHeroiPage })));
 const BuildPage = lazy(() => import("@/pages/character-build/BuildPage").then((m) => ({ default: m.BuildPage })));
 const ProtocolosPage = lazy(() => import("@/pages/protocolos/ProtocolosPage").then((m) => ({ default: m.ProtocolosPage })));
 const DetectorGargalosPage = lazy(() => import("@/pages/detector-gargalos/DetectorGargalosPage").then((m) => ({ default: m.DetectorGargalosPage })));
@@ -174,6 +176,8 @@ export default function App() {
           <Route path="/tesouro" element={<TesouroPage />} />
           <Route path="/banco" element={<BancoPage />} />
           <Route path="/inventario" element={<InventarioPage />} />
+          <Route path="/loja-arcana" element={<LojaArcanaPage />} />
+          <Route path="/inventario-heroi" element={<InventarioHeroiPage />} />
           <Route path="/build" element={<BuildPage />} />
           <Route path="/protocolos" element={<ProtocolosPage />} />
           <Route path="/detector-gargalos" element={<DetectorGargalosPage />} />
