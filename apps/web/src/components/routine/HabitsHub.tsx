@@ -53,7 +53,7 @@ export function RitualPanel({ hub, onCheck, busyId }: { hub: HabitsHub; onCheck:
         {r.total === 0 ? (
           <p className="text-sm text-rpg-muted">Nenhum hábito previsto para hoje — dia livre pela sua agenda de hábitos.</p>
         ) : (
-          <ul className="mt-1 grid gap-1.5 sm:grid-cols-2">
+          <ul className="mt-1 grid gap-1.5">
             {r.items.map((it) => (
               <li key={it.id} className={clsx("flex items-start gap-2 border px-2 py-1.5", it.done ? "border-rpg-green/60 bg-rpg-green/10" : "border-rpg-border bg-rpg-bg-2/60")} style={R}>
                 <span className="mt-0.5 shrink-0" aria-hidden>{it.icon ?? "🔁"}</span>

@@ -20,7 +20,7 @@ export interface ReviewEvidence {
   /** Bloco de texto pronto para o prompt. */
   block: string;
   /** Quantidades usadas — exibidas na UI como procedência ("baseado em…"). */
-  counts: { tasksDone: number; journalDays: number; projects: number; habits: number; overdue: number };
+  counts: { tasksDone: number; journalDays: number; projects: number; habits: number; overdue: number; notes: number };
 }
 
 interface Options {
@@ -56,7 +56,7 @@ function parseList(raw: unknown): string[] {
 
 /** Período [from, toExclusive) em datas locais YYYY-MM-DD. */
 export async function collectReviewEvidence(db: Db, ownerId: string, from: string, toExclusive: string, opts: Options = WEEK): Promise<ReviewEvidence> {
-  const [done, overdue, journal, habits] = await Promise.all([
+  const [done, overdue, journal, habits, notes] = await Promise.all([
     db.execute({
       sql: `SELECT t.title AS title, p.name AS project, date(COALESCE(t.completed_at, t.updated_at)) AS day, t.priority AS priority
             FROM tasks t LEFT JOIN projects p ON p.id = t.project_id AND p.owner_id = t.owner_id
@@ -82,6 +82,12 @@ export async function collectReviewEvidence(db: Db, ownerId: string, from: strin
       sql: `SELECT h.name AS name, COUNT(*) AS n FROM habit_entries he JOIN habits h ON h.id = he.habit_id AND h.owner_id = he.owner_id
             WHERE he.owner_id = ? AND he.entry_date >= ? AND he.entry_date < ? AND he.count >= h.target_count
             GROUP BY h.id ORDER BY n DESC LIMIT 12`,
+      args: [ownerId, from, toExclusive],
+    }),
+    db.execute({
+      sql: `SELECT title, plain_text, updated_at FROM notes
+            WHERE owner_id = ? AND archived_at IS NULL AND date(updated_at) >= date(?) AND date(updated_at) < date(?)
+            ORDER BY updated_at ASC LIMIT 30`,
       args: [ownerId, from, toExclusive],
     }),
   ]);
@@ -112,6 +118,15 @@ export async function collectReviewEvidence(db: Db, ownerId: string, from: strin
     lines.push("", "HÁBITOS (check-ins cumpridos no período):", habitRows.map((h) => `${h.name}: ${Number(h.n)}`).join("; "));
   }
 
+  const notesRows = notes.rows as unknown as Array<{ title: string; plain_text: string | null; updated_at: string }>;
+  if (notesRows.length > 0) {
+    lines.push("", `ANOTAÇÕES (${notesRows.length} nota(s) criada(s)/editada(s) no período):`);
+    for (const n of notesRows) {
+      const body = (n.plain_text ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
+      lines.push(`- ${shortDate(n.updated_at)} · "${n.title}"${body ? `: ${body}` : ""}`);
+    }
+  }
+
   const journalRows = journal.rows as unknown as Array<Record<string, unknown>>;
   if (journalRows.length > 0) {
     lines.push("", `DIÁRIO — o que o usuário escreveu (${journalRows.length} dia(s)):`);
@@ -136,6 +151,6 @@ export async function collectReviewEvidence(db: Db, ownerId: string, from: strin
 
   return {
     block: lines.join("\n"),
-    counts: { tasksDone: doneRows.length, journalDays: journalRows.length, projects: byProject.size, habits: habitRows.length, overdue: overdueRows.length },
+    counts: { tasksDone: doneRows.length, journalDays: journalRows.length, projects: byProject.size, habits: habitRows.length, overdue: overdueRows.length, notes: notesRows.length },
   };
 }
