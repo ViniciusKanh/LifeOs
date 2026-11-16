@@ -825,7 +825,17 @@ function LoanSimuladorView({ credit }: { credit: CreditInfo }) {
   );
 }
 
-/** "Fatura" visual do empréstimo ativo -- nome e nível reais do jogador, nunca uma "classe" inventada sem dado por trás. */
+/** Carimbo de tinta do status da nota (ativo/quitado/atrasado) -- cor e texto sempre derivados do status real do empréstimo, nunca decorativo sozinho. */
+function LoanStamp({ tone, label, compact = false }: { tone: "gold" | "green" | "red"; label: string; compact?: boolean }) {
+  return <span className={clsx("rpg-stamp font-rpg", compact ? "text-[9px] px-2 py-0.5" : "text-[11px]", `rpg-stamp-${tone}`)}>{label}</span>;
+}
+
+/**
+ * "Nota de Crédito" do empréstimo ativo -- estilo talão/nota promissória de
+ * época: papel de pergaminho, carimbo de tinta pro status e um canhoto
+ * (resumo) registrado logo abaixo, como num talão de verdade. Nome e nível
+ * reais do jogador, nunca uma "classe" inventada sem dado por trás.
+ */
 function LoanFaturaCard({
   loan,
   credit,
@@ -843,40 +853,44 @@ function LoanFaturaCard({
 }) {
   const totalWithFee = loan.overdue ? loan.totalDue + projectLateFee(loan.totalDue, loan.lateFeeBps) : loan.totalDue;
   return (
-    <RPGPanel variant={loan.overdue ? "danger" : "gold"} className="mb-5">
-      <div className="flex items-center justify-between gap-2 mb-4">
+    <div className="rpg-talao p-4 sm:p-5 mb-5">
+      <div className="flex items-start justify-between gap-2 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center border-2 border-rpg-gold/70 bg-rpg-bg text-rpg-gold-light" style={{ borderRadius: 3 }} aria-hidden>
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center border-2 border-rpg-bronze bg-rpg-ink/10 text-rpg-ink" style={{ borderRadius: 3 }} aria-hidden>
             <CreditCard size={16} />
           </span>
           <div className="min-w-0">
-            <p className="font-pixel text-[10px] uppercase tracking-wide text-rpg-muted">Fatura do empréstimo</p>
-            <p className="text-sm font-semibold text-rpg-text truncate">{playerName ?? "Aventureiro"}{playerLevel != null ? ` · Nv. ${playerLevel}` : ""}</p>
+            <p className="font-rpg text-[10px] uppercase tracking-wide text-rpg-ink/70">Nota de Crédito da Guilda</p>
+            <p className="text-sm font-semibold text-rpg-ink truncate">{playerName ?? "Aventureiro"}{playerLevel != null ? ` · Nv. ${playerLevel}` : ""}</p>
           </div>
         </div>
-        {loan.overdue ? <RPGBadge tone="red">Atrasado</RPGBadge> : <RPGBadge tone={tierTone(credit.tier.label)}>{credit.tier.label}</RPGBadge>}
+        <LoanStamp tone={loan.overdue ? "red" : "gold"} label={loan.overdue ? "Atrasado" : "Ativo"} />
       </div>
       <div className="flex items-end justify-between gap-3 flex-wrap mb-3">
         <div>
-          <p className="text-[11px] text-rpg-muted">Valor tomado</p>
-          <p className="font-pixel text-2xl font-bold text-rpg-text tabular-nums">{formatCoins(loan.amount)}</p>
+          <p className="text-[11px] text-rpg-ink/70">Valor tomado</p>
+          <p className="font-pixel text-2xl font-bold text-rpg-ink tabular-nums">{formatCoins(loan.amount)}</p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] text-rpg-muted">Total a pagar</p>
-          <p className="font-pixel text-2xl font-bold text-rpg-gold-light tabular-nums">{formatCoins(totalWithFee)}</p>
+          <p className="text-[11px] text-rpg-ink/70">Total a pagar</p>
+          <p className="font-pixel text-2xl font-bold text-rpg-ink tabular-nums">{formatCoins(totalWithFee)}</p>
         </div>
       </div>
       {loan.overdue ? (
-        <p className="flex items-center gap-1.5 text-xs text-rpg-red mb-4">
+        <p className="flex items-center gap-1.5 text-xs text-[#9b2b24] mb-4">
           <AlertTriangle size={13} aria-hidden /> Atrasado há {daysOverdue(loan.dueAt)} dia(s) (multa de {formatPct(loan.lateFeeBps)}% já incluída) — pagar agora evita mais queda no score.
         </p>
       ) : (
-        <p className="text-xs text-rpg-muted mb-4">Vence em {daysLeft(loan.dueAt)} dia(s).</p>
+        <p className="text-xs text-rpg-ink/70 mb-4">Emitida em {new Date(loan.createdAt).toLocaleDateString("pt-BR")} · vence em {daysLeft(loan.dueAt)} dia(s).</p>
       )}
       <RPGButton type="button" variant={loan.overdue ? "danger" : "success"} className="w-full" disabled={repaying} onClick={onRepay}>
         {repaying ? "Quitando…" : "Quitar empréstimo"}
       </RPGButton>
-    </RPGPanel>
+      <div className="rpg-talao-stub flex items-center justify-between gap-2 text-[11px] text-rpg-ink/70">
+        <span>Canhoto · {playerName ?? "Aventureiro"} · {credit.tier.label}</span>
+        <span className="font-pixel">{formatCoins(loan.amount)} · juros {formatPct(credit.tier.rateBps)}%</span>
+      </div>
+    </div>
   );
 }
 
@@ -938,9 +952,15 @@ function CreditoView({
       {loan.active ? (
         <LoanFaturaCard loan={loan.active} credit={credit} playerName={playerName} playerLevel={playerLevel} onRepay={() => onRepay(loan.active!.id)} repaying={repaying} />
       ) : (
-        <RPGPanel variant="gold" title="Pedir empréstimo" icon={<CreditCard size={16} />} className="mb-5">
+        <div className="rpg-talao p-4 sm:p-5 mb-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center border-2 border-rpg-bronze bg-rpg-ink/10 text-rpg-ink" style={{ borderRadius: 3 }} aria-hidden>
+              <CreditCard size={16} />
+            </span>
+            <p className="font-rpg text-[13px] font-semibold uppercase tracking-[0.06em] text-rpg-ink">Preencher nota de crédito</p>
+          </div>
           {credit.tier.maxAmount <= 0 ? (
-            <p className="text-sm text-rpg-muted">Seu score ainda não libera crédito. Conclua um investimento no Banco para começar a construir histórico.</p>
+            <p className="text-sm text-rpg-ink/80">Seu score ainda não libera crédito. Conclua um investimento no Banco para começar a construir histórico.</p>
           ) : (
             <>
               <form
@@ -959,11 +979,11 @@ function CreditoView({
                   max={credit.tier.maxAmount}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full border-2 border-rpg-border bg-rpg-bg px-2.5 py-2 text-sm text-rpg-text outline-none focus:border-rpg-gold"
+                  className="w-full border-2 border-rpg-bronze bg-rpg-bg/95 px-2.5 py-2 text-sm text-rpg-text outline-none focus:border-rpg-gold"
                   style={{ borderRadius: 2 }}
                 />
                 <RPGButton type="submit" variant="gold" disabled={requesting || !valid}>
-                  Pedir
+                  {requesting ? "Emitindo…" : "Emitir nota"}
                 </RPGButton>
               </form>
               {(loanQuickAmounts.length > 0 || credit.tier.maxAmount > 0) && (
@@ -975,40 +995,52 @@ function CreditoView({
                 </div>
               )}
               {valid && total != null && (
-                <dl className="text-[11px] space-y-1 border-t border-rpg-border/60 pt-2 max-w-xs">
+                <dl className="text-[11px] space-y-1 border-t border-rpg-ink/20 pt-2 max-w-xs text-rpg-ink">
                   <div className="flex items-center justify-between">
-                    <dt className="text-rpg-muted">Juros ({formatPct(credit.tier.rateBps)}%)</dt>
-                    <dd className="font-pixel text-rpg-red">+{formatCoins(total - parsed)}</dd>
+                    <dt className="text-rpg-ink/70">Juros ({formatPct(credit.tier.rateBps)}%)</dt>
+                    <dd className="font-pixel text-[#9b2b24]">+{formatCoins(total - parsed)}</dd>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <dt className="font-semibold text-rpg-gold-light">Total a pagar em {credit.termDays} dias</dt>
-                    <dd className="font-pixel font-semibold text-rpg-gold-light">{formatCoins(total)}</dd>
+                    <dt className="font-semibold text-rpg-ink">Total a pagar em {credit.termDays} dias</dt>
+                    <dd className="font-pixel font-semibold text-rpg-ink">{formatCoins(total)}</dd>
                   </div>
                 </dl>
               )}
-              <p className="mt-2 text-[11px] text-rpg-muted">Limite de {formatCoins(credit.tier.maxAmount)} moedas. Pagar atrasado soma multa de {formatPct(credit.lateFeeBps)}% e derruba o score.</p>
+              <p className="mt-2 text-[11px] text-rpg-ink/70">Limite de {formatCoins(credit.tier.maxAmount)} moedas. Pagar atrasado soma multa de {formatPct(credit.lateFeeBps)}% e derruba o score.</p>
+              {valid && (
+                <div className="rpg-talao-stub flex items-center justify-between gap-2 text-[11px] text-rpg-ink/70">
+                  <span>Canhoto · a emitir</span>
+                  <span className="font-pixel">{formatCoins(parsed)} → {total != null ? formatCoins(total) : "—"}</span>
+                </div>
+              )}
             </>
           )}
-        </RPGPanel>
+        </div>
       )}
 
       {loan.history.length > 0 && (
-        <RPGPanel title="Histórico de empréstimos" icon={<Coins size={16} />}>
-          <ul className="space-y-1.5">
+        <div className="rpg-talao p-4 sm:p-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center border-2 border-rpg-bronze bg-rpg-ink/10 text-rpg-ink" style={{ borderRadius: 3 }} aria-hidden>
+              <Coins size={16} />
+            </span>
+            <p className="font-rpg text-[13px] font-semibold uppercase tracking-[0.06em] text-rpg-ink">Canhotos do talão</p>
+          </div>
+          <ul>
             {loan.history.slice(0, 10).map((l) => {
               const late = !!l.repaidAt && l.repaidAt > l.dueAt;
               return (
-                <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-1.5 text-rpg-text">
+                <li key={l.id} className="rpg-talao-stub flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-1.5 text-rpg-ink">
                     {formatCoins(l.amount)} → {formatCoins(l.repaidAmount ?? l.totalDue)}
-                    <RPGBadge tone={late ? "red" : "green"}>{late ? "Atrasado" : "Em dia"}</RPGBadge>
+                    <LoanStamp tone={late ? "red" : "green"} label={late ? "Atrasado" : "Quitado"} compact />
                   </span>
-                  <span className="font-pixel text-[11px] text-rpg-muted shrink-0">{l.repaidAt ? new Date(l.repaidAt).toLocaleDateString("pt-BR") : ""}</span>
+                  <span className="font-pixel text-[11px] text-rpg-ink/70 shrink-0">{l.repaidAt ? new Date(l.repaidAt).toLocaleDateString("pt-BR") : ""}</span>
                 </li>
               );
             })}
           </ul>
-        </RPGPanel>
+        </div>
       )}
     </>
   );

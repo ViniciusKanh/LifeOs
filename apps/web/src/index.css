@@ -203,6 +203,60 @@
   .rpg-parchment::before { top: -6px; }
   .rpg-parchment::after { bottom: -6px; }
 
+  /* Talão de Crédito (Banco) — nota de empréstimo em estilo "caderneta antiga":
+     mesma textura de pergaminho, com linha picotada separando o corpo da nota
+     do canhoto (o registro que fica no talão) e um carimbo de tinta pro status. */
+  .rpg-talao {
+    position: relative;
+    border-radius: 3px;
+    color: rgb(var(--rpg-parchment-ink));
+    background:
+      radial-gradient(120% 80% at 50% 0%, rgb(var(--rpg-parchment)) 55%, rgb(var(--rpg-parchment) / 0.88) 100%),
+      rgb(var(--rpg-parchment));
+    border: 2px solid rgb(var(--rpg-bronze));
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25), inset 0 0 24px rgb(120 80 30 / 0.3), var(--rpg-shadow);
+    overflow: hidden;
+  }
+  .rpg-talao-stub {
+    position: relative;
+    margin-top: 0.75rem;
+    padding-top: 0.9rem;
+    border-top: 2px dashed rgb(var(--rpg-parchment-ink) / 0.4);
+  }
+  .rpg-talao-stub::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: -2px;
+    right: -2px;
+    height: 9px;
+    background-image: radial-gradient(circle, rgb(var(--rpg-bg)) 2.2px, transparent 2.3px);
+    background-size: 14px 9px;
+    background-repeat: repeat-x;
+    background-position: 0 0;
+  }
+
+  /* Carimbo de status (ativo/quitado/atrasado) -- tinta sobre o papel, levemente girado. */
+  .rpg-stamp {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    padding: 0.25em 0.75em;
+    border: 3px double currentColor;
+    border-radius: 6px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transform: rotate(-8deg);
+    opacity: 0.85;
+    mix-blend-mode: multiply;
+    white-space: nowrap;
+  }
+  .rpg-stamp-gold { color: rgb(var(--rpg-bronze)); }
+  .rpg-stamp-green { color: #2f6b3a; }
+  .rpg-stamp-red { color: #9b2b24; }
+
   /* Filete ornamental (divisor de seção / borda da sidebar e topbar). */
   .rpg-ornament-line {
     height: 2px;

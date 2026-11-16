@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import clsx from "clsx";
 import { RPGSectionHeader } from "./RPGSectionHeader";
 
-export type RPGPanelVariant = "default" | "gold" | "quest" | "danger" | "success" | "parchment" | "legendary";
+export type RPGPanelVariant = "default" | "gold" | "quest" | "danger" | "success" | "parchment" | "talao" | "legendary";
 
 const VARIANT_CLASS: Record<RPGPanelVariant, string> = {
   default: "rpg-panel",
@@ -12,6 +12,7 @@ const VARIANT_CLASS: Record<RPGPanelVariant, string> = {
   success: "rpg-panel rpg-panel-success",
   legendary: "rpg-panel rpg-panel-legendary",
   parchment: "rpg-parchment",
+  talao: "rpg-talao",
 };
 
 /**
@@ -45,7 +46,7 @@ export function RPGPanel({
 }) {
   return (
     <Tag id={id} className={clsx(VARIANT_CLASS[variant], "min-w-0", className)}>
-      {title && <RPGSectionHeader icon={icon} title={title} actions={actions} parchment={variant === "parchment"} />}
+      {title && <RPGSectionHeader icon={icon} title={title} actions={actions} parchment={variant === "parchment" || variant === "talao"} />}
       <div className={clsx(title ? "px-4 pb-4" : "p-4", bodyClassName)}>{children}</div>
       {footer && <div className="border-t border-rpg-border/70 px-4 py-2.5">{footer}</div>}
     </Tag>
