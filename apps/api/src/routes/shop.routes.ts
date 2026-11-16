@@ -30,7 +30,10 @@ const listSchema = z.object({
 });
 const addSchema = z.object({ productKey, quantity: z.number().int().min(1).max(99).default(1) });
 const updateSchema = z.object({ quantity: z.number().int().min(0).max(99) });
-const checkoutSchema = z.object({ requestId: z.string().trim().min(8).max(64) });
+const checkoutSchema = z.object({
+  requestId: z.string().trim().min(8).max(64),
+  paymentMethod: z.enum(["coins", "credit"]).default("coins"),
+});
 
 const replyCart = (res: import("express").Response, r: CartResult) => (r.ok ? res.json(r.cart) : res.status(r.status).json({ error: r.message }));
 
@@ -69,11 +72,11 @@ shopRouter.delete("/cart/items/:productKey", async (req, res) => {
 /** DELETE /api/shop/cart — esvazia */
 shopRouter.delete("/cart", async (req, res) => res.json(await clearCart(getDb(), req.user!.id)));
 
-/** POST /api/shop/checkout — confirma o pedido (idempotente por requestId) */
+/** POST /api/shop/checkout — confirma o pedido (idempotente por requestId). paymentMethod "credit" usa o Crédito do Banco (empréstimo real). */
 shopRouter.post("/checkout", async (req, res) => {
   const p = checkoutSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: "Requisição inválida." });
-  const r = await checkout(getDb(), req.user!.id, p.data.requestId);
+  const r = await checkout(getDb(), req.user!.id, p.data.requestId, p.data.paymentMethod);
   return r.ok ? res.json(r) : res.status(409).json({ error: r.message, code: r.code });
 });
 

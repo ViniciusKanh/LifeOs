@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Backpack, Boxes, Crown, Package, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Backpack, Boxes, Crown, Package, Sparkles, Truck } from "lucide-react";
 import { RPGBadge, RPGPageHeader, RPGPanel, RPGTabs } from "@/components/rpg";
 import type { RpgTone } from "@/components/rpg/rpgAssets";
 import { IndicatorCard } from "@/components/rpg-modules/ModuleKit";
@@ -7,10 +7,34 @@ import { useHeroInventory } from "@/hooks/useShop";
 import { SHOP_CATEGORIES, type ShopCategory, type ShopRarity } from "@/services/shopService";
 
 /**
- * Inventário do Herói (Fase 1): o que foi comprado na Loja Arcana.
- * Equipar em slots, loadouts e consumo de poções com efeito real chegam
- * na Fase 2 — aqui o item já existe e já conta nos indicadores.
+ * Inventário do Herói: itens comprados na Loja Arcana e já entregues pelo
+ * Correio da Guilda. Equipar em slots, loadouts e consumo de poções com
+ * efeito real ainda são pendentes — aqui o item já existe e já conta nos
+ * indicadores assim que chega. "Correio da Guilda" mostra o que ainda
+ * está a caminho; o relógio é só visual, quem decide a chegada de verdade
+ * é o servidor (a cada abertura desta tela ele reconcilia o que já pode
+ * ser entregue).
  */
+
+/** Mostra "chegando" / "Xmin" / "pronto" a partir de ready_at — só decoração; quem entrega é sempre o servidor. */
+function useCountdownLabel(readyAtIso: string): string {
+  const [label, setLabel] = useState("calculando…");
+  useEffect(() => {
+    const tick = () => {
+      const diffMs = new Date(readyAtIso).getTime() - Date.now();
+      if (diffMs <= 0) {
+        setLabel("chegando…");
+        return;
+      }
+      const minutes = Math.ceil(diffMs / 60_000);
+      setLabel(minutes <= 1 ? "menos de 1 min" : `${minutes} min`);
+    };
+    tick();
+    const id = setInterval(tick, 15_000);
+    return () => clearInterval(id);
+  }, [readyAtIso]);
+  return label;
+}
 
 const CATEGORY_LABEL: Record<ShopCategory, string> = {
   pocoes: "Poções",
@@ -45,10 +69,24 @@ const RARITY_LABEL: Record<ShopRarity, { label: string; tone: RpgTone }> = {
 
 type Tab = "all" | ShopCategory;
 
+function PendingDeliveryRow({ delivery }: { delivery: { productName: string; rarity: ShopRarity; quantity: number; readyAt: string } }) {
+  const label = useCountdownLabel(delivery.readyAt);
+  return (
+    <li className="flex items-center justify-between gap-2 border border-rpg-border/60 bg-rpg-bg-2/60 px-2.5 py-1.5 text-xs" style={{ borderRadius: 4 }}>
+      <span className="min-w-0 flex-1 truncate text-rpg-text">
+        {delivery.productName} {delivery.quantity > 1 ? `x${delivery.quantity}` : ""}
+      </span>
+      <RPGBadge tone={RARITY_LABEL[delivery.rarity].tone}>{RARITY_LABEL[delivery.rarity].label}</RPGBadge>
+      <span className="shrink-0 font-pixel text-rpg-muted tabular-nums">{label}</span>
+    </li>
+  );
+}
+
 export function InventarioHeroiPage() {
   const [tab, setTab] = useState<Tab>("all");
   const { data, isLoading } = useHeroInventory();
   const items = useMemo(() => (data?.items ?? []).filter((i) => tab === "all" || i.category === tab), [data, tab]);
+  const pending = data?.pending ?? [];
 
   return (
     <div className="space-y-4">
@@ -63,8 +101,18 @@ export function InventarioHeroiPage() {
         <IndicatorCard icon={<Boxes size={20} />} label="Total de itens" value={data?.kpis.totalItems ?? 0} tone="gold" />
         <IndicatorCard icon={<Crown size={20} />} label="Lendários/Míticos" value={data?.kpis.legendaryCount ?? 0} tone="purple" />
         <IndicatorCard icon={<Package size={20} />} label="Consumíveis" value={data?.kpis.consumables ?? 0} tone="blue" />
-        <IndicatorCard icon={<Sparkles size={20} />} label="Bônus ativos" value={data?.kpis.bonusesActive ?? 0} hint="Efeitos funcionais chegam na Fase 3" tone="orange" />
+        <IndicatorCard icon={<Sparkles size={20} />} label="Bônus ativos" value={data?.kpis.bonusesActive ?? 0} hint="Efeitos funcionais chegam em uma próxima fase" tone="orange" />
       </div>
+
+      {pending.length > 0 && (
+        <RPGPanel title="Correio da Guilda" icon={<Truck size={16} aria-hidden />} variant="quest">
+          <ul className="space-y-1.5">
+            {pending.map((d) => (
+              <PendingDeliveryRow key={`${d.productKey}-${d.readyAt}`} delivery={d} />
+            ))}
+          </ul>
+        </RPGPanel>
+      )}
 
       <RPGTabs
         label="Categorias do Inventário"

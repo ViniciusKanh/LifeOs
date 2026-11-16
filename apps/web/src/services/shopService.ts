@@ -46,10 +46,14 @@ export interface Cart {
   balance: { coins: number; gems: number };
 }
 
+export type ShopPaymentMethod = "coins" | "credit";
+export type OrderPaymentMethod = "coins" | "gems" | "credit";
+
 export interface CheckoutResponse {
   orderId: string;
   totalCoins: number;
   totalGems: number;
+  paymentMethod: OrderPaymentMethod;
   replayed: boolean;
 }
 
@@ -59,7 +63,17 @@ export interface ShopOrder {
   paymentMethod: string;
   totalAmount: number;
   createdAt: string;
-  items: Array<{ productKey: string; productName: string; rarity: string; quantity: number; unitPrice: number; lineTotal: number }>;
+  bankLoanId: string | null;
+  items: Array<{
+    productKey: string;
+    productName: string;
+    rarity: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    deliveryStatus: "em_transito" | "entregue" | null;
+    readyAt: string | null;
+  }>;
 }
 
 export interface HeroInventoryItem {
@@ -75,8 +89,17 @@ export interface HeroInventoryItem {
   acquiredAt: string | null;
 }
 
+export interface HeroPendingDelivery {
+  productKey: string;
+  productName: string;
+  rarity: ShopRarity;
+  quantity: number;
+  readyAt: string;
+}
+
 export interface HeroInventory {
   items: HeroInventoryItem[];
+  pending: HeroPendingDelivery[];
   kpis: { totalItems: number; legendaryCount: number; consumables: number; slotsUsed: number; bonusesActive: number };
 }
 
@@ -95,7 +118,7 @@ export const shopService = {
   updateCartItem: (productKey: string, quantity: number) => api.patch<Cart>(`/shop/cart/items/${encodeURIComponent(productKey)}`, { quantity }),
   removeFromCart: (productKey: string) => api.delete<Cart>(`/shop/cart/items/${encodeURIComponent(productKey)}`),
   clearCart: () => api.delete<Cart>("/shop/cart"),
-  checkout: (requestId: string) => api.post<CheckoutResponse>("/shop/checkout", { requestId }),
+  checkout: (requestId: string, paymentMethod: ShopPaymentMethod = "coins") => api.post<CheckoutResponse>("/shop/checkout", { requestId, paymentMethod }),
   orders: () => api.get<ShopOrder[]>("/shop/orders"),
   heroInventory: () => api.get<HeroInventory>("/shop/inventory"),
 };

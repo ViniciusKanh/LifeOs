@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { shopService, type ShopCategory, type ShopRarity, type ShopSort } from "@/services/shopService";
+import { shopService, type ShopCategory, type ShopPaymentMethod, type ShopRarity, type ShopSort } from "@/services/shopService";
 
 const KEY = ["shop"];
+const BANK_KEY = ["bank"];
 
 /** Catálogo da Loja Arcana, filtrável no servidor. */
 export function useShopProducts(filter: { category?: ShopCategory | "all"; rarity?: ShopRarity | "all"; query?: string; sort?: ShopSort }) {
@@ -18,7 +19,14 @@ export function useShopCart() {
   const remove = useMutation({ mutationFn: (productKey: string) => shopService.removeFromCart(productKey), onSuccess: (cart) => qc.setQueryData([...KEY, "cart"], cart) });
   const clear = useMutation({ mutationFn: shopService.clearCart, onSuccess: (cart) => qc.setQueryData([...KEY, "cart"], cart) });
   // Sem atualização otimista de saldo: só o backend confirma o débito real.
-  const checkout = useMutation({ mutationFn: (requestId: string) => shopService.checkout(requestId), onSuccess: invalidate });
+  const checkout = useMutation({
+    mutationFn: ({ requestId, paymentMethod }: { requestId: string; paymentMethod?: ShopPaymentMethod }) => shopService.checkout(requestId, paymentMethod),
+    onSuccess: () => {
+      invalidate();
+      // Crédito do Banco cria/gasta um empréstimo real — o resumo do Banco precisa refletir isso.
+      qc.invalidateQueries({ queryKey: BANK_KEY });
+    },
+  });
   return { ...query, cart: query.data, add, update, remove, clear, checkout };
 }
 

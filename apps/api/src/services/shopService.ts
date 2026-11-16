@@ -2,6 +2,7 @@ import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { coinBalance } from "./gamificationService.js";
 import { gemBalance } from "./rewardsService.js";
+import { requestLoan } from "./bankService.js";
 
 /**
  * Loja Arcana (Fase 1 — fundação): catálogo real, carrinho persistido e
@@ -24,6 +25,9 @@ export const SHOP_RARITIES = ["comum", "incomum", "raro", "epico", "lendario", "
 export type ShopRarity = (typeof SHOP_RARITIES)[number];
 
 const RARITY_ORDER: Record<ShopRarity, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mitico: 5 };
+
+/** Correio da Guilda: minutos até a entrega, por raridade (Fase 2). Calculado no checkout, cumprido só pelo servidor. */
+const DELIVERY_DELAY_MIN: Record<ShopRarity, number> = { comum: 0, incomum: 1, raro: 3, epico: 5, lendario: 10, mitico: 15 };
 
 export interface ShopProduct {
   key: string;
@@ -200,26 +204,42 @@ export async function clearCart(db: Client, ownerId: string): Promise<CartView> 
 
 /* --------------------------------- Checkout --------------------------------- */
 
+export type CheckoutPaymentMethod = "coins" | "credit";
+export type OrderPaymentMethod = "coins" | "gems" | "credit";
+
 export type CheckoutResult =
-  | { ok: true; orderId: string; totalCoins: number; totalGems: number; replayed: boolean }
-  | { ok: false; code: "empty" | "insufficient" | "unavailable"; message: string };
+  | { ok: true; orderId: string; totalCoins: number; totalGems: number; paymentMethod: OrderPaymentMethod; replayed: boolean }
+  | { ok: false; code: "empty" | "insufficient" | "unavailable" | "credit_unavailable"; message: string };
 
 /**
- * Checkout atômico e idempotente (Fase 1 — só moedas/gemas, entrega
- * imediata). O mesmo padrão de `redeemReward`: a mesma `requestId` nunca
- * gera dois pedidos; o INSERT do pedido só acontece se o saldo no momento
- * da escrita ainda cobrir o total recalculado agora (nunca o que veio do
- * carrinho em memória do cliente); o débito e a entrega no inventário só
- * acontecem se o pedido foi mesmo criado.
+ * Checkout atômico e idempotente. O mesmo padrão de `redeemReward`: a
+ * mesma `requestId` nunca gera dois pedidos; o INSERT do pedido só
+ * acontece se o saldo no momento da escrita ainda cobrir o total
+ * recalculado agora (nunca o que veio do carrinho em memória do
+ * cliente). A partir da Fase 2 a entrega NÃO é mais imediata: cada item
+ * vira uma linha em `shop_deliveries` com `ready_at` já calculado
+ * (Correio da Guilda — ver `syncDeliveries`).
+ *
+ * "Crédito do Banco" nunca cria uma carteira paralela: é pedir um
+ * empréstimo real (`requestLoan`, as mesmas regras de score/limite/juros
+ * do Banco) no valor exato da compra e gastá-lo na hora — por isso só
+ * funciona se o Banco liberar o empréstimo (score, limite do nível, não
+ * ter outro empréstimo ativo) e nunca cobre itens pagos em gemas.
+ *
+ * Limite conhecido desta fase: se o processo cair bem entre o empréstimo
+ * ser concedido e o pedido ser gravado, o usuário fica com as moedas do
+ * empréstimo em conta mas sem o pedido — recuperável pagando com "coins"
+ * (ele já tem o saldo) ou quitando o empréstimo no Banco; não há perda
+ * de moedas nem cobrança duplicada.
  */
-export async function checkout(db: Client, ownerId: string, requestId: string): Promise<CheckoutResult> {
+export async function checkout(db: Client, ownerId: string, requestId: string, paymentMethod: CheckoutPaymentMethod = "coins"): Promise<CheckoutResult> {
   const existing = await db.execute({ sql: "SELECT id FROM shop_orders WHERE owner_id = ? AND request_id = ?", args: [ownerId, requestId] });
   if (existing.rows[0]) {
     const orderId = String(existing.rows[0].id);
-    const totals = await db.execute({ sql: "SELECT payment_method, total_amount FROM shop_orders WHERE id = ?", args: [orderId] });
-    const row = totals.rows[0]!;
-    const isGem = row.payment_method === "gems";
-    return { ok: true, orderId, totalCoins: isGem ? 0 : Number(row.total_amount), totalGems: isGem ? Number(row.total_amount) : 0, replayed: true };
+    const row = (await db.execute({ sql: "SELECT payment_method, total_amount FROM shop_orders WHERE id = ?", args: [orderId] })).rows[0]!;
+    const method = String(row.payment_method) as OrderPaymentMethod;
+    const total = Number(row.total_amount);
+    return { ok: true, orderId, totalCoins: method === "gems" ? 0 : total, totalGems: method === "gems" ? total : 0, paymentMethod: method, replayed: true };
   }
 
   const cart = await getCart(db, ownerId);
@@ -227,30 +247,41 @@ export async function checkout(db: Client, ownerId: string, requestId: string): 
   if (lines.length === 0) return { ok: false, code: "empty", message: "O carrinho está vazio." };
   if (lines.some((i) => !i.available)) return { ok: false, code: "unavailable", message: "Um ou mais itens do carrinho não estão mais disponíveis na Loja. Remova-os para continuar." };
 
-  // Fase 1: um pedido só pode ser pago numa única moeda (moedas OU gemas) — carrinho misto é bloqueado aqui.
+  // Um pedido só pode ser pago numa única moeda (moedas/crédito OU gemas) — carrinho misto é bloqueado aqui.
   const hasCoins = lines.some((i) => i.currency === "coin");
   const hasGems = lines.some((i) => i.currency === "gem");
   if (hasCoins && hasGems) return { ok: false, code: "unavailable", message: "Por enquanto, finalize em duas compras: itens pagos em moedas e itens pagos em gemas separadamente." };
-  const currency: "coin" | "gem" = hasGems ? "gem" : "coin";
+  if (hasGems && paymentMethod === "credit") return { ok: false, code: "unavailable", message: "O Crédito do Banco só cobre itens pagos em moedas." };
+
   const total = lines.reduce((s, i) => s + i.lineTotal, 0);
-  const ledger = currency === "gem" ? "gem_ledger" : "coin_ledger";
-  const paymentMethod = currency === "gem" ? "gems" : "coins";
+  const method: OrderPaymentMethod = hasGems ? "gems" : paymentMethod;
+  const ledger = method === "gems" ? "gem_ledger" : "coin_ledger";
+
+  let bankLoanId: string | null = null;
+  if (method === "credit") {
+    const loan = await requestLoan(db, ownerId, total);
+    if (!loan.ok) {
+      const message = loan.code === "active_exists" ? "Você já tem um empréstimo ativo no Banco. Quite-o antes de comprar no crédito." : loan.message;
+      return { ok: false, code: "credit_unavailable", message };
+    }
+    bankLoanId = loan.loan.id;
+  }
 
   const orderId = nanoid();
   const guard = "EXISTS (SELECT 1 FROM shop_orders WHERE id = ?)";
   const stmts: Array<{ sql: string; args: Array<string | number | null> }> = [
     {
-      sql: `INSERT INTO shop_orders (id, owner_id, request_id, payment_method, total_amount)
-            SELECT ?, ?, ?, ?, ? WHERE (SELECT COALESCE(SUM(amount), 0) FROM ${ledger} WHERE owner_id = ?) >= ?`,
-      args: [orderId, ownerId, requestId, paymentMethod, total, ownerId, total],
+      sql: `INSERT INTO shop_orders (id, owner_id, request_id, payment_method, total_amount, bank_loan_id)
+            SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COALESCE(SUM(amount), 0) FROM ${ledger} WHERE owner_id = ?) >= ?`,
+      args: [orderId, ownerId, requestId, method, total, bankLoanId, ownerId, total],
     },
     {
       sql: `INSERT INTO ${ledger} (id, owner_id, amount, source_type, source_id, event_type, label)
             SELECT ?, ?, ?, 'shop_order', ?, 'purchase', ? WHERE ${guard}`,
-      args: [nanoid(), ownerId, -total, orderId, `Compra na Loja Arcana (${lines.length} item(ns))`, orderId],
+      args: [nanoid(), ownerId, -total, orderId, `Compra na Loja Arcana (${lines.length} item(ns))${method === "credit" ? " — no crédito do Banco" : ""}`, orderId],
     },
     {
-      sql: `INSERT INTO shop_order_events (id, order_id, owner_id, type, message) SELECT ?, ?, ?, 'confirmado', 'Pedido confirmado e entregue ao Inventário do Herói.' WHERE ${guard}`,
+      sql: `INSERT INTO shop_order_events (id, order_id, owner_id, type, message) SELECT ?, ?, ?, 'confirmado', 'Pedido confirmado. Acompanhe a entrega no Correio da Guilda.' WHERE ${guard}`,
       args: [nanoid(), orderId, ownerId, orderId],
     },
   ];
@@ -260,22 +291,10 @@ export async function checkout(db: Client, ownerId: string, requestId: string): 
             SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard}`,
       args: [nanoid(), orderId, line.productKey, line.name, line.rarity, line.quantity, line.unitPrice, line.lineTotal, orderId],
     });
-    const itemKey = `shop:${line.productKey}`;
-    const txId = nanoid();
     stmts.push({
-      sql: `INSERT INTO inventory_transactions (id, owner_id, item_key, type, quantity, source_type, source_id, label)
-            SELECT ?, ?, ?, 'acquire', ?, 'shop_order', ?, ? WHERE ${guard}`,
-      args: [txId, ownerId, itemKey, line.quantity, orderId, `Comprado na Loja Arcana: ${line.name}`, orderId],
-    });
-    stmts.push({
-      sql: `INSERT INTO user_inventory_items (id, owner_id, item_key, quantity, acquired_at, last_acquired_at, source_type, source_id)
-            SELECT ?, ?, ?, ?, datetime('now'), datetime('now'), 'shop_order', ?
-            WHERE EXISTS (SELECT 1 FROM inventory_transactions WHERE id = ?)
-            ON CONFLICT (owner_id, item_key) DO UPDATE SET
-              quantity = quantity + excluded.quantity,
-              last_acquired_at = datetime('now'),
-              updated_at = datetime('now')`,
-      args: [nanoid(), ownerId, itemKey, line.quantity, orderId, txId],
+      sql: `INSERT INTO shop_deliveries (id, order_id, owner_id, product_key, product_name, rarity, quantity, ready_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, datetime('now', '+' || ? || ' minutes') WHERE ${guard}`,
+      args: [nanoid(), orderId, ownerId, line.productKey, line.name, line.rarity, line.quantity, DELIVERY_DELAY_MIN[line.rarity], orderId],
     });
   }
   stmts.push({ sql: "DELETE FROM shop_cart_items WHERE cart_id = (SELECT id FROM shop_carts WHERE owner_id = ?)", args: [ownerId] });
@@ -283,14 +302,64 @@ export async function checkout(db: Client, ownerId: string, requestId: string): 
   try {
     const results = await db.batch(stmts, "write");
     if (results[0].rowsAffected === 0) {
-      return { ok: false, code: "insufficient", message: currency === "gem" ? "Gemas insuficientes para esta compra." : "Moedas insuficientes para esta compra." };
+      return { ok: false, code: "insufficient", message: method === "gems" ? "Gemas insuficientes para esta compra." : "Moedas insuficientes para esta compra." };
     }
   } catch (err) {
     const again = await db.execute({ sql: "SELECT id FROM shop_orders WHERE owner_id = ? AND request_id = ?", args: [ownerId, requestId] });
-    if (again.rows[0]) return checkout(db, ownerId, requestId);
+    if (again.rows[0]) return checkout(db, ownerId, requestId, paymentMethod);
     throw err;
   }
-  return { ok: true, orderId, totalCoins: currency === "coin" ? total : 0, totalGems: currency === "gem" ? total : 0, replayed: false };
+  return { ok: true, orderId, totalCoins: method === "gems" ? 0 : total, totalGems: method === "gems" ? total : 0, paymentMethod: method, replayed: false };
+}
+
+/**
+ * Correio da Guilda: entrega (no Inventário do Herói) o que já passou do
+ * `ready_at`. Idempotente (mesmo padrão de `applyGrants`: INSERT OR
+ * IGNORE guardado pela UNIQUE de `inventory_transactions`) e chamado
+ * antes de toda leitura de pedidos/inventário — nunca por temporizador
+ * no navegador, só pelo relógio do servidor.
+ */
+async function syncDeliveries(db: Client, ownerId: string): Promise<void> {
+  const due = await db.execute({
+    sql: "SELECT * FROM shop_deliveries WHERE owner_id = ? AND status = 'em_transito' AND ready_at <= datetime('now')",
+    args: [ownerId],
+  });
+  if (due.rows.length === 0) return;
+  const stmts: Array<{ sql: string; args: Array<string | number | null> }> = [];
+  for (const row of due.rows as unknown as Array<Record<string, unknown>>) {
+    const deliveryId = String(row.id);
+    const productKey = String(row.product_key);
+    const productName = String(row.product_name);
+    const quantity = Number(row.quantity);
+    const itemKey = `shop:${productKey}`;
+    const txId = nanoid();
+    stmts.push({
+      sql: `INSERT OR IGNORE INTO inventory_transactions (id, owner_id, item_key, type, quantity, source_type, source_id, label)
+            VALUES (?, ?, ?, 'acquire', ?, 'shop_delivery', ?, ?)`,
+      args: [txId, ownerId, itemKey, quantity, deliveryId, `Entregue pelo Correio da Guilda: ${productName}`],
+    });
+    stmts.push({
+      sql: `INSERT INTO user_inventory_items (id, owner_id, item_key, quantity, acquired_at, last_acquired_at, source_type, source_id)
+            SELECT ?, ?, ?, ?, datetime('now'), datetime('now'), 'shop_delivery', ?
+            WHERE EXISTS (SELECT 1 FROM inventory_transactions WHERE id = ?)
+            ON CONFLICT (owner_id, item_key) DO UPDATE SET
+              quantity = quantity + excluded.quantity,
+              last_acquired_at = datetime('now'),
+              updated_at = datetime('now')`,
+      args: [nanoid(), ownerId, itemKey, quantity, deliveryId, txId],
+    });
+    stmts.push({
+      sql: "UPDATE shop_deliveries SET status = 'entregue', delivered_at = datetime('now') WHERE id = ? AND status = 'em_transito'",
+      args: [deliveryId],
+    });
+  }
+  await db.batch(stmts, "write");
+  await db.execute({
+    sql: `UPDATE shop_orders SET status = 'entregue', delivered_at = datetime('now')
+          WHERE owner_id = ? AND status = 'confirmado'
+            AND NOT EXISTS (SELECT 1 FROM shop_deliveries WHERE order_id = shop_orders.id AND status != 'entregue')`,
+    args: [ownerId],
+  });
 }
 
 export interface OrderView {
@@ -299,19 +368,45 @@ export interface OrderView {
   paymentMethod: string;
   totalAmount: number;
   createdAt: string;
-  items: Array<{ productKey: string; productName: string; rarity: string; quantity: number; unitPrice: number; lineTotal: number }>;
+  bankLoanId: string | null;
+  items: Array<{
+    productKey: string;
+    productName: string;
+    rarity: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    deliveryStatus: "em_transito" | "entregue" | null;
+    readyAt: string | null;
+  }>;
 }
 
 export async function listOrders(db: Client, ownerId: string, limit = 30): Promise<OrderView[]> {
+  await syncDeliveries(db, ownerId);
   const orders = await db.execute({ sql: "SELECT * FROM shop_orders WHERE owner_id = ? ORDER BY created_at DESC LIMIT ?", args: [ownerId, limit] });
   const ids = orders.rows.map((r) => String(r.id));
   if (ids.length === 0) return [];
   const items = await db.execute({ sql: `SELECT * FROM shop_order_items WHERE order_id IN (${ids.map(() => "?").join(",")})`, args: ids });
+  const deliveries = await db.execute({ sql: `SELECT * FROM shop_deliveries WHERE order_id IN (${ids.map(() => "?").join(",")})`, args: ids });
+  const deliveryByOrderProduct = new Map<string, { status: "em_transito" | "entregue"; readyAt: string }>();
+  for (const r of deliveries.rows) {
+    deliveryByOrderProduct.set(`${r.order_id}:${r.product_key}`, { status: r.status as "em_transito" | "entregue", readyAt: String(r.ready_at) });
+  }
   const byOrder = new Map<string, OrderView["items"]>();
   for (const r of items.rows) {
     const orderId = String(r.order_id);
+    const delivery = deliveryByOrderProduct.get(`${orderId}:${r.product_key}`);
     const list = byOrder.get(orderId) ?? [];
-    list.push({ productKey: String(r.product_key), productName: String(r.product_name), rarity: String(r.rarity), quantity: Number(r.quantity), unitPrice: Number(r.unit_price), lineTotal: Number(r.line_total) });
+    list.push({
+      productKey: String(r.product_key),
+      productName: String(r.product_name),
+      rarity: String(r.rarity),
+      quantity: Number(r.quantity),
+      unitPrice: Number(r.unit_price),
+      lineTotal: Number(r.line_total),
+      deliveryStatus: delivery?.status ?? null,
+      readyAt: delivery?.readyAt ?? null,
+    });
     byOrder.set(orderId, list);
   }
   return orders.rows.map((r) => ({
@@ -320,6 +415,7 @@ export async function listOrders(db: Client, ownerId: string, limit = 30): Promi
     paymentMethod: String(r.payment_method),
     totalAmount: Number(r.total_amount),
     createdAt: String(r.created_at),
+    bankLoanId: r.bank_loan_id == null ? null : String(r.bank_loan_id),
     items: byOrder.get(String(r.id)) ?? [],
   }));
 }
@@ -339,13 +435,39 @@ export interface HeroInventoryItem {
   acquiredAt: string | null;
 }
 
+export interface HeroPendingDelivery {
+  productKey: string;
+  productName: string;
+  rarity: ShopRarity;
+  quantity: number;
+  readyAt: string;
+}
+
 export interface HeroInventoryView {
   items: HeroInventoryItem[];
+  pending: HeroPendingDelivery[];
   kpis: { totalItems: number; legendaryCount: number; consumables: number; slotsUsed: number; bonusesActive: number };
 }
 
-/** Itens comprados na Loja (chave "shop:*"), sem equipar/consumir ainda — isso é Fase 2. */
+/**
+ * Itens comprados na Loja (chave "shop:*") já entregues pelo Correio da
+ * Guilda. Equipar/consumir com efeito real ainda é pendente (próxima
+ * fase). Reconcilia entregas vencidas (`syncDeliveries`) antes de ler,
+ * então `pending` só mostra o que genuinamente ainda está a caminho.
+ */
 export async function getHeroInventory(db: Client, ownerId: string): Promise<HeroInventoryView> {
+  await syncDeliveries(db, ownerId);
+  const pendingRows = await db.execute({
+    sql: "SELECT product_key, product_name, rarity, quantity, ready_at FROM shop_deliveries WHERE owner_id = ? AND status = 'em_transito' ORDER BY ready_at ASC",
+    args: [ownerId],
+  });
+  const pending: HeroPendingDelivery[] = pendingRows.rows.map((r) => ({
+    productKey: String(r.product_key),
+    productName: String(r.product_name),
+    rarity: r.rarity as ShopRarity,
+    quantity: Number(r.quantity),
+    readyAt: String(r.ready_at),
+  }));
   const rows = await db.execute({
     sql: `SELECT ui.item_key, ui.quantity, ui.acquired_at, p.name, p.description, p.category, p.rarity, p.art, p.effect_text, p.duration_text
           FROM user_inventory_items ui JOIN shop_products p ON p.key = substr(ui.item_key, 6)
@@ -367,6 +489,7 @@ export async function getHeroInventory(db: Client, ownerId: string): Promise<Her
   }));
   return {
     items,
+    pending,
     kpis: {
       totalItems: items.reduce((s, i) => s + i.quantity, 0),
       legendaryCount: items.filter((i) => i.rarity === "lendario" || i.rarity === "mitico").reduce((s, i) => s + i.quantity, 0),

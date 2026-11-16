@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
-import { Coins, Gem, Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Coins, Gem, Landmark, Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGTabs, RPGToast, RPGWallet } from "@/components/rpg";
 import type { RpgTone } from "@/components/rpg/rpgAssets";
+import { useBank } from "@/hooks/useBank";
 import { useShopCart, useShopProducts } from "@/hooks/useShop";
-import { SHOP_CATEGORIES, type ShopCategory, type ShopProduct, type ShopRarity } from "@/services/shopService";
+import { SHOP_CATEGORIES, type ShopCategory, type ShopPaymentMethod, type ShopProduct, type ShopRarity } from "@/services/shopService";
 
 /**
- * Loja Arcana (Fase 1): catálogo real + carrinho persistido + checkout
- * pago em moedas ou gemas já existentes no LifeOS. Entrega é imediata
- * (item já aparece no Inventário do Herói) — o Correio da Guilda (entrega
- * com atraso real) e o pagamento com Crédito do Banco chegam na Fase 2.
+ * Loja Arcana: catálogo real + carrinho persistido + checkout. Pagamento
+ * em moedas, gemas ou Crédito do Banco (reaproveita o empréstimo real do
+ * Banco — nenhuma carteira paralela). Entrega passa pelo Correio da
+ * Guilda: cada item chega ao Inventário do Herói depois de um tempo real
+ * calculado pelo servidor conforme a raridade (itens comuns chegam na
+ * hora; os mais raros levam mais minutos).
  */
 
 const CATEGORY_LABEL: Record<ShopCategory, string> = {
@@ -48,8 +51,10 @@ type Tab = "all" | ShopCategory;
 export function LojaArcanaPage() {
   const [tab, setTab] = useState<Tab>("all");
   const [toast, setToast] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<ShopPaymentMethod>("coins");
   const { data: products, isLoading } = useShopProducts({ category: tab === "all" ? "all" : tab });
   const { cart, add, update, remove, checkout } = useShopCart();
+  const { summary: bankSummary } = useBank();
 
   const items = useMemo(() => products ?? [], [products]);
 
@@ -57,12 +62,26 @@ export function LojaArcanaPage() {
     add.mutate({ productKey: p.key, quantity: 1 }, { onError: () => setToast("Não foi possível adicionar ao carrinho.") });
   };
 
+  // Crédito do Banco só cobre carrinhos 100% em moedas (gemas nunca entram no empréstimo).
+  const cartIsGemOnly = (cart?.subtotalGems ?? 0) > 0 && (cart?.subtotalCoins ?? 0) === 0;
+  const creditLimit = bankSummary?.credit.tier.maxAmount ?? 0;
+  const creditBlockedByLoan = Boolean(bankSummary?.loan.active);
+  const creditBlockedByLimit = (cart?.subtotalCoins ?? 0) > creditLimit;
+  const creditAvailable = !cartIsGemOnly && creditLimit > 0 && !creditBlockedByLoan && !creditBlockedByLimit;
+  const effectivePaymentMethod: ShopPaymentMethod = paymentMethod === "credit" && creditAvailable ? "credit" : "coins";
+
   const onCheckout = () => {
     const requestId = crypto.randomUUID();
-    checkout.mutate(requestId, {
-      onSuccess: (r) => setToast(r.replayed ? "Esta compra já tinha sido confirmada." : `Compra confirmada! ${r.totalCoins > 0 ? `${r.totalCoins} moedas` : `${r.totalGems} gemas`} debitadas — itens já no Inventário do Herói.`),
-      onError: (err: unknown) => setToast(err instanceof Error ? err.message : "Não foi possível confirmar a compra."),
-    });
+    checkout.mutate(
+      { requestId, paymentMethod: cartIsGemOnly ? "coins" : effectivePaymentMethod },
+      {
+        onSuccess: (r) => {
+          const paidWith = r.paymentMethod === "gems" ? `${r.totalGems} gemas` : r.paymentMethod === "credit" ? `${r.totalCoins} moedas no Crédito do Banco` : `${r.totalCoins} moedas`;
+          setToast(r.replayed ? "Esta compra já tinha sido confirmada." : `Compra confirmada! ${paidWith} debitadas — acompanhe a entrega no Correio da Guilda.`);
+        },
+        onError: (err: unknown) => setToast(err instanceof Error ? err.message : "Não foi possível confirmar a compra."),
+      },
+    );
   };
 
   const cartCount = cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0;
@@ -171,11 +190,46 @@ export function LojaArcanaPage() {
                   </p>
                 )}
               </div>
+              {!cartIsGemOnly && (
+                <div className="space-y-1.5 border-t border-rpg-border/60 pt-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-rpg-muted">Forma de pagamento</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("coins")}
+                      className={`flex items-center justify-center gap-1.5 border px-2 py-1.5 text-xs font-semibold ${paymentMethod === "coins" ? "border-rpg-gold bg-rpg-gold/15 text-rpg-gold-light" : "border-rpg-border/60 text-rpg-muted"}`}
+                      style={{ borderRadius: 4 }}
+                    >
+                      <Coins size={14} aria-hidden /> Moedas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("credit")}
+                      disabled={!creditAvailable}
+                      title={creditBlockedByLoan ? "Você já tem um empréstimo ativo no Banco." : creditBlockedByLimit ? `Limite atual de crédito: ${creditLimit} moedas.` : undefined}
+                      className={`flex items-center justify-center gap-1.5 border px-2 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${paymentMethod === "credit" && creditAvailable ? "border-rpg-purple bg-rpg-purple/15 text-rpg-purple" : "border-rpg-border/60 text-rpg-muted"}`}
+                      style={{ borderRadius: 4 }}
+                    >
+                      <Landmark size={14} aria-hidden /> Crédito
+                    </button>
+                  </div>
+                  {paymentMethod === "credit" && creditAvailable && (
+                    <p className="text-[11px] text-rpg-purple">
+                      Pedirá um empréstimo real de {cart.subtotalCoins.toLocaleString("pt-BR")} moedas no Banco ({((bankSummary?.credit.tier.rateBps ?? 0) / 100).toFixed(1)}% de juros, {bankSummary?.credit.termDays} dias para pagar).
+                    </p>
+                  )}
+                  {paymentMethod === "credit" && !creditAvailable && (
+                    <p className="text-[11px] text-rpg-red">
+                      {creditBlockedByLoan ? "Você já tem um empréstimo ativo — quite-o no Banco para usar o crédito de novo." : creditBlockedByLimit ? `Acima do seu limite de crédito atual (${creditLimit} moedas).` : "Crédito ainda não liberado pelo seu score no Banco."}
+                    </p>
+                  )}
+                </div>
+              )}
               <RPGButton variant="gold" className="w-full justify-center" onClick={onCheckout} disabled={checkout.isPending || cart.items.some((i) => !i.available)}>
                 Finalizar Compra
               </RPGButton>
               <p className="text-[11px] text-rpg-muted">
-                Fase 1: pagamento só em moedas ou gemas, com entrega imediata ao Inventário do Herói. Crédito do Banco e entrega com o Correio da Guilda chegam na Fase 2.
+                Entrega pelo Correio da Guilda: itens comuns chegam na hora; raros e lendários levam alguns minutos. Acompanhe em Meus Pedidos.
               </p>
             </div>
           )}
