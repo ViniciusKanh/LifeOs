@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Coins, Crown, Sparkles } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuth } from "@/hooks/useAuth";
 import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { useGamificationProfile } from "@/hooks/useGamification";
 import { GAMIFICATION_REFRESH_EVENT, type PlayerEvent } from "@/services/gamificationService";
@@ -17,10 +18,12 @@ interface Burst {
   title: string;
   stamp: "mission" | "contract" | null;
   detail: string | null;
+  /** Trilhas de Brilho (Loja Arcana — Personalização): só nas missões concluídas. */
+  sparkle: boolean;
 }
 
 /** Título da explosão a partir dos eventos novos (missão, hábito, contrato ou genérico). */
-function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
+function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins" | "sparkle"> {
   const main = events.find((e) => e.eventType === "completed" || e.eventType === "fulfilled" || e.eventType === "session" || e.eventType === "first_entry") ?? events[0];
   if (main.sourceType === "task") return { title: "MISSÃO CONCLUÍDA", stamp: "mission", detail: main.label?.replace(/^Missão concluída: /, "") ?? null };
   if (main.sourceType === "habit_entry") return { title: "HÁBITO CUMPRIDO", stamp: "contract", detail: main.label?.replace(/^Hábito cumprido: /, "") ?? null };
@@ -53,6 +56,8 @@ function describe(events: PlayerEvent[]): Omit<Burst, "key" | "xp" | "coins"> {
  */
 export function GamificationFeedback() {
   const { isRpg } = useTheme();
+  const { user } = useAuth();
+  const sparkleTrailOwned = !!user?.rpg_prefs?.shopCosmetics?.sparkleTrail;
   const qc = useQueryClient();
   const { prefs } = useRpgPreferences();
   // Preferência do usuário soma-se ao prefers-reduced-motion do sistema.
@@ -97,11 +102,13 @@ export function GamificationFeedback() {
       const point = recentActionPoint();
       if (point && xp > 0) spawnBurst(`+${xp} XP`, point, { reduced: reduce });
       playSfx("xp", prefs.sound);
+      const described = describe(fresh);
       setBurst({
         key: fresh[0].id,
         xp: fresh.reduce((a, e) => a + e.xp, 0),
         coins: fresh.reduce((a, e) => a + e.coins, 0),
-        ...describe(fresh),
+        ...described,
+        sparkle: sparkleTrailOwned && fresh.some((e) => e.sourceType === "task"),
       });
     }
     if (lastLevel.current !== null && data.level > lastLevel.current && !silent) {
@@ -142,6 +149,23 @@ export function GamificationFeedback() {
                   transition={{ duration: 0.6 }}
                   aria-hidden
                 />
+              )}
+              {burst.sparkle && !reduce && (
+                <span className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+                  {[
+                    { top: "8%", left: "12%", delay: "0s" },
+                    { top: "70%", left: "22%", delay: "0.15s" },
+                    { top: "20%", left: "88%", delay: "0.3s" },
+                    { top: "75%", left: "78%", delay: "0.45s" },
+                  ].map((p, i) => (
+                    <Sparkles
+                      key={i}
+                      size={12}
+                      className="absolute text-rpg-gold-light animate-ping"
+                      style={{ top: p.top, left: p.left, animationDelay: p.delay, animationDuration: "1.1s", animationIterationCount: 2 }}
+                    />
+                  ))}
+                </span>
               )}
               {burst.stamp && (
                 <motion.span

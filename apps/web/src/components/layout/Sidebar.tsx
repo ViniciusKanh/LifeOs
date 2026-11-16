@@ -192,7 +192,7 @@ export function NavGroups({
                                 className="absolute -left-3 lg:-left-4 top-2 bottom-2 w-[3px] rounded-r-full bg-gradient-to-b from-brand-500 to-signal rpg:from-rpg-gold-light rpg:to-rpg-gold"
                               />
                             )}
-                            <span className="relative shrink-0">
+                            <span className={`relative shrink-0${isActive ? " sidebar-active-icon" : ""}`}>
                               <Icon size={17} />
                               {badge ? (
                                 <span

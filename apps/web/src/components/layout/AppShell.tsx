@@ -118,7 +118,7 @@ function MobileDrawer({ open, onClose, isAdmin, badges }: { open: boolean; onClo
 
 export function AppShell() {
   const { isRpg } = useTheme();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const location = useLocation();
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
   useDesktopNotifications();
@@ -129,9 +129,13 @@ export function AppShell() {
   const bankPending = useBankPendingCount();
   const navBadges: Record<string, number> = bankPending > 0 ? { "/banco": bankPending } : {};
 
-  const current = findNavItem(location.pathname);
+  // pathname+search: abas como /revisoes?ciclo=weekly só diferenciam pela query.
+  const fullLocation = location.pathname + location.search;
+  const current = findNavItem(fullLocation);
+  const activeTarget = current?.tab?.to ?? current?.item.to ?? null;
   // Sub-página = rota mais funda que o item/aba (ex.: /projetos/:id); uma aba do hub não é sub-página.
-  const isSubPage = !!current && location.pathname !== (current.tab?.to ?? current.item.to);
+  // Só compara com a query quando o próprio alvo usa "?" (aba por query) -- outras rotas com filtros na URL continuam comparando só pelo path.
+  const isSubPage = !!current && activeTarget != null && (activeTarget.includes("?") ? fullLocation !== activeTarget : location.pathname !== activeTarget);
   const quote = current?.item.quote ?? DEFAULT_QUOTE;
 
   // A janela nunca rola (comportamento de app): só este contêiner. Cada troca de rota volta ao topo dele.
@@ -153,6 +157,18 @@ export function AppShell() {
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+
+  // Cosméticos da Loja Arcana que valem em qualquer tela (cursor e filtro dos
+  // ícones da barra lateral) — classes no <html>, nunca sobrepõem o tema RPG.
+  const cosmetics = user?.rpg_prefs?.shopCosmetics;
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("rpg-cursor-arcane", !!cosmetics?.cursor);
+    root.classList.toggle("rpg-icon-tint", !!cosmetics?.iconTint);
+    return () => {
+      root.classList.remove("rpg-cursor-arcane", "rpg-icon-tint");
+    };
+  }, [cosmetics?.cursor, cosmetics?.iconTint]);
 
   return (
     <div className="app-shell fixed inset-0 w-full flex overflow-hidden bg-paper text-[#1E2537] dark:bg-ink dark:text-[#E7EAF2] rpg:rpg-backdrop rpg:text-rpg-text">

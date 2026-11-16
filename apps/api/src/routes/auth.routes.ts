@@ -322,9 +322,13 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
       return res.status(403).json({ error: "Este emblema ainda não foi conquistado." });
     }
     // Mescla com o que já está salvo: cada tela envia só o que mudou.
+    // "shopCosmetics" nunca é aceito por aqui (sem checagem de posse nesta
+    // rota) — só existe no schema para o GET /auth/me devolvê-lo de volta;
+    // a escrita de verdade é POST /shop/cosmetics/:key/toggle.
+    const { shopCosmetics: _ignoredShopCosmetics, ...rpgPrefsPatch } = data.rpgPrefs;
     const current = await db.execute({ sql: "SELECT rpg_prefs_json FROM users WHERE id = ?", args: [req.user!.id] });
     sets.push("rpg_prefs_json = ?");
-    args.push(JSON.stringify({ ...parseRpgPrefs(current.rows[0]?.rpg_prefs_json), ...data.rpgPrefs }));
+    args.push(JSON.stringify({ ...parseRpgPrefs(current.rows[0]?.rpg_prefs_json), ...rpgPrefsPatch }));
   }
   if (sets.length === 0) {
     return res.status(400).json({ error: "Nenhum campo para atualizar." });

@@ -1,4 +1,5 @@
 import { api } from "./api";
+import type { ShopCosmeticsState } from "@/types";
 
 /** Espelho de /api/shop (Loja Arcana — Fase 1: catálogo, carrinho e checkout em moedas/gemas). */
 export const SHOP_CATEGORIES = ["pocoes", "vestimentas", "artefatos", "personalizacao", "boosters", "decoracao", "reliquias", "materiais", "pacotes"] as const;
@@ -76,6 +77,8 @@ export interface ShopOrder {
   }>;
 }
 
+export type CosmeticSlot = "avatarAura" | "accentTheme" | "cursor" | "wallpaperGlow" | "sparkleTrail" | "iconTint";
+
 export interface HeroInventoryItem {
   key: string;
   name: string;
@@ -87,6 +90,21 @@ export interface HeroInventoryItem {
   effectText: string | null;
   durationText: string | null;
   acquiredAt: string | null;
+  /** Tem ação de "Usar" de verdade (boosters, passe de revisão, ticket de hábito). */
+  usable: boolean;
+  /** Cosmético de Personalização equipável — slot que ele ocupa. */
+  cosmeticSlot: CosmeticSlot | null;
+}
+
+export interface ShopActiveBoost {
+  effectType: string;
+  label: string;
+  expiresAt: string;
+}
+
+export interface ShopEffectsState {
+  cosmetics: ShopCosmeticsState;
+  activeBoosts: ShopActiveBoost[];
 }
 
 export interface HeroPendingDelivery {
@@ -121,4 +139,9 @@ export const shopService = {
   checkout: (requestId: string, paymentMethod: ShopPaymentMethod = "coins") => api.post<CheckoutResponse>("/shop/checkout", { requestId, paymentMethod }),
   orders: () => api.get<ShopOrder[]>("/shop/orders"),
   heroInventory: () => api.get<HeroInventory>("/shop/inventory"),
+  effects: () => api.get<ShopEffectsState>("/shop/effects"),
+  useItem: (productKey: string, requestId: string, habitId?: string) =>
+    api.post<{ ok: true; message: string }>(`/shop/items/${encodeURIComponent(productKey)}/use`, { requestId, habitId }),
+  toggleCosmetic: (productKey: string, enabled: boolean) =>
+    api.post<{ ok: true; message: string }>(`/shop/cosmetics/${encodeURIComponent(productKey)}/toggle`, { enabled }),
 };

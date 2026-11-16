@@ -17,6 +17,16 @@ import { disableMfa } from "../services/mfaService.js";
 import { invalidateAuthState, revokeAllSessions } from "../services/sessionService.js";
 import { CURRENT_TERMS_VERSION } from "../config/legal.js";
 import crypto from "node:crypto";
+import {
+  SHOP_CATEGORIES,
+  SHOP_RARITIES,
+  createProductAdmin,
+  deleteProductAdmin,
+  listAllProductsAdmin,
+  setProductActiveAdmin,
+  updateProductAdmin,
+  type AdminProductResult,
+} from "../services/shopService.js";
 
 export const adminRouter = Router();
 
@@ -458,4 +468,69 @@ adminRouter.post("/users/:id/revoke-sessions", async (req, res) => {
   await revokeAllSessions(req.params.id);
   await logAudit(db, req.user!.id, "admin_users.revoke_sessions", req.params.id, req);
   return res.json({ ok: true });
+});
+
+/* ----------------------------- Loja Arcana (administração de produtos) ----------------------------- */
+
+const productInputSchema = z.object({
+  category: z.enum(SHOP_CATEGORIES),
+  rarity: z.enum(SHOP_RARITIES),
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().min(2).max(400),
+  currency: z.enum(["coin", "gem"]),
+  price: z.number().int().min(1).max(100_000),
+  art: z.string().trim().min(1).max(8),
+  effectText: z.string().trim().max(200).nullable().optional().transform((v) => v || null),
+  durationText: z.string().trim().max(80).nullable().optional().transform((v) => v || null),
+  stackable: z.boolean().default(true),
+  maxStack: z.number().int().min(1).max(999).default(99),
+  featured: z.boolean().default(false),
+  active: z.boolean().default(true),
+  stock: z.number().int().min(0).max(100_000).nullable().optional().transform((v) => v ?? null),
+});
+
+const replyProduct = (res: import("express").Response, r: AdminProductResult) => (r.ok ? res.json(r.product) : res.status(r.code === "duplicate" ? 409 : r.code === "in_use" ? 409 : 404).json({ error: r.message, code: r.code }));
+
+/** GET /api/admin/shop/products — catálogo completo (ativos e inativos). */
+adminRouter.get("/shop/products", async (_req, res) => res.json(await listAllProductsAdmin(getDb())));
+
+/** POST /api/admin/shop/products — cria um produto novo (a chave é gerada a partir do nome). */
+adminRouter.post("/shop/products", async (req, res) => {
+  const p = productInputSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: "Dados do produto inválidos." });
+  const db = getDb();
+  const r = await createProductAdmin(db, p.data);
+  if (r.ok) await logAudit(db, req.user!.id, "admin_shop.create_product", r.product.key, req);
+  return replyProduct(res, r);
+});
+
+/** PATCH /api/admin/shop/products/:key — edita um produto existente (a chave nunca muda). */
+adminRouter.patch("/shop/products/:key", async (req, res) => {
+  const p = productInputSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: "Dados do produto inválidos." });
+  const db = getDb();
+  const r = await updateProductAdmin(db, req.params.key, p.data);
+  if (r.ok) await logAudit(db, req.user!.id, "admin_shop.update_product", req.params.key, req);
+  return replyProduct(res, r);
+});
+
+/** PATCH /api/admin/shop/products/:key/active — ativa/desativa sem mexer no resto (some da Loja, mas quem já tem o item mantém). */
+adminRouter.patch("/shop/products/:key/active", async (req, res) => {
+  const p = z.object({ active: z.boolean() }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: "Requisição inválida." });
+  const db = getDb();
+  const r = await setProductActiveAdmin(db, req.params.key, p.data.active);
+  if (r.ok) await logAudit(db, req.user!.id, p.data.active ? "admin_shop.activate_product" : "admin_shop.deactivate_product", req.params.key, req);
+  return replyProduct(res, r);
+});
+
+/** DELETE /api/admin/shop/products/:key — só remove de verdade produtos que ninguém nunca comprou. */
+adminRouter.delete("/shop/products/:key", async (req, res) => {
+  const db = getDb();
+  const r = await deleteProductAdmin(db, req.params.key);
+  if (r.ok) {
+    await logAudit(db, req.user!.id, "admin_shop.delete_product", req.params.key, req);
+    return res.json({ ok: true });
+  }
+  return res.status(r.code === "in_use" ? 409 : 404).json({ error: r.message, code: r.code });
 });

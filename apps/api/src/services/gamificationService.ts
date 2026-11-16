@@ -1,4 +1,4 @@
-import { applyPct, claimTaskBoost, focusBoostAt, releaseTaskBoost } from "./itemEffectService.js";
+import { applyPct, claimEffect, claimTaskBoost, focusBoostAt, releaseEffect, releaseTaskBoost } from "./itemEffectService.js";
 import { maybeAutoInvest } from "./bankService.js";
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
@@ -383,11 +383,19 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
       const b = grants[0];
       grants[0] = { ...b, baseXp: b.xp, multiplier: (100 + boost.pct) / 100, xp: applyPct(b.xp, boost.pct), label: `${b.label} (+${boost.pct}% Pergaminho)` };
     }
+    // Bônus de Moedas (Loja Arcana): mesmo mecanismo do boost de XP acima,
+    // mas só nas moedas desta missão — reserva atômica e devolução simétrica.
+    const coinBoost = await claimEffect(db, ownerId, "COIN_MULTIPLIER_TASK", `task-coin:${taskId}`);
+    if (coinBoost && grants[0]) {
+      const b = grants[0];
+      grants[0] = { ...b, coins: applyPct(b.coins, coinBoost.pct), label: `${b.label} (+${coinBoost.pct}% moedas)` };
+    }
     grants.push({ sourceType: "day", sourceId: dayKey, eventType: "first_mission", xp: R.firstOfDayXp, coins: 0, label: "Primeira missão do dia" });
 
     const capped = applyDailyCap(grants, await taskXpToday(db, ownerId, dayKey), R.dailyXpCap);
     if (capped.length === 0) {
       if (boost) await releaseTaskBoost(db, ownerId, boost.id);
+      if (coinBoost) await releaseEffect(db, ownerId, coinBoost.id);
       return;
     }
     // A concessão base vem primeiro: se ela já existia (tarefa reaberta e
@@ -395,6 +403,7 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
     const [baseGrant, ...bonuses] = capped;
     if (!(await award(db, ownerId, baseGrant, dayKey))) {
       if (boost) await releaseTaskBoost(db, ownerId, boost.id);
+      if (coinBoost) await releaseEffect(db, ownerId, coinBoost.id);
       return;
     }
     for (const g of bonuses) await award(db, ownerId, g, dayKey);

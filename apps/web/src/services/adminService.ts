@@ -1,5 +1,28 @@
 import { api } from "./api";
 import type { AdminIntegration, AdminSetting, AdminUser, AdminUserOverview } from "@/types";
+import type { ShopCategory, ShopProduct, ShopRarity } from "./shopService";
+
+export interface AdminShopProduct extends ShopProduct {
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShopProductInput {
+  category: ShopCategory;
+  rarity: ShopRarity;
+  name: string;
+  description: string;
+  currency: "coin" | "gem";
+  price: number;
+  art: string;
+  effectText: string | null;
+  durationText: string | null;
+  stackable: boolean;
+  maxStack: number;
+  featured: boolean;
+  active: boolean;
+  stock: number | null;
+}
 
 export const adminService = {
   listSettings: () => api.get<AdminSetting[]>("/admin/settings"),
@@ -33,4 +56,11 @@ export const adminService = {
   sendPasswordReset: (id: string) => api.post<{ ok: boolean }>(`/admin/users/${id}/password-reset`),
   tempPassword: (id: string) => api.post<{ tempPassword: string }>(`/admin/users/${id}/temp-password`),
   revokeSessions: (id: string) => api.post<{ ok: boolean }>(`/admin/users/${id}/revoke-sessions`),
+
+  // Loja Arcana — administração de produtos.
+  listShopProducts: () => api.get<AdminShopProduct[]>("/admin/shop/products"),
+  createShopProduct: (input: ShopProductInput) => api.post<AdminShopProduct>("/admin/shop/products", input),
+  updateShopProduct: (key: string, input: ShopProductInput) => api.patch<AdminShopProduct>(`/admin/shop/products/${encodeURIComponent(key)}`, input),
+  setShopProductActive: (key: string, active: boolean) => api.patch<AdminShopProduct>(`/admin/shop/products/${encodeURIComponent(key)}/active`, { active }),
+  deleteShopProduct: (key: string) => api.delete<{ ok: true }>(`/admin/shop/products/${encodeURIComponent(key)}`),
 };

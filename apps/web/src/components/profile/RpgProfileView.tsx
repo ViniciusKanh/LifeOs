@@ -46,6 +46,8 @@ import { useGamificationProfile, useGamificationRules, useXpHistory } from "@/ho
 import { useAchievements } from "@/hooks/useAchievements";
 import { useAnalyticsOverview, useLifeScore } from "@/hooks/useAnalytics";
 import { useHabits } from "@/hooks/useHabits";
+import { useHeroInventory } from "@/hooks/useShop";
+import { CATEGORY_ICON } from "@/lib/shopLabels";
 import { useProjects } from "@/hooks/useProjects";
 import { useLifeAdmin } from "@/hooks/useLifeOs";
 import { useExperiments } from "@/hooks/useExperiments";
@@ -95,6 +97,9 @@ export function RpgProfileView({
   const [editing, setEditing] = useState(false);
   const [statsDays, setStatsDays] = useState(30);
   const { prefs, update } = useRpgPreferences();
+  const shopCosmetics = user.rpg_prefs?.shopCosmetics;
+  const { data: heroInventory } = useHeroInventory();
+  const decorItems = (heroInventory?.items ?? []).filter((i) => i.category === "decoracao");
   const { data: hud } = useHeroHud();
   const { updateProfile, isUpdatingProfile } = useProfile();
   const { data: p } = useGamificationProfile();
@@ -156,6 +161,27 @@ export function RpgProfileView({
       <header className="rpg-panel rpg-panel-gold relative overflow-hidden min-h-[150px] sm:min-h-[190px]">
         <img src={bannerSrc(prefs.banner)} alt="" aria-hidden decoding="async" className="pixelated absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-rpg-bg/90 via-rpg-bg/45 to-transparent" aria-hidden />
+        {/* Tema de Destaque (Loja Arcana — Personalização): recolore o brilho do cabeçalho, nunca troca o banner escolhido. */}
+        {shopCosmetics?.accentTheme && (
+          <div
+            aria-hidden
+            className="absolute inset-0 mix-blend-screen opacity-70"
+            style={{
+              background:
+                shopCosmetics.accentTheme === "noite-astral"
+                  ? "radial-gradient(circle at 30% 20%, rgb(var(--rpg-purple) / 0.35), transparent 60%)"
+                  : "radial-gradient(circle at 30% 20%, rgb(var(--rpg-gold) / 0.4), transparent 60%)",
+            }}
+          />
+        )}
+        {/* Plano de Fundo Biblioteca Arcana: brilho arcano pulsante no cabeçalho. */}
+        {shopCosmetics?.wallpaperGlow && (
+          <div
+            aria-hidden
+            className="absolute inset-0 animate-pulse"
+            style={{ background: "radial-gradient(circle at 85% 15%, rgb(var(--rpg-purple) / 0.3), transparent 55%)" }}
+          />
+        )}
         <div className="relative p-5 sm:p-7 max-w-xl">
           <p className="font-pixel text-[11px] uppercase tracking-[0.18em] text-rpg-gold">Ficha do personagem</p>
           <h1 className="rpg-title text-3xl sm:text-4xl font-bold leading-tight">Meu Perfil</h1>
@@ -218,6 +244,20 @@ export function RpgProfileView({
               </RPGPanel>
             )}
             <TrophyShowcasePanel hud={hud} />
+            {decorItems.length > 0 && (
+              <RPGPanel title="Vitrine de Troféus" icon={<Trophy size={16} />}>
+                <p className="text-[11px] text-rpg-muted mb-2">Itens de Decoração comprados na Loja Arcana — aparecem aqui assim que entregues.</p>
+                <ul className="flex flex-wrap gap-2">
+                  {decorItems.map((d) => (
+                    <li key={d.key} className="flex items-center gap-1.5 border border-rpg-border bg-rpg-bg-2 px-2.5 py-1.5 text-xs" style={{ borderRadius: 4 }} title={d.description}>
+                      <span aria-hidden>{CATEGORY_ICON[d.category]}</span>
+                      <span className="text-rpg-text">{d.name}</span>
+                      {d.quantity > 1 && <span className="text-rpg-muted">x{d.quantity}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </RPGPanel>
+            )}
             <RPGPanel title="Progressão" icon={<Crown size={16} />}>
               {p ? (
                 <>

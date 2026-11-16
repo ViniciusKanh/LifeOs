@@ -88,3 +88,32 @@ export async function releaseTaskBoost(db: Client, ownerId: string, id: string):
     args: [id, ownerId],
   });
 }
+
+/**
+ * Versão genérica de claimTaskBoost/releaseTaskBoost para efeitos que não
+ * fazem parte de EFFECT_RULES (ex.: bônus da Loja Arcana) — mesma reserva
+ * atômica, mesmo formato de retorno, só sem o filtro de catálogo.
+ */
+export async function claimEffect(db: Client, ownerId: string, effectType: string, sourceId: string): Promise<{ id: string; pct: number } | null> {
+  const now = sqlTime(new Date());
+  const r = await db.execute({
+    sql: `SELECT id, value FROM active_item_effects WHERE owner_id = ? AND effect_type = ?
+          AND status = 'active' AND expires_at > ? ORDER BY expires_at ASC LIMIT 1`,
+    args: [ownerId, effectType, now],
+  });
+  const row = r.rows[0];
+  if (!row) return null;
+  const upd = await db.execute({
+    sql: "UPDATE active_item_effects SET status = 'consumed', consumed_source = ? WHERE id = ? AND owner_id = ? AND status = 'active'",
+    args: [sourceId, String(row.id), ownerId],
+  });
+  return upd.rowsAffected === 1 ? { id: String(row.id), pct: Number(row.value) } : null;
+}
+
+/** Devolve um efeito consumido por claimEffect quando a concessão não aconteceu. */
+export async function releaseEffect(db: Client, ownerId: string, id: string): Promise<void> {
+  await db.execute({
+    sql: "UPDATE active_item_effects SET status = 'active', consumed_source = NULL WHERE id = ? AND owner_id = ? AND status = 'consumed'",
+    args: [id, ownerId],
+  });
+}

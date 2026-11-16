@@ -4,7 +4,8 @@ import { RPGBadge, RPGButton, RPGPageHeader, RPGPanel, RPGTabs, RPGToast, RPGWal
 import type { RpgTone } from "@/components/rpg/rpgAssets";
 import { useBank } from "@/hooks/useBank";
 import { useShopCart, useShopProducts } from "@/hooks/useShop";
-import { SHOP_CATEGORIES, type ShopCategory, type ShopPaymentMethod, type ShopProduct, type ShopRarity } from "@/services/shopService";
+import { CATEGORY_ICON, CATEGORY_LABEL, RARITY_LABEL } from "@/lib/shopLabels";
+import { SHOP_CATEGORIES, type ShopCategory, type ShopPaymentMethod, type ShopProduct } from "@/services/shopService";
 
 /**
  * Loja Arcana: catálogo real + carrinho persistido + checkout. Pagamento
@@ -14,37 +15,6 @@ import { SHOP_CATEGORIES, type ShopCategory, type ShopPaymentMethod, type ShopPr
  * calculado pelo servidor conforme a raridade (itens comuns chegam na
  * hora; os mais raros levam mais minutos).
  */
-
-const CATEGORY_LABEL: Record<ShopCategory, string> = {
-  pocoes: "Poções",
-  vestimentas: "Vestimentas",
-  artefatos: "Artefatos",
-  personalizacao: "Personalização",
-  boosters: "Boosters",
-  decoracao: "Decoração",
-  reliquias: "Relíquias",
-  materiais: "Materiais",
-  pacotes: "Pacotes",
-};
-const CATEGORY_ICON: Record<ShopCategory, string> = {
-  pocoes: "🧪",
-  vestimentas: "🧥",
-  artefatos: "🔮",
-  personalizacao: "🎨",
-  boosters: "⚡",
-  decoracao: "🏺",
-  reliquias: "💎",
-  materiais: "🧵",
-  pacotes: "📦",
-};
-const RARITY_LABEL: Record<ShopRarity, { label: string; tone: RpgTone }> = {
-  comum: { label: "Comum", tone: "muted" },
-  incomum: { label: "Incomum", tone: "green" },
-  raro: { label: "Raro", tone: "blue" },
-  epico: { label: "Épico", tone: "purple" },
-  lendario: { label: "Lendário", tone: "gold" },
-  mitico: { label: "Mítico", tone: "pink" },
-};
 
 type Tab = "all" | ShopCategory;
 

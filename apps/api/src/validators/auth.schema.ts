@@ -73,6 +73,23 @@ export const rpgPrefsSchema = z
     sound: z.boolean(),
     /** Vitrine: até 3 conquistas escolhidas (o servidor só exibe as desbloqueadas). */
     showcase: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)).max(3),
+    /**
+     * Cosméticos da Loja Arcana (Inventário do Herói). Só aparece aqui para
+     * o GET /auth/me devolver de volta — a ESCRITA de verdade (com
+     * validação de posse real do item) passa só por POST
+     * /shop/cosmetics/:key/toggle; esta rota de perfil ignora este campo
+     * mesmo que venha no corpo (ver auth.routes.ts).
+     */
+    shopCosmetics: z
+      .object({
+        avatarAura: z.boolean(),
+        accentTheme: z.enum(["noite-astral", "castelo-dourado"]).nullable(),
+        cursor: z.boolean(),
+        wallpaperGlow: z.boolean(),
+        sparkleTrail: z.boolean(),
+        iconTint: z.boolean(),
+      })
+      .partial(),
   })
   .partial()
   .strict();

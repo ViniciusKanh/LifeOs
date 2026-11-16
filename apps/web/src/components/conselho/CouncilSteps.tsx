@@ -64,7 +64,7 @@ export function CouncilReportStep({
             </ul>
             <p className="mt-3 text-xs text-rpg-muted">
               Life Score no fim da semana: <span className="font-pixel text-rpg-text">{summary.lifeScore.overall}</span>.{" "}
-              <Link to="/weekly-review" className="underline text-rpg-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold">
+              <Link to="/revisoes?ciclo=weekly" className="underline text-rpg-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold">
                 Ver a revisão completa
               </Link>
             </p>

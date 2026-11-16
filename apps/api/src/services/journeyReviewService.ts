@@ -467,9 +467,10 @@ export async function getReview(db: Client, ownerId: string, kind: ReviewKind, k
     .sort((a, b) => (b.progressPct ?? -1) - (a.progressPct ?? -1))
     .slice(0, 8)
     .map((g) => ({ id: g.id, title: g.title, status: g.status, progressPct: g.progressPct, cycle: g.cycle, lifeArea: g.lifeArea, openTasks: g.openTasks, doneTasks: g.doneTasks }));
+  const weeklyGrace = kind === "weekly" ? await weeklyGraceDays(db, ownerId) : 0;
   const eligible = kind === "weekly" ? (() => {
     const age = daysBetween(key, today);
-    return age >= 0 && age < 14;
+    return age >= 0 && age < 14 + weeklyGrace;
   })() : await isReviewRewardEligible(db, ownerId, kind, key);
   const required = settings[kind];
   const filled = filledAnswers(stored);
@@ -679,6 +680,25 @@ async function prefillWarCouncil(db: Client, ownerId: string, nextWeek: string, 
   return { weekStart: nextWeek, focus: focus.length, priorities: plan.priorities.length };
 }
 
+/** Passe de Revisão Semanal (Loja Arcana): dias extras na janela de elegibilidade do baú, se o passe estiver ativo. */
+async function weeklyGraceDays(db: Client, ownerId: string): Promise<number> {
+  const r = await db.execute({
+    sql: "SELECT value FROM active_item_effects WHERE owner_id = ? AND effect_type = 'REVIEW_GRACE_WEEKLY' AND status = 'active' AND expires_at > datetime('now') ORDER BY expires_at ASC LIMIT 1",
+    args: [ownerId],
+  });
+  return r.rows[0] ? Number(r.rows[0].value) : 0;
+}
+
+/** Consome o passe — só quando ele realmente foi o motivo do resgate ter sido liberado. */
+async function consumeWeeklyGrace(db: Client, ownerId: string): Promise<void> {
+  await db.execute({
+    sql: `UPDATE active_item_effects SET status = 'consumed' WHERE id = (
+            SELECT id FROM active_item_effects WHERE owner_id = ? AND effect_type = 'REVIEW_GRACE_WEEKLY' AND status = 'active' AND expires_at > datetime('now') ORDER BY expires_at ASC LIMIT 1
+          )`,
+    args: [ownerId],
+  });
+}
+
 /** Abre o baú: recompensa oficial uma vez por período (idempotente pela chave review:<tipo>:<período>). */
 export async function claimReward(db: Client, ownerId: string, kind: ReviewKind, key: string) {
   const s = await loadStored(db, ownerId, kind, key);
@@ -686,8 +706,18 @@ export async function claimReward(db: Client, ownerId: string, kind: ReviewKind,
   const before = await reviewRewardStatus(db, ownerId, kind, key);
   if (before.awarded) return { granted: false, alreadyClaimed: true, ...before };
   const today = await todayKeyFor(db, ownerId);
-  const eligible = kind === "weekly" ? daysBetween(key, today) >= 0 && daysBetween(key, today) < 14 : await isReviewRewardEligible(db, ownerId, kind, key);
+  const age = kind === "weekly" ? daysBetween(key, today) : null;
+  let eligible = kind === "weekly" ? age! >= 0 && age! < 14 : await isReviewRewardEligible(db, ownerId, kind, key);
+  let usedGrace = false;
+  if (!eligible && kind === "weekly" && age! >= 14) {
+    const grace = await weeklyGraceDays(db, ownerId);
+    if (grace > 0 && age! < 14 + grace) {
+      eligible = true;
+      usedGrace = true;
+    }
+  }
   if (!eligible) return { granted: false, alreadyClaimed: false, ...before, reason: "Só o período atual ou o imediatamente anterior rendem recompensa (evita acumular revisões antigas)." };
+  if (usedGrace) await consumeWeeklyGrace(db, ownerId);
   await awardReviewClosed(db, ownerId, kind, key, { eligible: true, hasReflection: true });
   const after = await reviewRewardStatus(db, ownerId, kind, key);
   return { granted: after.awarded, alreadyClaimed: false, ...after };
@@ -855,7 +885,7 @@ export async function reviewAdvisor(db: Client, ownerId: string, kind: ReviewKin
   const withData = view.indicators.filter((i) => i.value != null && (i.value !== 0 || (i.previous ?? 0) !== 0));
   const facts: AdvisorItem[] = withData.slice(0, 12).map((i) => ({ kind: "dado", text: `${i.label}: ${i.value} ${i.unit}${i.deltaPct != null ? ` (${i.deltaPct > 0 ? "+" : ""}${i.deltaPct}% vs ${view.previous.label})` : i.note ? ` — ${i.note.replace(/\.$/, "")}` : ""}.` }));
   for (const g of view.goals.slice(0, 4)) facts.push({ kind: "dado", text: `Meta “${g.title}”: ${g.progressPct ?? 0}% · ${g.openTasks} missões abertas.` });
-  const insufficient = withData.length < 2 && evidence.counts.tasksDone === 0 && evidence.counts.journalDays === 0 && evidence.counts.notes === 0;
+  const insufficient = withData.length < 2 && evidence.counts.tasksDone === 0 && evidence.counts.journalDays === 0 && evidence.counts.notes === 0 && evidence.counts.contractsSealed === 0;
   const rules: AdvisorItem[] = view.insights.map((i) => ({ kind: i.kind === "alta" ? "inferencia" : "inferencia", text: `${i.title}: ${i.text}` }));
   const seeds: Array<{ request: string; why: string }> = [];
   if (missionsCfg.enabled) {
@@ -878,7 +908,7 @@ export async function reviewAdvisor(db: Client, ownerId: string, kind: ReviewKin
   const own = mode === "reflection" ? `\nRESPOSTAS JÁ ESCRITAS PELO USUÁRIO (texto dele, use só para continuar no mesmo tom; não invente fatos): ${JSON.stringify(view.review.answers).slice(0, 3000)}` : "";
   const modeText: Record<ReviewAdvisorMode, string> = {
     analyze: "Analise o período: pontos fortes, dificuldades e tendências.",
-    reflection: `Escreva respostas em primeira pessoa para as perguntas (${view.questions.map((q) => `${q.key}: ${q.label}`).join("; ")}), contando a história real da semana: o que aconteceu, em quais tarefas/projetos, o que o Diário e as anotações mostram. Não escreva "[Rascunho]" nem nenhum outro marcador — escreva como se fosse a própria reflexão do usuário, para ele revisar e ajustar.`,
+    reflection: `Escreva respostas em primeira pessoa para as perguntas (${view.questions.map((q) => `${q.key}: ${q.label}`).join("; ")}), contando a história real do período: o que aconteceu, em quais tarefas/missões, contratos (Guilda dos Pactos) e projetos, o que o Diário e as anotações mostram. Não escreva "[Rascunho]" nem nenhum outro marcador — escreva como se fosse a própria reflexão do usuário, para ele revisar e ajustar.`,
     bottlenecks: "Identifique gargalos: quedas relevantes e metas sem avanço, com a evidência numérica.",
     plan: "Proponha até 3 prioridades concretas para o próximo ciclo, ligadas às evidências.",
     missions: "Proponha até 3 missões (como pedidos curtos em linguagem natural) que atacam os pontos fracos do período.",
@@ -887,12 +917,12 @@ export async function reviewAdvisor(db: Client, ownerId: string, kind: ReviewKin
   const prompt = `Você é o Conselheiro de Revisão do LifeOS (RPG de produtividade, português do Brasil).
 ${modeText[mode]}
 Período: ${view.label} (${view.range.from} a ${view.range.until}${view.range.inProgress ? ", em andamento" : ""}).
-Regras: use SOMENTE os dados abaixo (números, tarefas, diário e anotações reais); não invente métricas, causas médicas, eventos, tarefas ou falas que não estejam nos dados. Classifique cada item como "dado" (número real), "inferencia" (interpretação) ou "sugestao" (ação). Seja breve (até 8 itens, exceto no modo reflection). Variação parcial deve ser dita como parcial.
+Regras: use SOMENTE os dados abaixo (números, tarefas/missões, contratos, diário e anotações reais); não invente métricas, causas médicas, eventos, tarefas, contratos ou falas que não estejam nos dados. Classifique cada item como "dado" (número real), "inferencia" (interpretação) ou "sugestao" (ação). Seja breve (até 8 itens, exceto no modo reflection). Variação parcial deve ser dita como parcial.
 NÚMEROS:
 ${facts.map((f) => `- ${f.text}`).join("\n")}
 SINAIS JÁ DETECTADOS:
 ${rules.map((r) => `- ${r.text}`).join("\n") || "- nenhum"}
-O QUE DE FATO ACONTECEU NO PERÍODO (tarefas concluídas, pendências, hábitos, diário e anotações do usuário):
+O QUE DE FATO ACONTECEU NO PERÍODO (tarefas/missões concluídas, pendências, hábitos, contratos da Guilda dos Pactos, diário e anotações do usuário):
 ${evidence.block}${own}
 ${question ? `PERGUNTA DO USUÁRIO: ${question.slice(0, 500)}` : ""}`;
   const out = await generateText(prompt, config, { responseSchema: ADVISOR_SCHEMA, timeoutMs: 30_000, retries: 1, maxOutputTokens: 2500 });

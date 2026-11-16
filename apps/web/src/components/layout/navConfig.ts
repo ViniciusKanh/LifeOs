@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Store,
   Map as MapIcon,
   Sunset,
   BrainCircuit,
@@ -157,8 +158,8 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ClipboardList,
         quote: "Pequenos ajustes hoje, grandes resultados amanhã.",
         tabs: [
-          { to: "/weekly-review", label: "Semanal" },
-          { to: "/revisoes", label: "Mês, trimestre e ano" },
+          { to: "/revisoes?ciclo=weekly", label: "Semanal" },
+          { to: "/revisoes?ciclo=monthly", label: "Mês, trimestre e ano" },
         ],
       },
       { to: "/experimentos", label: "Experimentos", icon: FlaskConical, quote: "Teste pequeno, aprenda grande." },
@@ -173,12 +174,21 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/conquistas", label: "Conquistas" },
           { to: "/tesouro", label: "Tesouro" },
           { to: "/inventario", label: "Coleção" },
-          { to: "/loja-arcana", label: "Loja Arcana" },
-          { to: "/inventario-heroi", label: "Inventário do Herói" },
           { to: "/build", label: "Build" },
         ],
       },
       { to: "/arvore-habilidades", label: "Árvore de Habilidades", icon: TreeDeciduous, quote: "Plante o que quer aprender e comprove cada nível.", searchPlaceholder: "Buscar habilidades, troncos, provas…" },
+      {
+        // Hub da economia de itens: separado do Perfil do Herói para não ficar escondido numa aba.
+        to: "/loja-arcana",
+        label: "Loja Arcana",
+        icon: Store,
+        quote: "Toda moeda bem gasta vira uma vantagem de verdade.",
+        tabs: [
+          { to: "/loja-arcana", label: "Loja" },
+          { to: "/inventario-heroi", label: "Inventário do Herói" },
+        ],
+      },
       {
         to: "/banco",
         label: "Banco",
@@ -207,6 +217,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/configuracoes", label: "Configurações", icon: Settings },
       { to: "/admin/usuarios", label: "Usuários", icon: Users },
+      { to: "/admin/loja", label: "Produtos da Loja", icon: Store },
     ],
   },
 ];
@@ -226,9 +237,12 @@ export function navLabel(item: Pick<NavItem, "label" | "rpgLabel">, isRpg: boole
   return isRpg && item.rpgLabel ? item.rpgLabel : item.label;
 }
 
-export function findNavItem(pathname: string): { item: NavItem; group: NavGroup; tab: NavTab | null } | null {
+/** `location` é o pathname, ou pathname+querystring quando a aba precisa diferenciar por "?" (ex.: /revisoes?ciclo=weekly vs. ?ciclo=monthly). */
+export function findNavItem(location: string): { item: NavItem; group: NavGroup; tab: NavTab | null } | null {
   let best: { item: NavItem; group: NavGroup; tab: NavTab | null; len: number } | null = null;
-  const matches = (to: string) => pathname === to || pathname.startsWith(`${to}/`);
+  const pathname = location.split("?")[0]!;
+  // Rota com "?" na config só bate com o path+query exatos (evita que duas abas "?ciclo=x" e "?ciclo=y" colidam na mesma tela).
+  const matches = (to: string) => (to.includes("?") ? location === to : pathname === to || pathname.startsWith(`${to}/`));
   for (const group of NAV_GROUPS) {
     for (const item of group.items) {
       const paths: Array<{ to: string; tab: NavTab | null }> = [{ to: item.to, tab: null }, ...(item.tabs ?? []).map((t) => ({ to: t.to, tab: t }))];

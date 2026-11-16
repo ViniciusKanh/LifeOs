@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adminService } from "@/services/adminService";
+import { adminService, type ShopProductInput } from "@/services/adminService";
 import type { AdminIntegration } from "@/types";
+
+const SHOP_PRODUCTS_KEY = ["admin", "shop-products"];
 
 const SETTINGS_KEY = ["admin", "settings"];
 const USERS_KEY = ["admin", "users"];
@@ -100,4 +102,25 @@ export function useAdminUserOverview(id: string | null) {
     enabled: Boolean(id),
   });
   return { overview: query.data ?? null, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch };
+}
+
+/** Administração da Loja Arcana: CRUD de produtos (catálogo completo, ativos e inativos). */
+export function useAdminShopProducts() {
+  const qc = useQueryClient();
+  const query = useQuery({ queryKey: SHOP_PRODUCTS_KEY, queryFn: adminService.listShopProducts });
+  const invalidate = () => qc.invalidateQueries({ queryKey: SHOP_PRODUCTS_KEY });
+
+  const create = useMutation({ mutationFn: (input: ShopProductInput) => adminService.createShopProduct(input), onSuccess: invalidate });
+  const update = useMutation({ mutationFn: ({ key, input }: { key: string; input: ShopProductInput }) => adminService.updateShopProduct(key, input), onSuccess: invalidate });
+  const setActive = useMutation({ mutationFn: ({ key, active }: { key: string; active: boolean }) => adminService.setShopProductActive(key, active), onSuccess: invalidate });
+  const remove = useMutation({ mutationFn: (key: string) => adminService.deleteShopProduct(key), onSuccess: invalidate });
+
+  return {
+    products: query.data ?? [],
+    isLoading: query.isLoading,
+    create,
+    update,
+    setActive,
+    remove,
+  };
 }

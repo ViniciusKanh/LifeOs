@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { shopService, type ShopCategory, type ShopPaymentMethod, type ShopRarity, type ShopSort } from "@/services/shopService";
+import { newRequestId } from "@/utils/requestId";
 
 const KEY = ["shop"];
 const BANK_KEY = ["bank"];
@@ -34,7 +35,27 @@ export function useShopOrders(enabled = true) {
   return useQuery({ queryKey: [...KEY, "orders"], queryFn: shopService.orders, enabled, staleTime: 15_000 });
 }
 
-/** Inventário do Herói: itens comprados na Loja (sem equipar/consumir ainda — Fase 2). */
+/** Inventário do Herói: itens comprados na Loja — "Usar" (boosters/passe/ticket) e "Equipar" (cosméticos). */
 export function useHeroInventory() {
-  return useQuery({ queryKey: [...KEY, "inventory"], queryFn: shopService.heroInventory, staleTime: 15_000 });
+  const qc = useQueryClient();
+  const query = useQuery({ queryKey: [...KEY, "inventory"], queryFn: shopService.heroInventory, staleTime: 15_000 });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: [...KEY, "inventory"] });
+    void qc.invalidateQueries({ queryKey: [...KEY, "effects"] });
+    void qc.invalidateQueries({ queryKey: ["auth", "me"] });
+  };
+  const useItem = useMutation({
+    mutationFn: ({ productKey, habitId }: { productKey: string; habitId?: string }) => shopService.useItem(productKey, newRequestId(), habitId),
+    onSuccess: invalidate,
+  });
+  const toggleCosmetic = useMutation({
+    mutationFn: ({ productKey, enabled }: { productKey: string; enabled: boolean }) => shopService.toggleCosmetic(productKey, enabled),
+    onSuccess: invalidate,
+  });
+  return { ...query, useItem, toggleCosmetic };
+}
+
+/** Bônus temporários ativos (boosters/passe da Loja) e cosméticos ligados agora. */
+export function useShopEffects() {
+  return useQuery({ queryKey: [...KEY, "effects"], queryFn: shopService.effects, staleTime: 10_000 });
 }

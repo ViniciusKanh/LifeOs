@@ -16,6 +16,8 @@ import {
   updateCartItem,
   type CartResult,
 } from "../services/shopService.js";
+import { getShopEffectsState, toggleCosmetic, useShopItem } from "../services/shopEffectsService.js";
+import type { ActionResult } from "../services/shopEffectsService.js";
 
 /** Loja Arcana (Fase 1) — rotas isoladas por usuário. */
 export const shopRouter = Router();
@@ -85,3 +87,30 @@ shopRouter.get("/orders", async (req, res) => res.json(await listOrders(getDb(),
 
 /** GET /api/shop/inventory — Inventário do Herói (itens comprados na Loja) */
 shopRouter.get("/inventory", async (req, res) => res.json(await getHeroInventory(getDb(), req.user!.id)));
+
+const useItemSchema = z.object({
+  requestId: z.string().trim().min(8).max(64),
+  habitId: z.string().trim().min(1).max(64).optional(),
+});
+const toggleCosmeticSchema = z.object({ enabled: z.boolean() });
+
+const replyAction = (res: import("express").Response, r: ActionResult) => (r.ok ? res.json({ ok: true, message: r.message }) : res.status(r.status).json({ error: r.message }));
+
+/** GET /api/shop/effects — cosméticos ligados agora + bônus temporários (da Loja) ainda ativos */
+shopRouter.get("/effects", async (req, res) => res.json(await getShopEffectsState(getDb(), req.user!.id)));
+
+/** POST /api/shop/items/:key/use — "usar" um item com efeito funcional (boosters, passe, ticket) */
+shopRouter.post("/items/:key/use", async (req, res) => {
+  const key = productKey.safeParse(req.params.key);
+  const body = useItemSchema.safeParse(req.body);
+  if (!key.success || !body.success) return res.status(400).json({ error: "Requisição inválida." });
+  return replyAction(res, await useShopItem(getDb(), req.user!.id, key.data, body.data.requestId, { habitId: body.data.habitId }));
+});
+
+/** POST /api/shop/cosmetics/:key/toggle — liga/desliga um cosmético comprado (Personalização) */
+shopRouter.post("/cosmetics/:key/toggle", async (req, res) => {
+  const key = productKey.safeParse(req.params.key);
+  const body = toggleCosmeticSchema.safeParse(req.body);
+  if (!key.success || !body.success) return res.status(400).json({ error: "Requisição inválida." });
+  return replyAction(res, await toggleCosmetic(getDb(), req.user!.id, key.data, body.data.enabled));
+});

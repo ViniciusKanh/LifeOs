@@ -28,6 +28,16 @@ export interface CurrentUser {
   rpg_prefs?: Partial<RpgPrefsPayload>;
 }
 
+/** Cosméticos de Personalização comprados na Loja Arcana e ligados pelo usuário (ver shopEffectsService no backend). */
+export interface ShopCosmeticsState {
+  avatarAura: boolean;
+  accentTheme: "noite-astral" | "castelo-dourado" | null;
+  cursor: boolean;
+  wallpaperGlow: boolean;
+  sparkleTrail: boolean;
+  iconTint: boolean;
+}
+
 /** Espelho de rpgPrefsSchema (API). */
 export interface RpgPrefsPayload {
   avatarId: "aventureiro" | "mago" | "arqueiro" | "cavaleiro" | "inventor" | "alquimista";
@@ -42,6 +52,8 @@ export interface RpgPrefsPayload {
   showXp: boolean;
   showCoins: boolean;
   animations: "full" | "reduced" | "off";
+  /** Só leitura aqui — a escrita de verdade é shopService.toggleCosmetic (com validação de posse no servidor). */
+  shopCosmetics?: Partial<ShopCosmeticsState>;
 }
 
 /** Resposta do login quando a conta tem MFA: a sessão só nasce na 2ª etapa. */

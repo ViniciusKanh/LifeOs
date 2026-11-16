@@ -58,6 +58,9 @@ const ConfiguracoesPage = lazy(() =>
 const AdminUsuariosPage = lazy(() =>
   import("@/pages/admin/AdminUsuariosPage").then((m) => ({ default: m.AdminUsuariosPage }))
 );
+const AdminLojaPage = lazy(() =>
+  import("@/pages/admin/AdminLojaPage").then((m) => ({ default: m.AdminLojaPage }))
+);
 const SaudePage = lazy(() => import("@/pages/saude/SaudePage").then((m) => ({ default: m.SaudePage })));
 const HabitosPage = lazy(() => import("@/pages/habitos/HabitosPage").then((m) => ({ default: m.HabitosPage })));
 const MetasPage = lazy(() => import("@/pages/metas/MetasHubPage").then((m) => ({ default: m.MetasHubPage })));
@@ -222,6 +225,14 @@ export default function App() {
             element={
               <AdminRoute>
                 <AdminUsuariosPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/loja"
+            element={
+              <AdminRoute>
+                <AdminLojaPage />
               </AdminRoute>
             }
           />

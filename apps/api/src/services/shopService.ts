@@ -24,6 +24,22 @@ export type ShopCategory = (typeof SHOP_CATEGORIES)[number];
 export const SHOP_RARITIES = ["comum", "incomum", "raro", "epico", "lendario", "mitico"] as const;
 export type ShopRarity = (typeof SHOP_RARITIES)[number];
 
+export type CosmeticSlot = "avatarAura" | "accentTheme" | "cursor" | "wallpaperGlow" | "sparkleTrail" | "iconTint";
+
+/** Cosméticos de verdade (Personalização): chave do produto → slot que ele ocupa, ligado/desligado em users.rpg_prefs_json. */
+export const COSMETIC_PRODUCTS: Record<string, { slot: CosmeticSlot; value: string | boolean }> = {
+  "moldura-epica-avatar": { slot: "avatarAura", value: true },
+  "trilhas-brilho": { slot: "sparkleTrail", value: true },
+  "tema-noite-astral": { slot: "accentTheme", value: "noite-astral" },
+  "tema-castelo-dourado": { slot: "accentTheme", value: "castelo-dourado" },
+  "pack-icones-misticos": { slot: "iconTint", value: true },
+  "cursor-arcano": { slot: "cursor", value: true },
+  "fundo-biblioteca-arcana": { slot: "wallpaperGlow", value: true },
+};
+
+/** Itens com uma ação de "Usar" de verdade (boosters, passe de revisão, ticket de hábito) — ver shopEffectsService. */
+export const USABLE_PRODUCT_KEYS = ["multiplicador-xp-2x", "bonus-moedas", "passe-revisao-semanal", "ticket-reset-habito"];
+
 const RARITY_ORDER: Record<ShopRarity, number> = { comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mitico: 5 };
 
 /** Correio da Guilda: minutos até a entrega, por raridade (Fase 2). Calculado no checkout, cumprido só pelo servidor. */
@@ -433,6 +449,10 @@ export interface HeroInventoryItem {
   effectText: string | null;
   durationText: string | null;
   acquiredAt: string | null;
+  /** Tem uma ação de "Usar" de verdade (boosters, passe de revisão, ticket de hábito). */
+  usable: boolean;
+  /** Cosmético de Personalização equipável — slot que ele ocupa (ver COSMETIC_PRODUCTS). */
+  cosmeticSlot: CosmeticSlot | null;
 }
 
 export interface HeroPendingDelivery {
@@ -451,9 +471,11 @@ export interface HeroInventoryView {
 
 /**
  * Itens comprados na Loja (chave "shop:*") já entregues pelo Correio da
- * Guilda. Equipar/consumir com efeito real ainda é pendente (próxima
- * fase). Reconcilia entregas vencidas (`syncDeliveries`) antes de ler,
- * então `pending` só mostra o que genuinamente ainda está a caminho.
+ * Guilda. "usable" marca itens com ação de Usar de verdade (boosters,
+ * passe, ticket — ver shopEffectsService.useShopItem) e "cosmeticSlot"
+ * marca cosméticos de Personalização equipáveis (toggleCosmetic).
+ * Reconcilia entregas vencidas (`syncDeliveries`) antes de ler, então
+ * `pending` só mostra o que genuinamente ainda está a caminho.
  */
 export async function getHeroInventory(db: Client, ownerId: string): Promise<HeroInventoryView> {
   await syncDeliveries(db, ownerId);
@@ -475,18 +497,38 @@ export async function getHeroInventory(db: Client, ownerId: string): Promise<Her
           ORDER BY ui.last_acquired_at DESC`,
     args: [ownerId],
   });
-  const items: HeroInventoryItem[] = rows.rows.map((r) => ({
-    key: String(r.item_key),
-    name: String(r.name),
-    description: String(r.description),
-    category: r.category as ShopCategory,
-    rarity: r.rarity as ShopRarity,
-    art: String(r.art),
-    quantity: Number(r.quantity),
-    effectText: r.effect_text == null ? null : String(r.effect_text),
-    durationText: r.duration_text == null ? null : String(r.duration_text),
-    acquiredAt: r.acquired_at == null ? null : String(r.acquired_at),
-  }));
+  const items: HeroInventoryItem[] = rows.rows.map((r) => {
+    const key = String(r.item_key).slice(5);
+    return {
+      key: String(r.item_key),
+      name: String(r.name),
+      description: String(r.description),
+      category: r.category as ShopCategory,
+      rarity: r.rarity as ShopRarity,
+      art: String(r.art),
+      quantity: Number(r.quantity),
+      effectText: r.effect_text == null ? null : String(r.effect_text),
+      durationText: r.duration_text == null ? null : String(r.duration_text),
+      acquiredAt: r.acquired_at == null ? null : String(r.acquired_at),
+      usable: USABLE_PRODUCT_KEYS.includes(key),
+      cosmeticSlot: COSMETIC_PRODUCTS[key]?.slot ?? null,
+    };
+  });
+  const bonuses = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM active_item_effects WHERE owner_id = ? AND status = 'active' AND effect_type IN ('XP_MULTIPLIER_TASK', 'COIN_MULTIPLIER_TASK', 'REVIEW_GRACE_WEEKLY') AND expires_at > datetime('now')",
+    args: [ownerId],
+  });
+  const equippedCosmetics = await (async () => {
+    const u = await db.execute({ sql: "SELECT rpg_prefs_json FROM users WHERE id = ?", args: [ownerId] });
+    try {
+      const prefs = JSON.parse(String(u.rows[0]?.rpg_prefs_json ?? "{}"));
+      const sc = prefs?.shopCosmetics;
+      return sc && typeof sc === "object" ? sc : {};
+    } catch {
+      return {};
+    }
+  })();
+  const slotsUsed = Object.values(equippedCosmetics).filter((v) => v === true || typeof v === "string").length;
   return {
     items,
     pending,
@@ -494,8 +536,129 @@ export async function getHeroInventory(db: Client, ownerId: string): Promise<Her
       totalItems: items.reduce((s, i) => s + i.quantity, 0),
       legendaryCount: items.filter((i) => i.rarity === "lendario" || i.rarity === "mitico").reduce((s, i) => s + i.quantity, 0),
       consumables: items.filter((i) => i.category === "pocoes").reduce((s, i) => s + i.quantity, 0),
-      slotsUsed: 0,
-      bonusesActive: 0,
+      slotsUsed,
+      bonusesActive: Number(bonuses.rows[0]?.n ?? 0),
     },
   };
+}
+
+/* ----------------------------- Administração da Loja (admin) ----------------------------- */
+
+export interface AdminShopProduct extends ShopProduct {
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapAdminProduct(row: Record<string, unknown>): AdminShopProduct {
+  return { ...mapProduct(row), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+
+/** Catálogo completo (ativos e inativos) — só para a tela de administração. */
+export async function listAllProductsAdmin(db: Client): Promise<AdminShopProduct[]> {
+  const r = await db.execute({ sql: "SELECT * FROM shop_products ORDER BY category ASC, sort_order ASC, created_at ASC", args: [] });
+  return r.rows.map((row) => mapAdminProduct(row as unknown as Record<string, unknown>));
+}
+
+export interface ShopProductInput {
+  category: ShopCategory;
+  rarity: ShopRarity;
+  name: string;
+  description: string;
+  currency: "coin" | "gem";
+  price: number;
+  art: string;
+  effectText: string | null;
+  durationText: string | null;
+  stackable: boolean;
+  maxStack: number;
+  featured: boolean;
+  active: boolean;
+  stock: number | null;
+}
+
+/** Chave estável a partir do nome (nunca muda depois de criada — pedidos e inventário já existentes referenciam por chave). */
+function slugifyProductName(name: string): string {
+  const base = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return base || `item-${nanoid(8)}`;
+}
+
+export type AdminProductResult = { ok: true; product: AdminShopProduct } | { ok: false; code: "duplicate" | "not_found" | "in_use"; message: string };
+
+export async function createProductAdmin(db: Client, input: ShopProductInput): Promise<AdminProductResult> {
+  let key = slugifyProductName(input.name);
+  const existing = await db.execute({ sql: "SELECT key FROM shop_products WHERE key = ?", args: [key] });
+  if (existing.rows[0]) key = `${key}-${nanoid(4)}`;
+  await db.execute({
+    sql: `INSERT INTO shop_products (key, category, rarity, name, description, currency, price, art, effect_text, duration_text, stackable, max_stack, featured, active, stock, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM shop_products))`,
+    args: [
+      key,
+      input.category,
+      input.rarity,
+      input.name,
+      input.description,
+      input.currency,
+      input.price,
+      input.art,
+      input.effectText,
+      input.durationText,
+      input.stackable ? 1 : 0,
+      input.maxStack,
+      input.featured ? 1 : 0,
+      input.active ? 1 : 0,
+      input.stock,
+    ],
+  });
+  const row = (await db.execute({ sql: "SELECT * FROM shop_products WHERE key = ?", args: [key] })).rows[0]!;
+  return { ok: true, product: mapAdminProduct(row as unknown as Record<string, unknown>) };
+}
+
+export async function updateProductAdmin(db: Client, key: string, input: ShopProductInput): Promise<AdminProductResult> {
+  const r = await db.execute({
+    sql: `UPDATE shop_products SET category = ?, rarity = ?, name = ?, description = ?, currency = ?, price = ?, art = ?, effect_text = ?, duration_text = ?,
+            stackable = ?, max_stack = ?, featured = ?, active = ?, stock = ?, updated_at = datetime('now')
+          WHERE key = ?`,
+    args: [
+      input.category,
+      input.rarity,
+      input.name,
+      input.description,
+      input.currency,
+      input.price,
+      input.art,
+      input.effectText,
+      input.durationText,
+      input.stackable ? 1 : 0,
+      input.maxStack,
+      input.featured ? 1 : 0,
+      input.active ? 1 : 0,
+      input.stock,
+      key,
+    ],
+  });
+  if (r.rowsAffected === 0) return { ok: false, code: "not_found", message: "Produto não encontrado." };
+  const row = (await db.execute({ sql: "SELECT * FROM shop_products WHERE key = ?", args: [key] })).rows[0]!;
+  return { ok: true, product: mapAdminProduct(row as unknown as Record<string, unknown>) };
+}
+
+export async function setProductActiveAdmin(db: Client, key: string, active: boolean): Promise<AdminProductResult> {
+  const r = await db.execute({ sql: "UPDATE shop_products SET active = ?, updated_at = datetime('now') WHERE key = ?", args: [active ? 1 : 0, key] });
+  if (r.rowsAffected === 0) return { ok: false, code: "not_found", message: "Produto não encontrado." };
+  const row = (await db.execute({ sql: "SELECT * FROM shop_products WHERE key = ?", args: [key] })).rows[0]!;
+  return { ok: true, product: mapAdminProduct(row as unknown as Record<string, unknown>) };
+}
+
+/** Só apaga de verdade quando ninguém nunca comprou — senão o item sumiria do Inventário de quem já tem. Desativar é o caminho normal. */
+export async function deleteProductAdmin(db: Client, key: string): Promise<{ ok: true } | { ok: false; code: "not_found" | "in_use"; message: string }> {
+  const used = await db.execute({ sql: "SELECT 1 FROM shop_order_items WHERE product_key = ? LIMIT 1", args: [key] });
+  if (used.rows[0]) return { ok: false, code: "in_use", message: "Este produto já foi comprado por algum usuário — desative-o em vez de excluir, para não sumir do Inventário de quem já tem." };
+  const r = await db.execute({ sql: "DELETE FROM shop_products WHERE key = ?", args: [key] });
+  if (r.rowsAffected === 0) return { ok: false, code: "not_found", message: "Produto não encontrado." };
+  return { ok: true };
 }

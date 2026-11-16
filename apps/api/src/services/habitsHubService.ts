@@ -185,13 +185,18 @@ export function consistency(habits: HabitDef[], doneBy: Map<string, Set<string>>
 
 async function loadHabits(db: Client, ownerId: string) {
   const { tz, today } = await userDayContext(db, ownerId);
-  const [habits, entries] = await Promise.all([
+  const [habits, entries, resets] = await Promise.all([
     db.execute({ sql: "SELECT * FROM habits WHERE owner_id = ? AND archived_at IS NULL ORDER BY created_at ASC", args: [ownerId] }),
     db.execute({ sql: "SELECT habit_id, entry_date, count, created_at FROM habit_entries WHERE owner_id = ? AND entry_date >= date(?, '-400 days')", args: [ownerId, today] }),
+    // Ticket de Reset de Hábito (Loja Arcana): a sequência ATUAL volta a contar a
+    // partir daqui — os check-ins em si (histórico, Analytics, Timeline) não mudam.
+    db.execute({ sql: "SELECT habit_id, MAX(reset_at) AS reset_at FROM habit_streak_resets WHERE owner_id = ? GROUP BY habit_id", args: [ownerId] }),
   ]);
   const defs = habits.rows.map((r) => parseHabit(r as Row));
   const target = new Map(defs.map((h) => [h.id, h.target]));
+  const resetAtBy = new Map(resets.rows.map((r) => [String(r.habit_id), String(r.reset_at)]));
   const doneBy = new Map<string, Set<string>>();
+  const streakDoneBy = new Map<string, Set<string>>();
   const countBy = new Map<string, Map<string, number>>();
   for (const e of entries.rows) {
     const id = String(e.habit_id);
@@ -202,13 +207,18 @@ async function loadHabits(db: Client, ownerId: string) {
     if (c >= (target.get(id) ?? 1)) {
       if (!doneBy.has(id)) doneBy.set(id, new Set());
       doneBy.get(id)!.add(day);
+      const resetAt = resetAtBy.get(id);
+      if (!resetAt || day > resetAt) {
+        if (!streakDoneBy.has(id)) streakDoneBy.set(id, new Set());
+        streakDoneBy.get(id)!.add(day);
+      }
     }
   }
-  return { tz, today, defs, doneBy, countBy, entries: entries.rows };
+  return { tz, today, defs, doneBy, streakDoneBy, countBy, entries: entries.rows };
 }
 
 export async function getHabitsHub(db: Client, ownerId: string) {
-  const { today, defs, doneBy, countBy, entries } = await loadHabits(db, ownerId);
+  const { today, defs, doneBy, streakDoneBy, countBy, entries } = await loadHabits(db, ownerId);
   const [xp, claimed] = await Promise.all([
     db.execute({
       sql: `SELECT COALESCE(SUM(xp), 0) AS total, COALESCE(SUM(CASE WHEN day_key = ? THEN xp ELSE 0 END), 0) AS today,
@@ -224,6 +234,10 @@ export async function getHabitsHub(db: Client, ownerId: string) {
 
   const cards = defs.map((h) => {
     const done = doneBy.get(h.id) ?? empty;
+    // Ticket de Reset de Hábito (Loja Arcana): a sequência ATUAL ignora os
+    // check-ins anteriores ao reset; o recorde (bestStreak) e a consistência
+    // continuam olhando o histórico completo de verdade — nada se perde.
+    const streakDone = streakDoneBy.get(h.id) ?? done;
     const cycleDone = isCycleHabit(h) ? [...done].filter((d) => cycleKey(h, d) === cycleKey(h, today)).length : 0;
     const scheduledToday = isCycleHabit(h) ? isActiveOn(h, today) && cycleDone < cycleNeed(h) : isScheduledOn(h, today);
     return {
@@ -233,7 +247,7 @@ export async function getHabitsHub(db: Client, ownerId: string) {
       doneToday: done.has(today),
       scheduledToday,
       cycle: isCycleHabit(h) ? { done: cycleDone, need: cycleNeed(h), label: h.frequency === "monthly" ? "neste mês" : "nesta semana" } : null,
-      streak: habitStreak(h, done, today),
+      streak: habitStreak(h, streakDone, today),
       bestStreak: bestDailyStreak(h, done, today),
       consistency30: consistency([h], doneBy, shiftDayKey(today, -29), today),
     };

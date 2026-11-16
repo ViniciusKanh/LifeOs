@@ -55,6 +55,8 @@ export function ReviewsScreen() {
   const [blocksBusy, setBlocksBusy] = useState(false);
   const [reserving, setReserving] = useState<string | null>(null);
   const ritualRef = useRef<HTMLDivElement>(null);
+  const sealRef = useRef<HTMLDivElement>(null);
+  const [sealPulse, setSealPulse] = useState(false);
 
   const go = (k: ReviewKind, periodKey: string | null) =>
     setParams(
@@ -288,6 +290,15 @@ export function ReviewsScreen() {
     applying: act.applyPlan.isPending,
     onOpenDiary: () => navigate("/diario"),
     flush: () => void save(),
+    // Fechar o último passo do ritual não sela nada sozinho (selar é uma confirmação à parte,
+    // de propósito) — mas precisa deixar claro pra onde ir: rola até o Selar e avisa o que falta.
+    onFinish: () => {
+      requestAnimationFrame(() => sealRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      setSealPulse(true);
+      window.setTimeout(() => setSealPulse(false), 2200);
+      if (local.ok) notify("Ritual concluído! Confira as respostas e clique em Selar para fechar o período.");
+      else notify(d.seal.reason ?? "Complete mais um pouco antes de selar.", "error");
+    },
   };
 
   return (
@@ -360,7 +371,9 @@ export function ReviewsScreen() {
               </section>
             )}
 
-            <SealBar d={d} local={local} saving={saving} onSave={() => void save(false)} onSeal={() => void seal()} sealing={act.seal.isPending} onExport={() => exportBook(d, draft)} />
+            <div ref={sealRef} className={clsx("scroll-mt-4 rounded-md transition-shadow duration-500", sealPulse && "ring-2 ring-rpg-gold shadow-[0_0_0_6px_rgb(var(--rpg-gold)/0.22)]")}>
+              <SealBar d={d} local={local} saving={saving} onSave={() => void save(false)} onSeal={() => void seal()} sealing={act.seal.isPending} onExport={() => exportBook(d, draft)} />
+            </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">

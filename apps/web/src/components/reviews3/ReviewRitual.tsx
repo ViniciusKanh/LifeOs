@@ -66,6 +66,7 @@ export function WeeklyRitual({
   applying,
   onOpenDiary,
   flush,
+  onFinish,
 }: RitualProps) {
   const steps = d.steps;
   const firstOpen = steps.find((s) => !draft.steps.includes(s)) ?? steps[steps.length - 1]!;
@@ -73,7 +74,10 @@ export function WeeklyRitual({
   const idx = steps.indexOf(cur);
   const markDone = () => {
     if (!draft.steps.includes(cur)) set((x) => ({ ...x, steps: [...x.steps, cur] }));
+    // "Concluir ritual" no último passo só marca o passo (o ritual em si nunca sela nada) —
+    // sem isso, o clique parecia não fazer nada; agora avisa e leva até o Selar.
     if (idx < steps.length - 1) setCur(steps[idx + 1]!);
+    else onFinish?.();
   };
   const q = (key: string) => d.questions.find((x) => x.key === key)!;
   return (
@@ -466,4 +470,6 @@ export interface RitualProps {
   applying: boolean;
   onOpenDiary: () => void;
   flush: () => void;
+  /** Chamado ao concluir o último passo do ritual semanal (rola/avisa até o Selar — o ritual em si não sela nada). */
+  onFinish?: () => void;
 }
