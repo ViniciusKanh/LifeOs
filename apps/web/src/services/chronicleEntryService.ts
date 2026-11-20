@@ -20,6 +20,14 @@ export interface ChronicleEntryMeta {
   achievement: { title: string; description: string | null; tier: string; unlocked: boolean; current: number; threshold: number; reward: { xp: number; coins: number } } | null;
 }
 
+/** Prévia da crônica completa — `dataUsed` mostra a procedência (Dado real) de cada registro usado. */
+export interface ChronicleDraft {
+  text: string;
+  title: string | null;
+  dataUsed: Array<{ source: string; text: string }>;
+  original: string;
+}
+
 export interface ScribeResult {
   action: ScribeAction;
   text: string | null;
@@ -30,7 +38,10 @@ export interface ScribeResult {
 export const chronicleEntryService = {
   meta: (date: string) => api.get<ChronicleEntryMeta>(`/chronicle-entry/${date}/meta`),
   setGoal: (goal: number) => api.put<{ ok: true }>("/chronicle-entry/settings/writing-goal", { goal }),
-  scribe: (date: string, action: ScribeAction) => api.post<ScribeResult>(`/chronicle-entry/${date}/scribe`, { action, consent: true }),
+  /** `text` = conteúdo atual do editor (a IA lê o que está na tela, não o que já foi salvo). */
+  scribe: (date: string, action: ScribeAction, text: string) => api.post<ScribeResult>(`/chronicle-entry/${date}/scribe`, { action, consent: true, text }),
+  /** Crônica completa: reescreve o texto e completa com missões, treinos, contratos e demais registros reais do dia. */
+  writeChronicle: (date: string, text: string) => api.post<ChronicleDraft>(`/chronicle-entry/${date}/chronicle`, { consent: true, text }),
   transcribe: (mediaId: string) => api.post<{ text: string }>(`/chronicle-entry/media/${mediaId}/transcribe`, { consent: true }),
   learningToGrimoire: (date: string, text: string) => api.post<{ added: number }>(`/chronicle-entry/${date}/learning-to-grimoire`, { text }),
 };

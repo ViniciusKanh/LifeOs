@@ -44,16 +44,6 @@ export function CriticalDeadlineList({ items }: { items: DeadlineItem[] }) {
                   <Link to={item.sourceModule} className="p-1.5 rounded-lg hover:bg-paper dark:hover:bg-ink" aria-label={`Abrir ${item.title}`} title="Abrir">
                     <ChevronRight size={16} />
                   </Link>
-                  {item.entityType === "task" && (
-                    <Link
-                      to="/capacity-planner"
-                      className="p-1.5 rounded-lg hover:bg-paper dark:hover:bg-ink text-brand-600 dark:text-brand-400"
-                      aria-label={`Planejar ${item.title} no Capacity Planner`}
-                      title="Planejar no Capacity Planner"
-                    >
-                      <Wand2 size={16} />
-                    </Link>
-                  )}
                 </div>
               </div>
               {item.progress != null && (

@@ -91,10 +91,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Hoje",
         icon: Sun,
         quote: "Consistência hoje, resultados amanhã.",
-        tabs: [
-          { to: "/hoje", label: "Hoje" },
-          { to: "/gatilhos", label: "Lembretes" },
-        ],
       },
       { to: "/inbox", label: "Inbox", icon: Inbox, quote: "Capture agora, decida depois." },
       { to: "/calendario", label: "Agenda", icon: CalendarRange, quote: "Quem planeja o tempo, comanda o progresso." },
@@ -115,7 +111,6 @@ export const NAV_GROUPS: NavGroup[] = [
         quote: "Disciplina de hoje, liberdade de amanhã.",
         tabs: [
           { to: "/tarefas", label: "Quadro" },
-          { to: "/capacity-planner", label: "Carga" },
           { to: "/deadline-radar", label: "Prazos" },
         ],
       },

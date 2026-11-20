@@ -55,16 +55,15 @@ import { previewTaskReward } from "@/utils/gamification";
 import type { Task } from "@/types";
 import { MissionAdvisor, type AdvisorSeed } from "./MissionAdvisor";
 import { MissionBoard, type SortMode } from "./MissionBoard";
-import { MissionAnalytics, MissionCalendar, MissionDeadlines, MissionList, MissionLoadView } from "./MissionViews";
+import { MissionAnalytics, MissionCalendar, MissionDeadlines, MissionList } from "./MissionViews";
 import { DONE, Frame, MISSIONS_ART, addDaysIso, isForToday, isOverdue, type BoardTask } from "./MissionsShared";
 
-const TABS = ["quadro", "lista", "calendario", "carga", "prazos", "analises", "automacoes"] as const;
+const TABS = ["quadro", "lista", "calendario", "prazos", "analises", "automacoes"] as const;
 type TabKey = (typeof TABS)[number];
 const TAB_META: Array<[TabKey, string, ReactNode]> = [
   ["quadro", "Quadro", <LayoutGrid key="i" size={14} />],
   ["lista", "Lista", <List key="i" size={14} />],
   ["calendario", "Calendário", <CalendarDays key="i" size={14} />],
-  ["carga", "Carga", <Gauge key="i" size={14} />],
   ["prazos", "Prazos", <CalendarClock key="i" size={14} />],
   ["analises", "Análises", <BarChart3 key="i" size={14} />],
   ["automacoes", "Automações", <Workflow key="i" size={14} />],
@@ -237,15 +236,6 @@ export function MissionsScreen() {
         onError: (e) => notify(errMsg(e, "Não consegui arquivar."), "error"),
       },
     );
-  const startFocus = async (t: BoardTask) => {
-    try {
-      await dayHeroService.startTimer({ mode: "free", linkType: "task", linkId: t.id, plannedMinutes: t.estimate_minutes ?? null });
-      void qc.invalidateQueries({ queryKey: TODAY_HUB_KEY });
-      notify(`Foco iniciado em “${t.title}”. O cronômetro fica no Hoje e registra o tempo nesta missão.`);
-    } catch (e) {
-      notify(errMsg(e, "Não consegui iniciar o foco."), "error");
-    }
-  };
   const postpone = (t: BoardTask, days: number) =>
     updateTask({ id: t.id, patch: { dueDate: addDaysIso(today, days) } })
       .then(() => notify(`Prazo de “${t.title}” movido para ${days === 1 ? "amanhã" : "daqui a 7 dias"}.`))
@@ -262,7 +252,8 @@ export function MissionsScreen() {
     onMove: moveCard,
     onAdd: (status: string) => setModal({ task: null, status }),
     onArchive: doArchive,
-    onFocus: focusOn ? (t: BoardTask) => void startFocus(t) : null,
+    // Cronômetro de foco removido do LifeOS.
+    onFocus: null,
     onBreakdown: breakdownOn ? (t: BoardTask) => openAdvisor({ mode: "breakdown", taskId: t.id, message: "Divida esta missão em etapas executáveis, com estimativa e ordem.", autoSend: true }) : null,
   };
 
@@ -357,8 +348,6 @@ export function MissionsScreen() {
             <MissionCalendar tasks={filtered} today={today} onOpen={handlers.onOpen} onNewOn={(d) => setModal({ task: null, due: d })} />
           ) : tab === "prazos" ? (
             <MissionDeadlines tasks={filtered} today={today} onOpen={handlers.onOpen} onPostpone={postpone} />
-          ) : tab === "carga" ? (
-            overview ? <MissionLoadView overview={overview} /> : <Empty icon={<Gauge size={20} />} title="Carregando indicadores…" />
           ) : tab === "analises" ? (
             overview ? <MissionAnalytics overview={overview} /> : <Empty icon={<BarChart3 size={20} />} title="Carregando indicadores…" />
           ) : (
@@ -491,11 +480,9 @@ function Indicators({
     { key: "late", icon: <AlertTriangle size={18} />, tone: "red", value: String(i.overdue), label: "Atrasadas", hint: "Prazo já passou", onClick: () => onFilter("overdue"), pressed: active === "overdue" },
     { key: "rate", icon: <Percent size={18} />, tone: "green", value: i.completionRate == null ? "—" : `${i.completionRate}%`, label: "Conclusão 30d", hint: i.definitions.completionRate, onClick: () => onTab("analises") },
     { key: "xp", icon: <Zap size={18} />, tone: "gold", value: String(i.xpLast30), label: "XP 30d", hint: i.definitions.xpLast30, onClick: () => onTab("analises") },
-    { key: "est", icon: <Clock size={18} />, tone: "cyan", value: fmtMin(i.estimatedOpenMinutes), label: "Estimado aberto", hint: `${i.unestimatedOpen} missão(ões) sem estimativa`, onClick: () => onTab("carga") },
-    { key: "exec", icon: <Timer size={18} />, tone: "pink", value: fmtMin(i.executedLast30Minutes), label: "Executado 30d", hint: i.definitions.executedLast30Minutes, onClick: () => onTab("analises") },
   ];
   return (
-    <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:grid-cols-9" aria-label="Indicadores das missões">
+    <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7" aria-label="Indicadores das missões">
       {items.map((it) => (
         <li key={it.key}>
           <button

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { autoInvestSchema, createDepositSchema, createLoanSchema, ledgerQuerySchema } from "../validators/bank.schema.js";
@@ -10,14 +11,16 @@ import {
   getBankStatement,
   getBankSummary,
   getLedgerEntryDetail,
+  getManualCreditLimit,
   listLedger,
   recordCreditScoreSnapshot,
   repayLoan,
   requestLoan,
   setAutoInvestRule,
+  updateBankSettings,
 } from "../services/bankService.js";
 import { userDayContext } from "../services/localDayService.js";
-import { awardBankDepositClaimed, awardBankLoanRepaid } from "../services/gamificationService.js";
+import { awardBankDepositClaimed, awardBankLoanRepaid, coinBalance } from "../services/gamificationService.js";
 
 /**
  * Banco: investir moedas ganhas em missões em planos com prazo e bônus
@@ -148,6 +151,24 @@ bankRouter.get("/ledger/:id", async (req, res) => {
     return res.status(404).json({ error: "Movimentação não encontrada." });
   }
   return res.json(detail);
+});
+
+/** GET/PUT /api/bank/settings — limite de crédito próprio e ajuste do saldo (tela Configurações). */
+const bankSettingsSchema = z.object({
+  creditLimit: z.number().int("Use um número inteiro.").min(0, "O limite não pode ser negativo.").max(1_000_000).nullable().optional(),
+  balance: z.number().int("Use um número inteiro.").min(0, "O saldo não pode ser negativo.").max(100_000_000).optional(),
+});
+
+bankRouter.get("/settings", async (req, res) => {
+  const db = getDb();
+  const [balance, creditLimit] = await Promise.all([coinBalance(db, req.user!.id), getManualCreditLimit(db, req.user!.id)]);
+  return res.json({ balance, creditLimit });
+});
+
+bankRouter.put("/settings", async (req, res) => {
+  const parsed = bankSettingsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos." });
+  return res.json(await updateBankSettings(getDb(), req.user!.id, parsed.data));
 });
 
 /** POST /api/bank/loans — pede um empréstimo dentro do limite liberado pelo score de crédito. */

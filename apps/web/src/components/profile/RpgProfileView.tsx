@@ -76,18 +76,12 @@ export function RpgProfileView({
   user,
   identityEditor,
   passwordCard,
-  pushCard,
-  weeklyEmailCard,
-  triggersCard,
   exportCard,
   helpCard,
 }: {
   user: CurrentUser;
   identityEditor: ReactNode;
   passwordCard: ReactNode;
-  pushCard: ReactNode;
-  weeklyEmailCard: ReactNode;
-  triggersCard: ReactNode;
   exportCard: ReactNode;
   helpCard: ReactNode;
 }) {
@@ -412,11 +406,8 @@ export function RpgProfileView({
           <div className="space-y-4 min-w-0">
             {platformFeatures.googleOAuthRedirect && <GoogleAccountCard user={user} />}
             <DesktopAppCard rpg />
-            {pushCard}
           </div>
           <div className="space-y-4 min-w-0">
-            {weeklyEmailCard}
-            {triggersCard}
             {exportCard}
           </div>
         </div>

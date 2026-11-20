@@ -2,8 +2,13 @@ import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { computeStreak, dayKeyIn, todayKeyFor, userTimezone } from "./gamificationService.js";
 import { normalizeStoredUtc } from "./healthService.js";
-import { lifeOsEmailShell, sendMail } from "./emailService.js";
+import { lifeOsEmailShell } from "./emailService.js";
 import { sendPushToUser } from "./pushService.js";
+
+// E-mails só para cadastro de novo usuário e senha (pedido do usuário, para poupar Vercel/Turso/SMTP).
+// Este módulo não envia mais e-mail: o stub mantém o fluxo intacto e responde "não enviado".
+const sendMail = async (_input: { to: string; subject: string; html: string; text?: string }): Promise<boolean> => false;
+
 
 /**
  * Guilda — parceiro de compromisso.

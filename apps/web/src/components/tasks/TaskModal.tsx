@@ -123,7 +123,7 @@ export function TaskModal({
         impact: isProfessional && impact > 0 ? impact : null,
         urgency: isProfessional && urgency > 0 ? urgency : null,
         effort: isProfessional && effort > 0 ? effort : null,
-        estimateMinutes: estimateMinutes.trim() === "" ? null : Math.max(0, Number(estimateMinutes)),
+        // Estimativa de duração removida da tela (a carga/Capacity Planner saiu); o valor antigo fica no banco.
         recurrenceRule: buildRecurrenceRule({ freq: recurrenceFreq, byDay: recurrenceByDay }),
       });
       const createdId = !isEditing && saved && typeof (saved as { id?: unknown }).id === "string" ? (saved as { id: string }).id : null;
@@ -304,44 +304,6 @@ export function TaskModal({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Data de início" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <Field label="Data de término" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="text-xs text-slate">Duração estimada (opcional)</label>
-            <p className="text-[11px] text-slate mt-0.5 mb-2">
-              É essa duração que o Capacity Planner usa para calcular sua carga do dia — sem ela, a tarefa aparece como "sem estimativa" e não entra na conta.
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {[15, 30, 60, 90, 120].map((min) => (
-                <button
-                  key={min}
-                  type="button"
-                  onClick={() => setEstimateMinutes(String(min))}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    estimateMinutes === String(min)
-                      ? "bg-brand-500 border-brand-500 text-white"
-                      : "border-paper-border dark:border-ink-border text-slate hover:border-brand-300 dark:hover:border-brand-700"
-                  }`}
-                >
-                  {min < 60 ? `${min}min` : `${min / 60}h${min % 60 ? String(min % 60).padStart(2, "0") : ""}`}
-                </button>
-              ))}
-              <input
-                type="number"
-                min={0}
-                step={5}
-                value={estimateMinutes}
-                onChange={(e) => setEstimateMinutes(e.target.value)}
-                placeholder="min"
-                className="w-24 rounded-lg px-3 py-1.5 text-xs bg-transparent outline-none border border-paper-border dark:border-ink-border"
-                aria-label="Duração estimada em minutos"
-              />
-              {estimateMinutes.trim() !== "" && (
-                <button type="button" onClick={() => setEstimateMinutes("")} className="text-[11px] text-slate hover:text-drop">
-                  Limpar
-                </button>
-              )}
-            </div>
           </div>
 
           <div className="rounded-xl p-4 border border-paper-border dark:border-ink-border">

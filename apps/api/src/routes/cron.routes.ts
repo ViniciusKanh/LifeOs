@@ -1,9 +1,6 @@
 import { getDb } from "../db/client.js";
-import { runLifeAdminRemindersForAll } from "../services/lifeAdminService.js";
 import { runDueAutomationsForAll } from "../services/automationRunner.js";
 import { Router } from "express";
-import { mondayOf, sendWeeklySummariesToAllOptedIn } from "../services/weeklyEmailService.js";
-import { runTaskDeadlineTriggersForAll, runJournalReminderTriggersForAll, runBankTriggersForAll } from "../services/notificationTriggersService.js";
 
 /**
  * Endpoints de cron — chamados por um agendador externo (Vercel Cron,
@@ -27,50 +24,28 @@ function isAuthorized(req: import("express").Request): boolean {
  * semana completa (segunda a domingo) antes de hoje. Pensado pra
  * rodar uma vez por semana (ex.: toda segunda de manhã).
  */
-cronRouter.get("/weekly-emails", async (req, res) => {
-  if (!isAuthorized(req)) {
-    return res.status(401).json({ error: "Não autorizado." });
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const thisMonday = mondayOf(today);
-  const lastWeekStart = new Date(`${thisMonday}T00:00:00Z`);
-  lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
-  const weekStartDate = lastWeekStart.toISOString().slice(0, 10);
-
-  const result = await sendWeeklySummariesToAllOptedIn(weekStartDate);
-  return res.json({ weekStartDate, ...result });
+// Resumo semanal por e-mail removido (só há e-mail de cadastro e de senha).
+cronRouter.get("/weekly-emails", (req, res) => {
+  if (!isAuthorized(req)) return res.status(401).json({ error: "Não autorizado." });
+  return res.json({ disabled: true });
 });
 
 cronRouter.get("/notification-triggers", async (req, res) => {
   if (!isAuthorized(req)) {
     return res.status(401).json({ error: "Não autorizado." });
   }
-  const result = await runTaskDeadlineTriggersForAll();
-  // Administração da vida: lembretes de vencimento (antes / hoje / atrasado), no mesmo cron diário.
-  const lifeAdmin = await runLifeAdminRemindersForAll(getDb());
-  // Banco: investimento maturado e empréstimo vencido, no mesmo cron diário.
-  const bank = await runBankTriggersForAll();
+  // Notificações (prazos, administração da vida, banco) foram removidas: o cron diário
+  // só roda as automações agendadas que gravam dados (Grimório, Metas…), idempotentes.
   // Automações do Grimório e de Metas agendadas (diárias/semanais), idempotentes por dia/semana.
   const automations = await runDueAutomationsForAll(getDb()).catch((err) => {
     console.error("[cron] automações falharam:", err);
     return { ran: 0, skipped: 0, errors: 1 };
   });
-  return res.json({ ...result, lifeAdmin, bank, automations });
+  return res.json({ automations });
 });
 
-/**
- * GET /api/cron/journal-reminder — lembrete inteligente de escrever no
- * diário (Fase 11, horário aprendido na Fase 15): pensado pra rodar a
- * cada hora (ver "crons" no vercel.json); só notifica quem ainda não
- * escreveu nada real no Diário hoje E cuja hora atual (UTC) bate com o
- * horário que o próprio usuário costuma escrever de verdade — aprendido
- * a partir do histórico real de journal_entries, com um horário padrão
- * de fim de dia pra quem ainda não tem histórico suficiente.
- */
-cronRouter.get("/journal-reminder", async (req, res) => {
-  if (!isAuthorized(req)) {
-    return res.status(401).json({ error: "Não autorizado." });
-  }
-  const result = await runJournalReminderTriggersForAll();
-  return res.json(result);
+// Lembrete do Diário removido junto com as notificações.
+cronRouter.get("/journal-reminder", (req, res) => {
+  if (!isAuthorized(req)) return res.status(401).json({ error: "Não autorizado." });
+  return res.json({ disabled: true });
 });

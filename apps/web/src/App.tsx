@@ -69,16 +69,12 @@ const ExperimentDetailPage = lazy(() => import("@/pages/experimentos/ExperimentD
 const ConquistasPage = lazy(() =>
   import("@/pages/conquistas/ConquistasPage").then((m) => ({ default: m.ConquistasPage }))
 );
-const CapacityPlannerPage = lazy(() =>
-  import("@/pages/capacity-planner/CapacityPlannerPage").then((m) => ({ default: m.CapacityPlannerPage }))
-);
 const DeadlineRadarPage = lazy(() =>
   import("@/pages/deadline-radar/DeadlineRadarPage").then((m) => ({ default: m.DeadlineRadarPage }))
 );
 const WeeklyReviewPage = lazy(() =>
   import("@/pages/weekly-review/WeeklyReviewPage").then((m) => ({ default: m.WeeklyReviewPage }))
 );
-const GatilhosPage = lazy(() => import("@/pages/gatilhos/GatilhosPage").then((m) => ({ default: m.GatilhosPage })));
 const InventarioPage = lazy(() => import("@/pages/inventario/InventarioPage").then((m) => ({ default: m.InventarioPage })));
 const LojaArcanaPage = lazy(() => import("@/pages/loja-arcana/LojaArcanaPage").then((m) => ({ default: m.LojaArcanaPage })));
 const InventarioHeroiPage = lazy(() => import("@/pages/inventario-heroi/InventarioHeroiPage").then((m) => ({ default: m.InventarioHeroiPage })));
@@ -189,7 +185,8 @@ export default function App() {
           {/* A antiga Loja virou o Tesouro & Recompensas. */}
           <Route path="/loja" element={<Navigate to="/tesouro" replace />} />
           <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/capacity-planner" element={<CapacityPlannerPage />} />
+          {/* Capacity Planner (carga) removido: o endereço antigo volta para Tarefas. */}
+          <Route path="/capacity-planner" element={<Navigate to="/tarefas" replace />} />
           <Route path="/deadline-radar" element={<DeadlineRadarPage />} />
           <Route path="/goal-forecast" element={<Navigate to="/metas" replace />} />
           <Route path="/timeline" element={<TimelinePage />} />
@@ -204,7 +201,8 @@ export default function App() {
           <Route path="/weekly-review" element={<WeeklyReviewPage />} />
           <Route path="/life-map" element={<Navigate to="/metas" replace />} />
           <Route path="/data-health" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/gatilhos" element={<GatilhosPage />} />
+          {/* Lembretes/notificações removidos: o endereço antigo volta para Hoje. */}
+          <Route path="/gatilhos" element={<Navigate to="/hoje" replace />} />
           <Route path="/diario" element={<DiarioPage />} />
           <Route path="/administracao" element={<AdministracaoPage />} />
           <Route path="/direcao" element={<Navigate to="/metas" replace />} />

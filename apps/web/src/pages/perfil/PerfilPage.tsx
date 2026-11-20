@@ -29,8 +29,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { THEME_LABEL, useTheme } from "@/hooks/useTheme";
 import { RpgProfileView } from "@/components/profile/RpgProfileView";
-import { usePush } from "@/hooks/usePush";
-import { useWeeklyEmail } from "@/hooks/useReviews";
 import { Button, Card, Field, IconBadge, PageHeader } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/Switch";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
@@ -293,23 +291,7 @@ export function PerfilPage() {
     </>
   );
 
-  const triggersCard = (
-    <>
-          <Card className="p-5">
-            <div className="flex items-center gap-2.5 mb-3">
-              <IconBadge tone="amber" size={32} icon={<BellRing size={15} />} />
-              <div>
-                <p className="text-sm font-semibold">Gatilhos e alertas</p>
-                <p className="text-xs text-slate">Controle tarefas vencidas, conquistas, resumo semanal, push e e-mail em um só lugar.</p>
-              </div>
-            </div>
-            <Link to="/gatilhos" className="flex items-center justify-between rounded-xl p-3 bg-paper dark:bg-ink hover:border-brand-500/50 border border-transparent transition-colors text-sm">
-              <span className="font-semibold">Abrir central de gatilhos</span>
-              <ChevronRight size={14} className="text-slate shrink-0" />
-            </Link>
-          </Card>
-    </>
-  );
+
 
   const exportCard = (
     <>
@@ -407,9 +389,6 @@ export function PerfilPage() {
           user={user}
           identityEditor={identityEditor}
           passwordCard={passwordCard}
-          pushCard={<PushNotificationsCard />}
-          weeklyEmailCard={<WeeklyEmailCard />}
-          triggersCard={triggersCard}
           exportCard={exportCard}
           helpCard={helpCard}
         />
@@ -541,11 +520,7 @@ export function PerfilPage() {
           <DesktopAppCard />
           <MfaSettingsCard user={user} />
 
-          <PushNotificationsCard />
-          <WeeklyEmailCard />
           <DeleteAccountCard user={user} />
-
-          {triggersCard}
 
           {exportCard}
 
@@ -555,127 +530,5 @@ export function PerfilPage() {
 
       {cropFile && <ImageCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={handleCropConfirm} />}
     </div>
-  );
-}
-
-/**
- * Notificações push reais (Web Push/VAPID) — o toggle reflete o
- * estado de verdade do navegador (usePush já confere PushManager.
- * getSubscription()), não um booleano só salvo no nosso banco.
- */
-function PushNotificationsCard() {
-  const { support, permission, isSubscribed, loading, error, subscribe, unsubscribe, sendTest } = usePush();
-  const [testState, setTestState] = useState<{ ok: boolean; message: string } | null>(null);
-  const [testing, setTesting] = useState(false);
-
-  const handleToggle = async () => {
-    setTestState(null);
-    if (isSubscribed) {
-      await unsubscribe();
-    } else {
-      await subscribe();
-    }
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setTestState(null);
-    try {
-      const result = await sendTest();
-      setTestState({ ok: true, message: `Notificação de teste enviada (${result.sent} dispositivo(s)).` });
-    } catch (err) {
-      setTestState({ ok: false, message: err instanceof Error ? err.message : "Falha ao enviar notificação de teste." });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2.5 mb-3">
-        <IconBadge tone={isSubscribed ? "green" : "purple"} size={32} icon={isSubscribed ? <Bell size={15} /> : <BellOff size={15} />} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">Notificações push</p>
-          <p className="text-xs text-slate">Receba um aviso no navegador/celular quando desbloquear uma conquista ou seu insight diário estiver pronto.</p>
-        </div>
-      </div>
-
-      {support === "unsupported" ? (
-        <p className="text-xs text-slate">Seu navegador não tem suporte a notificações push.</p>
-      ) : (
-        <>
-          <div className="flex items-center justify-between gap-3 rounded-xl p-3 bg-paper dark:bg-ink">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{isSubscribed ? "Ativadas neste dispositivo" : "Desativadas neste dispositivo"}</p>
-              {permission === "denied" && <p className="text-[11px] text-drop mt-0.5">Bloqueadas nas configurações do navegador.</p>}
-            </div>
-            <Switch checked={isSubscribed} onChange={handleToggle} disabled={loading || permission === "denied"} label="Notificações push neste dispositivo" />
-          </div>
-
-          {error && <p className="text-xs text-drop mt-2">{error}</p>}
-
-          {isSubscribed && (
-            <Button variant="secondary" className="w-full mt-3" onClick={handleTest} disabled={testing}>
-              <Send size={14} /> {testing ? "Enviando..." : "Enviar notificação de teste"}
-            </Button>
-          )}
-          {testState && (
-            <p className={`text-xs mt-2 ${testState.ok ? "text-growth" : "text-drop"}`}>{testState.message}</p>
-          )}
-        </>
-      )}
-    </Card>
-  );
-}
-
-function WeeklyEmailCard() {
-  const { enabled, isLoading, setEnabled, sendNow, isSending } = useWeeklyEmail();
-  const [sendState, setSendState] = useState<{ ok: boolean; message: string } | null>(null);
-
-  const handleToggle = async () => {
-    setSendState(null);
-    try {
-      await setEnabled(!enabled);
-      setSendState({ ok: true, message: !enabled ? "Resumo semanal ativado." : "Resumo semanal desativado." });
-    } catch (err) {
-      setSendState({ ok: false, message: err instanceof Error ? err.message : "Não foi possível salvar sua preferência." });
-    }
-  };
-
-  const handleSendNow = async () => {
-    setSendState(null);
-    try {
-      await sendNow();
-      setSendState({ ok: true, message: "Resumo enviado! Confira sua caixa de entrada." });
-    } catch (err) {
-      setSendState({
-        ok: false,
-        message: err instanceof Error ? err.message : "Falha ao enviar o resumo semanal.",
-      });
-    }
-  };
-
-  return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2.5 mb-3">
-        <IconBadge tone={enabled ? "green" : "purple"} size={32} icon={<Mails size={15} />} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">Resumo semanal por e-mail</p>
-          <p className="text-xs text-slate">Toda semana, um e-mail com seu Life Score e as métricas reais da Weekly Review.</p>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-3 rounded-xl p-3 bg-paper dark:bg-ink">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{enabled ? "Ativado" : "Desativado"}</p>
-        </div>
-        <Switch checked={enabled} onChange={handleToggle} disabled={isLoading} label="Resumo semanal por e-mail" />
-      </div>
-
-      <Button variant="secondary" className="w-full mt-3" onClick={handleSendNow} disabled={isSending}>
-        <Send size={14} /> {isSending ? "Enviando..." : "Enviar resumo da última semana agora"}
-      </Button>
-      {sendState && <p className={`text-xs mt-2 ${sendState.ok ? "text-growth" : "text-drop"}`}>{sendState.message}</p>}
-    </Card>
   );
 }

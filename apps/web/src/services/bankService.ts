@@ -75,6 +75,8 @@ export interface CreditInfo {
   lateFeeBps: number;
   /** Tabela completa de níveis de crédito -- alimenta o Simulador de empréstimo. */
   tiers: LoanTier[];
+  /** Limite definido em Configurações (null = limite pelo score). */
+  manualLimit?: number | null;
 }
 
 export interface AutoInvestRule {
@@ -174,7 +176,14 @@ function ledgerQueryString(filter: LedgerFilter): string {
   return params.toString();
 }
 
+export interface BankSettings {
+  balance: number;
+  creditLimit: number | null;
+}
+
 export const bankService = {
+  settings: () => api.get<BankSettings>("/bank/settings"),
+  updateSettings: (input: { balance?: number; creditLimit?: number | null }) => api.put<BankSettings>("/bank/settings", input),
   summary: () => api.get<BankSummary>("/bank"),
   deposit: (input: DepositInput) => api.post<DepositSuccess>("/bank/deposits", input),
   claim: (depositId: string) => api.post<ClaimSuccess>(`/bank/deposits/${depositId}/claim`),

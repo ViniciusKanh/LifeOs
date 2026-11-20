@@ -306,7 +306,6 @@ export function ArchetypeCards({ hub }: { hub: Hub }) {
 }
 
 export function FeaturedMission({ hub, notify }: { hub: Hub; notify: (m: string, tone?: "success" | "error") => void }) {
-  const { startTimer } = useTodayActions();
   const f = hub.featured;
   return (
     <KitSection title="Missão em destaque" icon={<Swords size={16} />} tone="gold">
@@ -320,12 +319,9 @@ export function FeaturedMission({ hub, notify }: { hub: Hub; notify: (m: string,
               Prioridade {f.priority} · {f.dueDate ? `prazo ${new Date(`${f.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR")}` : "sem prazo"} · {f.reasons.slice(0, 2).join(" · ")}
             </p>
           </div>
-          <RPGButton
-            variant="primary"
-            onClick={() => startTimer.mutate({ mode: "pomodoro", plannedMinutes: 25, linkType: "task", linkId: f.id }, { onSuccess: () => notify("Foco iniciado — acompanhe em Hoje › Foco."), onError: (e) => notify(e instanceof Error ? e.message : "Não foi possível iniciar.", "error") })}
-          >
-            <Play size={14} aria-hidden /> Continuar missão
-          </RPGButton>
+          <Link to={`/tarefas?task=${f.id}`} className="rpg-btn rpg-btn-primary inline-flex items-center gap-1.5 text-sm">
+            <Play size={14} aria-hidden /> Abrir missão
+          </Link>
         </div>
       ) : (
         <p className="text-sm text-rpg-muted">Nenhuma missão aberta. <Link to="/tarefas?nova=1" className="text-rpg-blue hover:underline">Criar missão</Link></p>

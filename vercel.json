@@ -21,10 +21,6 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/weekly-emails",
-      "schedule": "0 12 * * 1"
-    },
-    {
       "path": "/api/cron/notification-triggers",
       "schedule": "5 12 * * *"
     }

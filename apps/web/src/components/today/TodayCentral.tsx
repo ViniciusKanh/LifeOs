@@ -77,7 +77,7 @@ const durMin = (a: string, b: string | null) => (b && a.length > 10 && b.length 
  * Mostra as 3 prioridades do ranking (prazo + prioridade) e o que já foi concluído
  * hoje. Fixar uma missão principal é opcional e só serve para o bônus oficial.
  */
-function FocusNowCard({ hub, onStart }: { hub: TodayHub; onStart: (taskId: string | null) => void }) {
+function FocusNowCard({ hub }: { hub: TodayHub }) {
   const { setMain } = useTodayActions();
   const [help, setHelp] = useState(false);
   const m = hub.main;
@@ -108,9 +108,6 @@ function FocusNowCard({ hub, onStart }: { hub: TodayHub; onStart: (taskId: strin
             {m.title}
           </Link>
           {m.subtasks.total > 0 && <RPGProgressBar className="mt-1" label="Etapas" value={m.subtasks.done} max={m.subtasks.total} valueLabel={`${m.subtasks.done}/${m.subtasks.total}`} tone="purple" />}
-          <RPGButton variant="primary" className="mt-1.5 min-h-[34px] text-xs" onClick={() => onStart(m.id)} disabled={!!hub.timer}>
-            <Play size={12} aria-hidden /> {hub.timer ? "Foco em andamento" : "Focar nesta"}
-          </RPGButton>
         </div>
       )}
       {hub.focusNow.length > 0 ? (
@@ -122,9 +119,6 @@ function FocusNowCard({ hub, onStart }: { hub: TodayHub; onStart: (taskId: strin
                 {f.title}
               </Link>
               {f.overdue && <RPGBadge tone="red">atrasada</RPGBadge>}
-              <button type="button" disabled={!!hub.timer} onClick={() => onStart(f.id)} className="shrink-0 p-1 text-rpg-purple hover:text-rpg-gold-light disabled:opacity-40" aria-label={`Iniciar foco em ${f.title}`}>
-                <Play size={14} />
-              </button>
             </li>
           ))}
         </ol>
@@ -139,7 +133,7 @@ function FocusNowCard({ hub, onStart }: { hub: TodayHub; onStart: (taskId: strin
   );
 }
 
-export function TodayBanner({ hub, onStart }: { hub: TodayHub; onStart: (taskId: string | null) => void }) {
+export function TodayBanner({ hub }: { hub: TodayHub }) {
   const { user } = useAuth();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -173,7 +167,7 @@ export function TodayBanner({ hub, onStart }: { hub: TodayHub; onStart: (taskId:
           </div>
         </div>
       </header>
-      <FocusNowCard hub={hub} onStart={onStart} />
+      <FocusNowCard hub={hub} />
     </div>
   );
 }
@@ -215,7 +209,7 @@ export function TodayIndicators({ hub }: { hub: TodayHub }) {
 
 const KIND_LABEL: Record<RitualKind, string> = { manual: "Manual", planning: "Planejamento (missão principal ou intenção)", task: "Missão concluída", habit: "Hábito", focus: "Sessão de foco (15+ min)", health: "Saúde (água, treino ou humor)", study: "Estudo/leitura (15+ min)", journal: "Diário escrito" };
 
-export function RitualPanel({ hub, onStartFocus, notify, compact }: { hub: TodayHub; onStartFocus: () => void; notify: Notify; compact?: boolean }) {
+export function RitualPanel({ hub, notify, compact }: { hub: TodayHub; notify: Notify; compact?: boolean }) {
   const { toggleRitual } = useTodayActions();
   const [config, setConfig] = useState(false);
   const r = hub.ritual;
@@ -255,11 +249,6 @@ export function RitualPanel({ hub, onStartFocus, notify, compact }: { hub: Today
               )}
               <span className={clsx("min-w-0 flex-1 text-sm", s.done ? "text-rpg-muted line-through" : "text-rpg-text")}>{s.label}</span>
               {!compact && s.auto && <span className="hidden text-[10px] text-rpg-muted sm:inline">automático</span>}
-              {!s.done && firstOpen && (s.kind === "focus" || s.kind === "study" || s.kind === "task") && (
-                <RPGButton variant="primary" className="min-h-[32px] px-2 text-xs" onClick={onStartFocus} disabled={!!hub.timer}>
-                  Iniciar <ChevronRight size={12} aria-hidden />
-                </RPGButton>
-              )}
               {!s.done && s.kind === "journal" && (
                 <Link to="/diario" className="text-[11px] text-rpg-blue hover:underline">
                   Diário
@@ -373,7 +362,7 @@ function RitualConfigModal({ open, hub, onClose, notify }: { open: boolean; hub:
 
 const PRIO_TONE = { Alta: "red", Média: "orange", Baixa: "muted" } as const;
 
-export function MissionsPanel({ hub, notify, onStart, limit }: { hub: TodayHub; notify: Notify; onStart: (taskId: string) => void; limit?: number }) {
+export function MissionsPanel({ hub, notify, limit }: { hub: TodayHub; notify: Notify; limit?: number }) {
   const { updateTask } = useTasks();
   const { setMain } = useTodayActions();
   const { toggleSubtask } = usePlanningActions();
@@ -426,14 +415,9 @@ export function MissionsPanel({ hub, notify, onStart, limit }: { hub: TodayHub; 
               </Link>
               <p className="text-[11px] text-rpg-muted">
                 {m.projectName ?? "Sem projeto"} · {m.dueDate ? new Date(`${m.dueDate}T12:00:00`).toLocaleDateString("pt-BR") : "planejada para hoje"}
-                {m.estimateMinutes ? ` · ~${m.estimateMinutes} min` : ""}
-                {m.spentMinutes ? ` · ${m.spentMinutes} min feitos` : ""}
               </p>
               {m.subtasks.total > 0 && <RPGProgressBar className="mt-1" label="Subtarefas" showLabel={false} value={m.subtasks.done} max={m.subtasks.total} tone="purple" />}
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                <RPGButton variant="primary" className="min-h-[34px] px-2 text-xs" disabled={!!hub.timer} onClick={() => onStart(m.id)}>
-                  <Play size={12} aria-hidden /> Iniciar
-                </RPGButton>
                 <RPGButton variant="success" className="min-h-[34px] px-2 text-xs" onClick={() => void complete(m)}>
                   <Check size={12} aria-hidden /> Concluir
                 </RPGButton>
@@ -488,7 +472,6 @@ export function MissionsPanel({ hub, notify, onStart, limit }: { hub: TodayHub; 
   );
 }
 
-/* ═══════════════════════════════ Cronômetro ═══════════════════════════════ */
 
 const fmtClock = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -496,108 +479,6 @@ const fmtClock = (ms: number) => {
   const m = Math.floor((s % 3600) / 60);
   return `${h ? `${h}:` : ""}${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
-
-/** Cronômetro persistido no servidor: o tempo é recalculado pelos timestamps (aba minimizada/recarga não perdem nada). */
-export function FocusTimer({ hub, notify, preset }: { hub: TodayHub; notify: Notify; preset?: { taskId: string } | null }) {
-  const { startTimer, pauseTimer, stopTimer } = useTodayActions();
-  const decks = useGrimoireDecks();
-  const [mode, setMode] = useState<TimerMode>("pomodoro");
-  const [minutes, setMinutes] = useState(25);
-  const [link, setLink] = useState<string>(preset ? `task:${preset.taskId}` : "");
-  const [, tick] = useState(0);
-  const stopping = useRef(false);
-  const t = hub.timer;
-  useEffect(() => {
-    if (preset) setLink(`task:${preset.taskId}`);
-  }, [preset]);
-  useEffect(() => {
-    if (!t || t.pausedAt) return;
-    const i = window.setInterval(() => tick((x) => x + 1), 1000);
-    return () => window.clearInterval(i);
-  }, [t]);
-  const elapsed = t ? Math.max(0, (t.pausedAt ? Date.parse(t.pausedAt) : Date.now()) - Date.parse(t.startedAt) - t.pausedMs) : 0;
-  const planned = t?.plannedMinutes ? t.plannedMinutes * 60_000 : null;
-  const stop = () => {
-    if (stopping.current) return;
-    stopping.current = true;
-    stopTimer.mutate(undefined, {
-      onSuccess: (r) => notify(r.minutes >= 1 ? `Sessão registrada: ${r.minutes} min de foco.` : "Sessão encerrada (menos de 1 min não conta)."),
-      onError: (e) => notify(e instanceof Error ? e.message : "Não foi possível encerrar.", "error"),
-      onSettled: () => (stopping.current = false),
-    });
-  };
-  // Pomodoro/bloco: encerra sozinho ao atingir a duração (uma única vez).
-  useEffect(() => {
-    if (t && planned && !t.pausedAt && elapsed >= planned) stop();
-  });
-  const start = () => {
-    const [type, id] = link ? link.split(":") : [null, null];
-    startTimer.mutate({ mode, plannedMinutes: mode === "free" ? null : minutes, linkType: (type as "task" | "deck" | null) ?? null, linkId: id ?? null }, { onError: (e) => notify(e instanceof Error ? e.message : "Não foi possível iniciar.", "error") });
-  };
-  return (
-    <KitSection title="Cronômetro de foco" icon={<AlarmClock size={16} />} tone="legendary">
-      {t ? (
-        <div className="flex flex-col items-center gap-2 text-center">
-          <p className="font-pixel text-[10px] uppercase text-rpg-muted">{t.mode === "pomodoro" ? "Pomodoro" : t.mode === "block" ? "Bloco" : "Foco livre"}{t.linkLabel ? ` · ${t.linkLabel}` : ""}</p>
-          <p className="font-rpg text-5xl font-bold tabular-nums text-rpg-gold-light" aria-live="polite">{planned ? fmtClock(Math.max(0, planned - elapsed)) : fmtClock(elapsed)}</p>
-          {planned && <RPGProgressBar className="w-full" label="Progresso" showLabel={false} value={elapsed} max={planned} tone="purple" />}
-          <p className="text-[11px] text-rpg-muted">{t.pausedAt ? "Pausado" : "Em andamento"} · {fmtClock(elapsed)} efetivos</p>
-          <div className="flex gap-2">
-            <RPGButton variant="secondary" onClick={() => pauseTimer.mutate(!t.pausedAt)} disabled={pauseTimer.isPending}>
-              {t.pausedAt ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />} {t.pausedAt ? "Retomar" : "Pausar"}
-            </RPGButton>
-            <RPGButton variant="danger" onClick={stop} disabled={stopTimer.isPending}>
-              <Square size={14} aria-hidden /> Encerrar
-            </RPGButton>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Modo">
-            {(["pomodoro", "block", "free"] as const).map((m) => (
-              <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => (setMode(m), setMinutes(m === "pomodoro" ? 25 : 50))} className={clsx("min-h-[40px] border-2 text-xs", mode === m ? "border-rpg-gold bg-rpg-gold/15 text-rpg-gold-light" : "border-rpg-border text-rpg-muted")} style={R}>
-                {m === "pomodoro" ? "Pomodoro" : m === "block" ? "Bloco" : "Livre"}
-              </button>
-            ))}
-          </div>
-          {mode !== "free" && (
-            <div className="flex flex-wrap gap-1.5">
-              {(mode === "pomodoro" ? [15, 25, 45] : [30, 50, 90, 120]).map((v) => (
-                <button key={v} type="button" onClick={() => setMinutes(v)} className={clsx("min-h-[36px] border px-2.5 text-xs", minutes === v ? "border-rpg-purple bg-rpg-purple/20 text-rpg-text" : "border-rpg-border text-rpg-muted")} style={R}>
-                  {v} min
-                </button>
-              ))}
-              <input type="number" aria-label="Duração personalizada (min)" min={5} max={480} value={minutes} onChange={(e) => setMinutes(Math.max(5, Math.min(480, Number(e.target.value) || 25)))} className="min-h-[36px] w-20 border border-rpg-border bg-rpg-bg-2 px-2 text-xs text-rpg-text" style={R} />
-            </div>
-          )}
-          <select aria-label="Vincular atividade" className={FIELD} style={R} value={link} onChange={(e) => setLink(e.target.value)}>
-            <option value="">Sem vínculo</option>
-            <optgroup label="Missões de hoje">
-              {hub.missions.map((m) => (
-                <option key={m.id} value={`task:${m.id}`}>
-                  {m.title}
-                </option>
-              ))}
-            </optgroup>
-            {(decks.data ?? []).length > 0 && (
-              <optgroup label="Estudo (Grimório)">
-                {(decks.data ?? []).map((d) => (
-                  <option key={d.id} value={`deck:${d.id}`}>
-                    {d.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-          <RPGButton variant="gold" className="w-full" onClick={start} disabled={startTimer.isPending}>
-            <Play size={14} aria-hidden /> Iniciar {mode === "free" ? "foco livre" : `${minutes} min`}
-          </RPGButton>
-          <p className="text-[10px] text-rpg-muted">A sessão vira um apontamento de foco (fonte oficial). XP de foco é pago uma vez por sessão, pela regra de blocos.</p>
-        </div>
-      )}
-    </KitSection>
-  );
-}
 
 export function FocusBlocksPanel({ hub }: { hub: TodayHub }) {
   return (
@@ -679,7 +560,7 @@ export function HabitsToday({ hub, notify }: { hub: TodayHub; notify: Notify }) 
   );
 }
 
-export function AgendaToday({ hub, notify, onStart }: { hub: TodayHub; notify: Notify; onStart: (taskId: string) => void }) {
+export function AgendaToday({ hub, notify }: { hub: TodayHub; notify: Notify }) {
   const sync = useJourneySync();
   const [form, setForm] = useState<{ title: string; time: string; minutes: number } | null>(null);
   const create = async () => {
@@ -728,11 +609,6 @@ export function AgendaToday({ hub, notify, onStart }: { hub: TodayHub; notify: N
                   <span className={clsx("min-w-0 flex-1 truncate", ended ? "text-rpg-muted" : "text-rpg-text")}>{a.title}</span>
                 )}
                 {d != null && <span className="shrink-0 text-[10px] text-rpg-muted">{d} min</span>}
-                {(a.blockTaskId || a.sourceType === "task") && !hub.timer && (
-                  <button type="button" className="flex h-8 w-8 items-center justify-center text-rpg-purple" aria-label={`Iniciar foco em ${a.title}`} onClick={() => onStart(a.blockTaskId ?? a.sourceId ?? "")}>
-                    <Play size={13} aria-hidden />
-                  </button>
-                )}
               </li>
             );
           })}
@@ -835,13 +711,13 @@ export function RewardsPanel({ hub }: { hub: TodayHub }) {
   );
 }
 
-const QUICK = ["Planejar meu dia", "O que faço agora?", "Organizar prioridades", "Iniciar foco", "Revisar pendências"];
+const QUICK = ["Planejar meu dia", "O que faço agora?", "Organizar prioridades", "Revisar pendências"];
 const KIND = { dado: { label: "Dado real", tone: "blue" }, inferencia: { label: "Inferência", tone: "purple" }, sugestao: { label: "Sugestão", tone: "green" } } as const;
 
-export function DayCouncil({ hub, compact, onStartFocus }: { hub: TodayHub; compact?: boolean; onStartFocus: () => void }) {
+export function DayCouncil({ hub, compact }: { hub: TodayHub; compact?: boolean }) {
   const advisor = useAdvisor("today");
   const [q, setQ] = useState("");
-  const ask = (question: string, useAi: boolean) => (question === "Iniciar foco" ? onStartFocus() : advisor.mutate({ useAi, question }));
+  const ask = (question: string, useAi: boolean) => advisor.mutate({ useAi, question });
   return (
     <section className="rpg-panel flex flex-col gap-2 p-3" aria-label="Conselho do dia">
       <div className="flex items-start gap-3">
@@ -925,27 +801,21 @@ export function DayClosePanel({ notify }: { notify: Notify }) {
 
 /* ═══════════════════════════════ Tela ═══════════════════════════════ */
 
-const TABS = ["visao", "dia", "missoes", "foco", "rituais", "automacoes", "ia"] as const;
+const TABS = ["visao", "dia", "missoes", "rituais", "automacoes", "ia"] as const;
 type Tab = (typeof TABS)[number];
 
 /** HOJE — Central da Jornada Diária (tema RPG). */
 export function TodayCentral() {
   const q = useTodayHub();
-  const { startTimer } = useTodayActions();
   const [tab, setTab] = useUrlTab(TABS, "visao");
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
   const notify: Notify = (msg, tone = "success") => setToast({ msg, tone });
   const hub = q.data;
-  const startOn = (taskId: string | null) => {
-    if (!taskId) return setTab("foco");
-    startTimer.mutate({ mode: "pomodoro", plannedMinutes: 25, linkType: "task", linkId: taskId }, { onSuccess: () => notify("Pomodoro de 25 min iniciado."), onError: (e) => notify(e instanceof Error ? e.message : "Não foi possível iniciar.", "error") });
-  };
   const tabs = useMemo(
     () => [
       { value: "visao" as Tab, label: "Visão Geral", icon: <LayoutGrid size={15} /> },
       { value: "dia" as Tab, label: "Meu Dia", icon: <CalendarDays size={15} /> },
       { value: "missoes" as Tab, label: "Missões", icon: <Swords size={15} />, badge: hub?.missions.filter((m) => m.overdue).length || undefined },
-      { value: "foco" as Tab, label: "Foco", icon: <Timer size={15} /> },
       { value: "rituais" as Tab, label: "Rituais", icon: <Crown size={15} /> },
       { value: "automacoes" as Tab, label: "Automações", icon: <Zap size={15} /> },
       { value: "ia" as Tab, label: "IA Copiloto", icon: <Bot size={15} /> },
@@ -973,68 +843,47 @@ export function TodayCentral() {
     );
   return (
     <div className="w-full space-y-3 px-4 py-6 md:px-6 lg:px-8">
-      <TodayBanner hub={hub} onStart={(id) => startOn(id)} />
+      <TodayBanner hub={hub} />
       <TodayIndicators hub={hub} />
-      {hub.timer && tab !== "foco" && (
-        <button type="button" onClick={() => setTab("foco")} className="rpg-panel flex w-full items-center gap-2 border-rpg-purple p-2 text-left text-sm text-rpg-text">
-          <Timer size={16} className="text-rpg-purple" aria-hidden /> Foco em andamento{hub.timer.linkLabel ? `: ${hub.timer.linkLabel}` : ""} — abrir cronômetro
-        </button>
-      )}
       <MySkillsCard compact />
       <ModuleTabs label="Seções do dia" value={tab} onChange={setTab} tabs={tabs} />
       {tab === "visao" && (
         <>
           <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
-            <RitualPanel hub={hub} onStartFocus={() => startOn(hub.main?.id ?? null)} notify={notify} compact />
-            <MissionsPanel hub={hub} notify={notify} onStart={startOn} limit={3} />
+            <RitualPanel hub={hub} notify={notify} compact />
+            <MissionsPanel hub={hub} notify={notify} limit={3} />
             <div className="space-y-3 lg:col-span-2 2xl:col-span-1">
-              <AgendaToday hub={hub} notify={notify} onStart={startOn} />
+              <AgendaToday hub={hub} notify={notify} />
               <SignalsPanel hub={hub} />
             </div>
           </div>
           <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
             <RewardsPanel hub={hub} />
-            <DayCouncil hub={hub} compact onStartFocus={() => setTab("foco")} />
+            <DayCouncil hub={hub} compact />
           </div>
         </>
       )}
       {tab === "dia" && (
         <div className="grid items-start gap-3 lg:grid-cols-3">
           <HabitsToday hub={hub} notify={notify} />
-          <AgendaToday hub={hub} notify={notify} onStart={startOn} />
+          <AgendaToday hub={hub} notify={notify} />
           <div className="space-y-3">
             <SignalsPanel hub={hub} />
             <RewardsPanel hub={hub} />
           </div>
         </div>
       )}
-      {tab === "missoes" && <MissionsPanel hub={hub} notify={notify} onStart={startOn} />}
-      {tab === "foco" && (
-        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <FocusTimer hub={hub} notify={notify} preset={hub.main ? { taskId: hub.main.id } : null} />
-          <div className="space-y-3">
-            <FocusBlocksPanel hub={hub} />
-            <KitSection title="Hoje no foco" icon={<Target size={16} />}>
-              <p className="text-sm text-rpg-text">
-                {hub.indicators.focusMinutes} min em {hub.indicators.focusSessions} sessão(ões).
-              </p>
-              <Link to="/tarefas" className="text-xs text-rpg-blue hover:underline">
-                Histórico de apontamentos nas Missões →
-              </Link>
-            </KitSection>
-          </div>
-        </div>
-      )}
+      {tab === "missoes" && <MissionsPanel hub={hub} notify={notify} />}
       {tab === "rituais" && (
         <div className="grid items-start gap-3 lg:grid-cols-2">
-          <RitualPanel hub={hub} onStartFocus={() => setTab("foco")} notify={notify} />
+          <RitualPanel hub={hub} notify={notify} />
           <DayClosePanel notify={notify} />
         </div>
       )}
       {tab === "automacoes" && <AutomationsPanel module="today" title="Automações do Hoje" intro="Planejamento, próxima ação, blocos de foco, progresso, alertas e encerramento. Nada é criado ou movido sem a sua aprovação." />}
       {tab === "ia" && (
         <div className="grid items-start gap-3 lg:grid-cols-2">
-          <DayCouncil hub={hub} onStartFocus={() => setTab("foco")} />
+          <DayCouncil hub={hub} />
           <DayClosePanel notify={notify} />
         </div>
       )}

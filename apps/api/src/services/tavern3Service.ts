@@ -228,8 +228,6 @@ export async function saveRitual(db: Client, ownerId: string, patch: Partial<Rec
   if (patch.steps) (sets.push("steps_json = ?"), args.push(JSON.stringify([...new Set(patch.steps)].filter((s) => (STEPS as readonly string[]).includes(s)))));
   if (patch.priorities) (sets.push("priorities_json = ?"), args.push(JSON.stringify(patch.priorities.slice(0, 5))));
   if (sets.length) await db.execute({ sql: `UPDATE tavern_rituals SET ${sets.join(", ")}, updated_at = datetime('now') WHERE owner_id = ? AND day_key = ?`, args: [...args, ownerId, today] });
-  // O aprendizado principal também alimenta o fechamento do Diário (mesmo registro, sem duplicar).
-  if (patch.learned !== undefined) await saveJournalFields(db, ownerId, { learning: patch.learned });
   return parseRitual((await db.execute({ sql: "SELECT * FROM tavern_rituals WHERE owner_id = ? AND day_key = ?", args: [ownerId, today] })).rows[0] as unknown as Row, today);
 }
 

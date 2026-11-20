@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Gauge, KeyRound, Mail, Plus, Send, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Coins, Gauge, KeyRound, Mail, Plus, Send, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminSettings, useAdminUsers, useGeminiModels, useGoogleRedirectUri, useSecurityInfo } from "@/hooks/useAdmin";
 import { adminService } from "@/services/adminService";
 import { NovoUsuarioModal } from "@/components/admin/NovoUsuarioModal";
+import { BankSettingsCard } from "@/components/bank/BankSettingsCard";
 import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
 import type { AdminIntegration, AdminSetting } from "@/types";
 
@@ -282,6 +283,14 @@ export function ConfiguracoesPage() {
       <PageHeader icon={<ShieldCheck size={20} />} title="Configurações" subtitle="Integrações, segurança e administração do LifeOS." />
       {/* Duas colunas em telas largas para ocupar a área do app; uma coluna no celular/tablet. */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+
+      <SectionCard
+        icon={<IconBadge tone="orange" size={30} icon={<Coins size={14} />} />}
+        title="Banco (moedas e crédito)"
+        description="Ajuste o seu saldo de moedas e defina o seu próprio limite de crédito."
+      >
+        <BankSettingsCard />
+      </SectionCard>
 
       <SectionCard
         icon={<IconBadge tone="purple" size={30} icon={<KeyRound size={14} />} />}

@@ -226,64 +226,7 @@ export function MissionCalendar({ tasks, today, onOpen, onNewOn }: { tasks: Boar
   );
 }
 
-/* ═════════════ Carga ═════════════ */
 
-const LEVEL_TONE: Record<string, string> = { leve: "text-rpg-green", equilibrada: "text-rpg-blue", alta: "text-rpg-orange", sobrecarga: "text-rpg-red" };
-
-export function MissionLoadView({ overview }: { overview: MissionsOverview }) {
-  const q = useMissionsLoad(true);
-  const i = overview.indicators;
-  const data = (q.data?.days ?? []).map((d) => ({ dia: fmtWeekday(d.date), livre: d.freeMinutes, planejado: d.plannedMinutes, excesso: d.overloadMinutes }));
-  return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <Section title="Capacidade dos próximos dias" icon={<Gauge size={14} />}>
-        {q.isLoading ? (
-          <div className="flex h-60 items-center justify-center text-rpg-muted">
-            <Loader2 className="animate-spin" aria-label="Carregando carga" />
-          </div>
-        ) : q.isError ? (
-          <Empty icon={<AlertTriangle size={20} />} title="Não consegui calcular a carga agora." />
-        ) : (
-          <>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                  <CartesianGrid stroke={CHART.grid} vertical={false} />
-                  <XAxis dataKey="dia" tick={{ fill: CHART.text, fontSize: 11 }} />
-                  <YAxis tick={{ fill: CHART.text, fontSize: 11 }} unit="m" />
-                  <Tooltip {...TOOLTIP} formatter={(v: number) => fmtMin(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="planejado" name="Planejado" stackId="a" fill={CHART.purple} />
-                  <Bar dataKey="excesso" name="Excesso" stackId="a" fill={CHART.red} />
-                  <Bar dataKey="livre" name="Livre" fill={CHART.green} opacity={0.55} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <ul className="mt-2 grid gap-1 sm:grid-cols-2">
-              {(q.data?.days ?? []).map((d) => (
-                <li key={d.date} className="flex items-center gap-2 text-xs">
-                  <span className="w-16 capitalize text-rpg-muted">{fmtWeekday(d.date)}</span>
-                  <span className={clsx("font-semibold capitalize", LEVEL_TONE[d.level] ?? "text-rpg-text")}>{d.level}</span>
-                  <span className="text-rpg-muted">· {d.occupancyPct}% ocupado · janela {d.window}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-        <p className="mt-2 text-[11px] text-rpg-muted">Mesma regra do Planejamento de Capacidade: janela de trabalho menos compromissos da Agenda, comparada ao esforço das missões planejadas.</p>
-      </Section>
-      <Section title="Esforço em aberto" icon={<Hourglass size={14} />}>
-        <dl className="grid grid-cols-2 gap-2">
-          <Stat label="Estimado em aberto" value={fmtMin(i.estimatedOpenMinutes)} />
-          <Stat label="Sem estimativa" value={String(i.unestimatedOpen)} tone={i.unestimatedOpen ? "text-rpg-orange" : undefined} />
-          <Stat label="Executado (30 dias)" value={fmtMin(i.executedLast30Minutes)} />
-          <Stat label="Em execução" value={String(i.inProgress)} />
-        </dl>
-        {i.unestimatedOpen > 0 && <p className="mt-2 text-[11px] text-rpg-muted">Missões sem estimativa não entram no cálculo de carga — estime-as para o planejamento ficar fiel.</p>}
-      </Section>
-    </div>
-  );
-}
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (

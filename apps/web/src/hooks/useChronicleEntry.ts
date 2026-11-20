@@ -9,7 +9,8 @@ export function useChronicleEntryActions(date: string) {
   const qc = useQueryClient();
   return {
     setGoal: useMutation({ mutationFn: (goal: number) => chronicleEntryService.setGoal(goal), onSuccess: () => void qc.invalidateQueries({ queryKey: ["chronicle-entry"] }) }),
-    scribe: useMutation({ mutationFn: (action: ScribeAction) => chronicleEntryService.scribe(date, action) }),
+    scribe: useMutation({ mutationFn: (v: { action: ScribeAction; text: string }) => chronicleEntryService.scribe(date, v.action, v.text) }),
+    writeChronicle: useMutation({ mutationFn: (text: string) => chronicleEntryService.writeChronicle(date, text) }),
     transcribe: useMutation({ mutationFn: (mediaId: string) => chronicleEntryService.transcribe(mediaId) }),
     toGrimoire: useMutation({
       mutationFn: (text: string) => chronicleEntryService.learningToGrimoire(date, text),

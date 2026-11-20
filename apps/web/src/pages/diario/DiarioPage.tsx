@@ -59,7 +59,6 @@ import { JournalMediaSection } from "@/components/journal/JournalMediaSection";
 import { SpotlightSlider, type SpotlightSlide } from "@/components/media/SpotlightSlider";
 import { JournalAiOrganizer } from "@/components/journal/JournalAiOrganizer";
 import { JournalWritingAssistant } from "@/components/journal/JournalWritingAssistant";
-import { JournalDayClosing } from "@/components/journal/JournalDayClosing";
 import { JournalWordCloud } from "@/components/journal/JournalWordCloud";
 import { JournalChapterBadge } from "@/components/journal/JournalChapterBadge";
 import { MOOD_EMOJI } from "@/utils/journalMood";
@@ -91,7 +90,6 @@ import {
   ChronicleMissions,
   ChronicleRankPanel,
   ChronicleTimeline,
-  ClosingRitual,
   ConsistencyHeatmap,
   DayStatePanel,
   LabNoteSender,
@@ -723,11 +721,6 @@ type FormState = {
   gratitude: string[];
   selfCare: string[];
   selfCareOther: string;
-  nightTakeaway: string;
-  /** Fechamento 3.0 (texto simples). */
-  closingReflection: string;
-  closingLearning: string;
-  closingPending: string;
   journalIds: string[];
   locationLabel: string;
   locationLat: number | null;
@@ -740,10 +733,6 @@ const EMPTY_FORM: FormState = {
   gratitude: ["", "", ""],
   selfCare: [],
   selfCareOther: "",
-  nightTakeaway: "",
-  closingReflection: "",
-  closingLearning: "",
-  closingPending: "",
   journalIds: [],
   locationLabel: "",
   locationLat: null,
@@ -761,6 +750,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   const {
     entry,
     isLoading,
+    isFetching,
     save,
     isSaving,
     addMedia,
@@ -798,174 +788,133 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   // Modo Escrita: só o relato, sem as demais seções (que continuam salvas e acessíveis no modo completo).
   const [writingMode, setWritingMode] = useState(false);
   const { data: chronicleHub } = useChronicleHub();
-  const editorQueryClient = useQueryClient();
-  // Controle de conflito: a versão (updated_at) que este dispositivo conhece.
-  const baseUpdatedAt = useRef<string | null>(null);
-  const conflictRef = useRef(false);
-  const [conflict, setConflict] = useState(false);
-  const [draftFound, setDraftFound] = useState<FormState | null>(null);
-  // Rascunho local (sessionStorage: some ao fechar a aba) — evita perder texto se a rede falhar.
-  const draftKey = `lifeos:diario:rascunho:${date}`;
-  const writeDraft = (state: FormState) => {
-    try {
-      window.sessionStorage.setItem(draftKey, JSON.stringify(state));
-    } catch {
-      /* armazenamento indisponível: segue sem rascunho local */
-    }
-  };
-  const clearDraft = () => {
-    try {
-      window.sessionStorage.removeItem(draftKey);
-    } catch {
-      /* idem */
-    }
-  };
-  useEffect(() => {
-    if (entry) baseUpdatedAt.current = entry.updatedAt ?? null;
-  }, [entry?.updatedAt]);
+
+  /*
+   * Proteção contra perda de texto (sem "versões"):
+   * - o form só é preenchido com a leitura FRESCA do servidor (refetchOnMount: "always");
+   * - enquanto um dia não foi carregado, nenhum salvamento sai para ele — era assim que
+   *   um form vazio ou antigo sobrescrevia a crônica;
+   * - cada salvamento leva a própria data (trocar de dia no meio do autosave não mistura dias);
+   * - falha de rede: tenta de novo e avisa, sem descartar o que está na tela;
+   * - ao sair do editor, o que estiver pendente é gravado na hora.
+   */
+  const loadedDates = useRef(new Set<string>());
+  const formRef = useRef<FormState>(EMPTY_FORM);
+  const pending = useRef<{ date: string; state: FormState } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const justSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sincroniza o form local com a entrada carregada — só quando ela muda de
-  // fato (troca de dia ou primeiro load), nunca sobrescrevendo o que o
-  // usuário está digitando no meio de uma sessão de edição.
+  const fromEntry = (e: NonNullable<typeof entry>): FormState => ({
+    thoughts: e.thoughts ?? "",
+    gratitude: padGratitude(e.gratitude),
+    selfCare: e.selfCare,
+    selfCareOther: e.selfCareOther ?? "",
+    journalIds: e.journalIds,
+    locationLabel: e.locationLabel ?? "",
+    locationLat: e.locationLat,
+    locationLng: e.locationLng,
+    tags: e.tags,
+  });
+
+  // Primeira leitura fresca de cada dia → preenche o form. Depois disso, o que vale é o
+  // que o usuário digita (o servidor nunca atropela a digitação em andamento).
   useEffect(() => {
-    if (!entry) return;
-    setForm({
-      thoughts: entry.thoughts ?? "",
-      gratitude: padGratitude(entry.gratitude),
-      selfCare: entry.selfCare,
-      selfCareOther: entry.selfCareOther ?? "",
-      nightTakeaway: entry.nightTakeaway ?? "",
-      closingReflection: entry.closingReflection ?? "",
-      closingLearning: entry.closingLearning ?? "",
-      closingPending: entry.closingPending ?? "",
-      journalIds: entry.journalIds,
-      locationLabel: entry.locationLabel ?? "",
-      locationLat: entry.locationLat,
-      locationLng: entry.locationLng,
-      tags: entry.tags,
-    });
+    if (!entry || entry.date !== date || isFetching) return;
+    if (loadedDates.current.has(date)) return;
+    const next = fromEntry(entry);
+    formRef.current = next;
+    setForm(next);
+    loadedDates.current.add(date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.date]);
+  }, [entry, date, isFetching]);
 
-  // Recuperação de rascunho: se ficou texto não salvo nesta aba, oferece restaurar.
-  useEffect(() => {
-    if (!entry) return;
-    try {
-      const raw = window.sessionStorage.getItem(draftKey);
-      if (!raw) return;
-      const d = JSON.parse(raw) as FormState;
-      // Rascunhos antigos (antes do 3.0) não têm os campos do fechamento.
-      const restored = { ...EMPTY_FORM, ...d, gratitude: padGratitude(d.gratitude ?? []) };
-      if ((d.thoughts ?? "") !== (entry.thoughts ?? "") || (d.nightTakeaway ?? "") !== (entry.nightTakeaway ?? "") || (d.closingReflection ?? "") !== (entry.closingReflection ?? "") || (d.closingLearning ?? "") !== (entry.closingLearning ?? "")) setDraftFound(restored);
-      else window.sessionStorage.removeItem(draftKey);
-    } catch {
-      /* rascunho ilegível: ignora */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.date]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (justSavedTimer.current) clearTimeout(justSavedTimer.current);
-    };
-  }, []);
-
-  const persistNow = (state: FormState) => {
-    writeDraft(state);
-    // Em conflito não salvamos nada até o usuário decidir (o rascunho local guarda o texto).
-    if (conflictRef.current) return Promise.resolve(undefined);
+  const persistNow = (state: FormState, forDate: string = date): Promise<unknown> => {
+    if (!loadedDates.current.has(forDate)) return Promise.resolve(undefined);
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    pending.current = { date: forDate, state };
     return save({
-      baseUpdatedAt: baseUpdatedAt.current,
-      thoughts: state.thoughts || null,
-      gratitude: state.gratitude.filter((g) => g.trim().length > 0),
-      selfCare: state.selfCare,
-      selfCareOther: state.selfCareOther || null,
-      nightTakeaway: state.nightTakeaway || null,
-      closingReflection: state.closingReflection,
-      closingLearning: state.closingLearning,
-      closingPending: state.closingPending,
-      journalIds: state.journalIds,
-      locationLabel: state.locationLabel || null,
-      locationLat: state.locationLat,
-      locationLng: state.locationLng,
-      tags: state.tags,
+      forDate,
+      input: {
+        thoughts: state.thoughts || null,
+        gratitude: state.gratitude.filter((g) => g.trim().length > 0),
+        selfCare: state.selfCare,
+        selfCareOther: state.selfCareOther || null,
+        journalIds: state.journalIds,
+        locationLabel: state.locationLabel || null,
+        locationLat: state.locationLat,
+        locationLng: state.locationLng,
+        tags: state.tags,
+      },
     })
       .then((saved) => {
-        if (saved && "updatedAt" in saved) baseUpdatedAt.current = saved.updatedAt ?? baseUpdatedAt.current;
-        clearDraft();
+        if (pending.current?.state === state) pending.current = null;
+        setSaveError(false);
         return saved;
       })
-      .catch((e: unknown) => {
-        if (e instanceof ApiError && e.status === 409) {
-          conflictRef.current = true;
-          setConflict(true);
-        }
+      .catch(() => {
+        // Mantém o texto na tela e tenta de novo em alguns segundos.
+        setSaveError(true);
+        retryTimer.current = setTimeout(() => {
+          const p = pending.current;
+          if (p) void persistNow(p.state, p.date);
+        }, 5000);
         return undefined;
       });
   };
 
-  /** Conflito: carrega a versão do servidor (descarta a local) ou mantém a local e sobrescreve. */
-  const resolveConflict = async (keepMine: boolean) => {
-    conflictRef.current = false;
-    setConflict(false);
-    if (keepMine) {
-      baseUpdatedAt.current = null;
-      await persistNow(form);
-      return;
-    }
-    clearDraft();
-    const fresh = await journalService.get(date);
-    editorQueryClient.setQueryData(["journal", date], fresh);
-    baseUpdatedAt.current = fresh.updatedAt ?? null;
-    setForm({
-      thoughts: fresh.thoughts ?? "",
-      gratitude: padGratitude(fresh.gratitude),
-      selfCare: fresh.selfCare,
-      selfCareOther: fresh.selfCareOther ?? "",
-      nightTakeaway: fresh.nightTakeaway ?? "",
-      closingReflection: fresh.closingReflection ?? "",
-      closingLearning: fresh.closingLearning ?? "",
-      closingPending: fresh.closingPending ?? "",
-      journalIds: fresh.journalIds,
-      locationLabel: fresh.locationLabel ?? "",
-      locationLat: fresh.locationLat,
-      locationLng: fresh.locationLng,
-      tags: fresh.tags,
-    });
-  };
+  // Trocar de dia ou sair do editor: grava na hora o que ainda estava no debounce.
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        if (loadedDates.current.has(date)) void persistNow(formRef.current, date);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
-  /** Grava agora o que ainda está no debounce — a IA lê o texto do banco, então precisa da versão mais recente. */
+  useEffect(() => {
+    return () => {
+      if (justSavedTimer.current) clearTimeout(justSavedTimer.current);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, []);
+
+  /** Grava agora o que ainda está no debounce — a IA lê o texto mais recente. */
   const flushPendingSave = async () => {
     if (!saveTimer.current) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = null;
-    await persistNow(form);
+    await persistNow(formRef.current);
   };
 
-  /** Digitação: atualiza na hora e agenda o autosave (~900ms sem digitar) — é assim que o diário "escreve sozinho" no banco. */
+  /** Digitação: atualiza na hora e agenda o autosave (~900ms sem digitar). */
   const updateField = (patch: Partial<FormState>) => {
-    setForm((prev) => {
-      const next = { ...prev, ...patch };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => persistNow(next), AUTOSAVE_DELAY_MS);
-      return next;
-    });
+    const next = { ...formRef.current, ...patch };
+    formRef.current = next;
+    setForm(next);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    const forDate = date;
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      void persistNow(next, forDate);
+    }, AUTOSAVE_DELAY_MS);
   };
 
-  /** Saída do campo ou toggle (checkbox/humor da noite): salva imediatamente, sem esperar o debounce. */
+  /** Saída do campo ou toggle: salva imediatamente, sem esperar o debounce. */
   const saveNow = (patch: Partial<FormState> = {}) => {
-    setForm((prev) => {
-      const next = { ...prev, ...patch };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      persistNow(next);
-      return next;
-    });
+    const next = { ...formRef.current, ...patch };
+    formRef.current = next;
+    setForm(next);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    void persistNow(next);
   };
 
   /** Estrela do masthead: marca/desmarca o dia como favorito (Fase 6) — funciona mesmo num dia ainda sem nenhum texto escrito. */
@@ -998,7 +947,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   /** Botão "Salvar" explícito do masthead: força salvar tudo agora (o autosave já cobre isso, mas o usuário pediu um botão pra confirmar que os dados foram gravados). */
   const saveAllNow = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    persistNow(form);
+    saveTimer.current = null;
+    void persistNow(formRef.current);
     if (justSavedTimer.current) clearTimeout(justSavedTimer.current);
     setJustSaved(true);
     justSavedTimer.current = setTimeout(() => setJustSaved(false), 2200);
@@ -1016,7 +966,7 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   }, [moments, form.thoughts]);
 
   /** Acrescenta parágrafos (HTML já seguro) ao fim de um campo de texto rico e salva na hora. */
-  const appendHtml = (field: "thoughts" | "nightTakeaway", html: string) => {
+  const appendHtml = (field: "thoughts", html: string) => {
     const current = form[field];
     const trimmed = current.trim();
     const isEmpty = trimmed.length === 0 || trimmed === "<p></p>";
@@ -1034,20 +984,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
 
   /** Insere a frase pronta do momento como um novo parágrafo no texto do dia e salva na hora. */
   const handleInsertMoment = (moment: JournalMoment) => appendHtml("thoughts", `<p>${escapeHtml(moment.text)}</p>`);
-
-  const queryClient = useQueryClient();
-  /** Humor do fechamento vai para Saúde (mood_entries) — fonte única de humor/energia no LifeOS. */
-  const registerMood = async (mood: number, energy: number, stress?: number | null, note?: string | null) => {
-    const nowIso = new Date().toISOString();
-    // Fora do dia corrente (ou à noite, quando o UTC já virou), ancora no meio do dia escolhido.
-    const recordedAt = nowIso.slice(0, 10) === date ? nowIso : `${date}T12:00:00.000Z`;
-    await healthService.addMood({ mood, energy, stress: stress ?? null, note: note ?? null, recordedAt });
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["journal"] }),
-      queryClient.invalidateQueries({ queryKey: ["health"] }),
-      queryClient.invalidateQueries({ queryKey: ["analytics"] }),
-    ]);
-  };
 
   const combinedSelfCare = useMemo(() => {
     const auto = entry?.auto.autoSelfCare ?? [];
@@ -1088,7 +1024,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
   const visualMediaCount = (entry?.media ?? []).filter((m) => m.kind !== "audio").length;
   const audioCount = (entry?.media ?? []).filter((m) => m.kind === "audio").length;
   const highlightsCount = entry?.ai?.highlights.length ?? 0;
-  const hasClosing = countWords(form.nightTakeaway) > 0 || !!auto?.mood;
   const placeCount = (form.locationLabel ? 1 : 0) + form.tags.length + (entry?.links.length ?? 0);
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const chapters: ChronicleChapter[] = [
@@ -1104,12 +1039,11 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
     { id: "cronica-gratidao", icon: <Check size={14} />, label: "Cuidado", value: selfCareCount > 0 ? plural(selfCareCount, "item", "itens") : "Marcar", filled: selfCareCount > 0 },
     { id: "cronica-midias", icon: <Camera size={14} />, label: "Mídias", value: visualMediaCount > 0 ? plural(visualMediaCount, "anexo", "anexos") : "Adicionar", filled: visualMediaCount > 0 },
     { id: "cronica-voz", icon: <Mic size={14} />, label: "Voz", value: audioCount > 0 ? plural(audioCount, "nota", "notas") : "Gravar", filled: audioCount > 0 },
-    { id: "cronica-fechamento", icon: <Moon size={14} />, label: "Fechamento", value: hasClosing ? "Registrado" : "Fechar o dia", filled: hasClosing },
     { id: "cronica-lugar", icon: <MapPin size={14} />, label: "Lugar e tags", value: form.locationLabel || (placeCount > 0 ? plural(placeCount, "marcação", "marcações") : "Marcar"), filled: placeCount > 0 },
   ];
 
-  // Tema RPG: Entrada do Diário 3.0 (Crônica Pessoal) — mesma lógica de salvamento acima.
-  if (isRpg) {
+  // Entrada do Diário 3.0 (Crônica Pessoal) — o RPG é o único tema; o editor clássico foi removido.
+  {
     return (
       <ChronicleEntry3
         ctx={{
@@ -1121,24 +1055,12 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           isLoading,
           isSaving,
           justSaved,
+          saveError,
           form,
           updateField,
           saveNow,
           saveAllNow,
           flushPendingSave,
-          conflict,
-          resolveConflict: (keepMine) => void resolveConflict(keepMine),
-          draftFound: !!draftFound,
-          recoverDraft: () => {
-            if (!draftFound) return;
-            setForm(draftFound);
-            void persistNow(draftFound);
-            setDraftFound(null);
-          },
-          discardDraft: () => {
-            clearDraft();
-            setDraftFound(null);
-          },
           toggleFavorite: handleToggleFavorite,
           isTogglingFavorite,
           deleteEntry: () => void deleteEntry().then(() => onBack()).catch(() => undefined),
@@ -1150,7 +1072,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
           combinedSelfCare,
           autoSelfCare: entry?.auto.autoSelfCare ?? [],
           toggleSelfCare,
-          registerMood,
           addAudio: (dataUri, durationSeconds) => addAudioMedia({ dataUri, durationSeconds }),
           removeMedia: (mediaId) => void removeMedia(mediaId).catch(() => undefined),
           isAddingAudio: isAddingAudioMedia,
@@ -1168,7 +1089,8 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
                 }}
                 onApply={async (input) => {
                   const updated = await applyOrganization(input);
-                  setForm((prev) => ({ ...prev, tags: updated.tags }));
+                  formRef.current = { ...formRef.current, tags: updated.tags };
+                  setForm(formRef.current);
                 }}
                 onClear={() => clearOrganization()}
                 isSuggesting={isSuggestingOrganization}
@@ -1206,513 +1128,6 @@ function DiaryDayEditor({ date, setDate, onBack }: { date: string; setDate: Reac
       />
     );
   }
-
-  return (
-    <div className="w-full px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
-      {/* Masthead — inspirado no app Diário/Journal da Apple: gradiente suave do
-          ícone do app, navegação de dia limpa, e um painel de Insights reais
-          sobre o hábito de escrever (sequência, recorde, entradas, palavras) */}
-      <div className="mb-5 sm:mb-6 rounded-2xl border border-paper-border dark:border-ink-border bg-gradient-to-br from-cat-pink/15 via-cat-purple/[0.06] to-transparent p-4 sm:p-6 sm:pt-5 rpg:rpg-panel rpg:border-rpg-pink/50 rpg:p-4 sm:rpg:p-6">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={onBack}
-              className="hidden sm:flex items-center gap-1 text-xs text-slate hover:text-cat-pink font-medium transition-colors pr-1"
-            >
-              <ChevronLeft size={14} />
-              Entradas
-            </button>
-            <button
-              onClick={() => setDate((d) => addDays(d, -1))}
-              className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors"
-              aria-label="Dia anterior"
-            >
-              <ChevronLeft size={15} />
-            </button>
-          </div>
-          <div className="text-center min-w-0">
-            {isRpg && <p className="font-pixel text-[10px] uppercase tracking-wider text-rpg-gold mb-1">Diário</p>}
-            <p className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-cat-pink truncate leading-none rpg:font-rpg rpg:text-rpg-pink">{isRpg ? "Crônica da Jornada" : "Diário"}</p>
-            <p className="text-[11px] sm:text-xs text-slate mt-1.5 capitalize truncate">{formatHeaderDate(date)}</p>
-          </div>
-          <button
-            onClick={() => setDate((d) => addDays(d, 1))}
-            disabled={date >= todayIso()}
-            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-colors disabled:opacity-30"
-            aria-label="Próximo dia"
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
-
-        {collections.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-1.5 mb-4">
-            {collections.map((col) => {
-              const active = form.journalIds.includes(col.id);
-              return (
-                <button
-                  key={col.id}
-                  onClick={() => toggleJournalCollection(col.id)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
-                    active ? COLLECTION_COLOR_CLASSES[col.color ?? "pink"] : "bg-black/[0.04] dark:bg-white/[0.06] text-slate hover:text-inherit"
-                  }`}
-                >
-                  {col.icon && <span>{col.icon}</span>}
-                  {col.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {WEEKDAYS.map((w, i) => (
-              <span
-                key={i}
-                className={`w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors ${
-                  i === currentWeekday ? "bg-cat-pink text-white" : "text-slate border border-paper-border dark:border-ink-border"
-                }`}
-              >
-                {w}
-              </span>
-            ))}
-          </div>
-          {date !== todayIso() && (
-            <button onClick={() => setDate(todayIso())} className="text-xs text-cat-pink font-medium underline underline-offset-2">
-              Voltar para hoje
-            </button>
-          )}
-
-          <div className="flex items-center gap-2.5 ml-auto">
-            <span
-              className="flex items-center gap-1 text-[11px] text-slate"
-              title={isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}
-            >
-              {isSaving ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Check size={12} className={justSaved ? "text-growth" : "text-slate/60"} />
-              )}
-              {/* Em telas estreitas o rótulo de status some (fica só o ícone com o mesmo
-                  texto em title) pra abrir espaço pros botões de excluir/favoritar/salvar
-                  sem empurrar a linha das bolinhas dos dias da semana para o overflow. */}
-              <span className="hidden sm:inline">{isSaving ? "Salvando…" : justSaved ? "Salvo!" : "Salvo automaticamente"}</span>
-            </span>
-            <button
-              onClick={handleExportPdf}
-              disabled={isExportingPdf}
-              aria-label="Exportar esta entrada em PDF"
-              title="Compartilhar / exportar PDF"
-              className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border text-slate hover:text-cat-pink hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-all disabled:opacity-50"
-            >
-              {isExportingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            </button>
-            <button
-              onClick={handleDeleteEntry}
-              disabled={isDeletingEntry}
-              aria-label="Excluir esta entrada"
-              className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border border-paper-border dark:border-ink-border text-slate hover:text-red-500 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] transition-all disabled:opacity-50"
-            >
-              <Trash2 size={14} />
-            </button>
-            <button
-              onClick={handleToggleFavorite}
-              disabled={isTogglingFavorite}
-              aria-label={entry?.isFavorite ? "Remover dos favoritos" : "Marcar como favorito"}
-              aria-pressed={entry?.isFavorite ?? false}
-              className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border transition-all disabled:opacity-50 ${
-                entry?.isFavorite
-                  ? "border-amber-300 bg-amber-50 text-amber-500 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400"
-                  : "border-paper-border dark:border-ink-border text-slate hover:text-amber-500 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-              }`}
-            >
-              <Star size={14} className={entry?.isFavorite ? "fill-current" : undefined} />
-            </button>
-            <button
-              onClick={saveAllNow}
-              disabled={isSaving}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-cat-pink text-white hover:bg-cat-pink/90 active:scale-95 transition-all disabled:opacity-50 shadow-sm"
-            >
-              <Save size={13} />
-              Salvar
-            </button>
-          </div>
-        </div>
-
-        {/* Insights — o mesmo tipo de painel do Diário da Apple, mas 100% derivado
-            de journal_entries reais (nunca inventado): sequência atual, recorde,
-            total de entradas e de palavras escritas. */}
-        {insights && (insights.totalEntries > 0 || insights.currentStreak > 0) && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-            <StatChip icon={<Flame size={14} />} label="Sequência atual" value={`${streakCount} ${streakCount === 1 ? "dia" : "dias"}`} tone="text-signal" />
-            <StatChip icon={<Award size={14} />} label="Recorde" value={`${longestCount} ${longestCount === 1 ? "dia" : "dias"}`} tone="text-cat-purple" />
-            <StatChip icon={<CalendarDays size={14} />} label="Entradas" value={`${entriesCount}`} tone="text-cat-blue" />
-            <StatChip icon={<TypeIcon size={14} />} label="Palavras" value={wordsCount.toLocaleString("pt-BR")} tone="text-cat-green" />
-          </div>
-        )}
-
-        {auto && (
-          <>
-            {isRpg && <p className={`mb-2 text-xs ${RPG_SECTION_TITLE}`}>Estado do dia</p>}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              <StatChip icon={<ListChecks size={14} />} label="Tarefas" value={`${auto.tasksToday.done}/${auto.tasksToday.total}`} tone="text-cat-blue" />
-              <StatChip icon={<Repeat size={14} />} label="Hábitos" value={`${auto.habitsToday.done}/${auto.habitsToday.total}`} tone="text-cat-green" />
-              <StatChip icon={<Droplets size={14} />} label="Água" value={`${(auto.waterMl / 1000).toFixed(1)}L`} tone="text-cat-blue" />
-              <StatChip icon={<Dumbbell size={14} />} label="Exercício" value={fmtMinutes(auto.exerciseMinutes)} tone="text-cat-green" />
-              <StatChip icon={<BookOpen size={14} />} label="Leitura" value={`${auto.reading.pages}pág.`} tone="text-cat-pink" />
-            </div>
-            <p className="text-sm sm:text-base text-[#3a3430] dark:text-[#EDEBE4]/90 mt-4 text-center leading-relaxed">
-              {auto.summary}
-            </p>
-          </>
-        )}
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-4" aria-busy="true" aria-label="Carregando a entrada do dia">
-          <div className="h-[72px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.05] motion-safe:animate-pulse rpg:rounded-[4px] rpg:bg-rpg-panel" />
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] gap-4">
-            <div className="h-[380px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.05] motion-safe:animate-pulse rpg:rounded-[4px] rpg:bg-rpg-panel" />
-            <div className="hidden xl:block h-[380px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.05] motion-safe:animate-pulse rpg:rounded-[4px] rpg:bg-rpg-panel" />
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {conflict && (
-            <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-sm dark:bg-amber-500/10 rpg:rounded-[4px] rpg:border-rpg-orange rpg:bg-rpg-orange/10 rpg:text-rpg-text">
-              <span className="min-w-0 flex-1">Esta crônica foi alterada em outro dispositivo. O salvamento automático foi pausado para não sobrescrever nada.</span>
-              <button type="button" className="rounded-lg border px-2 py-1 text-xs font-semibold" onClick={() => void resolveConflict(false)}>
-                Carregar a versão salva
-              </button>
-              <button type="button" className="rounded-lg border px-2 py-1 text-xs font-semibold" onClick={() => void resolveConflict(true)}>
-                Manter a minha
-              </button>
-            </div>
-          )}
-          {draftFound && !conflict && (
-            <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border border-cat-pink/50 bg-cat-pink/5 p-3 text-sm rpg:rounded-[4px] rpg:border-rpg-pink rpg:bg-rpg-pink/10 rpg:text-rpg-text">
-              <span className="min-w-0 flex-1">Encontramos um rascunho não salvo deste dia.</span>
-              <button
-                type="button"
-                className="rounded-lg border px-2 py-1 text-xs font-semibold"
-                onClick={() => {
-                  setForm(draftFound);
-                  void persistNow(draftFound);
-                  setDraftFound(null);
-                }}
-              >
-                Recuperar
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border px-2 py-1 text-xs font-semibold"
-                onClick={() => {
-                  clearDraft();
-                  setDraftFound(null);
-                }}
-              >
-                Descartar
-              </button>
-            </div>
-          )}
-          <div className="flex flex-wrap items-center justify-end gap-1.5" role="group" aria-label="Modo do editor">
-            <button type="button" aria-pressed={writingMode} onClick={() => setWritingMode(true)} className={`rounded-lg border px-2.5 py-1 text-xs font-semibold rpg:rounded-[3px] ${writingMode ? "border-cat-pink text-cat-pink rpg:border-rpg-gold rpg:text-rpg-gold-light" : "text-slate rpg:border-rpg-border"}`}>
-              Modo Escrita
-            </button>
-            <button type="button" aria-pressed={!writingMode} onClick={() => setWritingMode(false)} className={`rounded-lg border px-2.5 py-1 text-xs font-semibold rpg:rounded-[3px] ${!writingMode ? "border-cat-pink text-cat-pink rpg:border-rpg-gold rpg:text-rpg-gold-light" : "text-slate rpg:border-rpg-border"}`}>
-              Crônica Completa
-            </button>
-          </div>
-          {!writingMode && <ChronicleIndex chapters={chapters} />}
-
-          {/* Coluna principal = o que o usuário escreveu/registrou, na ordem em que o
-              dia é contado (relato → momentos → gratidão → mídia → voz → fechamento).
-              Coluna lateral = contexto (lugar, etiquetas, reflexão, insight, leitura).
-              No tablet/mobile a lateral desce para baixo do conteúdo principal. */}
-          <div className={`grid grid-cols-1 gap-4 items-start ${writingMode ? "" : "xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]"}`}>
-            <div className={`min-w-0 space-y-4 ${writingMode ? "[&>*:not(#cronica-relato)]:hidden" : ""}`}>
-              <SectionCard
-                id="cronica-relato"
-                chapter="I"
-                icon={<PenLine size={16} />}
-                title="Como foi meu dia"
-                subtitle="Escreva do seu jeito, corrido — sem perguntas prontas"
-                meta={wordCount > 0 ? `${wordCount.toLocaleString("pt-BR")} ${wordCount === 1 ? "palavra" : "palavras"}` : undefined}
-              >
-                <div className="space-y-3">
-                  <JournalMomentsRow moments={moments} addedIds={addedMomentIds} onInsert={handleInsertMoment} />
-                  <RichTextEditor
-                    value={form.thoughts}
-                    onChange={(v) => updateField({ thoughts: v })}
-                    onBlur={() => saveNow()}
-                    placeholder="Querido diário, hoje…"
-                    minHeightClass="min-h-[260px]"
-                  />
-                  <JournalWritingAssistant
-                    onAssist={(notes) => assistWriting(notes)}
-                    isLoading={isAssistingWriting}
-                    onInsertDraft={(text) => appendHtml("thoughts", toParagraphs(text))}
-                    onInsertQuestion={(q) => appendHtml("thoughts", `<p><strong>${escapeHtml(q)}</strong></p><p></p>`)}
-                    onUseTakeaway={(t) => appendHtml("nightTakeaway", `<p>${escapeHtml(t)}</p>`)}
-                  />
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                id="cronica-momentos"
-                chapter="II"
-                icon={<Sparkles size={16} />}
-                title="Momentos e organização"
-                subtitle="O Gemini lê seu texto, sua gratidão e (se você permitir) suas fotos — você confirma antes de salvar"
-                meta={entry?.ai ? `${entry.ai.highlights.length} ${entry.ai.highlights.length === 1 ? "destaque" : "destaques"}` : undefined}
-              >
-                <JournalAiOrganizer
-                  saved={entry?.ai ?? null}
-                  media={entry?.media ?? []}
-                  onSuggest={async (includePhotos) => {
-                    await flushPendingSave();
-                    return suggestOrganization(includePhotos);
-                  }}
-                  onApply={async (input) => {
-                    const updated = await applyOrganization(input);
-                    // As etiquetas escolhidas entram no form local, senão o próximo autosave as sobrescreveria.
-                    setForm((prev) => ({ ...prev, tags: updated.tags }));
-                  }}
-                  onClear={() => clearOrganization()}
-                  isSuggesting={isSuggestingOrganization}
-                  isApplying={isApplyingOrganization}
-                  currentHtml={form.thoughts}
-                  onReplaceText={(plain) => saveNow({ thoughts: toParagraphs(plain) })}
-                  onRestoreText={(html) => saveNow({ thoughts: html })}
-                />
-              </SectionCard>
-
-              <SectionCard
-                id="cronica-gratidao"
-                chapter="III"
-                icon={<Heart size={16} />}
-                title="Gratidão e cuidado"
-                subtitle="Pelo que sou grato hoje — e o que fiz para manter a mente tranquila"
-                meta={gratitudeCount > 0 ? `${gratitudeCount}/3 gratidões` : undefined}
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                  <fieldset className="min-w-0">
-                    <legend className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
-                      <Heart size={12} /> Hoje sou grato por:
-                    </legend>
-                    <div className="space-y-2">
-                      {[0, 1, 2].map((i) => (
-                        <input
-                          key={i}
-                          value={form.gratitude[i]}
-                          onChange={(e) => updateField({ gratitude: form.gratitude.map((g, gi) => (gi === i ? e.target.value : g)) })}
-                          onBlur={() => saveNow()}
-                          placeholder={`${i + 1}.`}
-                          aria-label={`Gratidão ${i + 1}`}
-                          className="w-full rounded-xl px-3 py-2 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
-                        />
-                      ))}
-                    </div>
-                  </fieldset>
-                  <fieldset className="min-w-0">
-                    <legend className="text-xs font-medium text-slate mb-1.5 flex items-center gap-1.5">
-                      <Sparkles size={12} /> Cuidado comigo
-                    </legend>
-                    <div className="space-y-1.5">
-                      {SELF_CARE_OPTIONS.map((opt) => {
-                        const isAuto = (entry?.auto.autoSelfCare ?? []).includes(opt.key);
-                        const checked = combinedSelfCare.has(opt.key);
-                        return (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            role="checkbox"
-                            aria-checked={checked}
-                            onClick={() => toggleSelfCare(opt.key)}
-                            className="w-full flex items-center gap-2.5 text-left rounded-lg px-1.5 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
-                          >
-                            <span
-                              className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-all duration-150 motion-safe:active:scale-90 ${
-                                checked ? "bg-cat-pink border-cat-pink text-white scale-100" : "border-paper-border dark:border-ink-border scale-90"
-                              }`}
-                            >
-                              {checked && <Check size={11} className="motion-safe:animate-check-pop" />}
-                            </span>
-                            <span className="text-xs">{opt.label}</span>
-                            {isAuto && <span className="text-[10px] text-cat-pink ml-auto shrink-0">hábito de hoje</span>}
-                          </button>
-                        );
-                      })}
-                      <input
-                        value={form.selfCareOther}
-                        onChange={(e) => updateField({ selfCareOther: e.target.value })}
-                        onBlur={() => saveNow()}
-                        placeholder="Outro…"
-                        aria-label="Outro cuidado comigo"
-                        className="w-full mt-1 rounded-xl px-3 py-2 text-xs bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border focus:border-cat-pink transition-colors"
-                      />
-                    </div>
-                  </fieldset>
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                id="cronica-midias"
-                chapter="IV"
-                icon={<Camera size={16} />}
-                title="Fotos, vídeos e documentos"
-                subtitle="Cada mídia guarda a história que você contar sobre ela"
-                meta={visualMediaCount > 0 ? `${visualMediaCount} ${visualMediaCount === 1 ? "mídia" : "mídias"}` : undefined}
-              >
-                <JournalMediaSection
-                  media={entry?.media ?? []}
-                  onUpload={(input) => addMedia(input)}
-                  onUpdate={(mediaId, patch) => updateMedia({ mediaId, ...patch })}
-                  onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
-                />
-                {photoError && (
-                  <p className="text-xs text-drop mt-2" role="alert">
-                    {photoError}
-                  </p>
-                )}
-              </SectionCard>
-
-              <SectionCard
-                id="cronica-voz"
-                chapter="V"
-                icon={<Mic size={16} />}
-                title="Notas de voz"
-                subtitle="Registre um pensamento falado"
-                meta={audioCount > 0 ? `${audioCount} ${audioCount === 1 ? "nota" : "notas"}` : undefined}
-              >
-                <JournalAudioSection
-                  media={(entry?.media ?? []).filter((m) => m.kind === "audio")}
-                  onAdd={(dataUri, durationSeconds) => addAudioMedia({ dataUri, durationSeconds }).catch(() => undefined)}
-                  onRemove={(mediaId) => removeMedia(mediaId).catch(() => undefined)}
-                  isUploading={isAddingAudioMedia}
-                />
-              </SectionCard>
-
-              <div id="cronica-fechamento" className="scroll-mt-4 min-w-0">
-                <JournalDayClosing
-                  chapter="VI"
-                  headingId="cronica-fechamento-titulo"
-                  auto={auto}
-                  legacyNightMood={entry?.nightMood ?? null}
-                  takeaway={form.nightTakeaway}
-                  onTakeawayChange={(v) => updateField({ nightTakeaway: v })}
-                  onTakeawayBlur={() => saveNow()}
-                  onRegisterMood={registerMood}
-                />
-              </div>
-            </div>
-
-            <aside aria-label="Contexto do dia" className={`min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4 ${writingMode ? "hidden" : ""}`}>
-              {isRpg && <DayStatePanel date={date} />}
-              {isRpg && chronicleHub && <LabNoteSender hub={chronicleHub} date={date} onToast={() => undefined} />}
-              <SectionCard
-                id="cronica-lugar"
-                icon={<MapPin size={16} />}
-                title="Lugar, etiquetas e vínculos"
-                subtitle="Onde você estava, o que marcar e o que este dia conecta"
-                className="sm:col-span-2 xl:col-span-1"
-              >
-                <LocationTagsLinksSection
-                  locationLabel={form.locationLabel}
-                  tags={form.tags}
-                  links={entry?.links ?? []}
-                  onSetLocation={(label, lat, lng) => saveNow({ locationLabel: label, locationLat: lat, locationLng: lng })}
-                  onClearLocation={() => saveNow({ locationLabel: "", locationLat: null, locationLng: null })}
-                  onChangeTags={(tags) => saveNow({ tags })}
-                  onAddLink={(targetType, targetId) => addLink({ targetType, targetId }).catch(() => undefined)}
-                  onRemoveLink={(linkId) => removeLink(linkId).catch(() => undefined)}
-                />
-              </SectionCard>
-
-              <SectionCard
-                icon={<Quote size={16} />}
-                title={auto?.dailyQuote.kind === "versiculo" ? "Versículo do dia" : "Provérbio do dia"}
-                subtitle="Uma pausa para reflexão"
-              >
-                {auto?.dailyQuote ? (
-                  <blockquote className="flex flex-col gap-2">
-                    <p className="italic text-[15px] leading-relaxed text-[#3a3430] dark:text-[#EDEBE4]/90 rpg:text-rpg-text">“{auto.dailyQuote.text}”</p>
-                    <footer className="text-[11px] text-cat-pink font-semibold not-italic">— {auto.dailyQuote.source}</footer>
-                  </blockquote>
-                ) : (
-                  <p className="text-xs text-slate">Reflexão do dia indisponível.</p>
-                )}
-              </SectionCard>
-
-              <SectionCard icon={<Lightbulb size={16} />} title="Insight do dia" subtitle="Gerado pelo LifeOS Copilot a partir dos seus dados reais">
-                {entry?.auto.insightText ? (
-                  <p className="text-sm">{entry.auto.insightText}</p>
-                ) : (
-                  <p className="text-xs text-slate">
-                    Ainda não há insight gerado para hoje.{" "}
-                    <Link to="/dashboard" className="text-cat-pink font-medium">
-                      Gerar no Dashboard →
-                    </Link>
-                  </p>
-                )}
-              </SectionCard>
-
-              {book && (
-                <SectionCard icon={<BookOpen size={16} />} title="Leitura atual" subtitle="Registrado na Biblioteca">
-                  <div className="flex gap-3">
-                    {book.coverUrl ? (
-                      <img src={book.coverUrl} alt={book.title} className="w-10 h-[60px] object-cover rounded-md shrink-0 border border-paper-border dark:border-ink-border" />
-                    ) : (
-                      <div className="w-10 h-[60px] rounded-md shrink-0 bg-cat-pink/10 flex items-center justify-center">
-                        <BookOpen size={16} className="text-cat-pink" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{book.title}</p>
-                      {book.author && <p className="text-xs text-slate truncate">{book.author}</p>}
-                      {entry.auto.reading.minutes > 0 && (
-                        <p className="text-[11px] text-slate mt-1">
-                          {fmtMinutes(entry.auto.reading.minutes)} lidos hoje · {entry.auto.reading.pages} páginas
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </SectionCard>
-              )}
-
-              {streakHighlight && (
-                <SectionCard icon={<Flame size={16} />} title="Sequência em destaque" subtitle="Seu hábito mais consistente agora">
-                  <div className="flex items-center gap-2.5">
-                    <Flame size={20} className="text-signal" />
-                    <div>
-                      <p className="text-sm font-semibold">{streakHighlight.habitName}</p>
-                      <p className="text-xs text-slate">{streakHighlight.streak} dias seguidos</p>
-                    </div>
-                  </div>
-                  <Link to="/habitos" className="text-xs text-cat-pink font-medium mt-2 inline-block">
-                    Ver hábitos →
-                  </Link>
-                </SectionCard>
-              )}
-            </aside>
-          </div>
-
-          {/* Insights da semana (Analytics) ficam depois do registro do dia: contexto, não o foco da escrita. */}
-          {isRpg ? (
-            hasWeekInsights && (
-              <section aria-label="Insights da semana">
-                <p className={`mb-2 text-xs ${RPG_SECTION_TITLE}`}>Insights da semana</p>
-                <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
-              </section>
-            )
-          ) : (
-            <DashboardInsights insights={lifeInsights} changePct={overview?.changePct ?? null} streak={streakHighlight} />
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 type ViewKey = "feed" | "insights" | "calendar" | "places" | "collections";
@@ -3414,7 +2829,9 @@ function ChronicleRpgShell({
       {tab === "visao" && hub && (
         <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-3">
-            <ClosingRitual hub={hub} onWrite={() => openDay(hub.today)} />
+            <button type="button" className="rpg-btn rpg-btn-primary w-full text-sm" onClick={() => openDay(hub.today)}>
+              Abrir a crônica de hoje
+            </button>
             <DayStatePanel date={hub.today} />
           </div>
           <div className="min-w-0 space-y-3">

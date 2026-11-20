@@ -14,7 +14,6 @@ export function useTavern3Actions() {
   return {
     sync,
     saveRitual: useMutation({ mutationFn: tavern3Service.saveRitual, onSuccess: () => void qc.invalidateQueries({ queryKey: TAVERN3_KEY }) }),
-    saveJournal: useMutation({ mutationFn: tavern3Service.saveJournal, onSuccess: sync }),
     settings: useMutation({ mutationFn: tavern3Service.settings, onSuccess: sync }),
     focusBlock: useMutation({ mutationFn: tavern3Service.focusBlock, onSuccess: sync }),
     tomorrowTask: useMutation({ mutationFn: tavern3Service.tomorrowTask, onSuccess: sync }),

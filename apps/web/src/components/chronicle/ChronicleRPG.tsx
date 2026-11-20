@@ -61,7 +61,7 @@ export function ChronicleRankPanel({ hub }: { hub: ChronicleHub }) {
       icon={<Feather size={26} />}
       rules={
         <>
-          Classificação de jogo pela consistência do registro, não pelo conteúdo: 10 por dia com crônica ({b.days}), 5 por dia com fechamento ({b.closedDays}), 2 por gratidão ({b.gratitudes}) e 15 por
+          Classificação de jogo pela consistência do registro, não pelo conteúdo: 10 por dia com crônica ({b.days}), 2 por gratidão ({b.gratitudes}) e 15 por
           retrospectiva salva ({b.retros}). Quantidade de palavras não conta.
         </>
       }
@@ -77,7 +77,6 @@ export function ChronicleIndicators({ hub }: { hub: ChronicleHub }) {
       <IndicatorCard tone="purple" icon={<NotebookPen size={24} />} label="Entradas" value={i.entries} hint={`${i.daysWritten} dia(s) com registro`} />
       <IndicatorCard tone="gold" icon={<ScrollText size={24} />} label="Palavras" value={i.words.toLocaleString("pt-BR")} hint="registradas no total" />
       <IndicatorCard tone="pink" icon={<Heart size={24} />} label="Gratidões" value={i.gratitudes} hint="itens registrados" />
-      <IndicatorCard tone="green" icon={<CheckCircle2 size={24} />} label="Reflexões concluídas" value={i.reflectionsClosed} hint="dias com fechamento" />
       <IndicatorCard tone="blue" icon={<FlaskConical size={24} />} label="Experimentos vinculados" value={i.experimentsLinked} hint="com observações do Diário" />
       <IndicatorCard tone="gold" icon={<Star size={24} />} label="Memórias favoritas" value={i.favorites} hint="marcadas com estrela" />
       <IndicatorCard tone="purple" icon={<Lightbulb size={24} />} label="Insights" value={hub.insights.themes.length + hub.insights.learnings.length} hint="temas e aprendizados" />
@@ -123,27 +122,6 @@ export function ConsistencyHeatmap({ hub, onOpenDay, weeks = 53 }: { hub: Chroni
           </li>
         ))}
       </ul>
-    </KitSection>
-  );
-}
-
-export function ClosingRitual({ hub, onWrite }: { hub: ChronicleHub; onWrite: () => void }) {
-  const done = hub.ritual.filter((r) => r.done).length;
-  return (
-    <KitSection title="Ritual de fechamento" icon={<Moon size={16} />} tone="gold">
-      <RPGProgressBar value={done} max={hub.ritual.length} tone="purple" label="Etapas do ritual" valueLabel={`${done}/${hub.ritual.length}`} />
-      <ul className="mt-2 space-y-1">
-        {hub.ritual.map((r) => (
-          <li key={r.key} className="flex items-center gap-2 text-sm">
-            {r.done ? <CheckCircle2 size={16} className="text-rpg-green" aria-label="Feito" /> : <Circle size={16} className="text-rpg-muted" aria-label="Pendente" />}
-            <span className={r.done ? "text-rpg-muted line-through" : "text-rpg-text"}>{r.title}</span>
-          </li>
-        ))}
-      </ul>
-      <button type="button" className="rpg-btn rpg-btn-secondary mt-2 w-full text-sm" onClick={onWrite}>
-        Abrir a crônica de hoje
-      </button>
-      <p className="mt-1 text-[10.5px] text-rpg-muted">Todas as etapas são opcionais. Elas apenas leem o que você já registrou hoje.</p>
     </KitSection>
   );
 }

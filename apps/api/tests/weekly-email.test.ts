@@ -41,19 +41,13 @@ describe("Resumo semanal por e-mail", () => {
     }
   });
 
-  it("endpoint de cron aceita o segredo correto e reporta quantos foram enviados/pulados", async () => {
+  it("endpoint de cron do resumo semanal está desativado (e-mail só para cadastro e senha)", async () => {
     const { agent } = await createAuthenticatedAgent();
-    await agent.patch("/api/reviews/weekly/email-settings").send({ enabled: true });
-
     process.env.CRON_SECRET = "segredo-de-teste";
     try {
       const res = await agent.get("/api/cron/weekly-emails").set("Authorization", "Bearer segredo-de-teste");
       expect(res.status).toBe(200);
-      expect(res.body.totalCandidates).toBeGreaterThanOrEqual(1);
-      // SMTP não configurado nos testes — nenhum e-mail é de fato enviado, mas o
-      // endpoint não deve lançar erro, e sim contar como "skipped".
-      expect(res.body.sent).toBe(0);
-      expect(res.body.skipped).toBeGreaterThanOrEqual(1);
+      expect(res.body.disabled).toBe(true);
     } finally {
       delete process.env.CRON_SECRET;
     }

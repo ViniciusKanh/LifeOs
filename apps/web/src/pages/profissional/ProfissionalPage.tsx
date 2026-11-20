@@ -10,7 +10,6 @@ import { Button, Card, EmptyState, Field, PageHeader, StatTile } from "@/compone
 import { useTheme } from "@/hooks/useTheme";
 import { RPGPageHeader, RPGPanel, RPGProgressBar, RPGStatCard, RPG_SECTION_TITLE } from "@/components/rpg";
 import { TaskModal } from "@/components/tasks/TaskModal";
-import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { ComparisonGrid, DayMatrix, WeekdayBars } from "@/components/professional/ProfessionalInsights";
 import { formatMinutes, STATUS_META } from "@/components/projects/projectMeta";
 import type { Task } from "@/types";
@@ -248,19 +247,8 @@ export function ProfissionalPage() {
             </RPGPanel>
           )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
-            <Section
-              className="xl:col-span-2"
-              icon={<Hourglass size={16} className="text-brand-600" />}
-              title={isRpg ? "Carga das jornadas profissionais" : "Carga dos projetos profissionais"}
-              action={<Link to="/projetos" className="text-xs font-medium text-brand-600 dark:text-brand-100 hover:underline shrink-0">Projetos</Link>}
-            >
-              <ProjectLoadBoard
-                workload={overview.workload}
-                isLoading={false}
-                emptyText="Nenhum projeto do tipo Profissional com tarefas. Em Projetos, marque o tipo como Profissional e vincule tarefas."
-              />
-            </Section>
+          {/* Painel de carga removido (a estimativa de tempo das tarefas saiu do LifeOS). */}
+          <div className="grid grid-cols-1 gap-4 mb-4">
             <div className="space-y-4">
               <Section icon={<CalendarClock size={16} className="text-signal-deep" />} title="Prazos dos próximos 14 dias">
                 {overview.upcoming.length === 0 ? (

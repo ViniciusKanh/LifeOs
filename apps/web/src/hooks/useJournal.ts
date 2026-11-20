@@ -32,12 +32,15 @@ export function useJournal(date: string) {
   const queryClient = useQueryClient();
   const key = ["journal", date];
 
-  const query = useQuery({ queryKey: key, queryFn: () => journalService.get(date) });
+  // Sempre busca a versão do servidor ao abrir o dia: o editor só libera o
+  // salvamento depois dessa leitura fresca (nunca a partir do cache antigo).
+  const query = useQuery({ queryKey: key, queryFn: () => journalService.get(date), refetchOnMount: "always", refetchOnWindowFocus: false });
 
+  // A data vai junto da chamada: um autosave pendente do dia anterior nunca grava no dia novo.
   const save = useMutation({
-    mutationFn: (input: JournalUpsertInput) => journalService.save(date, input),
-    onSuccess: (data) => {
-      queryClient.setQueryData(key, data);
+    mutationFn: ({ forDate, input }: { forDate: string; input: JournalUpsertInput }) => journalService.save(forDate, input),
+    onSuccess: (data, vars) => {
+      queryClient.setQueryData(["journal", vars.forDate], data);
       queryClient.invalidateQueries({ queryKey: ["journal", "insights"] });
       // A primeira crônica do dia pode render XP (backend é idempotente).
       notifyGamification();
@@ -120,6 +123,7 @@ export function useJournal(date: string) {
   return {
     entry: query.data ?? null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     save: save.mutateAsync,
     isSaving: save.isPending,
     addMedia: addMedia.mutateAsync,

@@ -4,9 +4,10 @@ export const createDepositSchema = z.object({
   planId: z.string().trim().min(1, "Escolha um plano de investimento."),
   amount: z.number().int("A quantia deve ser um número inteiro de moedas.").positive("Informe uma quantia maior que zero."),
   // Cofrinho com propósito: apelido/emoji são só apresentação; goalId vincula a uma Meta existente (opcional).
-  label: z.string().trim().max(60, "Máximo de 60 caracteres.").optional(),
-  icon: z.string().trim().max(8, "Use só um emoji.").optional(),
-  goalId: z.string().trim().min(1).optional(),
+  // O app envia null quando o campo fica vazio — aceitar null evita o erro "Expected string, received null".
+  label: z.string().trim().max(60, "Máximo de 60 caracteres.").nullish().transform((v) => v || undefined),
+  icon: z.string().trim().max(8, "Use só um emoji.").nullish().transform((v) => v || undefined),
+  goalId: z.string().trim().nullish().transform((v) => v || undefined),
 });
 
 export type CreateDepositInput = z.infer<typeof createDepositSchema>;

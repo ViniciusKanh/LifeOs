@@ -6,7 +6,6 @@ const ACTIONS = [
   { to: "/tarefas", label: "Adicionar nova tarefa", icon: Plus },
   { to: "/calendario", label: "Ver no Calendário", icon: CalendarDays },
   { to: "/metas", label: "Revisar metas relacionadas", icon: Target },
-  { to: "/capacity-planner", label: "Abrir Capacity Planner", icon: Gauge },
 ];
 
 export function DeadlineQuickActions() {

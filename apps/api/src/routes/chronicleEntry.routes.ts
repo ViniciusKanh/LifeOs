@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { ChronicleAIError, writeFullChronicle } from "../services/journalChronicleAIService.js";
 import { ChronicleEntryError, getEntryMeta, learningToGrimoire, scribeAssist, setWritingGoal, transcribeVoiceNote } from "../services/chronicleEntryService.js";
 
 /**
@@ -17,7 +18,7 @@ const aiLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 30 });
 const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 
 function fail(res: Response, err: unknown) {
-  if (err instanceof ChronicleEntryError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof ChronicleEntryError || err instanceof ChronicleAIError) return res.status(err.status).json({ error: err.message });
   console.error("[cronica] erro:", err instanceof Error ? err.message : "desconhecido");
   return res.status(500).json({ error: "Não foi possível concluir a ação." });
 }
@@ -45,6 +46,25 @@ chronicleEntryRouter.put("/settings/writing-goal", async (req, res) => {
 const scribeSchema = z.object({
   action: z.enum(["review", "organize", "summary", "title", "moments", "learnings", "tasks", "tags", "expand"]),
   consent: z.literal(true, { errorMap: () => ({ message: "Autorize o envio do texto ao Gemini para usar o Escriba." }) }),
+  // Texto atual do editor (HTML). Opcional para clientes antigos.
+  text: z.string().max(60000).optional(),
+});
+
+const chronicleSchema = z.object({
+  consent: z.literal(true, { errorMap: () => ({ message: "Autorize o envio do texto e dos dados do dia ao Gemini." }) }),
+  text: z.string().max(60000).default(""),
+});
+
+/** Crônica completa: reescreve o texto da tela e completa com os dados reais do dia (prévia, não grava). */
+chronicleEntryRouter.post("/:date/chronicle", aiLimit, async (req, res) => {
+  if (!isDate(req.params.date)) return res.status(400).json({ error: "Data inválida." });
+  const p = chronicleSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? "Dados inválidos." });
+  try {
+    return res.json(await writeFullChronicle(getDb(), req.user!.id, req.params.date, p.data.text, p.data.consent));
+  } catch (err) {
+    return fail(res, err);
+  }
 });
 
 chronicleEntryRouter.post("/:date/scribe", aiLimit, async (req, res) => {
@@ -52,7 +72,7 @@ chronicleEntryRouter.post("/:date/scribe", aiLimit, async (req, res) => {
   const p = scribeSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? "Dados inválidos." });
   try {
-    return res.json(await scribeAssist(getDb(), req.user!.id, req.params.date, p.data.action, p.data.consent));
+    return res.json(await scribeAssist(getDb(), req.user!.id, req.params.date, p.data.action, p.data.consent, p.data.text));
   } catch (err) {
     return fail(res, err);
   }

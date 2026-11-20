@@ -151,10 +151,15 @@ function serviceHost(endpoint: string) {
  *  - 401/403: a inscrição foi criada com outra chave pública — o app
  *    recria a inscrição automaticamente na próxima sincronização.
  */
+/** Push removido junto com o sino; a função continua exportada para não quebrar quem chama. */
+const PUSH_DISABLED = true;
+
 export async function sendPushToUser(
   ownerId: string,
   payload: PushPayload
 ): Promise<{ sent: number; removed: number; failures: PushFailure[] }> {
+  // Push desativado (sistema de notificações removido). Não consulta o banco nem a rede.
+  if (PUSH_DISABLED) return { sent: 0, removed: 0, failures: [] };
   const keys = await getVapidKeys();
   const db = getDb();
 

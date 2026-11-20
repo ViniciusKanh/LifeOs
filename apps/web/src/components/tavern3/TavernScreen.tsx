@@ -48,33 +48,13 @@ import { MOOD_EMOJI } from "@/utils/journalMood";
 const ART = "/assets/rpg/modules/tavern3";
 const R = { borderRadius: 4 };
 type Toast = (m: string, tone?: "success" | "error") => void;
-const TABS = ["visao", "balanco", "reflexao", "aprendizados", "gratidao", "amanha", "conquistas", "historico", "conselho", "automacoes"] as const;
+const TABS = ["visao", "balanco", "aprendizados", "amanha", "conquistas", "historico", "conselho", "automacoes"] as const;
 type Tab = (typeof TABS)[number];
-const STEP_TAB: Record<StepKey, Tab> = { balance: "balanco", reflection: "reflexao", learnings: "aprendizados", gratitude: "gratidao", tomorrow: "amanha" };
 const DIM_LABEL: Record<string, string> = { productivity: "Produtividade", health: "Saúde", habits: "Hábitos", goals: "Metas", reading: "Leitura", education: "Educação", professional: "Profissional" };
 const TIER: Record<string, { label: string; tone: "muted" | "blue" | "gold" | "purple" }> = { bronze: { label: "Comum", tone: "muted" }, silver: { label: "Raro", tone: "blue" }, gold: { label: "Épico", tone: "gold" }, platinum: { label: "Lendário", tone: "purple" } };
 const FIELD = "w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold";
 
 /* ═════════════════════ peças ═════════════════════ */
-
-function StepDone({ t, step, notify }: { t: Tavern3; step: StepKey; notify: Toast }) {
-  const { saveRitual } = useTavern3Actions();
-  const done = t.ritual.steps.includes(step);
-  return (
-    <RPGButton
-      variant={done ? "ghost" : "gold"}
-      disabled={saveRitual.isPending}
-      onClick={() =>
-        saveRitual.mutate(
-          { steps: done ? t.ritual.steps.filter((s) => s !== step) : [...t.ritual.steps, step] },
-          { onSuccess: () => notify(done ? "Etapa reaberta." : `Etapa concluída: ${STEP_LABEL[step].title}.`), onError: () => notify("Não foi possível salvar a etapa.", "error") },
-        )
-      }
-    >
-      {done ? <CheckCircle2 size={14} aria-hidden /> : <Check size={14} aria-hidden />} {done ? "Etapa concluída · reabrir" : "Concluir esta etapa"}
-    </RPGButton>
-  );
-}
 
 /** Campo de texto do ritual com salvamento ao sair do campo. */
 function RitualField({ label, value, field, placeholder, rows = 2 }: { label: string; value: string; field: "highlights" | "challenges" | "decisions" | "learned" | "worked" | "improve" | "repeatThis" | "avoidTomorrow" | "selfCare"; placeholder?: string; rows?: number }) {
@@ -89,39 +69,18 @@ function RitualField({ label, value, field, placeholder, rows = 2 }: { label: st
   );
 }
 
-/** Campo do Diário (reflexão, intenção, pendência) gravado na crônica do dia. */
-function JournalField({ label, value, field, placeholder }: { label: string; value: string; field: "reflection" | "pending" | "intention"; placeholder?: string }) {
-  const { saveJournal } = useTavern3Actions();
-  const [v, setV] = useState(value);
-  useEffect(() => setV(value), [value]);
-  return (
-    <label className="block text-[11px] text-rpg-muted">
-      {label} <span className="text-rpg-pink">· vai para o Diário</span>
-      <textarea rows={3} value={v} maxLength={4000} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && saveJournal.mutate({ [field]: v })} className={`${FIELD} mt-1`} style={{ borderRadius: 3 }} />
-    </label>
-  );
-}
-
-function Banner({ t, onStart, onCustomize, onHistory }: { t: Tavern3; onStart: () => void; onCustomize: () => void; onHistory: () => void }) {
-  const done = t.ritual.steps.length;
-  const state = t.ritual.completedAt ? "Ritual encerrado" : done ? `Ritual em andamento (${done}/5)` : "Ritual não iniciado";
+function Banner({ t, onStart, onHistory }: { t: Tavern3; onStart: () => void; onHistory: () => void }) {
   return (
     <header className="relative min-h-[200px] overflow-hidden border-2 border-rpg-gold/60 bg-rpg-bg-2" style={R}>
       <img src={`${ART}/banner-scene.webp`} alt="" aria-hidden className="pixelated absolute inset-y-0 right-0 h-full w-full object-cover object-right opacity-95 md:w-[58%]" />
       <div className="absolute inset-0 bg-gradient-to-r from-rpg-bg via-rpg-bg/85 to-transparent" aria-hidden />
       <div className="relative flex h-full flex-col justify-center gap-2 p-4 sm:p-5">
-        <p className="font-pixel text-[10px] uppercase tracking-[0.25em] text-rpg-gold">Fim do dia · {new Date(`${t.today}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</p>
+        <p className="font-pixel text-[10px] uppercase tracking-[0.25em] text-rpg-gold">{new Date(`${t.today}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</p>
         <h1 className="rpg-title text-3xl font-bold leading-none sm:text-4xl">A Taverna</h1>
-        <p className="max-w-md text-sm text-rpg-text/90">“Todo herói precisa refletir, recuperar suas energias e se preparar para a próxima jornada.”</p>
-        <p className="flex items-center gap-1.5 text-xs text-rpg-gold-light">
-          {t.ritual.completedAt ? <CheckCircle2 size={13} aria-hidden /> : <Moon size={13} aria-hidden />} {state}
-        </p>
+        <p className="max-w-md text-sm text-rpg-text/90">Balanço do dia, aprendizados e preparação para a próxima jornada.</p>
         <div className="mt-1 flex flex-wrap gap-2">
           <RPGButton variant="gold" onClick={onStart}>
-            <Play size={14} aria-hidden /> {t.ritual.completedAt ? "Rever ritual" : done ? "Continuar ritual" : "Iniciar ritual"}
-          </RPGButton>
-          <RPGButton variant="secondary" onClick={onCustomize}>
-            <Settings2 size={14} aria-hidden /> Personalizar ritual
+            <Play size={14} aria-hidden /> Ver balanço
           </RPGButton>
           <RPGButton variant="ghost" onClick={onHistory}>
             <History size={14} aria-hidden /> Histórico
@@ -156,35 +115,6 @@ function Indicators({ t }: { t: Tavern3 }) {
     </div>
   );
 }
-function RitualPanel({ t, go }: { t: Tavern3; go: (s: StepKey) => void }) {
-  const done = t.stepsState.filter((s) => s.done).length;
-  const next = t.stepsState.find((s) => !s.done);
-  return (
-    <KitSection title="Ritual do fim do dia" icon={<ScrollText size={16} />} action={<RPGBadge tone="green">{done}/5</RPGBadge>}>
-      <ol className="space-y-1.5">
-        {t.stepsState.map((s, i) => (
-          <li key={s.key}>
-            <button type="button" onClick={() => go(s.key)} className="flex w-full items-start gap-2 border border-transparent p-1.5 text-left hover:border-rpg-border" style={{ borderRadius: 3 }}>
-              {s.done ? <CheckCircle2 size={20} className="shrink-0 text-rpg-green" aria-hidden /> : <Circle size={20} className="shrink-0 text-rpg-muted" aria-hidden />}
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-rpg-text">
-                  {i + 1}. {STEP_LABEL[s.key].title} {s.required && <span className="text-[10px] text-rpg-orange">obrigatória</span>}
-                </span>
-                <span className="block text-[11px] text-rpg-muted">{STEP_LABEL[s.key].hint}</span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
-      {next && !t.ritual.completedAt && (
-        <RPGButton variant="primary" className="mt-2 w-full" onClick={() => go(next.key)}>
-          <Play size={14} aria-hidden /> Continuar ritual
-        </RPGButton>
-      )}
-    </KitSection>
-  );
-}
-
 function BalanceRadar({ t }: { t: Tavern3 }) {
   const data = t.balance.dims.map((d) => ({ dim: DIM_LABEL[d.key] ?? d.key, hoje: d.today, media: d.avg7 ?? 0 }));
   const hasAvg = t.balance.dims.some((d) => d.avg7 != null);
@@ -207,67 +137,6 @@ function BalanceRadar({ t }: { t: Tavern3 }) {
       </p>
       <p className="mt-1 text-[10px] text-rpg-muted">{t.balance.method} Uma pontuação baixa mostra onde houve menos registro — não é um julgamento.</p>
     </KitSection>
-  );
-}
-
-/** “Como foi meu dia?” — editor compacto do texto do Diário com autosave e controle de conflito. */
-function DayEditor({ t, notify, compact }: { t: Tavern3; notify: Toast; compact?: boolean }) {
-  const { saveJournal } = useTavern3Actions();
-  const [html, setHtml] = useState(t.journal.thoughts);
-  const base = useRef(t.journal.updatedAt);
-  const timer = useRef<number | null>(null);
-  const [state, setState] = useState<"idle" | "saving" | "saved" | "conflict">("idle");
-  useEffect(() => {
-    if (state !== "saving") base.current = t.journal.updatedAt;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.journal.updatedAt]);
-  const key = `lifeos:taverna:rascunho:${t.today}`;
-  const persist = (value: string) => {
-    try {
-      sessionStorage.setItem(key, value);
-    } catch {
-      /* sem armazenamento: segue */
-    }
-    setState("saving");
-    saveJournal.mutate(
-      { thoughts: value, baseUpdatedAt: base.current },
-      {
-        onSuccess: (r) => {
-          if (r) base.current = r.updatedAt;
-          setState("saved");
-          try {
-            sessionStorage.removeItem(key);
-          } catch {
-            /* idem */
-          }
-        },
-        onError: (e) => {
-          if (e instanceof ApiError && e.status === 409) setState("conflict");
-          else (setState("idle"), notify("Não foi possível salvar o texto. Um rascunho ficou guardado nesta aba.", "error"));
-        },
-      },
-    );
-  };
-  const change = (v: string) => {
-    setHtml(v);
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => persist(v), 1200);
-  };
-  return (
-    <div className="space-y-1.5">
-      <RichTextEditor value={html} onChange={change} onBlur={() => undefined} placeholder="Como foi o seu dia? Escreva do seu jeito…" minHeightClass={compact ? "min-h-[110px]" : "min-h-[220px]"} />
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-rpg-muted">
-        <span aria-live="polite">{state === "saving" ? "Salvando…" : state === "saved" ? "Salvo no Diário" : state === "conflict" ? "" : "Salvamento automático"}</span>
-        {state === "conflict" && (
-          <span className="text-rpg-orange" role="alert">
-            O Diário foi alterado em outro lugar. Abra a crônica completa para não sobrescrever nada.
-          </span>
-        )}
-        <Link to="/diario" className="ml-auto text-rpg-blue hover:underline">
-          Abrir a crônica completa →
-        </Link>
-      </div>
-    </div>
   );
 }
 
@@ -380,57 +249,6 @@ function AchievementsPanel({ t }: { t: Tavern3 }) {
   );
 }
 
-function CloseChest({ t, notify }: { t: Tavern3; notify: Toast }) {
-  const { close } = useTavern3Actions();
-  const reduce = useReducedMotion();
-  const [opened, setOpened] = useState<null | { granted: boolean; xp: number; coins: number }>(null);
-  const missing = t.stepsState.filter((s) => s.required && !s.done);
-  const doClose = () =>
-    close.mutate(undefined, {
-      onSuccess: (r) => {
-        setOpened({ granted: r.granted, xp: r.reward.xp, coins: r.reward.coins });
-        if (r.alreadyClosed) notify("O ritual de hoje já estava encerrado — nada é pago de novo.");
-      },
-      onError: (e) => notify(e instanceof Error ? e.message : "Não foi possível encerrar.", "error"),
-    });
-  return (
-    <KitSection title="Baú do encerramento" icon={<Star size={16} />} tone="gold">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <motion.img
-          src="/assets/rpg/modules/contracts3/chest-guardian.webp"
-          alt=""
-          aria-hidden
-          className="pixelated h-20 w-auto"
-          animate={opened && !reduce ? { y: [0, -10, 0], rotate: [0, -4, 4, 0], scale: [1, 1.15, 1] } : {}}
-          transition={{ duration: 0.8 }}
-        />
-        {t.ritual.completedAt ? (
-          <p className="text-sm text-rpg-text">
-            Ritual encerrado. {t.ritual.reward.xp ? `Recompensa recebida: +${t.ritual.reward.xp} XP e +${t.ritual.reward.coins} moedas.` : "Sem recompensa nova."}
-          </p>
-        ) : (
-          <>
-            <p className="text-[12px] text-rpg-muted">
-              Recompensa oficial ao encerrar: <span className="text-rpg-purple">+{t.reward.xp} XP</span> · <span className="text-rpg-gold-light">+{t.reward.coins} 🪙</span> — uma vez por dia.
-            </p>
-            {missing.length > 0 && <p className="text-[11px] text-rpg-orange">Falta concluir: {missing.map((m) => STEP_LABEL[m.key].title).join(", ")}.</p>}
-            <RPGButton variant="gold" disabled={!t.canClose || close.isPending} onClick={doClose}>
-              {close.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Moon size={14} aria-hidden />} Encerrar o dia
-            </RPGButton>
-          </>
-        )}
-        <AnimatePresence>
-          {opened && (
-            <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="font-rpg text-base font-bold text-rpg-gold-light" role="status">
-              {opened.granted ? `+${opened.xp} XP · +${opened.coins} moedas! Registrado na Crônica.` : "Ritual registrado."}
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </div>
-    </KitSection>
-  );
-}
-
 function TomorrowPreview({ t, go }: { t: Tavern3; go: () => void }) {
   const m = t.tomorrowPlan.mission;
   const items = [
@@ -518,101 +336,6 @@ function BalanceTab({ t, notify }: { t: Tavern3; notify: Toast }) {
           </details>
         )}
         <div className="mt-3">
-          <StepDone t={t} step="balance" notify={notify} />
-        </div>
-      </KitSection>
-    </div>
-  );
-}
-
-/** Escriba (IA) para organizar o relato — prévia, com consentimento explícito. */
-function TavernScribe({ t, notify }: { t: Tavern3; notify: Toast }) {
-  const { saveRitual, saveJournal } = useTavern3Actions();
-  const [consent, setConsent] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [res, setRes] = useState<ScribeResult | null>(null);
-  const ask = async (action: "summary" | "moments" | "learnings") => {
-    setBusy(action);
-    try {
-      setRes(await chronicleEntryService.scribe(t.today, action));
-    } catch (e) {
-      notify(e instanceof Error ? e.message : "O Escriba não respondeu.", "error");
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <div className="space-y-2 border border-rpg-purple/50 bg-rpg-purple/5 p-2" style={{ borderRadius: 3 }}>
-      <label className="flex items-start gap-2 text-[11px] text-rpg-text/90">
-        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5" />
-        Autorizo enviar o texto de hoje do Diário ao Gemini para esta organização. A IA só usa o que está escrito e devolve uma prévia.
-      </label>
-      <div className="flex flex-wrap gap-1.5">
-        {(
-          [
-            ["summary", "Resumir o dia"],
-            ["moments", "Acontecimentos importantes"],
-            ["learnings", "Extrair aprendizados"],
-          ] as const
-        ).map(([a, l]) => (
-          <RPGButton key={a} variant="secondary" className="min-h-[34px] px-2 text-xs" disabled={!consent || !!busy} onClick={() => void ask(a)}>
-            {busy === a ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <Wand2 size={12} aria-hidden />} {l}
-          </RPGButton>
-        ))}
-      </div>
-      {res && (
-        <div className="space-y-1.5 border border-rpg-purple bg-rpg-bg-2 p-2" style={{ borderRadius: 3 }} role="region" aria-label="Prévia da IA">
-          <RPGBadge tone="purple">Prévia da IA — revise antes de usar</RPGBadge>
-          {res.text && <p className="whitespace-pre-wrap text-sm text-rpg-text">{res.text}</p>}
-          {res.items.length > 0 && (
-            <ul className="list-inside list-disc text-sm text-rpg-text">
-              {res.items.map((i) => (
-                <li key={i}>{i}</li>
-              ))}
-            </ul>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {res.action === "summary" && res.text && (
-              <RPGButton variant="gold" className="min-h-[32px] text-xs" onClick={() => (saveJournal.mutate({ reflection: res.text! }), setRes(null), notify("Resumo salvo como reflexão do Diário."))}>
-                Usar como reflexão
-              </RPGButton>
-            )}
-            {res.action === "moments" && res.items.length > 0 && (
-              <RPGButton variant="gold" className="min-h-[32px] text-xs" onClick={() => (saveRitual.mutate({ highlights: [t.ritual.highlights, ...res.items].filter(Boolean).join("\n") }), setRes(null), notify("Acontecimentos adicionados."))}>
-                Adicionar aos acontecimentos
-              </RPGButton>
-            )}
-            {res.action === "learnings" && res.items.length > 0 && (
-              <RPGButton variant="gold" className="min-h-[32px] text-xs" onClick={() => (saveRitual.mutate({ learned: [t.ritual.learned, ...res.items].filter(Boolean).join("\n") }), setRes(null), notify("Aprendizados adicionados."))}>
-                Adicionar aos aprendizados
-              </RPGButton>
-            )}
-            <RPGButton variant="ghost" className="min-h-[32px] text-xs" onClick={() => setRes(null)}>
-              Descartar
-            </RPGButton>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReflectionTab({ t, notify }: { t: Tavern3; notify: Toast }) {
-  return (
-    <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <KitSection title="Diário — como foi meu dia" icon={<BookOpen size={16} />}>
-        <DayEditor t={t} notify={notify} />
-        <div className="mt-3">
-          <TavernScribe t={t} notify={notify} />
-        </div>
-      </KitSection>
-      <KitSection title="Reflexão" icon={<ScrollText size={16} />}>
-        <div className="space-y-2">
-          <JournalField label="Reflexão curta" value={t.journal.reflection} field="reflection" placeholder="Como termino este dia?" />
-          <RitualField label="Acontecimentos importantes" value={t.ritual.highlights} field="highlights" />
-          <RitualField label="Desafios" value={t.ritual.challenges} field="challenges" />
-          <RitualField label="Decisões tomadas" value={t.ritual.decisions} field="decisions" />
-          <StepDone t={t} step="reflection" notify={notify} />
         </div>
       </KitSection>
     </div>
@@ -624,7 +347,7 @@ function LearningsTab({ t, notify }: { t: Tavern3; notify: Toast }) {
   return (
     <KitSection title="Aprendizados" icon={<Lightbulb size={16} />}>
       <div className="grid gap-2 md:grid-cols-2">
-        <RitualField label="O que aprendi? (vai para o fechamento do Diário)" value={t.ritual.learned} field="learned" rows={3} />
+        <RitualField label="O que aprendi?" value={t.ritual.learned} field="learned" rows={3} />
         <RitualField label="O que funcionou?" value={t.ritual.worked} field="worked" rows={3} />
         <RitualField label="O que poderia melhorar?" value={t.ritual.improve} field="improve" rows={3} />
         <RitualField label="O que gostaria de repetir?" value={t.ritual.repeatThis} field="repeatThis" rows={3} />
@@ -645,51 +368,9 @@ function LearningsTab({ t, notify }: { t: Tavern3; notify: Toast }) {
         >
           <Sparkles size={14} aria-hidden /> Sugerir cartão no Grimório
         </RPGButton>
-        <StepDone t={t} step="learnings" notify={notify} />
       </div>
       <p className="mt-1 text-[10px] text-rpg-muted">O cartão só entra no seu baralho depois que você aprovar na fila do Grimório.</p>
     </KitSection>
-  );
-}
-
-function GratitudeTab({ t, notify }: { t: Tavern3; notify: Toast }) {
-  const { saveJournal } = useTavern3Actions();
-  const [list, setList] = useState(() => [...t.journal.gratitude, "", "", ""].slice(0, Math.max(3, t.journal.gratitude.length)));
-  const s = t.balance.signals;
-  return (
-    <div className="grid items-start gap-3 lg:grid-cols-2">
-      <KitSection title="Gratidão e cuidado" icon={<Heart size={16} />}>
-        <fieldset>
-          <legend className="mb-1 text-[11px] text-rpg-muted">Hoje sou grato por: <span className="text-rpg-pink">· vai para o Diário</span></legend>
-          <ol className="space-y-1.5">
-            {list.map((g, i) => (
-              <li key={i} className="flex items-center gap-1.5">
-                <span className="w-4 text-right font-pixel text-[10px] text-rpg-gold">{i + 1}.</span>
-                <input value={g} maxLength={300} onChange={(e) => setList((l) => l.map((x, j) => (j === i ? e.target.value : x)))} onBlur={() => saveJournal.mutate({ gratitude: list })} className={FIELD} style={{ borderRadius: 3 }} aria-label={`Gratidão ${i + 1}`} />
-              </li>
-            ))}
-          </ol>
-          {list.length < 10 && (
-            <button type="button" className="mt-1 text-[11px] text-rpg-blue hover:underline" onClick={() => setList((l) => [...l, ""])}>
-              + Adicionar mais
-            </button>
-          )}
-        </fieldset>
-        <div className="mt-2">
-          <RitualField label="Cuidado pessoal hoje" value={t.ritual.selfCare} field="selfCare" placeholder="Ex.: caminhada, descanso, conversa…" />
-        </div>
-        <div className="mt-3 border-t border-rpg-border/60 pt-2 text-[12px] text-rpg-text/90">
-          <p className="mb-1 font-pixel text-[10px] uppercase text-rpg-muted">Registros de Saúde de hoje (sem metas impostas)</p>
-          <p>
-            Sono: {s.sleep ? `${Math.floor(s.sleep.minutes / 60)}h${String(s.sleep.minutes % 60).padStart(2, "0")}` : "—"} · Água: {(s.waterMl / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} L · Treino: {s.workoutMinutes} min
-          </p>
-        </div>
-        <div className="mt-3">
-          <StepDone t={t} step="gratitude" notify={notify} />
-        </div>
-      </KitSection>
-      <MoodPanel t={t} notify={notify} />
-    </div>
   );
 }
 
@@ -784,7 +465,6 @@ function TomorrowTab({ t, notify }: { t: Tavern3; notify: Toast }) {
           <p className="text-[11px] text-rpg-muted">Nenhuma missão pendente no radar de amanhã.</p>
         )}
         <div className="mt-2">
-          <JournalField label="Intenção para amanhã" value={t.journal.intention.replace(/<[^>]+>/g, "")} field="intention" placeholder="Amanhã quero…" />
         </div>
       </KitSection>
       <KitSection title="Previsões da Forja para amanhã" icon={<Sparkles size={16} />}>
@@ -823,7 +503,6 @@ function TomorrowTab({ t, notify }: { t: Tavern3; notify: Toast }) {
         <p className="mt-2 text-[10px] text-rpg-muted">Previsões são estimativas estatísticas do seu histórico, não certezas. Elas só sugerem — não alteram a Agenda nem as Missões.</p>
       </KitSection>
       <div className="flex items-start">
-        <StepDone t={t} step="tomorrow" notify={notify} />
       </div>
       <Modal open={!!confirm} onClose={() => setConfirm(null)} title="Reservar bloco de foco" size="sm">
         {confirm && (
@@ -921,32 +600,6 @@ function HistoryTab({ t }: { t: Tavern3 }) {
   );
 }
 
-function CustomizeModal({ t, onClose, notify }: { t: Tavern3; onClose: () => void; notify: Toast }) {
-  const { settings } = useTavern3Actions();
-  const [req, setReq] = useState<StepKey[]>(t.required);
-  return (
-    <Modal open onClose={onClose} title="Personalizar ritual" size="sm">
-      <div className="space-y-3 text-sm text-rpg-text">
-        <p>Escolha as etapas obrigatórias para encerrar o dia e abrir o baú. As demais continuam disponíveis, opcionais.</p>
-        {(Object.keys(STEP_LABEL) as StepKey[]).map((s) => (
-          <label key={s} className="flex items-center gap-2">
-            <input type="checkbox" checked={req.includes(s)} onChange={() => setReq((r) => (r.includes(s) ? r.filter((x) => x !== s) : [...r, s]))} />
-            {STEP_LABEL[s].title}
-          </label>
-        ))}
-        <div className="flex justify-end gap-2">
-          <RPGButton variant="ghost" onClick={onClose}>
-            Cancelar
-          </RPGButton>
-          <RPGButton variant="gold" disabled={!req.length || settings.isPending} onClick={() => settings.mutate(req, { onSuccess: () => (notify("Ritual personalizado."), onClose()) })}>
-            Salvar
-          </RPGButton>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 /* ═════════════════════ tela ═════════════════════ */
 
 /**
@@ -957,16 +610,12 @@ function CustomizeModal({ t, onClose, notify }: { t: Tavern3; onClose: () => voi
 export function TavernScreen() {
   const { data: t, isLoading, isError, refetch } = useTavern3();
   const [tab, setTab] = useUrlTab(TABS, "visao");
-  const [custom, setCustom] = useState(false);
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
   const notify: Toast = (msg, tone = "success") => setToast({ msg, tone });
-  const go = (s: StepKey) => setTab(STEP_TAB[s]);
   const tabs: Array<[Tab, string, ReactNode]> = [
     ["visao", "Visão Geral", <Sparkles key="i" size={14} />],
     ["balanco", "Balanço", <BarChart3 key="i" size={14} />],
-    ["reflexao", "Reflexão", <BookOpen key="i" size={14} />],
     ["aprendizados", "Aprendizados", <Lightbulb key="i" size={14} />],
-    ["gratidao", "Gratidão", <Heart key="i" size={14} />],
     ["amanha", "Planejar Amanhã", <CalendarClock key="i" size={14} />],
     ["conquistas", "Conquistas", <Trophy key="i" size={14} />],
     ["historico", "Histórico", <History key="i" size={14} />],
@@ -986,7 +635,7 @@ export function TavernScreen() {
       )}
       {t && (
         <>
-          <Banner t={t} onStart={() => go(t.stepsState.find((s) => !s.done)?.key ?? "balance")} onCustomize={() => setCustom(true)} onHistory={() => setTab("historico")} />
+          <Banner t={t} onStart={() => setTab("balanco")} onHistory={() => setTab("historico")} />
           <Indicators t={t} />
           <div role="tablist" aria-label="Seções da Taverna" className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
             {tabs.map(([v, l, icon]) => (
@@ -997,43 +646,27 @@ export function TavernScreen() {
           </div>
           {tab === "visao" && (
             <div className="space-y-3">
+              {/* Sem ritual de fechamento: a Taverna virou um painel de balanço e preparação para amanhã. */}
               <div className="grid items-start gap-3 lg:grid-cols-2">
-                <RitualPanel t={t} go={go} />
                 <BalanceRadar t={t} />
-              </div>
-              <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                <KitSection title="Como foi meu dia?" icon={<BookOpen size={16} />}>
-                  <DayEditor t={t} notify={notify} compact />
-                </KitSection>
                 <InsightsPanel t={t} />
               </div>
               <div className="grid items-start gap-3 lg:grid-cols-3">
+                <MoodPanel t={t} notify={notify} />
                 <AchievementsPanel t={t} />
                 <TomorrowPreview t={t} go={() => setTab("amanha")} />
-                <CloseChest t={t} notify={notify} />
               </div>
             </div>
           )}
           {tab === "balanco" && <BalanceTab t={t} notify={notify} />}
-          {tab === "reflexao" && <ReflectionTab t={t} notify={notify} />}
           {tab === "aprendizados" && <LearningsTab t={t} notify={notify} />}
-          {tab === "gratidao" && <GratitudeTab t={t} notify={notify} />}
           {tab === "amanha" && <TomorrowTab t={t} notify={notify} />}
           {tab === "conquistas" && (
-            <div className="grid items-start gap-3 lg:grid-cols-2">
-              <AchievementsPanel t={t} />
-              <CloseChest t={t} notify={notify} />
-            </div>
+            <AchievementsPanel t={t} />
           )}
           {tab === "historico" && <HistoryTab t={t} />}
           {tab === "conselho" && <AdvisorPanel module="tavern" title="Conselheiro da Taverna" avatar={`${ART}/banner-scene.webp`} />}
           {tab === "automacoes" && <AutomationsPanel module="tavern" title="Automações da Taverna" intro="Lembretes e sugestões avisam; nada é escrito no Diário, na Agenda ou nas Missões sem você." />}
-          {tab !== "visao" && tab !== "conquistas" && tab !== "historico" && tab !== "conselho" && tab !== "automacoes" && (
-            <div className="lg:ml-auto lg:max-w-sm">
-              <CloseChest t={t} notify={notify} />
-            </div>
-          )}
-          {custom && <CustomizeModal t={t} onClose={() => setCustom(false)} notify={notify} />}
         </>
       )}
       <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />

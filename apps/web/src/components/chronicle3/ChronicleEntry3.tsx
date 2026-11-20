@@ -40,7 +40,7 @@ import type { JournalEntry, JournalMedia } from "@/types";
 import { RPGBadge, RPGButton, RPGProgressBar } from "@/components/rpg";
 import { RichTextEditor } from "@/components/journal/RichTextEditor";
 import { useChronicleEntryActions, useChronicleEntryMeta } from "@/hooks/useChronicleEntry";
-import type { ScribeAction, ScribeResult } from "@/services/chronicleEntryService";
+import type { ChronicleDraft, ScribeAction, ScribeResult } from "@/services/chronicleEntryService";
 import { taskService } from "@/services/taskService";
 import { MOOD_EMOJI } from "@/utils/journalMood";
 import { VoiceNotes } from "./VoiceNotes";
@@ -54,15 +54,11 @@ export interface EntryForm {
   gratitude: string[];
   selfCare: string[];
   selfCareOther: string;
-  nightTakeaway: string;
-  closingReflection: string;
-  closingLearning: string;
-  closingPending: string;
   locationLabel: string;
   tags: string[];
 }
 
-/** Contexto vindo do editor do Diário: mesma lógica de salvamento, conflito e rascunho. */
+/** Contexto vindo do editor do Diário: mesma lógica de salvamento (sem controle de versões). */
 export interface EntryCtx {
   date: string;
   goToDate: (d: string) => void;
@@ -72,16 +68,13 @@ export interface EntryCtx {
   isLoading: boolean;
   isSaving: boolean;
   justSaved: boolean;
+  /** Último salvamento falhou (rede). O texto continua na tela e o app tenta de novo sozinho. */
+  saveError: boolean;
   form: EntryForm;
   updateField: (patch: Partial<EntryForm>) => void;
   saveNow: (patch?: Partial<EntryForm>) => void;
   saveAllNow: () => void;
   flushPendingSave: () => Promise<void>;
-  conflict: boolean;
-  resolveConflict: (keepMine: boolean) => void;
-  draftFound: boolean;
-  recoverDraft: () => void;
-  discardDraft: () => void;
   toggleFavorite: () => void;
   isTogglingFavorite: boolean;
   deleteEntry: () => void;
@@ -93,7 +86,6 @@ export interface EntryCtx {
   combinedSelfCare: Set<string>;
   autoSelfCare: string[];
   toggleSelfCare: (key: string) => void;
-  registerMood: (mood: number, energy: number, stress?: number | null, note?: string | null) => Promise<void>;
   addAudio: (dataUri: string, durationSeconds: number) => Promise<unknown>;
   removeMedia: (id: string) => void;
   isAddingAudio: boolean;
@@ -167,21 +159,43 @@ const ACTIONS: Array<{ a: ScribeAction; label: string }> = [
 ];
 
 function Scribe({ ctx, consent, setConsent, notify }: { ctx: EntryCtx; consent: boolean; setConsent: (v: boolean) => void; notify: (m: string, err?: boolean) => void }) {
-  const { scribe } = useChronicleEntryActions(ctx.date);
+  const { scribe, writeChronicle } = useChronicleEntryActions(ctx.date);
   const [res, setRes] = useState<ScribeResult | null>(null);
+  const [draft, setDraft] = useState<ChronicleDraft | null>(null);
   const [picked, setPicked] = useState<boolean[]>([]);
   const [undo, setUndo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const ask = async (a: ScribeAction) => {
     if (!consent) return;
     await ctx.flushPendingSave();
+    setDraft(null);
     try {
-      const r = await scribe.mutateAsync(a);
+      const r = await scribe.mutateAsync({ action: a, text: ctx.form.thoughts });
       setRes(r);
       setPicked(r.items.map(() => true));
     } catch (err) {
       notify(err instanceof Error ? err.message : "O Escriba não respondeu.", true);
     }
+  };
+  /** Crônica completa: melhora o texto da tela e completa com os registros reais do dia. */
+  const askChronicle = async () => {
+    if (!consent) return;
+    await ctx.flushPendingSave();
+    setRes(null);
+    try {
+      setDraft(await writeChronicle.mutateAsync(ctx.form.thoughts));
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "O Escriba não respondeu.", true);
+    }
+  };
+  const applyDraft = (mode: "replace" | "append") => {
+    if (!draft) return;
+    setUndo(ctx.form.thoughts);
+    const html = toHtml(draft.text);
+    if (mode === "replace") ctx.saveNow({ thoughts: html });
+    else append(`<hr>${html}`);
+    setDraft(null);
+    notify(mode === "replace" ? "Crônica aplicada. Use “Desfazer” para voltar ao seu texto." : "Crônica inserida no fim do texto.");
   };
   const chosen = res ? res.items.filter((_, i) => picked[i]) : [];
   const append = (html: string) => ctx.saveNow({ thoughts: (ctx.form.thoughts.trim() && ctx.form.thoughts !== "<p></p>" ? ctx.form.thoughts : "") + html });
@@ -211,8 +225,7 @@ function Scribe({ ctx, consent, setConsent, notify }: { ctx: EntryCtx; consent: 
           append(`<p><strong>Momentos-chave</strong></p><ul>${chosen.map((m) => `<li><p>${esc(m)}</p></li>`).join("")}</ul>`);
           break;
         case "learnings":
-          ctx.saveNow({ closingLearning: [ctx.form.closingLearning.trim(), ...chosen].filter(Boolean).join("\n") });
-          notify("Aprendizados levados ao fechamento do dia.");
+          append(`<p><strong>Aprendizados</strong></p><ul>${chosen.map((m) => `<li><p>${esc(m)}</p></li>`).join("")}</ul>`);
           break;
         case "expand":
           append(chosen.map((q) => `<h3>${esc(q)}</h3><p></p>`).join(""));
@@ -239,7 +252,7 @@ function Scribe({ ctx, consent, setConsent, notify }: { ctx: EntryCtx; consent: 
     summary: "Inserir resumo no fim",
     title: "Usar como título",
     moments: "Inserir momentos selecionados",
-    learnings: "Levar ao fechamento",
+    learnings: "Inserir aprendizados no texto",
     expand: "Inserir perguntas no texto",
     tags: "Adicionar etiquetas",
     tasks: "Criar missões selecionadas",
@@ -249,13 +262,54 @@ function Scribe({ ctx, consent, setConsent, notify }: { ctx: EntryCtx; consent: 
       <label className="flex items-start gap-2 border border-rpg-purple/50 bg-rpg-purple/5 p-2 text-[11px] text-rpg-text/90" style={{ borderRadius: 3 }}>
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 accent-[rgb(var(--rpg-purple))]" />
         <span>
-          Autorizo enviar o texto desta crônica ao Gemini enquanto esta tela estiver aberta. O Escriba só sugere: o original fica intacto até você aprovar. Fotos, áudios e documentos não são enviados por aqui.
+          Autorizo enviar o texto desta crônica e os registros do dia (missões, treinos, contratos, hábitos, estudo, leitura e saúde) ao Gemini enquanto esta tela estiver aberta. O Escriba só sugere: o original fica intacto até você aprovar. Fotos, áudios e documentos não são enviados por aqui.
         </span>
       </label>
+      <RPGButton variant="gold" className="w-full min-h-[40px] text-sm" disabled={!consent || writeChronicle.isPending || scribe.isPending} onClick={() => void askChronicle()}>
+        {writeChronicle.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Sparkles size={14} aria-hidden />} Escrever crônica completa do dia
+      </RPGButton>
+      <p className="text-[10px] text-rpg-muted">Melhora o que você escreveu e completa com o que aconteceu: missões e o conteúdo delas, treinos (luta, dança, musculação…), evolução dos contratos, estudo, hábitos e saúde.</p>
+      {draft && (
+        <div className="space-y-2 border-2 border-rpg-gold/60 bg-rpg-bg-2 p-2" style={{ borderRadius: 3 }} role="region" aria-label="Prévia da crônica completa">
+          <div className="flex items-center gap-1.5">
+            <RPGBadge tone="purple" icon={<Sparkles size={9} aria-hidden />}>
+              Crônica sugerida (IA)
+            </RPGBadge>
+            <button type="button" className="ml-auto text-rpg-muted hover:text-rpg-text" aria-label="Descartar crônica" onClick={() => setDraft(null)}>
+              <X size={14} />
+            </button>
+          </div>
+          {draft.title && <p className="text-sm font-bold text-rpg-gold-light">{draft.title}</p>}
+          <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-sm text-rpg-text">{draft.text}</p>
+          {draft.dataUsed.length > 0 && (
+            <details className="text-[11px] text-rpg-muted">
+              <summary className="cursor-pointer text-rpg-blue">Dados reais usados ({draft.dataUsed.length})</summary>
+              <ul className="mt-1 space-y-0.5">
+                {draft.dataUsed.map((d, i) => (
+                  <li key={i}>
+                    <span className="font-semibold text-rpg-text">{d.source}:</span> {d.text}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <RPGButton variant="gold" className="min-h-[34px] text-xs" onClick={() => applyDraft("replace")}>
+              <Check size={12} aria-hidden /> Substituir meu texto
+            </RPGButton>
+            <RPGButton variant="secondary" className="min-h-[34px] text-xs" onClick={() => applyDraft("append")}>
+              Inserir no fim
+            </RPGButton>
+            <RPGButton variant="ghost" className="min-h-[34px] text-xs" onClick={() => setDraft(null)}>
+              Descartar
+            </RPGButton>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Ações do Escriba Arcano">
         {ACTIONS.map((x) => (
           <button key={x.a} type="button" disabled={!consent || scribe.isPending} onClick={() => void ask(x.a)} className="flex min-h-[34px] items-center gap-1 border border-rpg-border bg-rpg-bg-2 px-2 text-[11px] font-semibold text-rpg-text hover:border-rpg-purple disabled:opacity-40" style={{ borderRadius: 3 }}>
-            {scribe.isPending && scribe.variables === x.a ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} className="text-rpg-purple" />} {x.label}
+            {scribe.isPending && scribe.variables?.action === x.a ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} className="text-rpg-purple" />} {x.label}
           </button>
         ))}
       </div>
@@ -302,73 +356,6 @@ function Scribe({ ctx, consent, setConsent, notify }: { ctx: EntryCtx; consent: 
   );
 }
 
-/* ═════════════════════════ Estado emocional (Saúde) ═════════════════════════ */
-
-function MoodCheckin({ ctx, notify }: { ctx: EntryCtx; notify: (m: string, err?: boolean) => void }) {
-  const reg = ctx.entry?.auto.mood ?? null;
-  const [mood, setMood] = useState<number | null>(null);
-  const [energy, setEnergy] = useState<number | null>(null);
-  const [stress, setStress] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [again, setAgain] = useState(false);
-  const save = async () => {
-    if (!mood || !energy) return;
-    setSaving(true);
-    try {
-      await ctx.registerMood(mood, energy, stress, "Fechamento do dia (Diário)");
-      notify("Estado emocional registrado em Saúde.");
-      setAgain(false);
-      setMood(null);
-      setEnergy(null);
-      setStress(null);
-    } catch {
-      notify("Não foi possível registrar em Saúde.", true);
-    } finally {
-      setSaving(false);
-    }
-  };
-  if (reg && !again)
-    return (
-      <div className="flex flex-wrap items-center gap-2 text-sm text-rpg-text">
-        <span className="text-2xl" aria-hidden>
-          {MOOD_EMOJI[reg.mood - 1]}
-        </span>
-        <span>
-          Humor {reg.mood}/5 · energia {reg.energy}/5{reg.stress != null ? ` · estresse ${reg.stress}/5` : ""} <span className="text-[11px] text-rpg-muted">(registrado em Saúde)</span>
-        </span>
-        <button type="button" className="text-[11px] text-rpg-blue hover:underline" onClick={() => setAgain(true)}>
-          Registrar o estado final do dia
-        </button>
-      </div>
-    );
-  const Scale = ({ label, value, set, icons }: { label: string; value: number | null; set: (n: number) => void; icons?: string[] }) => (
-    <fieldset className="min-w-0">
-      <legend className="mb-1 text-[11px] text-rpg-muted">{label}</legend>
-      <div className="flex gap-1">
-        {ENERGY.map((n) => (
-          <button key={n} type="button" aria-pressed={value === n} onClick={() => set(n)} className={clsx("flex h-10 min-w-[40px] flex-1 items-center justify-center border-2 text-sm", value === n ? "border-rpg-pink bg-rpg-pink/15 text-rpg-text" : "border-rpg-border text-rpg-muted hover:text-rpg-text")} style={{ borderRadius: 3 }} aria-label={`${label} ${n} de 5${icons ? ` (${MOOD_NAMES[n - 1]})` : ""}`}>
-            {icons ? <span className="text-lg">{icons[n - 1]}</span> : n}
-          </button>
-        ))}
-      </div>
-    </fieldset>
-  );
-  return (
-    <div className="space-y-2">
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Scale label="Humor" value={mood} set={setMood} icons={MOOD_EMOJI} />
-        <Scale label="Energia" value={energy} set={setEnergy} />
-        <Scale label="Estresse (opcional)" value={stress} set={setStress} />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <RPGButton variant="pink" className="min-h-[36px] text-xs" disabled={!mood || !energy || saving} onClick={() => void save()}>
-          {saving ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <Heart size={12} aria-hidden />} Registrar em Saúde
-        </RPGButton>
-        <span className="text-[11px] text-rpg-muted">Fonte única de humor e energia do LifeOS — nada é gravado no Diário em duplicidade.</span>
-      </div>
-    </div>
-  );
-}
 
 /* ═════════════════════════ Tela ═════════════════════════ */
 
@@ -376,11 +363,11 @@ function MoodCheckin({ ctx, notify }: { ctx: EntryCtx; notify: (m: string, err?:
  * Entrada do Diário 3.0 — Crônica Pessoal. Reaproveita toda a lógica do editor
  * (autosave, conflito entre dispositivos, rascunho local, mídia protegida por
  * login) e acrescenta capítulos, meta de escrita, Escriba Arcano com prévia e
- * consentimento, notas de voz 3.0, fechamento completo e painéis do dia.
+ * consentimento, notas de voz 3.0 e painéis do dia.
  */
 export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
   const meta = useChronicleEntryMeta(ctx.date).data;
-  const { setGoal, transcribe, toGrimoire } = useChronicleEntryActions(ctx.date);
+  const { setGoal, transcribe } = useChronicleEntryActions(ctx.date);
   const [consent, setConsent] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [goalEdit, setGoalEdit] = useState<string | null>(null);
@@ -400,7 +387,6 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
   const gratitudeFilled = f.gratitude.filter((g) => g.trim()).length;
   const audio = (e?.media ?? []).filter((m) => m.kind === "audio");
   const visual = (e?.media ?? []).filter((m) => m.kind !== "audio").length;
-  const closingFilled = !!(f.closingReflection.trim() || f.closingLearning.trim() || f.closingPending.trim() || countWords(f.nightTakeaway) > 0 || auto?.mood);
   const sections = [
     { id: "c3-relato", label: "Relato", done: words > 0 },
     { id: "c3-momentos", label: "Momentos", done: !!e?.ai },
@@ -408,7 +394,6 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
     { id: "c3-gratidao", label: "Cuidado", done: ctx.combinedSelfCare.size > 0 || !!f.selfCareOther.trim() },
     { id: "c3-midias", label: "Mídias", done: visual > 0 },
     { id: "c3-voz", label: "Voz", done: audio.length > 0 },
-    { id: "c3-fechamento", label: "Fechamento", done: closingFilled },
     { id: "c3-lugar", label: "Lugar e tags", done: !!f.locationLabel || f.tags.length > 0 || (e?.links.length ?? 0) > 0 },
   ];
   const sectionsDone = sections.filter((s) => s.done).length;
@@ -454,7 +439,7 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
             </button>
             <span className="flex items-center gap-1 text-[11px] text-rpg-text/80" aria-live="polite">
               {ctx.isSaving ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <Check size={12} className={ctx.justSaved ? "text-rpg-green" : "text-rpg-muted"} aria-hidden />}
-              {ctx.isSaving ? "Salvando…" : ctx.justSaved ? "Salvo!" : "Salvando automaticamente"}
+              {ctx.isSaving ? "Salvando…" : ctx.saveError ? <span className="text-rpg-orange">Sem conexão — tentando salvar de novo</span> : ctx.justSaved ? "Salvo!" : "Salvando automaticamente"}
             </span>
           </div>
           <p className="font-pixel text-[10px] uppercase tracking-[0.3em] text-rpg-gold">Diário</p>
@@ -527,29 +512,6 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
           {stat(<ListChecks />, "Seções concluídas", `${sectionsDone}/${sections.length} (${Math.round((sectionsDone / sections.length) * 100)}%)`, "text-rpg-green")}
         </div>
       </header>
-
-      {ctx.conflict && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 border-2 border-rpg-orange bg-rpg-orange/10 p-2 text-sm text-rpg-text" style={R}>
-          <span className="min-w-0 flex-1">Esta crônica foi alterada em outro dispositivo. O salvamento automático foi pausado para não sobrescrever nada.</span>
-          <RPGButton variant="secondary" className="min-h-[32px] text-xs" onClick={() => ctx.resolveConflict(false)}>
-            Carregar a versão salva
-          </RPGButton>
-          <RPGButton variant="ghost" className="min-h-[32px] text-xs" onClick={() => ctx.resolveConflict(true)}>
-            Manter a minha
-          </RPGButton>
-        </div>
-      )}
-      {ctx.draftFound && !ctx.conflict && (
-        <div role="status" className="flex flex-wrap items-center gap-2 border-2 border-rpg-pink/70 bg-rpg-pink/10 p-2 text-sm text-rpg-text" style={R}>
-          <span className="min-w-0 flex-1">Encontramos um rascunho não salvo deste dia.</span>
-          <RPGButton variant="pink" className="min-h-[32px] text-xs" onClick={ctx.recoverDraft}>
-            Recuperar
-          </RPGButton>
-          <RPGButton variant="ghost" className="min-h-[32px] text-xs" onClick={ctx.discardDraft}>
-            Descartar
-          </RPGButton>
-        </div>
-      )}
 
       {/* ── Progresso do capítulo ── */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -675,9 +637,6 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
                 ) : (
                   <span>Sem humor registrado hoje.</span>
                 )}
-                <button type="button" className="text-rpg-blue hover:underline" onClick={() => goTo("c3-fechamento")}>
-                  {auto?.mood ? "Atualizar no fechamento" : "Registrar no fechamento"}
-                </button>
               </div>
             </Panel>
 
@@ -782,62 +741,6 @@ export function ChronicleEntry3({ ctx }: { ctx: EntryCtx }) {
                       </div>
                     </div>
                   )}
-                </Panel>
-
-                {/* VI — Fechamento do dia */}
-                <Panel id="c3-fechamento" num="VI" icon={<Moon size={16} />} title="Fechamento do dia" subtitle="Estado emocional final, reflexão, aprendizado, pendência e intenção para amanhã.">
-                  <div className="space-y-3">
-                    <MoodCheckin ctx={ctx} notify={notify} />
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className="block text-[11px] text-rpg-muted">
-                        Reflexão final
-                        <textarea rows={3} value={f.closingReflection} onChange={(ev) => ctx.updateField({ closingReflection: ev.target.value })} onBlur={() => ctx.saveNow()} maxLength={4000} className="mt-1 w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-pink" style={{ borderRadius: 3 }} placeholder="Como termino este dia?" />
-                      </label>
-                      <label className="block text-[11px] text-rpg-muted">
-                        Aprendizado do dia
-                        <textarea rows={3} value={f.closingLearning} onChange={(ev) => ctx.updateField({ closingLearning: ev.target.value })} onBlur={() => ctx.saveNow()} maxLength={4000} className="mt-1 w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-pink" style={{ borderRadius: 3 }} placeholder="O que levo de lição?" />
-                        {f.closingLearning.trim().length >= 5 && (
-                          <button
-                            type="button"
-                            className="mt-1 flex items-center gap-1 text-[11px] text-rpg-purple hover:underline"
-                            disabled={toGrimoire.isPending}
-                            onClick={() =>
-                              void toGrimoire
-                                .mutateAsync(f.closingLearning)
-                                .then((r) => notify(r.added ? "Cartão sugerido na fila de aprovação do Grimório." : "Esse aprendizado já está no Grimório."))
-                                .catch((err: unknown) => notify(err instanceof Error ? err.message : "Erro", true))
-                            }
-                          >
-                            <Lightbulb size={12} aria-hidden /> Sugerir como cartão do Grimório
-                          </button>
-                        )}
-                      </label>
-                      <label className="block text-[11px] text-rpg-muted">
-                        Pendência
-                        <textarea rows={2} value={f.closingPending} onChange={(ev) => ctx.updateField({ closingPending: ev.target.value })} onBlur={() => ctx.saveNow()} maxLength={2000} className="mt-1 w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-pink" style={{ borderRadius: 3 }} placeholder="O que ficou para depois?" />
-                        {f.closingPending.trim().length >= 3 && (
-                          <button
-                            type="button"
-                            className="mt-1 flex items-center gap-1 text-[11px] text-rpg-blue hover:underline"
-                            onClick={() =>
-                              void taskService
-                                .create({ title: f.closingPending.trim().split("\n")[0]!.slice(0, 200), description: `Pendência registrada no Diário em ${ctx.date.split("-").reverse().join("/")}.`, dueDate: shift(ctx.date, 1) })
-                                .then(() => notify("Missão criada para amanhã a partir da pendência."))
-                                .catch(() => notify("Não foi possível criar a missão.", true))
-                            }
-                          >
-                            <ListChecks size={12} aria-hidden /> Criar missão para amanhã
-                          </button>
-                        )}
-                      </label>
-                      <div className="text-[11px] text-rpg-muted">
-                        O que levo para amanhã (intenção)
-                        <div className="mt-1">
-                          <RichTextEditor value={f.nightTakeaway} onChange={(v) => ctx.updateField({ nightTakeaway: v })} onBlur={() => ctx.saveNow()} placeholder="Amanhã quero…" minHeightClass="min-h-[70px]" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </Panel>
 
                 {ctx.slots.weekInsights && (

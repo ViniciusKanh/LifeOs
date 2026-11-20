@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, CalendarClock, CheckCircle2, ChevronDown, FolderKanban, GanttChartSquare, Hourglass, LayoutGrid, List, Mail, Plus, Search, Sparkles } from "lucide-react";
 import { useProjects, useProjectWorkload } from "@/hooks/useProjects";
-import { ProjectLoadBoard } from "@/components/projects/ProjectLoadBoard";
 import { Button, Card, EmptyState, IconBadge, PageHeader, StatTile } from "@/components/ui/primitives";
 import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
 import { KIND_META, STATUS_META, compareByUrgency, projectHealth } from "@/components/projects/projectMeta";
@@ -121,7 +120,6 @@ export function ProjetosPage() {
   const [kindFilter, setKindFilter] = useState<ProjectKind | "all">("all");
   const [search, setSearch] = useState("");
   const { workload, isLoading: workloadLoading } = useProjectWorkload({ days: 30, kind: kindFilter === "all" ? undefined : kindFilter });
-  const [loadOpen, setLoadOpen] = useState(false);
   const [view, setView] = useState<"cards" | "list">(() => readPref<"cards" | "list">(VIEW_KEY, "cards"));
   const [collapsedGroups, setCollapsedGroups] = useState<ProjectStatus[]>(() => readPref<ProjectStatus[]>(COLLAPSED_KEY, ["completed", "cancelled"]));
   const today = todayIso();
@@ -383,33 +381,6 @@ export function ProjetosPage() {
             </div>
           )}
 
-          {/* Carga de trabalho: análise detalhada, recolhida por padrão para não poluir o portfólio. */}
-          <Card className="p-4 sm:p-5 mt-6">
-            <button onClick={() => setLoadOpen((v) => !v)} aria-expanded={loadOpen} className="w-full flex items-center justify-between gap-3 text-left">
-              <span className="min-w-0">
-                <span className="flex items-center gap-2 font-display font-semibold text-[15px] rpg:rpg-title">
-                  <Hourglass size={17} className="text-brand-600 rpg:text-rpg-gold" /> Carga de trabalho por projeto
-                </span>
-                <span className="block text-xs text-slate mt-0.5">
-                  Tarefas em aberto, horas estimadas × registradas (últimos 30 dias) e prazos{kindFilter !== "all" ? ` · ${KIND_META[kindFilter].label}` : ""}.
-                </span>
-              </span>
-              <ChevronDown size={18} className={`text-slate shrink-0 transition-transform ${loadOpen ? "rotate-180" : ""}`} />
-            </button>
-            <AnimatePresence initial={false}>
-              {loadOpen && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <div className="pt-4">
-                    <ProjectLoadBoard
-                      workload={workload}
-                      isLoading={workloadLoading}
-                      emptyText="Nenhuma tarefa vinculada a projetos ainda. Vincule tarefas a um projeto para ver a carga, as horas e a pressão de prazo."
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </Card>
         </>
       )}
 

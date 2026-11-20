@@ -72,7 +72,6 @@ export type RitualPatch = Partial<Pick<Ritual, "highlights" | "challenges" | "de
 export const tavern3Service = {
   get: () => api.get<Tavern3>("/tavern3"),
   saveRitual: (patch: RitualPatch) => api.put<Ritual>("/tavern3/ritual", patch),
-  saveJournal: (f: { thoughts?: string; reflection?: string; learning?: string; pending?: string; intention?: string; gratitude?: string[]; baseUpdatedAt?: string | null }) => api.put<{ updatedAt: string } | null>("/tavern3/journal", f),
   settings: (required: StepKey[]) => api.put<{ ok: true }>("/tavern3/settings", { required }),
   focusBlock: (input: { start: string; end: string; title: string; taskId?: string | null }) => api.post<{ id: string; date: string }>("/tavern3/focus-block", input),
   tomorrowTask: (taskId: string) => api.post<{ ok: true }>("/tavern3/tomorrow-task", { taskId }),

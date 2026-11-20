@@ -1,9 +1,14 @@
 import { nanoid } from "nanoid";
 import { getDb } from "../db/client.js";
-import { notificationTriggerEmail, sendMail } from "./emailService.js";
+import { notificationTriggerEmail } from "./emailService.js";
 import { sendPushToUser } from "./pushService.js";
 import { hasJournalEntryForDate } from "./journalService.js";
 import { userDayContext } from "./localDayService.js";
+
+// E-mails só para cadastro de novo usuário e senha (pedido do usuário, para poupar Vercel/Turso/SMTP).
+// Este módulo não envia mais e-mail: o stub mantém o fluxo intacto e responde "não enviado".
+const sendMail = async (_input: { to: string; subject: string; html: string; text?: string }): Promise<boolean> => false;
+
 
 type Db = ReturnType<typeof getDb>;
 
@@ -300,11 +305,10 @@ async function markDelivered(db: Db, ownerId: string, eventType: string, sourceI
 }
 
 /** Conteúdo exibível do sino (in_app_notifications) — ver migration 0085. */
-export async function recordInAppNotification(db: Db, ownerId: string, eventType: string, input: { title: string; body?: string; url?: string | null }) {
-  await db.execute({
-    sql: `INSERT INTO in_app_notifications (id, owner_id, event_type, title, body, url) VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [nanoid(), ownerId, eventType, input.title, input.body ?? null, input.url ?? null],
-  });
+// O sistema de notificações (sino) foi removido: nada mais é gravado em in_app_notifications.
+// A assinatura fica para os módulos que ainda chamam esta função seguirem funcionando.
+export async function recordInAppNotification(_db: Db, _ownerId: string, _eventType: string, _input: { title: string; body?: string; url?: string | null }): Promise<void> {
+  return;
 }
 
 export async function matchingCustomTasks(ownerId: string, rule: CustomNotificationTrigger, date: string) {

@@ -78,19 +78,9 @@ tavern3Router.put("/ritual", async (req, res) => {
   }
 });
 
-tavern3Router.put("/journal", async (req, res) => {
-  const d = parse(
-    z.object({ thoughts: z.string().max(40000).optional(), reflection: text, learning: text, pending: z.string().max(2000).optional(), intention: text, gratitude: z.array(z.string().max(300)).max(10).optional(), baseUpdatedAt: z.string().max(40).nullable().optional() }),
-    req.body,
-    res,
-  );
-  if (!d) return;
-  try {
-    return res.json(await saveJournalFields(getDb(), req.user!.id, d));
-  } catch (e) {
-    return fail(res, e);
-  }
-});
+// A Taverna não escreve mais no Diário (o fechamento do dia foi removido).
+// Clientes antigos recebem 410 em vez de sobrescrever a crônica.
+tavern3Router.put("/journal", (_req, res) => res.status(410).json({ error: "A Taverna não grava mais no Diário. Escreva pelo próprio Diário." }));
 
 tavern3Router.put("/settings", async (req, res) => {
   const d = parse(z.object({ required: z.array(stepEnum).min(1).max(5) }), req.body, res);

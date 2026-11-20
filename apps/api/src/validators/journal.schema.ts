@@ -11,7 +11,7 @@ import { IMAGE_DATA_URI, PDF_DATA_URI, VIDEO_DATA_URI, fileNameSchema } from "./
  * links etc. — que ocupa mais caracteres que o texto visível).
  */
 export const journalUpsertSchema = z.object({
-  /** updated_at que o cliente viu ao carregar; se o servidor tiver uma versão mais nova, responde 409. */
+  /** Obsoleto: aceito por compatibilidade com clientes antigos, mas ignorado (sem controle de versões). */
   baseUpdatedAt: z.string().max(40).nullable().optional(),
   /** "Como foi meu dia" — texto corrido (HTML do editor rico). Teto maior por ser o texto principal. */
   thoughts: z.string().trim().max(40000).optional().nullable(),

@@ -117,7 +117,6 @@ export function RpgMainQuest({
         reasons={task?.reasons.slice(0, 2).join(" · ") || null}
         facts={[
           { icon: <CalendarClock size={15} />, label: "Prazo", value: shortDate(task?.dueDate ?? null) },
-          { icon: <Clock size={15} />, label: "Tempo estimado", value: estimateMinutes ? `${estimateMinutes} min` : "Não estimado" },
           { icon: <Zap size={15} />, label: "Prioridade", value: task?.priority ?? "—" },
         ]}
         emptyText="Nenhuma tarefa em aberto. Aproveite para planejar a semana ou registrar seu dia no Diário."
@@ -126,7 +125,7 @@ export function RpgMainQuest({
             <RPGButton variant="success" onClick={onComplete} disabled={isCompleting} className="flex-1">
               <CheckCircle2 size={16} /> {isCompleting ? "Concluindo..." : "Marcar como concluída"}
             </RPGButton>
-            <Link to="/capacity-planner" className={rpgButtonClass("secondary", "flex-1")}>
+            <Link to="/tarefas" className={rpgButtonClass("secondary", "flex-1")}>
               <CalendarClock size={16} /> Replanejar
             </Link>
           </>

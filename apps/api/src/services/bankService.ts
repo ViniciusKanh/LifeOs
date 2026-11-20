@@ -253,13 +253,61 @@ export async function getCreditScore(db: Client, ownerId: string): Promise<numbe
   return Math.max(LOAN_SCORE_MIN, Math.min(LOAN_SCORE_MAX, score));
 }
 
+/**
+ * Limite de crédito definido pelo próprio usuário em Configurações
+ * (user_settings.bank_credit_limit). NULL = segue o limite do score.
+ * O crédito é um empréstimo com limite próprio — nunca sai do saldo.
+ */
+export async function getManualCreditLimit(db: Client, ownerId: string): Promise<number | null> {
+  const r = await db.execute({ sql: "SELECT bank_credit_limit FROM user_settings WHERE user_id = ?", args: [ownerId] }).catch(() => null);
+  const v = r?.rows[0]?.bank_credit_limit;
+  return v == null ? null : Number(v);
+}
+
+/** Nível efetivo: o do score, ou o limite manual (com os juros do nível atual, ou do 1º nível pago). */
+export async function effectiveLoanTier(db: Client, ownerId: string, score: number): Promise<LoanTier> {
+  const tier = loanTierForScore(score);
+  const manual = await getManualCreditLimit(db, ownerId);
+  if (manual == null) return tier;
+  const rateBps = tier.rateBps > 0 ? tier.rateBps : (LOAN_TIERS.find((t) => t.rateBps > 0)?.rateBps ?? 0);
+  return { minScore: 0, label: "Limite definido por você", maxAmount: manual, rateBps };
+}
+
+export class BankSettingsError extends Error {}
+
+/**
+ * Configurações do Banco: limite de crédito e saldo de moedas.
+ * O saldo é a soma do coin_ledger, então "alterar o saldo" grava UM lançamento
+ * de ajuste com a diferença — o extrato continua batendo e auditável.
+ */
+export async function updateBankSettings(db: Client, ownerId: string, input: { creditLimit?: number | null; balance?: number }) {
+  if (input.creditLimit !== undefined) {
+    await db.execute({
+      sql: `INSERT INTO user_settings (user_id, bank_credit_limit) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET bank_credit_limit = excluded.bank_credit_limit, updated_at = datetime('now')`,
+      args: [ownerId, input.creditLimit],
+    });
+  }
+  if (input.balance !== undefined) {
+    const current = await coinBalance(db, ownerId);
+    const diff = input.balance - current;
+    if (diff !== 0) {
+      await db.execute({
+        sql: `INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label) VALUES (?, ?, ?, 'manual_adjust', ?, 'adjustment', ?)`,
+        args: [nanoid(), ownerId, diff, nanoid(), `Ajuste manual de saldo (Configurações): ${current} → ${input.balance}`],
+      });
+    }
+  }
+  return { balance: await coinBalance(db, ownerId), creditLimit: await getManualCreditLimit(db, ownerId) };
+}
+
 export type LoanResult =
   | { ok: true; loan: BankLoanRow; balance: number }
   | { ok: false; code: "invalid_amount" | "active_exists" | "score_too_low"; message: string };
 
 export async function requestLoan(db: Client, ownerId: string, amount: number): Promise<LoanResult> {
   const score = await getCreditScore(db, ownerId);
-  const tier = loanTierForScore(score);
+  const tier = await effectiveLoanTier(db, ownerId, score);
   if (tier.maxAmount <= 0) {
     return { ok: false, code: "score_too_low", message: "Seu score de crédito ainda não libera empréstimos. Conclua investimentos no Banco para construir histórico." };
   }
@@ -363,6 +411,8 @@ export interface CreditInfo {
   lateFeeBps: number;
   /** Tabela completa de níveis de crédito (score mínimo, limite, juros) -- alimenta o Simulador de empréstimo no frontend. */
   tiers: LoanTier[];
+  /** Limite definido pelo usuário em Configurações (null = limite pelo score). */
+  manualLimit: number | null;
 }
 
 export interface AutoInvestRule {
@@ -404,7 +454,8 @@ export async function getBankSummary(db: Client, ownerId: string): Promise<BankS
     taxPaid: history.reduce((sum, d) => sum + (d.actualTax ?? (d.payout - d.netPayout)), 0),
     activeCount: active.length + claimable.length,
   };
-  const tier = loanTierForScore(score);
+  const tier = await effectiveLoanTier(db, ownerId, score);
+  const manualLimit = await getManualCreditLimit(db, ownerId);
   const credit: CreditInfo = {
     score,
     scoreMin: LOAN_SCORE_MIN,
@@ -413,6 +464,7 @@ export async function getBankSummary(db: Client, ownerId: string): Promise<BankS
     termDays: LOAN_TERM_DAYS,
     lateFeeBps: LOAN_LATE_FEE_BPS,
     tiers: LOAN_TIERS,
+    manualLimit,
   };
   const loan = {
     active: loans.find((l) => l.status === "active") ?? null,

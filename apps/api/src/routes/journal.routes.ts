@@ -579,89 +579,57 @@ journalRouter.put("/:date", async (req, res) => {
   const ownerId = req.user!.id;
 
   const existing = await db.execute({
-    sql: "SELECT id, updated_at FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
+    sql: "SELECT id, thoughts FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
     args: [ownerId, date],
   });
-  const existingRow = existing.rows[0] as unknown as { id: string; updated_at: string } | undefined;
-  // Conflito: outro dispositivo salvou depois da versão que este cliente carregou.
-  if (existingRow && data.baseUpdatedAt && String(existingRow.updated_at) > data.baseUpdatedAt) {
-    return res.status(409).json({ error: "Esta crônica foi alterada em outro dispositivo.", code: "journal_conflict", serverUpdatedAt: existingRow.updated_at });
+  const existingRow = existing.rows[0] as unknown as { id: string; thoughts: string | null } | undefined;
+
+  // Sem controle de "versões": o último salvamento vale. Para nunca perder texto:
+  // 1) campo omitido = mantém o valor salvo (clientes parciais não apagam nada);
+  // 2) texto vazio NUNCA apaga um texto existente (para apagar o dia, use Excluir entrada);
+  // 3) se o texto novo encolher mais da metade, o anterior vai para journal_thoughts_backup.
+  const plain = (html: string | null | undefined) => (html ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const oldPlain = plain(existingRow?.thoughts);
+  let thoughts: string | null | undefined = data.thoughts;
+  if (thoughts !== undefined && plain(thoughts).length === 0 && oldPlain.length > 0) thoughts = undefined;
+  if (existingRow && thoughts !== undefined && oldPlain.length >= 40 && plain(thoughts).length < oldPlain.length * 0.5) {
+    await db
+      .execute({
+        sql: "INSERT INTO journal_thoughts_backup (id, owner_id, entry_date, thoughts) VALUES (?, ?, ?, ?)",
+        args: [nanoid(), ownerId, date, String(existingRow.thoughts)],
+      })
+      .catch(() => undefined);
   }
 
   // Desde a 0050 o diário é texto corrido: intention, challenges, lighter_plan,
-  // feel_good, night_helped e night_mood não são mais gravados por aqui — o que
-  // já existia foi movido para thoughts (ou, no caso do humor, segue como
-  // registro antigo). Assim um cliente novo nunca apaga dado não migrado.
-  const values = {
-    thoughts: data.thoughts ?? null,
-    gratitude: JSON.stringify(data.gratitude ?? []),
-    self_care: JSON.stringify(data.selfCare ?? []),
-    self_care_other: data.selfCareOther ?? null,
-    night_takeaway: data.nightTakeaway ?? null,
-    // Sem focusTaskIds no corpo, preserva a missão principal já fixada (ex.: pela Taverna) — o editor do Diário não envia esse campo.
-    focus_task_ids: data.focusTaskIds !== undefined ? JSON.stringify(data.focusTaskIds) : null,
-    location_label: data.locationLabel ?? null,
-    location_lat: data.locationLat ?? null,
-    location_lng: data.locationLng ?? null,
-    tags: JSON.stringify(data.tags ?? []),
-    // Campos do fechamento 3.0: undefined preserva o valor salvo (clientes antigos não apagam nada).
-    closing_reflection: data.closingReflection === undefined ? null : data.closingReflection ?? "",
-    closing_learning: data.closingLearning === undefined ? null : data.closingLearning ?? "",
-    closing_pending: data.closingPending === undefined ? null : data.closingPending ?? "",
-  };
+  // feel_good, night_helped e night_mood não são mais gravados por aqui.
+  const fields: Array<[string, string | number | null | undefined]> = [
+    ["thoughts", thoughts === undefined ? undefined : thoughts ?? null],
+    ["gratitude", data.gratitude === undefined ? undefined : JSON.stringify(data.gratitude)],
+    ["self_care", data.selfCare === undefined ? undefined : JSON.stringify(data.selfCare)],
+    ["self_care_other", data.selfCareOther === undefined ? undefined : data.selfCareOther ?? null],
+    ["focus_task_ids", data.focusTaskIds === undefined ? undefined : JSON.stringify(data.focusTaskIds)],
+    ["location_label", data.locationLabel === undefined ? undefined : data.locationLabel ?? null],
+    ["location_lat", data.locationLat === undefined ? undefined : data.locationLat ?? null],
+    ["location_lng", data.locationLng === undefined ? undefined : data.locationLng ?? null],
+    ["tags", data.tags === undefined ? undefined : JSON.stringify(data.tags)],
+  ];
+  const present = fields.filter(([, v]) => v !== undefined) as Array<[string, string | number | null]>;
 
   const entryId = existingRow?.id ?? nanoid();
 
   if (existingRow) {
-    await db.execute({
-      sql: `UPDATE journal_entries SET
-              thoughts = ?, gratitude = ?, self_care = ?, self_care_other = ?, night_takeaway = ?,
-              focus_task_ids = COALESCE(?, focus_task_ids), location_label = ?, location_lat = ?, location_lng = ?, tags = ?,
-              closing_reflection = COALESCE(?, closing_reflection), closing_learning = COALESCE(?, closing_learning), closing_pending = COALESCE(?, closing_pending),
-              updated_at = datetime('now')
-            WHERE id = ? AND owner_id = ?`,
-      args: [
-        values.thoughts,
-        values.gratitude,
-        values.self_care,
-        values.self_care_other,
-        values.night_takeaway,
-        values.focus_task_ids,
-        values.location_label,
-        values.location_lat,
-        values.location_lng,
-        values.tags,
-        values.closing_reflection,
-        values.closing_learning,
-        values.closing_pending,
-        entryId,
-        ownerId,
-      ],
-    });
+    if (present.length > 0) {
+      await db.execute({
+        sql: `UPDATE journal_entries SET ${present.map(([c]) => `${c} = ?`).join(", ")}, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`,
+        args: [...present.map(([, v]) => v), entryId, ownerId],
+      });
+    }
   } else {
+    const cols = ["id", "owner_id", "entry_date", ...present.map(([c]) => c)];
     await db.execute({
-      sql: `INSERT INTO journal_entries
-              (id, owner_id, entry_date, thoughts, gratitude, self_care, self_care_other, night_takeaway,
-               focus_task_ids, location_label, location_lat, location_lng, tags, closing_reflection, closing_learning, closing_pending)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        entryId,
-        ownerId,
-        date,
-        values.thoughts,
-        values.gratitude,
-        values.self_care,
-        values.self_care_other,
-        values.night_takeaway,
-        values.focus_task_ids ?? "[]",
-        values.location_label,
-        values.location_lat,
-        values.location_lng,
-        values.tags,
-        values.closing_reflection,
-        values.closing_learning,
-        values.closing_pending,
-      ],
+      sql: `INSERT INTO journal_entries (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+      args: [entryId, ownerId, date, ...present.map(([, v]) => v)],
     });
   }
 
@@ -669,8 +637,8 @@ journalRouter.put("/:date", async (req, res) => {
     await syncEntryJournals(db, ownerId, entryId, data.journalIds);
   }
   // Texto puro (sem tags HTML do editor) decide se a crônica "conta".
-  const plainText = (values.thoughts ?? "").replace(/<[^>]*>/g, "").trim();
-  await awardJournalEntry(db, ownerId, date, plainText.length > 0);
+  const finalThoughts = thoughts === undefined ? existingRow?.thoughts ?? null : thoughts;
+  await awardJournalEntry(db, ownerId, date, plain(finalThoughts).length > 0);
   await syncAutoHabitsAfterWrite(db, ownerId, date);
 
   return res.json(await buildJournalResponse(db, ownerId, date));

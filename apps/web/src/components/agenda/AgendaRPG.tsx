@@ -133,15 +133,6 @@ export function TimeTower({ hub, onToast }: { hub: AgendaHub; onToast: (m: strin
       err(e);
     }
   };
-  const startFocus = async (b: TowerBlock) => {
-    if (!b.taskId) return;
-    try {
-      await taskService.startTime(b.taskId);
-      onToast("Cronômetro iniciado na missão. Pare pelo quadro de Missões.");
-    } catch (e) {
-      err(e);
-    }
-  };
   const postpone = (b: TowerBlock) => {
     if (b.kind === "task" && b.taskId) actions.planTask.mutate({ id: b.taskId, plannedDate: tomorrow }, { onSuccess: () => onToast("Missão replanejada para amanhã."), onError: err });
     else actions.reschedule.mutate({ id: b.id, date: tomorrow, start: b.start }, { onSuccess: () => onToast("Bloco movido para amanhã."), onError: err });
@@ -174,11 +165,6 @@ export function TimeTower({ hub, onToast }: { hub: AgendaHub; onToast: (m: strin
                   {b.overdue && <span className="ml-1 font-pixel text-[9px] uppercase text-rpg-red">atrasada</span>}
                 </span>
                 <span className="flex shrink-0 items-center gap-0.5">
-                  {b.taskId && (
-                    <button type="button" className="flex h-9 w-9 items-center justify-center text-rpg-muted hover:text-rpg-purple" title="Iniciar foco (cronômetro da missão)" aria-label={`Iniciar foco em ${b.title}`} onClick={() => void startFocus(b)}>
-                      <Play size={14} />
-                    </button>
-                  )}
                   {b.taskId && (
                     <button type="button" className="flex h-9 w-9 items-center justify-center text-rpg-muted hover:text-rpg-green" title="Concluir missão" aria-label={`Concluir ${b.title}`} onClick={() => void complete(b)}>
                       <CheckCircle2 size={14} />

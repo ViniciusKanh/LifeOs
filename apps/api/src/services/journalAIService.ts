@@ -1,7 +1,9 @@
 import type { getDb } from "../db/client.js";
 import { extractJson, str } from "./aiJson.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
+import type { Client } from "@libsql/client";
 import { getJournalAutoData, getJournalMedia, stripHtml } from "./journalService.js";
+import { collectRichDayFacts } from "./journalChronicleAIService.js";
 import type { JournalAiApplyInput } from "../validators/journal.schema.js";
 
 /**
@@ -215,7 +217,10 @@ export async function organizeJournalDay(db: Db, ownerId: string, date: string, 
 
   // Fatos reais do dia (tarefas, hábitos, treino, leitura…) entram como CONTEXTO para
   // a IA entender o rascunho — nunca como texto a ser inserido no diário sem o usuário pedir.
-  const { facts } = await collectDayFacts(db, ownerId, date).catch(() => ({ facts: [] as string[] }));
+  // Mesma coleta da Crônica completa: missões (com descrição), treinos, contratos, estudo, hábitos e saúde no fuso do usuário.
+  const facts = await collectRichDayFacts(db as unknown as Client, ownerId, date)
+    .then((list) => list.map((f) => f.text))
+    .catch(() => [] as string[]);
   const thoughtsText = stripHtml(row.thoughts as string | null).slice(0, 6000);
   const photoOrder = media.filter((m) => photoIds.has(m.id)).map((m, i) => `imagem ${i + 1} = foto id=${m.id}`);
   const prompt = [
@@ -227,7 +232,7 @@ export async function organizeJournalDay(db: Db, ownerId: string, date: string, 
     "REGRAS DE FIDELIDADE (obrigatórias):",
     "- Use SOMENTE o que o usuário escreveu" + (images.length > 0 ? ", o que for visível nas imagens anexadas" : "") + " e os fatos registrados no LifeOS listados abaixo.",
     "- Nunca invente acontecimentos, pessoas, nomes, lugares, horários, números, opiniões ou sentimentos. Se algo estiver ambíguo, mantenha ambíguo.",
-    "- Fatos do LifeOS servem para entender e ordenar o dia; só podem aparecer no improvedText se o próprio usuário os mencionou no texto.",
+    "- Os fatos do LifeOS DEVEM enriquecer o improvedText: integre de forma natural o que foi feito (missões e o conteúdo delas, treinos, contratos, estudo), sem virar relatório e sem inventar números.",
     "- Não dê diagnósticos, conselhos médicos, lições de moral nem sugestões de comportamento.",
     "",
     "(A) improvedText — reescrita do campo [Como foi meu dia]:",

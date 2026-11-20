@@ -11,7 +11,6 @@ import { HeroClassChip } from "@/components/rpg/HeroClass";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { AppUpdateWatcher } from "./AppUpdateWatcher";
 import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
-import { NotificationBell } from "./NotificationBell";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
@@ -27,7 +26,6 @@ import { OfflineStatus } from "./OfflineStatus";
 import { HubTabs } from "./HubTabs";
 import { RPG_LOGO } from "@/components/rpg/rpgAssets";
 import { IS_DESKTOP } from "@/platform";
-import { useDesktopNotifications } from "@/hooks/useDesktopNotifications";
 import { useBankPendingCount } from "@/hooks/useBank";
 
 // Aviso de nova versão do app nativo — só existe (e só é baixado) no LifeOS Desktop.
@@ -121,7 +119,6 @@ export function AppShell() {
   const { isAdmin, user } = useAuth();
   const location = useLocation();
   const { collapsed, canToggle, toggle } = useSidebarCollapsed();
-  useDesktopNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
@@ -217,7 +214,6 @@ export function AppShell() {
             <div className="hidden min-[400px]:block">
               <AchievementHeaderPulse />
             </div>
-            <NotificationBell />
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
             <ProfileMenu />
           </div>

@@ -188,9 +188,8 @@ export function NextBestStep({
               {task.reasons.length > 0 && <p className="text-xs text-slate mt-0.5">{task.reasons.slice(0, 2).join(" · ")}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
             <MiniFact icon={<CalendarClock size={15} />} label="Prazo" value={task.dueDate ? new Date(`${task.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "") : "Sem prazo"} />
-            <MiniFact icon={<Clock size={15} />} label="Tempo estimado" value={estimateMinutes ? `${estimateMinutes} min` : "Não estimado"} />
             <MiniFact icon={<Zap size={15} />} label="Prioridade" value={task.priority} />
           </div>
           <div className="flex flex-col sm:flex-row gap-2 mt-4">
@@ -201,7 +200,7 @@ export function NextBestStep({
             >
               <CheckCircle2 size={16} /> {isCompleting ? "Concluindo..." : "Marcar como concluída"}
             </button>
-            <Link to="/capacity-planner" className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border border-brand-500/30 text-brand-700 dark:text-brand-100 hover:bg-brand-500/5 transition-colors">
+            <Link to="/tarefas" className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border border-brand-500/30 text-brand-700 dark:text-brand-100 hover:bg-brand-500/5 transition-colors">
               <CalendarClock size={16} /> Replanejar
             </Link>
           </div>
