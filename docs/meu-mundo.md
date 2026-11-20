@@ -156,3 +156,31 @@ O LifeOS não tem tempo real. O mundo consulta `/api/world` ao abrir, ao voltar 
 - A decoração guarda nome e arte no momento da colocação. Se o item for consumido depois, a peça continua no mundo até ser retirada.
 - A execução de um agente é curta e síncrona, por isso não há botão de interromper.
 - A árvore de habilidades ainda não desbloqueia elementos do mundo. Para isso falta uma regra de economia definida.
+
+## A Vila (v0.5.26)
+
+O mapa passou de 30×30 para 42×42. O núcleo (0..29) mantém as coordenadas
+originais — slots de decoração e a posição do avatar no servidor continuam
+válidos. Em volta fica a Vila:
+
+- **Construções fechadas com telhado** (`BUILDINGS` em `engine/worldMap.ts`):
+  Banco do Reino (`/banco`), Loja Arcana (`/loja-arcana`), Torre do Grimório
+  (`/grimorio`), Taverna (`/taverna`), Salão dos Contratos (`/contratos`) e o
+  Moinho (cenário). Arte em `engine/drawVillage.ts`, desenhada uma vez em cache
+  por construção; fumaça, pás do moinho e brilho da torre são animados por quadro.
+  Pegadas quadradas (ou quase) para a ordenação por profundidade funcionar.
+- **Ruas**: alamedas de pedra no núcleo, terra batida na vila e a Estrada do
+  Reino (y 30–31). Lago com cais, riacho, plantação, mercado com poço, pomar
+  com estátua e fogueira.
+- **Pendências nas casas** (`engine/village.ts → buildMarkers`): brasão
+  vermelho "!" = atrasado, dourado "!" = para hoje, azul "?" = lembrete do dia.
+  Vêm só de `GET /api/world → pendencies` (missões atrasadas/do dia, cartas do
+  Grimório, resgates e empréstimos do Banco, pedidos da Loja, hábitos, diário,
+  treino e estudo). O painel "Pendências do reino" lista os mesmos itens.
+- **Agentes conversando** (`buildConversation`): dois agentes livres se
+  encontram num ponto (`MEET_SPOTS`), ficam frente a frente e trocam falas —
+  saudação genérica + um assunto que só aparece se o dado existir. Agentes
+  também patrulham as casas com pendência e comentam o que viram. Qualquer
+  execução real interrompe a conversa (estado `talking` tem prioridade mínima).
+- **Aldeões** (`VILLAGERS`): decorativos, sem nome e não selecionáveis; falas
+  neutras que não citam dados do usuário.

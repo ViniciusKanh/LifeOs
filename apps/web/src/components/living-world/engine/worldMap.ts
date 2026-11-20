@@ -1,21 +1,31 @@
 /**
  * Meu Mundo — geometria do mapa isométrico (fonte única no frontend).
  *
- * Grade 30×30. Cada ambiente é um retângulo com paredes só nos lados do
- * fundo (linha y0 e coluna x0), no estilo "casa de bonecas" isométrica: o
- * interior fica visível e a entrada é pelos lados da frente. Para adicionar um
- * ambiente: inclua em ROOMS, coloque móveis em FURNITURE e, se houver
- * atividade, uma estação em STATIONS. Os slots de decoração vêm do servidor.
+ * Grade 42×42. O núcleo (0..29) guarda os ambientes "casa de bonecas" —
+ * paredes só nos lados do fundo (linha y0 e coluna x0), interior visível e
+ * entrada pelos lados da frente. Em volta fica a Vila: construções fechadas
+ * com telhado (BUILDINGS), ruas, lago, moinho, plantação e mercado.
+ *
+ * As coordenadas do núcleo não mudam (o servidor guarda slots de decoração e
+ * a posição do avatar nelas). Para adicionar um ambiente: inclua em ROOMS,
+ * coloque móveis em FURNITURE e, se houver atividade, uma estação em STATIONS.
+ * Para uma construção da vila: inclua em BUILDINGS (pegada quadrada ou quase,
+ * para a ordenação por profundidade funcionar) com a porta numa face visível.
  */
 
-export const GRID = 30;
+export const GRID = 42;
 export const TILE_W = 64;
 export const TILE_H = 32;
 export const WALL_H = 56;
 
+/** Alamedas (2 tiles) entre os ambientes e que seguem pela vila. */
+const LANES = [9, 10, 19, 20];
+/** Estrada do Reino: avenida que separa o núcleo do bairro sul e do lago. */
+const ESTRADA = [30, 31];
+
 export type RoomKey = "biblioteca" | "escritorio" | "academia" | "guilda" | "casa" | "jardim" | "praca";
 export type Facing = "ne" | "nw" | "se" | "sw";
-export type TileKind = "floor" | "wall" | "path" | "grass" | "water" | "plaza";
+export type TileKind = "floor" | "wall" | "path" | "dirt" | "grass" | "water" | "plaza" | "dock" | "field" | "building";
 
 export interface RoomDef {
   key: RoomKey;
@@ -46,7 +56,9 @@ export type FurnitureKind =
   | "treadmill" | "bench" | "dumbbells" | "bag" | "mat" | "bed" | "sofa" | "rug" | "pot" | "tree"
   | "parkbench" | "crystal" | "server" | "lantern" | "flowers"
   | "globe" | "bookpile" | "candelabra" | "chair" | "wardrobe" | "nightstand" | "dummy" | "weaponrack" | "barrel"
-  | "bush" | "rock" | "pine" | "bannerpole" | "hedge" | "cables" | "target" | "lilypad";
+  | "bush" | "rock" | "pine" | "bannerpole" | "hedge" | "cables" | "target" | "lilypad"
+  | "statue" | "campfire" | "log" | "tent" | "fence" | "fencey" | "well" | "stall" | "crate" | "hay" | "signpost"
+  | "anvil" | "forge" | "cart" | "reeds" | "flowerbed";
 
 export interface Furniture {
   id: string;
@@ -60,7 +72,7 @@ export interface Furniture {
 }
 
 /** Itens que não bloqueiam, mas têm volume (precisam de ordenação por profundidade). */
-export const VOLUMETRIC_FREE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(["chair", "cables", "lilypad"]);
+export const VOLUMETRIC_FREE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(["chair", "cables", "lilypad", "reeds"]);
 
 const f = (id: string, kind: FurnitureKind, x: number, y: number, room: RoomKey | null, blocks = true, color?: string): Furniture => ({ id, kind, x, y, room, blocks, color });
 
@@ -155,18 +167,106 @@ export const FURNITURE: Furniture[] = [
   f("pra-flowers2", "flowers", 18, 15, "praca", false),
   f("pra-flowers3", "flowers", 11, 13, "praca", false),
   f("pra-flowers4", "flowers", 15, 18, "praca", false),
-  // Floresta em volta (atrás das paredes e nas bordas) — só cenário
-  ...[0, 2, 4, 6, 8, 10, 13, 16, 19, 21, 23, 25, 27, 29].map((x) => f(`wood-n-${x}`, x % 4 === 0 ? "pine" : "tree", x, 0, null)),
-  ...[2, 4, 6, 8, 10, 13, 16, 19, 22, 24, 26, 28].map((y) => f(`wood-w-${y}`, y % 4 === 0 ? "pine" : "tree", 0, y, null)),
-  ...[3, 7, 12, 17, 23, 27].map((x) => f(`bush-s-${x}`, "bush", x, 29, null)),
-  ...[3, 7, 12, 17, 24].map((y) => f(`bush-e-${y}`, "bush", 29, y, null)),
-  f("rock-1", "rock", 10, 3, null),
-  f("rock-2", "rock", 19, 26, null),
-  f("rock-3", "rock", 3, 10, null),
-  f("hedge-1", "hedge", 9, 9, null),
-  f("hedge-2", "hedge", 20, 9, null),
-  f("hedge-3", "hedge", 9, 20, null),
-  f("hedge-4", "hedge", 20, 20, null),
+  // Clareira do Pomar (norte da praça)
+  f("pom-statue", "statue", 14, 4, null),
+  f("pom-tree1", "tree", 12, 2, null),
+  f("pom-tree2", "tree", 17, 2, null),
+  f("pom-tree3", "tree", 12, 7, null),
+  f("pom-tree4", "tree", 17, 7, null),
+  f("pom-bench", "parkbench", 14, 6, null),
+  f("pom-fb1", "flowerbed", 13, 4, null, false),
+  f("pom-fb2", "flowerbed", 15, 4, null, false),
+  f("pom-fb3", "flowerbed", 14, 3, null, false),
+  f("pom-bush1", "bush", 11, 5, null),
+  f("pom-bush2", "bush", 18, 4, null),
+  f("pom-rock", "rock", 16, 8, null),
+  // Fogueira (sul da praça) — ponto de encontro dos agentes
+  f("fog-fire", "campfire", 14, 25, null),
+  f("fog-log1", "log", 14, 24, null),
+  f("fog-log2", "log", 14, 26, null),
+  f("fog-tent1", "tent", 12, 22, null, true, "#9e2b2b"),
+  f("fog-tent2", "tent", 17, 22, null, true, "#2b5c9e"),
+  f("fog-tree1", "pine", 11, 27, null),
+  f("fog-tree2", "tree", 18, 27, null),
+  f("fog-tree3", "pine", 12, 28, null),
+  f("fog-bush", "bush", 17, 28, null),
+  f("fog-rock", "rock", 11, 23, null),
+  f("fog-crate", "crate", 18, 23, null),
+  // Floresta do fundo (linha y=0 e coluna x=0) — só cenário
+  ...[0, 2, 4, 6, 8, 11, 13, 16, 18, 21, 23, 25, 27, 29, 32, 34, 36, 38, 40].map((x) => f(`wood-n-${x}`, x % 4 === 0 ? "pine" : "tree", x, 0, null)),
+  ...[2, 4, 6, 8, 12, 14, 16, 22, 24, 26, 28, 33, 36, 39].map((y) => f(`wood-w-${y}`, y % 4 === 0 ? "pine" : "tree", 0, y, null)),
+  // Bordas e cantos do núcleo
+  f("rock-1", "rock", 29, 3, null),
+  f("rock-2", "rock", 3, 29, null),
+  f("bush-c1", "bush", 29, 14, null),
+  f("bush-c2", "bush", 14, 29, null),
+  f("bush-c3", "bush", 29, 26, null),
+  f("bush-c4", "bush", 26, 29, null),
+  f("sign-1", "signpost", 21, 29, null),
+  f("sign-2", "signpost", 29, 21, null),
+  f("sign-3", "signpost", 8, 29, null),
+  // Postes da Estrada do Reino e das alamedas da vila
+  ...[4, 13, 17, 24, 28, 34, 39].map((x) => f(`lamp-e-${x}`, "lantern", x, 32, null)),
+  ...[33, 37].map((x) => f(`lamp-b-${x}`, "lantern", x, 8, null)),
+  ...[33, 37].map((x) => f(`lamp-l-${x}`, "lantern", x, 18, null)),
+  f("lamp-t1", "lantern", 34, 27, null),
+  f("lamp-s1", "lantern", 8, 33, null),
+  f("lamp-s2", "lantern", 18, 33, null),
+  // Bairro leste: árvores e caixotes
+  f("vl-tree1", "tree", 39, 3, null),
+  f("vl-tree2", "pine", 40, 6, null),
+  f("vl-tree3", "tree", 39, 13, null),
+  f("vl-tree4", "tree", 32, 23, null),
+  f("vl-pine1", "pine", 40, 12, null),
+  f("vl-bush1", "bush", 32, 13, null),
+  f("vl-bush2", "bush", 40, 17, null),
+  f("vl-bush3", "bush", 32, 3, null),
+  f("loja-crate1", "crate", 38, 15, null),
+  f("loja-crate2", "crate", 38, 16, null),
+  f("loja-barrel", "barrel", 38, 14, null),
+  f("banco-cart", "cart", 38, 7, null),
+  // Moinho e plantação
+  ...[37, 38, 39, 40].map((x) => f(`fence-f-${x}`, "fence", x, 25, null)),
+  ...[26, 27, 28].map((y) => f(`fence-fy-${y}`, "fencey", 36, y, null)),
+  f("hay-1", "hay", 40, 22, null),
+  f("hay-2", "hay", 37, 22, null),
+  f("vl-tree5", "tree", 40, 29, null),
+  // Bairro sul: taverna, salão dos contratos e mercado
+  f("tav-barrel1", "barrel", 7, 34, null),
+  f("tav-barrel2", "barrel", 7, 35, null),
+  f("tav-table1", "table", 3, 40, null),
+  f("tav-table2", "table", 6, 40, null),
+  f("tav-bush", "bush", 1, 33, null),
+  f("con-anvil", "anvil", 17, 38, null),
+  f("con-forge", "forge", 17, 34, null),
+  f("con-rack", "weaponrack", 13, 40, null),
+  f("con-barrel", "barrel", 15, 40, null),
+  f("mer-well", "well", 25, 36, null),
+  f("mer-stall1", "stall", 23, 34, null, true, "#C8423B"),
+  f("mer-stall2", "stall", 27, 34, null, true, "#2B6CB0"),
+  f("mer-stall3", "stall", 23, 38, null, true, "#2F855A"),
+  f("mer-stall4", "stall", 27, 38, null, true, "#B7791F"),
+  f("mer-crate1", "crate", 28, 36, null),
+  f("mer-crate2", "crate", 22, 36, null),
+  f("mer-tree1", "tree", 30, 34, null),
+  f("mer-tree2", "pine", 30, 39, null),
+  f("sul-tree1", "tree", 1, 40, null),
+  f("sul-tree2", "pine", 11, 40, null),
+  f("sul-bush1", "bush", 21, 40, null),
+  // Lago, cais e margens
+  f("lago-reeds1", "reeds", 34, 34, null),
+  f("lago-reeds2", "reeds", 38, 38, null),
+  f("lago-lily1", "lilypad", 35, 37, null, false),
+  f("lago-lily2", "lilypad", 37, 36, null, false),
+  f("lago-rock1", "rock", 33, 36, null),
+  f("lago-rock2", "rock", 39, 34, null),
+  f("lago-tree1", "tree", 33, 33, null),
+  f("lago-tree2", "tree", 40, 38, null),
+  f("lago-tree3", "pine", 33, 40, null),
+  f("lago-bush1", "bush", 39, 39, null),
+  // Borda frontal (só arbustos baixos, para não esconder o mapa)
+  ...[5, 15, 27].map((y) => f(`bush-e-${y}`, "bush", 41, y, null)),
+  ...[5, 16, 26].map((x) => f(`bush-s-${x}`, "bush", x, 41, null)),
 ];
 
 /** Decoração presa às paredes (face visível da parede do tile). Só visual. */
@@ -227,9 +327,119 @@ export function zAtFloat(x: number, y: number): number {
   return tileZ(rx, ry);
 }
 
-/** Água do lago do Jardim. */
+/** Água: lago do Jardim, lago da vila e o riacho que desce até a borda. */
 export const WATER: Array<[number, number]> = [];
 for (let x = 25; x <= 27; x++) for (let y = 25; y <= 27; y++) WATER.push([x, y]);
+for (let x = 34; x <= 38; x++) for (let y = 34; y <= 38; y++) if (!((x === 34 || x === 38) && (y === 34 || y === 38))) WATER.push([x, y]);
+for (const t of [[39, 36], [40, 36], [41, 36], [36, 39], [36, 40], [36, 41]] as const) WATER.push([t[0], t[1]]);
+/** Cais de madeira sobre o lago (caminhável). */
+export const DOCK: Array<[number, number]> = [[36, 34], [36, 35]];
+const DOCK_SET = new Set(DOCK.map(([x, y]) => x * 100 + y));
+const WATER_SET = new Set(WATER.filter(([x, y]) => !DOCK_SET.has(x * 100 + y)).map(([x, y]) => x * 100 + y));
+/** Plantação ao lado do moinho (terra arada com cultivo, não caminhável). */
+const FIELD_SET = new Set<number>();
+for (let x = 37; x <= 40; x++) for (let y = 26; y <= 28; y++) FIELD_SET.add(x * 100 + y);
+/** Praça do mercado (pedra). */
+const MARKET = { x0: 22, y0: 33, x1: 28, y1: 39 };
+
+/* ───────────────────────── Vila ───────────────────────── */
+
+export type BuildingKey = "banco" | "loja" | "torre" | "taverna" | "contratos" | "moinho";
+export type BuildingStyle = "bank" | "house" | "tower" | "mill" | "hall";
+
+export interface BuildingDef {
+  key: BuildingKey;
+  name: string;
+  subtitle: string;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  style: BuildingStyle;
+  /** Altura das paredes (px), sem o telhado. */
+  height: number;
+  wall: string;
+  roof: string;
+  trim: string;
+  accent: string;
+  /** Porta numa face visível: "x" = face leste (x1), "y" = face sul (y1). */
+  door: { face: "x" | "y"; at: number };
+  /** Tela do LifeOS ligada à construção (navegação pelo painel). */
+  route: string | null;
+  chimney: boolean;
+}
+
+export const BUILDINGS: BuildingDef[] = [
+  { key: "banco", name: "Banco do Reino", subtitle: "Cofre e investimentos", x0: 33, y0: 2, x1: 37, y1: 6, style: "bank", height: 58, wall: "#b9b2a3", roof: "#2d4f8f", trim: "#F1C66A", accent: "#59A9F8", door: { face: "y", at: 35 }, route: "/banco", chimney: false },
+  { key: "loja", name: "Loja Arcana", subtitle: "Recompensas e pedidos", x0: 33, y0: 12, x1: 37, y1: 16, style: "house", height: 50, wall: "#e6d6b8", roof: "#6b3fa0", trim: "#4a2f1b", accent: "#A875F5", door: { face: "y", at: 35 }, route: "/loja-arcana", chimney: true },
+  { key: "torre", name: "Torre do Grimório", subtitle: "Cartas de revisão", x0: 34, y0: 22, x1: 36, y1: 24, style: "tower", height: 118, wall: "#8d8fa3", roof: "#4b2a7a", trim: "#F1C66A", accent: "#A875F5", door: { face: "y", at: 35 }, route: "/grimorio", chimney: false },
+  { key: "moinho", name: "Moinho", subtitle: "Plantação da vila", x0: 38, y0: 23, x1: 39, y1: 24, style: "mill", height: 84, wall: "#d9c9a8", roof: "#8a3b2a", trim: "#4a2f1b", accent: "#4FD49A", door: { face: "x", at: 24 }, route: null, chimney: false },
+  { key: "taverna", name: "Taverna", subtitle: "Como foi meu dia", x0: 2, y0: 34, x1: 6, y1: 38, style: "house", height: 54, wall: "#ead9b9", roof: "#9e2b2b", trim: "#4a2f1b", accent: "#E78FC0", door: { face: "x", at: 36 }, route: "/taverna", chimney: true },
+  { key: "contratos", name: "Salão dos Contratos", subtitle: "Compromissos firmados", x0: 12, y0: 34, x1: 16, y1: 38, style: "hall", height: 56, wall: "#cdb48e", roof: "#3f5a3a", trim: "#3a2414", accent: "#F1C66A", door: { face: "x", at: 36 }, route: "/contratos", chimney: true },
+];
+
+export function buildingAt(x: number, y: number): BuildingDef | null {
+  return BUILDINGS.find((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) ?? null;
+}
+
+/** Tile de porta (na pegada) e a entrada (tile livre em frente à porta). */
+export function doorOf(b: BuildingDef): { door: { x: number; y: number }; entrance: { x: number; y: number } } {
+  return b.door.face === "y"
+    ? { door: { x: b.door.at, y: b.y1 }, entrance: { x: b.door.at, y: b.y1 + 1 } }
+    : { door: { x: b.x1, y: b.door.at }, entrance: { x: b.x1 + 1, y: b.door.at } };
+}
+
+/** Caminho de terra da porta até a rua mais próxima (na direção da face da porta). */
+const APPROACH_SET = new Set<number>();
+for (const b of BUILDINGS) {
+  const { entrance } = doorOf(b);
+  let { x, y } = entrance;
+  for (let i = 0; i < 8 && x <= 40 && y <= 40; i++) {
+    if (ESTRADA.includes(y) || LANES.includes(x) || LANES.includes(y)) break;
+    APPROACH_SET.add(x * 100 + y);
+    if (b.door.face === "y") y++;
+    else x++;
+  }
+}
+
+/** Pontos de encontro: pares de tiles frente a frente onde os agentes conversam. */
+export interface MeetSpot {
+  key: string;
+  label: string;
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+}
+export const MEET_SPOTS: MeetSpot[] = [
+  { key: "fogueira", label: "Fogueira", a: { x: 13, y: 25 }, b: { x: 15, y: 25 } },
+  { key: "praca", label: "Praça", a: { x: 16, y: 16 }, b: { x: 17, y: 15 } },
+  { key: "pomar", label: "Pomar", a: { x: 13, y: 6 }, b: { x: 15, y: 6 } },
+  { key: "poco", label: "Poço do mercado", a: { x: 24, y: 36 }, b: { x: 26, y: 36 } },
+  { key: "taverna", label: "Porta da Taverna", a: { x: 8, y: 37 }, b: { x: 8, y: 35 } },
+  { key: "banco", label: "Porta do Banco", a: { x: 34, y: 8 }, b: { x: 36, y: 8 } },
+];
+
+/** Aldeões decorativos: dão vida à vila, não representam dados do usuário. */
+export interface Villager {
+  id: string;
+  home: { x: number; y: number };
+  radius: number;
+  skin: string;
+  hair: string;
+  shirt: string;
+  pants: string;
+  hat: "straw" | "hood" | "helmet" | "cap" | null;
+  hatColor: string;
+  apron: string | null;
+  lines: string[];
+}
+export const VILLAGERS: Villager[] = [
+  { id: "npc-taverneira", home: { x: 8, y: 36 }, radius: 2, skin: "#f0c8a0", hair: "#a0522d", shirt: "#7a2a3a", pants: "#3a2a1a", hat: null, hatColor: "#000000", apron: "#f3e7c9", lines: ["Bem-vindo à Taverna!", "Sopa quente hoje.", "Boa jornada, viajante!"] },
+  { id: "npc-ferreiro", home: { x: 18, y: 36 }, radius: 2, skin: "#a86f4c", hair: "#1e1410", shirt: "#4a4f5c", pants: "#2a2420", hat: null, hatColor: "#000000", apron: "#5a3a22", lines: ["O fogo da forja não apaga.", "Promessa é metal forjado."] },
+  { id: "npc-fazendeiro", home: { x: 37, y: 29 }, radius: 2, skin: "#e8b48a", hair: "#6b4a32", shirt: "#3f7a3c", pants: "#5a4a3a", hat: "straw", hatColor: "#e3c36a", apron: null, lines: ["A colheita vem com paciência.", "Que dia bom para plantar!"] },
+  { id: "npc-guarda", home: { x: 21, y: 31 }, radius: 6, skin: "#d9a57a", hair: "#2a1a10", shirt: "#7a1f3a", pants: "#3b3b46", hat: "helmet", hatColor: "#aab2c0", apron: null, lines: ["Tudo calmo na estrada.", "Ronda em andamento."] },
+  { id: "npc-mercadora", home: { x: 25, y: 34 }, radius: 3, skin: "#c98e66", hair: "#2b1a12", shirt: "#B7791F", pants: "#4a3a2a", hat: "hood", hatColor: "#2B6CB0", apron: null, lines: ["Frutas frescas!", "Volte sempre ao mercado."] },
+  { id: "npc-pescador", home: { x: 36, y: 33 }, radius: 1, skin: "#e8b48a", hair: "#7a7a7a", shirt: "#2B6CB0", pants: "#3a3020", hat: "cap", hatColor: "#3f5a3a", apron: null, lines: ["Os peixes estão tímidos.", "O lago está sereno hoje."] },
+];
 
 export type StationAnim = "typing" | "reading" | "exercising" | "sleeping" | "interacting" | "sitting";
 
@@ -278,13 +488,27 @@ export function tileKind(x: number, y: number): TileKind {
   const r = roomAt(x, y);
   if (r) {
     if (r.walls && (x === r.x0 || y === r.y0)) return "wall";
-    if (WATER.some(([wx, wy]) => wx === x && wy === y)) return "water";
+    if (WATER_SET.has(x * 100 + y)) return "water";
     if (r.key === "jardim") return "grass";
     if (r.key === "praca") return "plaza";
     return "floor";
   }
-  if ((x >= 9 && x <= 20) || (y >= 9 && y <= 20)) return "path";
-  return "grass";
+  if (buildingAt(x, y)) return "building";
+  if (DOCK_SET.has(x * 100 + y)) return "dock";
+  if (WATER_SET.has(x * 100 + y)) return "water";
+  if (FIELD_SET.has(x * 100 + y)) return "field";
+  if (x >= MARKET.x0 && x <= MARKET.x1 && y >= MARKET.y0 && y <= MARKET.y1) return "plaza";
+  return roadKind(x, y) ?? "grass";
+}
+
+
+/** Pedra no núcleo e na Estrada do Reino; terra batida nas ruas da vila. */
+function roadKind(x: number, y: number): TileKind | null {
+  const inCore = x <= 29 && y <= 29;
+  if (ESTRADA.includes(y) && x >= 1 && x <= 40) return "path";
+  if ((LANES.includes(x) && y >= 1 && y <= 40) || (LANES.includes(y) && x >= 1 && x <= 40)) return inCore ? "path" : "dirt";
+  if (APPROACH_SET.has(x * 100 + y)) return "dirt";
+  return null;
 }
 
 /** Mapa de bloqueio (true = não navegável). Decoração ocupada e plantas também bloqueiam. */
@@ -294,7 +518,7 @@ export function buildBlocked(extra: Array<{ x: number; y: number }> = []): boole
     g[x] = [];
     for (let y = 0; y < GRID; y++) {
       const k = tileKind(x, y);
-      g[x]![y] = k === "wall" || k === "water";
+      g[x]![y] = k === "wall" || k === "water" || k === "building" || k === "field";
     }
   }
   for (const it of FURNITURE) if (it.blocks) g[it.x]![it.y] = true;

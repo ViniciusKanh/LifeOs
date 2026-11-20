@@ -103,6 +103,20 @@ export interface WorldDecorObject {
   artSet: "items" | "rewards" | "codex";
 }
 
+/** Pendências reais do dia (alimentam os marcadores da Vila e as conversas dos agentes). */
+export interface WorldPendencies {
+  overdue: number;
+  dueToday: number;
+  cardsDue: number;
+  claimable: number;
+  loanOverdue: number;
+  ordersPending: number;
+  habitsPending: number;
+  journalToday: boolean;
+  workoutToday: boolean;
+  studyToday: boolean;
+}
+
 export interface WorldState {
   today: string;
   timezone: string;
@@ -130,6 +144,8 @@ export interface WorldState {
   agents: WorldAgent[];
   decor: { slots: Array<{ key: string; room: WorldRoomKey; x: number; y: number }>; objects: WorldDecorObject[] };
   timeline: WorldTimelineEvent[];
+  /** Ausente em servidores antigos (antes da Vila). */
+  pendencies?: WorldPendencies;
   localHour: number;
 }
 

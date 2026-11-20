@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
-import { BookOpen, Bot, ChevronRight, CalendarDays, CheckCircle2, Coins, Dumbbell, Flame, Gift, Loader2, MessageSquare, NotebookPen, Pause, Play, Plus, ScrollText, Sparkles, Sprout, Swords, Wand2, Zap } from "lucide-react";
+import { BookOpen, Bot, ChevronRight, Flag, CalendarDays, CheckCircle2, Coins, Dumbbell, Flame, Gift, Loader2, MessageSquare, NotebookPen, Pause, Play, Plus, ScrollText, Sparkles, Sprout, Swords, Wand2, Zap } from "lucide-react";
 import { RPGBadge, RPGButton, RPGProgressBar } from "@/components/rpg";
 import { AgentPortrait } from "./AgentPortrait";
 import type { WorldAgent, WorldState, WorldTimelineEvent } from "@/services/livingWorldService";
+import { BUILDINGS } from "./engine/worldMap";
+import type { PlaceKey, PlaceMarker } from "./engine/village";
 
 const R = { borderRadius: 4 };
 
@@ -17,6 +19,49 @@ export const ROOM_LABEL: Record<string, string> = {
   jardim: "Jardim",
   praca: "Praça Central",
 };
+
+export const BUILDING_LABEL: Record<string, string> = Object.fromEntries(BUILDINGS.map((b) => [b.key, b.name]));
+
+/** Nome de qualquer lugar do mundo (ambiente do núcleo ou construção da vila). */
+export const placeLabel = (k: string) => ROOM_LABEL[k] ?? BUILDING_LABEL[k] ?? k;
+
+const TONE_ORDER: Record<PlaceMarker["tone"], number> = { danger: 0, warn: 1, info: 2 };
+const TONE_CLASS: Record<PlaceMarker["tone"], string> = {
+  danger: "border-rpg-red/70 bg-rpg-red/15 text-rpg-red",
+  warn: "border-rpg-gold/70 bg-rpg-gold/15 text-rpg-gold-light",
+  info: "border-rpg-blue/70 bg-rpg-blue/15 text-rpg-blue",
+};
+
+/* ───────────── Pendências do reino ───────────── */
+
+/** Lista as mesmas pendências reais que aparecem como brasões sobre as casas do mapa. */
+export function KingdomPanel({ markers, onOpen }: { markers: Partial<Record<PlaceKey, PlaceMarker>>; onOpen: (k: PlaceKey) => void }) {
+  const list = (Object.entries(markers) as Array<[PlaceKey, PlaceMarker]>).sort((a, b) => TONE_ORDER[a[1].tone] - TONE_ORDER[b[1].tone]);
+  return (
+    <Panel title="Pendências do reino" icon={<Flag size={15} />} action={list.length ? <RPGBadge tone="gold">{list.length}</RPGBadge> : undefined}>
+      {list.length === 0 ? (
+        <p className="text-sm text-rpg-muted">Nenhuma pendência hoje — o reino está em paz.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {list.map(([k, m]) => (
+            <li key={k}>
+              <button type="button" onClick={() => onOpen(k)} className="rpg-tile flex w-full items-center gap-2.5 px-2.5 py-2 text-left">
+                <span className={clsx("flex h-7 w-7 shrink-0 items-center justify-center border font-rpg text-base font-black", TONE_CLASS[m.tone])} style={R} aria-hidden>
+                  {m.tone === "info" ? "?" : "!"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-rpg-text">{placeLabel(k)}</span>
+                  <span className="block truncate text-[11px] text-rpg-muted">{m.text}</span>
+                </span>
+                <ChevronRight size={14} className="shrink-0 text-rpg-muted" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
 
 export function Panel({ title, icon, action, children, className }: { title: string; icon: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
   return (

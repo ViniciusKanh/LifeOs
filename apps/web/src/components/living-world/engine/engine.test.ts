@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { findPath, nearestFree } from "./pathfinding";
 import { CharacterBrain, canTransition, canOverride, stateForAnim } from "./characterMachine";
-import { AGENT_IDLE, AVATAR_SPAWN, buildBlocked, GRID, PLANT_TILES, STATIONS, tileKind } from "./worldMap";
+import { AGENT_IDLE, AVATAR_SPAWN, buildBlocked, buildingAt, BUILDINGS, doorOf, FURNITURE, GRID, MEET_SPOTS, PLANT_TILES, STATIONS, tileKind, VILLAGERS } from "./worldMap";
+import { buildConversation, buildMarkers, type WorldFacts } from "./village";
 
 const empty = (n: number) => Array.from({ length: n }, () => Array.from({ length: n }, () => false));
 
@@ -43,9 +44,61 @@ describe("Mapa do Meu Mundo", () => {
     }
   });
 
-  it("plantas ficam no Jardim e fora da água; grade 30×30", () => {
-    expect(GRID).toBe(30);
+  it("plantas ficam no Jardim e fora da água; grade 42×42 com a vila", () => {
+    expect(GRID).toBe(42);
     for (const [x, y] of PLANT_TILES) expect(["grass"]).toContain(tileKind(x, y));
+  });
+
+  it("entradas das construções, pontos de encontro e casas dos aldeões são alcançáveis", () => {
+    const blocked = buildBlocked();
+    const targets = [
+      ...BUILDINGS.map((b) => doorOf(b).entrance),
+      ...MEET_SPOTS.flatMap((m) => [m.a, m.b]),
+      ...VILLAGERS.map((v) => v.home),
+    ];
+    for (const t of targets) {
+      expect(blocked[t.x]![t.y], `tile ${t.x},${t.y} não pode estar bloqueado`).toBe(false);
+      expect(findPath(blocked, AVATAR_SPAWN, t), `sem caminho até ${t.x},${t.y}`).not.toBeNull();
+    }
+  });
+
+  it("construções: pegada quase quadrada, porta numa face visível e nada de móvel por cima", () => {
+    for (const b of BUILDINGS) {
+      expect(Math.abs(b.x1 - b.x0 - (b.y1 - b.y0))).toBeLessThanOrEqual(1);
+      const { door, entrance } = doorOf(b);
+      expect(buildingAt(door.x, door.y)?.key).toBe(b.key);
+      expect(buildingAt(entrance.x, entrance.y)).toBeNull();
+    }
+    for (const it of FURNITURE) expect(buildingAt(it.x, it.y), `${it.id} dentro de construção`).toBeNull();
+  });
+});
+
+const FACTS: WorldFacts = { overdue: 0, dueToday: 0, cardsDue: 0, claimable: 0, loanOverdue: 0, ordersPending: 0, habitsPending: 0, journalToday: true, workoutToday: true, studyToday: true, activityTitle: null };
+
+describe("Vila: marcadores e conversas", () => {
+  it("marcadores só aparecem com dado real e atrasado tem prioridade", () => {
+    expect(buildMarkers(null)).toEqual({});
+    expect(buildMarkers(FACTS)).toEqual({});
+    const m = buildMarkers({ ...FACTS, overdue: 2, dueToday: 5, cardsDue: 1, loanOverdue: 1, claimable: 3, journalToday: false });
+    expect(m.guilda).toMatchObject({ count: 2, tone: "danger", text: "2 missões atrasadas" });
+    expect(m.torre).toMatchObject({ count: 1, text: "1 carta para revisar" });
+    expect(m.banco?.tone).toBe("danger");
+    expect(m.casa?.tone).toBe("info");
+    expect(m.jardim).toBeUndefined();
+  });
+
+  it("conversa traz saudação e só cita números que existem nos dados", () => {
+    const a = { key: "mentor", name: "Mentor de Estudos" };
+    const b = { key: "analista", name: "Analista" };
+    expect(buildConversation(a, b, null, 1)).toHaveLength(2);
+    for (let seed = 0; seed < 40; seed++) {
+      const lines = buildConversation(a, b, { ...FACTS, cardsDue: 7 }, seed);
+      expect(lines.length).toBe(4);
+      const text = lines.map((l) => l.text).join(" ");
+      for (const n of text.match(/\d+/g) ?? []) expect(n).toBe("7");
+    }
+    const clear = buildConversation({ key: "planejador", name: "Planejador" }, b, FACTS, 3).map((l) => l.text).join(" ");
+    expect(clear).not.toMatch(/atrasad[ao]s? na Guilda/);
   });
 });
 

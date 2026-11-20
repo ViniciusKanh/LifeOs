@@ -29,6 +29,7 @@ describe("Meu Mundo — estado a partir dos dados reais", () => {
     expect(empty.body.agents).toHaveLength(4);
     expect(empty.body.profile.level).toBeGreaterThanOrEqual(1);
     expect(empty.body.settings.autonomous).toBe(true);
+    expect(empty.body.pendencies).toMatchObject({ overdue: 0, dueToday: 0, habitsPending: 0, journalToday: false });
 
     const task = await agent.post("/api/tasks").send({ title: "Escrever capítulo 2", status: "Em Andamento" });
     expect(task.status).toBe(201);

@@ -9,7 +9,7 @@
 export const SPRITE_W = 26;
 export const SPRITE_H = 34;
 
-export type Pose = "stand" | "walk" | "sit" | "typing" | "reading" | "exercise" | "celebrate" | "interact" | "think";
+export type Pose = "stand" | "walk" | "sit" | "typing" | "reading" | "exercise" | "celebrate" | "interact" | "think" | "talk";
 
 export interface Look {
   kind: "human" | "robot";
@@ -22,6 +22,10 @@ export interface Look {
   variant?: "planner" | "mentor" | "analyst" | "habits";
   /** Capa do avatar (aventureiro). */
   cape?: string;
+  /** Acessórios dos aldeões da vila. */
+  hat?: "straw" | "hood" | "helmet" | "cap";
+  hatColor?: string;
+  apron?: string;
 }
 
 const cache = new Map<string, HTMLCanvasElement>();
@@ -81,6 +85,11 @@ function drawHuman(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
     px(11, 15 + dy, 2, 2, shade(look.shirt, 20));
   }
   if (look.cape && !back) px(8, 14 + dy, 8, 1, look.cape);
+  if (look.apron && !back) {
+    px(9, 16 + dy, 6, 9, look.apron);
+    px(9, 16 + dy, 6, 1, shade(look.apron, -30));
+    px(14, 17 + dy, 1, 8, shade(look.apron, -25));
+  }
 
   // Braços
   const armL = (yy: number, hand: number) => {
@@ -141,6 +150,18 @@ function drawHuman(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
       px(16, 15 + dy, 4, 2, shirtD);
       px(20, 15 + dy, 2, 2, skinD);
       break;
+    case "talk":
+      // gesticula enquanto fala (alterna a mão no ar)
+      if (frame % 2) {
+        armL(14 + dy, 0);
+        px(16, 12 + dy, 2, 4, shirtD);
+        px(16, 10 + dy, 2, 2, skinD);
+      } else {
+        px(6, 13 + dy, 2, 3, look.shirt);
+        px(4, 12 + dy, 2, 2, look.skin);
+        armR(14 + dy, 0);
+      }
+      break;
     case "think":
       armL(14 + dy, 0);
       px(16, 15 + dy, 2, 3, shirtD);
@@ -176,6 +197,33 @@ function drawHuman(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
     px(14, hy + 6, 1, 1, shade(look.skin, -15));
     px(11, hy + 6, 2, 1, skinD);
     px(8, hy - 2, 9, 1, look.hair);
+  }
+  if (look.hat) {
+    const hc = look.hatColor ?? "#8a5d3b";
+    const hd = shade(hc, -35);
+    switch (look.hat) {
+      case "straw":
+        px(5, hy - 1, 14, 2, hc);
+        px(8, hy - 4, 8, 3, hc);
+        px(8, hy - 2, 8, 1, hd);
+        break;
+      case "hood":
+        px(7, hy - 3, 10, 3, hc);
+        px(6, hy - 1, 2, 9, hc);
+        px(16, hy - 1, 2, 9, hd);
+        if (back) px(8, hy, 8, 8, hc);
+        break;
+      case "helmet":
+        px(7, hy - 3, 10, 4, hc);
+        px(7, hy - 3, 10, 1, shade(hc, 40));
+        px(11, hy - 6, 2, 3, "#C8423B");
+        if (!back) px(11, hy + 1, 2, 4, hd);
+        break;
+      case "cap":
+        px(8, hy - 3, 8, 3, hc);
+        if (!back) px(14, hy - 1, 4, 1, hd);
+        break;
+    }
   }
 }
 
@@ -216,6 +264,15 @@ function drawRobot(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
       px(16, 16 + dy, 2, 3, metalD);
       px(8, 20 + dy + (frame % 2), 2, 2, metal);
       px(14, 20 + dy + ((frame + 1) % 2), 2, 2, metalD);
+    } else if (pose === "talk") {
+      // gesto de conversa: uma mão levantada por vez
+      if (frame % 2) {
+        px(6, 16 + dy, 2, 6, metal);
+        px(17, 11 + dy, 2, 5, metalD);
+      } else {
+        px(5, 11 + dy, 2, 5, metal);
+        px(16, 16 + dy, 2, 6, metalD);
+      }
     } else {
       const s = pose === "walk" ? [1, 0, -1, 0][frame % 4]! : 0;
       px(6, 16 + dy + s, 2, 6, metal);
@@ -280,7 +337,7 @@ function drawRobot(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
 
 /** Canvas 24×32 com a pose pronta (em cache). `back` = de costas (NE/NW). */
 export function getSprite(look: Look, pose: Pose, frame: number, back: boolean): HTMLCanvasElement {
-  const k = `${look.kind}|${look.variant ?? ""}|${look.cape ?? ""}|${look.skin}|${look.hair}|${look.shirt}|${look.pants}|${look.accent}|${pose}|${frame}|${back ? 1 : 0}`;
+  const k = `${look.kind}|${look.variant ?? ""}|${look.cape ?? ""}|${look.hat ?? ""}|${look.hatColor ?? ""}|${look.apron ?? ""}|${look.skin}|${look.hair}|${look.shirt}|${look.pants}|${look.accent}|${pose}|${frame}|${back ? 1 : 0}`;
   const hit = cache.get(k);
   if (hit) return hit;
   const c = document.createElement("canvas");

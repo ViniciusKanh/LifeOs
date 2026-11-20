@@ -8,10 +8,17 @@ import { CharacterBrain, stateForAnim, type CharState, type Intent } from "./cha
 import { box, cliff, diamond, drawFlat, drawFurniture, drawPlant, drawSky, drawTile, drawWall, drawWallDecor, drawWater, glow, isoPoint, platformSide, step, wallDecorLight } from "./draw";
 import { findPath, nearestFree, type Point } from "./pathfinding";
 import { framesFor, getSprite, SPRITE_H, SPRITE_W, type Look, type Pose } from "./sprites";
+import { buildingBounds, buildingHull, buildingLights, insideHull, buildingTopZ, drawBuilding, drawBuildingAnim, drawDock, drawVillageItem, VILLAGE_KINDS } from "./drawVillage";
+import { buildConversation, type PlaceKey, type PlaceMarker, type TalkLine, type WorldFacts } from "./village";
 import {
   AGENT_IDLE,
   AVATAR_SPAWN,
   buildBlocked,
+  buildingAt,
+  BUILDINGS,
+  doorOf,
+  MEET_SPOTS,
+  VILLAGERS,
   facingBetween,
   FURNITURE,
   GRID,
@@ -26,7 +33,9 @@ import {
   VOLUMETRIC_FREE,
   WALL_DECOR,
   zAtFloat,
+  type BuildingKey,
   type Facing,
+  type MeetSpot,
   type RoomKey,
   type Station,
 } from "./worldMap";
@@ -62,6 +71,9 @@ export interface EngineData {
   slots: Array<{ key: string; x: number; y: number; room: string }>;
   roomStatus: Partial<Record<RoomKey, string>>;
   localHour: number;
+  /** Pendências reais do usuário (alimentam marcadores e conversas). */
+  facts: WorldFacts | null;
+  markers: Partial<Record<PlaceKey, PlaceMarker>>;
 }
 
 export type Selection =
@@ -69,11 +81,19 @@ export type Selection =
   | { type: "avatar" }
   | { type: "agent"; key: string }
   | { type: "habit"; id: string }
-  | { type: "slot"; key: string };
+  | { type: "slot"; key: string }
+  | { type: "building"; key: BuildingKey };
 
 interface Char {
   id: string;
   isAvatar: boolean;
+  /** Aldeão decorativo (não selecionável, sem nome). */
+  isNpc: boolean;
+  home: Point;
+  roam: number;
+  lines: string[];
+  /** Fala real a exibir ao chegar num ponto de patrulha. */
+  say: { text: string; tone: Bubble["tone"] } | null;
   name: string;
   look: Look;
   x: number;
@@ -86,9 +106,42 @@ interface Char {
   frameT: number;
   idleSince: number;
   celebrateUntil: number;
-  bubble: { text: string; until: number; tone: "info" | "error" | "work" } | null;
+  bubble: Bubble | null;
   onBench: boolean;
 }
+
+interface Bubble {
+  text: string;
+  until: number;
+  tone: "info" | "error" | "work" | "talk" | "warn";
+}
+
+/** Conversa em andamento entre dois agentes (visual; dados reais nas falas). */
+interface Talk {
+  a: string;
+  b: string;
+  spot: MeetSpot;
+  lines: TalkLine[];
+  idx: number;
+  nextAt: number;
+  phase: "gather" | "talk";
+  started: number;
+  speaker: string | null;
+}
+
+/** Entrada de cada lugar: onde os agentes param para "olhar" uma pendência. */
+const PLACE_POI: Record<PlaceKey, Point> = {
+  biblioteca: { x: 9, y: 5 },
+  escritorio: { x: 25, y: 9 },
+  guilda: { x: 5, y: 19 },
+  academia: { x: 25, y: 19 },
+  casa: { x: 9, y: 25 },
+  jardim: { x: 20, y: 25 },
+  praca: { x: 14, y: 17 },
+  ...(Object.fromEntries(BUILDINGS.map((b) => [b.key, doorOf(b).entrance])) as Record<BuildingKey, Point>),
+};
+
+const MARKER_COLOR: Record<PlaceMarker["tone"], string> = { danger: "#F16D75", warn: "#F1C66A", info: "#59A9F8" };
 
 const BENCHES: Point[] = [
   { x: 13, y: 12 },
@@ -118,7 +171,12 @@ export class WorldEngine {
   private followChar: string | null = null;
   private staticLayer: HTMLCanvasElement | null = null;
   private staticScale = 0;
-  private labelRects: Array<{ key: RoomKey; x: number; y: number; w: number; h: number }> = [];
+  private labelRects: Array<{ key: PlaceKey; x: number; y: number; w: number; h: number }> = [];
+  private buildingCache = new Map<BuildingKey, { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number }>();
+  private selectedBuilding: BuildingKey | null = null;
+  private talk: Talk | null = null;
+  private nextTalkAt = performance.now() + 6000;
+  private talkSeed = 0;
   private floaters: Array<{ x: number; y: number; z: number; text: string; color: string; born: number }> = [];
   private particles: Array<{ x: number; y: number; ox: number; oy: number; vx: number; vy: number; life: number; color: string }> = [];
   private decorMode = false;
@@ -172,6 +230,19 @@ export class WorldEngine {
   }
 
   /** Destaca um personagem; com `follow`, a câmera acompanha até o usuário arrastar o mapa. */
+  setSelectedBuilding(k: BuildingKey | null) {
+    this.selectedBuilding = k;
+  }
+
+  centerOnBuilding(key: BuildingKey) {
+    const b = BUILDINGS.find((x) => x.key === key);
+    if (!b) return;
+    const s = isoToScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    this.camTouched = true;
+    this.cam.x = this.w / 2 - s.sx * this.cam.zoom;
+    this.cam.y = this.h / 2 - (s.sy - 60) * this.cam.zoom;
+  }
+
   setSelectedChar(id: string | null, follow = false) {
     this.selectedChar = id;
     this.followChar = id && follow ? id : null;
@@ -188,6 +259,7 @@ export class WorldEngine {
     }
     this.syncAvatar(d, first);
     this.syncAgents(d, first);
+    if (first) this.spawnVillagers();
   }
 
   resize() {
@@ -201,16 +273,16 @@ export class WorldEngine {
   }
 
   resetCamera() {
-    const c = isoToScreen(GRID / 2, GRID / 2);
-    // Enquadra o mundo inteiro ocupando o espaço disponível (sem bordas vazias exageradas).
-    this.cam.zoom = Math.min(1.2, Math.max(0.3, Math.min(this.w / 1820, this.h / 1040)));
+    // Enquadra o núcleo e o começo da vila; o restante se explora arrastando/zoom.
+    const c = isoToScreen(19, 19);
+    this.cam.zoom = Math.min(1.2, Math.max(0.3, Math.min(this.w / 2250, this.h / 1300)));
     this.cam.x = this.w / 2 - c.sx * this.cam.zoom;
-    this.cam.y = this.h / 2 - (c.sy - 40) * this.cam.zoom;
+    this.cam.y = this.h / 2 - (c.sy + 70) * this.cam.zoom;
   }
 
   zoomBy(f: number, ax = this.w / 2, ay = this.h / 2) {
     this.camTouched = true;
-    const nz = Math.min(2.2, Math.max(0.3, this.cam.zoom * f));
+    const nz = Math.min(2.2, Math.max(0.25, this.cam.zoom * f));
     this.cam.x = ax - ((ax - this.cam.x) * nz) / this.cam.zoom;
     this.cam.y = ay - ((ay - this.cam.y) * nz) / this.cam.zoom;
     this.cam.zoom = nz;
@@ -278,7 +350,7 @@ export class WorldEngine {
 
   private makeChar(id: string, isAvatar: boolean, name: string, look: Look, at: Point): Char {
     const brain = new CharacterBrain();
-    return { id, isAvatar, name, look, x: at.x, y: at.y, path: [], facing: "sw", brain, station: null, frame: 0, frameT: 0, idleSince: performance.now(), celebrateUntil: 0, bubble: null, onBench: false };
+    return { id, isAvatar, isNpc: false, home: at, roam: 0, lines: [], say: null, name, look, x: at.x, y: at.y, path: [], facing: "sw", brain, station: null, frame: 0, frameT: 0, idleSince: performance.now(), celebrateUntil: 0, bubble: null, onBench: false };
   }
 
   private walk(c: Char, intent: Intent): boolean {
@@ -318,6 +390,26 @@ export class WorldEngine {
       this.onAvatarMoved({ x: Math.round(c.x), y: Math.round(c.y) });
     }
     if (intent.source === "ambient") c.brain.release("ambient");
+    if (c.say) {
+      c.bubble = { text: c.say.text, until: performance.now() + 4500, tone: c.say.tone };
+      c.say = null;
+    }
+  }
+
+  /** Aldeões decorativos da vila (sempre os mesmos; não guardam estado no servidor). */
+  private spawnVillagers() {
+    for (const v of VILLAGERS) {
+      if (this.chars.has(v.id)) continue;
+      const look: Look = { kind: "human", skin: v.skin, hair: v.hair, shirt: v.shirt, pants: v.pants, accent: v.shirt, ...(v.hat ? { hat: v.hat, hatColor: v.hatColor } : {}), ...(v.apron ? { apron: v.apron } : {}) };
+      const at = nearestFree(this.blocked, v.home) ?? v.home;
+      const c = this.makeChar(v.id, false, "", look, at);
+      c.isNpc = true;
+      c.home = at;
+      c.roam = v.radius;
+      c.lines = v.lines;
+      c.idleSince = performance.now() - Math.random() * 8000;
+      this.chars.set(v.id, c);
+    }
   }
 
   private syncAvatar(d: EngineData, first: boolean) {
@@ -367,6 +459,7 @@ export class WorldEngine {
       const prev = this.prevAgent.get(a.key);
       this.prevAgent.set(a.key, a.status);
       if (a.status === "running" && st) {
+        if (this.talk && (this.talk.a === a.key || this.talk.b === a.key)) this.endTalk(now);
         if (!(c.brain.intent?.source === "domain")) {
           c.brain.intent = null;
           this.walk(c, { source: "domain", target: { x: st.x, y: st.y }, arriveState: "working", label: "Trabalhando…" });
@@ -398,13 +491,24 @@ export class WorldEngine {
 
   private ambientTick(now: number) {
     if (!this.settings.autonomous || !this.data) return;
+    const d = this.data;
+    const night = d.localHour >= 23 || d.localHour < 6;
+    this.talkTick(now);
     for (const c of this.chars.values()) {
-      if (c.brain.intent || c.path.length || c.brain.state === "error" || now < c.celebrateUntil) continue;
-      if (now - c.idleSince < (c.isAvatar ? 7000 : 11000) + ((c.id.length * 997) % 5000)) continue;
+      if (c.brain.intent || c.path.length || c.brain.state === "error" || c.brain.state === "talking" || now < c.celebrateUntil) continue;
+      if (this.talk && (this.talk.a === c.id || this.talk.b === c.id)) continue;
+      const wait = c.isNpc ? 6000 : c.isAvatar ? 7000 : 11000;
+      if (now - c.idleSince < wait + ((c.id.length * 997) % 5000)) continue;
       let target: Point;
       let arrive: CharState = "idle";
-      if (c.isAvatar) {
-        const night = this.data.localHour >= 23 || this.data.localHour < 6;
+      if (c.isNpc) {
+        if (night && c.id !== "npc-guarda") {
+          c.idleSince = now;
+          continue;
+        }
+        target = { x: c.home.x + Math.round((Math.random() * 2 - 1) * c.roam), y: c.home.y + Math.round((Math.random() * 2 - 1) * c.roam) };
+        if (Math.random() < 0.2 && c.lines.length) c.say = { text: c.lines[Math.floor(Math.random() * c.lines.length)]!, tone: "talk" };
+      } else if (c.isAvatar) {
         if (night) {
           const st = STATIONS["avatar-casa"]!;
           target = { x: st.x, y: st.y };
@@ -416,18 +520,104 @@ export class WorldEngine {
           target = this.randomWalkable();
         }
       } else {
-        const home = AGENT_IDLE[c.id] ?? AVATAR_SPAWN;
-        target = { x: home.x + Math.round(Math.random() * 4 - 2), y: home.y + Math.round(Math.random() * 4 - 2) };
+        // Agentes patrulham os lugares com pendência real e comentam o que viram.
+        const marked = (Object.entries(d.markers) as Array<[PlaceKey, PlaceMarker]>).filter(([k]) => PLACE_POI[k]);
+        if (marked.length && Math.random() < 0.45) {
+          const [k, m] = marked[Math.floor(Math.random() * marked.length)]!;
+          target = PLACE_POI[k];
+          arrive = "thinking";
+          c.say = { text: m.text, tone: m.tone === "danger" ? "error" : m.tone === "warn" ? "warn" : "info" };
+        } else {
+          const home = AGENT_IDLE[c.id] ?? AVATAR_SPAWN;
+          target = { x: home.x + Math.round(Math.random() * 4 - 2), y: home.y + Math.round(Math.random() * 4 - 2) };
+        }
       }
       c.idleSince = now;
-      this.walk(c, { source: "ambient", target, arriveState: arrive });
+      if (target.x < 0 || target.y < 0 || target.x >= GRID || target.y >= GRID) continue;
+      if (!this.walk(c, { source: "ambient", target, arriveState: arrive })) c.say = null;
     }
+  }
+
+  /** Agentes livres se encontram em pontos da vila e conversam sobre dados reais. */
+  private talkTick(now: number) {
+    const d = this.data;
+    if (!d) return;
+    const t = this.talk;
+    if (t) {
+      const a = this.chars.get(t.a);
+      const b = this.chars.get(t.b);
+      if (!a || !b || a.brain.intent?.source === "domain" || b.brain.intent?.source === "domain" || (t.phase === "gather" && now - t.started > 30000)) {
+        this.endTalk(now);
+        return;
+      }
+      if (t.phase === "gather") {
+        const ready = (c: Char, p: Point) => !c.path.length && Math.round(c.x) === p.x && Math.round(c.y) === p.y;
+        if (ready(a, t.spot.a) && ready(b, t.spot.b)) {
+          t.phase = "talk";
+          t.nextAt = now + 300;
+          a.facing = facingBetween(a.x, a.y, b.x, b.y);
+          b.facing = facingBetween(b.x, b.y, a.x, a.y);
+          a.brain.set("talking");
+          b.brain.set("talking");
+        }
+        return;
+      }
+      if (now < t.nextAt) return;
+      const line = t.lines[t.idx];
+      if (!line) {
+        this.endTalk(now);
+        return;
+      }
+      const sp = line.speaker === 0 ? a : b;
+      sp.bubble = { text: line.text, until: now + 3300, tone: "talk" };
+      t.speaker = sp.id;
+      t.idx++;
+      t.nextAt = now + 3500;
+      return;
+    }
+    if (now < this.nextTalkAt) return;
+    this.nextTalkAt = now + 5000;
+    const free = d.agents
+      .map((x) => this.chars.get(x.key))
+      .filter((c): c is Char => !!c && !c.brain.intent && !c.path.length && (c.brain.state === "idle" || c.brain.state === "thinking") && now > c.celebrateUntil);
+    if (free.length < 2) return;
+    const seed = this.talkSeed++;
+    const i = seed % free.length;
+    const a = free[i]!;
+    const b = free[(i + 1 + (seed % (free.length - 1))) % free.length]!;
+    if (a === b) return;
+    const spot = MEET_SPOTS[(seed * 7 + 3) % MEET_SPOTS.length]!;
+    const na = d.agents.find((x) => x.key === a.id)!;
+    const nb = d.agents.find((x) => x.key === b.id)!;
+    const lines = buildConversation({ key: na.key, name: na.name }, { key: nb.key, name: nb.name }, d.facts, seed * 31 + Math.floor(now / 1000));
+    a.say = null;
+    b.say = null;
+    if (!this.walk(a, { source: "ambient", target: spot.a, arriveState: "idle" })) return;
+    if (!this.walk(b, { source: "ambient", target: spot.b, arriveState: "idle" })) {
+      a.brain.release("ambient");
+      return;
+    }
+    this.talk = { a: a.id, b: b.id, spot, lines, idx: 0, nextAt: 0, phase: "gather", started: now, speaker: null };
+  }
+
+  private endTalk(now: number) {
+    const t = this.talk;
+    if (!t) return;
+    this.talk = null;
+    for (const id of [t.a, t.b]) {
+      const c = this.chars.get(id);
+      if (!c) continue;
+      if (c.brain.state === "talking") c.brain.set("idle");
+      c.idleSince = now;
+    }
+    this.nextTalkAt = now + 16000 + Math.random() * 14000;
   }
 
   private randomWalkable(): Point {
     for (let i = 0; i < 30; i++) {
-      const p = { x: 2 + Math.floor(Math.random() * 27), y: 2 + Math.floor(Math.random() * 27) };
-      if (!this.blocked[p.x]![p.y] && tileKind(p.x, p.y) !== "grass") return p;
+      const p = { x: 2 + Math.floor(Math.random() * (GRID - 4)), y: 2 + Math.floor(Math.random() * (GRID - 4)) };
+      const k = tileKind(p.x, p.y);
+      if (!this.blocked[p.x]![p.y] && k !== "grass" && k !== "dock") return p;
     }
     return AVATAR_SPAWN;
   }
@@ -537,13 +727,15 @@ export class WorldEngine {
         return { pose: "celebrate", lying: false };
       case "thinking":
         return { pose: "think", lying: false };
+      case "talking":
+        return { pose: this.talk?.speaker === c.id && c.bubble ? "talk" : "stand", lying: false };
       default:
         return { pose: c.onBench ? "sit" : "stand", lying: false };
     }
   }
 
   /** Limites do mundo em pixels (antes da câmera), para a camada estática. */
-  private static readonly WB = { x: -1010, y: -150, w: 2020, h: 1260 };
+  private static readonly WB = { x: -(GRID * 32) - 90, y: -260, w: GRID * 64 + 180, h: GRID * 32 + 400 };
 
   /**
    * Camada estática em cache: pisos texturizados, plataformas, degraus,
@@ -551,7 +743,8 @@ export class WorldEngine {
    * o quadro a quadro desenha apenas o que se move ou brilha.
    */
   private buildStatic() {
-    const scale = this.settings.quality === "high" ? 2 : this.settings.quality === "medium" ? 1.5 : 1;
+    // Mundo grande: escala do cache limitada para caber na memória de celulares.
+    const scale = this.settings.quality === "high" ? 1.5 : this.settings.quality === "medium" ? 1.25 : 1;
     const WB = WorldEngine.WB;
     const c = document.createElement("canvas");
     c.width = Math.round(WB.w * scale);
@@ -613,6 +806,18 @@ export class WorldEngine {
     }
     this.staticLayer = c;
     this.staticScale = scale;
+    // Cada construção da vila num canvas próprio (desenhada por profundidade a cada quadro).
+    this.buildingCache.clear();
+    for (const b of BUILDINGS) {
+      const bb = buildingBounds(b);
+      const bc = document.createElement("canvas");
+      bc.width = Math.round(bb.w * scale);
+      bc.height = Math.round(bb.h * scale);
+      const bctx = bc.getContext("2d")!;
+      bctx.setTransform(scale, 0, 0, scale, -bb.x * scale, -bb.y * scale);
+      drawBuilding(bctx, b);
+      this.buildingCache.set(b.key, { canvas: bc, ...bb });
+    }
   }
 
   private render(t: number) {
@@ -629,7 +834,24 @@ export class WorldEngine {
     // 1) Camada estática + elementos animados de fundo
     const WB = WorldEngine.WB;
     if (this.staticLayer) ctx.drawImage(this.staticLayer, WB.x, WB.y, WB.w, WB.h);
-    for (let x = 0; x < GRID; x++) for (let y = 0; y < GRID; y++) if (tileKind(x, y) === "water") drawWater(ctx, x, y, t, fx);
+    for (let x = 0; x < GRID; x++)
+      for (let y = 0; y < GRID; y++) {
+        const k = tileKind(x, y);
+        if (k === "water" || k === "dock") drawWater(ctx, x, y, t, fx);
+        if (k === "dock") drawDock(ctx, x, y);
+      }
+    // anel de missão no chão, na porta de cada construção com pendência
+    if (d && this.settings.showIndicators) {
+      for (const b of BUILDINGS) {
+        const m = d.markers[b.key];
+        if (!m) continue;
+        const e = doorOf(b).entrance;
+        ctx.globalAlpha = 0.45 + (fx ? Math.sin(t / 350) * 0.2 : 0);
+        diamond(ctx, e.x, e.y, "rgba(0,0,0,0)", MARKER_COLOR[m.tone], 0.9);
+        diamond(ctx, e.x, e.y, "rgba(0,0,0,0)", MARKER_COLOR[m.tone], 0.6);
+        ctx.globalAlpha = 1;
+      }
+    }
     for (const r of ROOMS) {
       if (!r.walls) continue;
       ctx.save();
@@ -648,6 +870,14 @@ export class WorldEngine {
           ctx.restore();
         }
       ctx.globalAlpha = 1;
+    }
+    if (this.selectedBuilding) {
+      const b = BUILDINGS.find((x) => x.key === this.selectedBuilding);
+      if (b) {
+        ctx.globalAlpha = 0.25 + (fx ? Math.sin(t / 400) * 0.08 : 0);
+        for (let x = b.x0 - 1; x <= b.x1 + 1; x++) for (let y = b.y0 - 1; y <= b.y1 + 1; y++) if (!buildingAt(x, y)) diamond(ctx, x, y, b.accent);
+        ctx.globalAlpha = 1;
+      }
     }
     const lifted = (x: number, y: number, draw: () => void) => {
       ctx.save();
@@ -678,7 +908,23 @@ export class WorldEngine {
     // 2) Objetos ordenados por profundidade
     type Item = { depth: number; draw: () => void };
     const items: Item[] = [];
-    for (const it of FURNITURE) if (it.blocks || VOLUMETRIC_FREE.has(it.kind)) items.push({ depth: it.x + it.y + (it.kind === "crystal" ? 1 : 0) - (it.kind === "chair" ? 0.1 : 0), draw: () => lifted(it.x, it.y, () => drawFurniture(ctx, it, t)) });
+    for (const it of FURNITURE)
+      if (it.blocks || VOLUMETRIC_FREE.has(it.kind))
+        items.push({
+          depth: it.x + it.y + (it.kind === "crystal" ? 1 : 0) - (it.kind === "chair" ? 0.1 : 0),
+          draw: () => lifted(it.x, it.y, () => (VILLAGE_KINDS.has(it.kind) ? drawVillageItem(ctx, it, t) : drawFurniture(ctx, it, t))),
+        });
+    // Construções: chave de profundidade na diagonal central da pegada (pegadas quadradas).
+    for (const b of BUILDINGS) {
+      const cache = this.buildingCache.get(b.key);
+      items.push({
+        depth: b.x0 + b.y0 + (b.x1 - b.x0),
+        draw: () => {
+          if (cache) ctx.drawImage(cache.canvas, cache.x, cache.y, cache.w, cache.h);
+          drawBuildingAnim(ctx, b, t, fx);
+        },
+      });
+    }
     if (d) {
       d.habits.slice(0, PLANT_TILES.length).forEach((h, i) => {
         const [px, py] = PLANT_TILES[i]!;
@@ -736,7 +982,9 @@ export class WorldEngine {
         if (it.kind === "lamp" || it.kind === "lantern") glow(ctx, lx, ly - z - 50, 80, "rgba(255,190,90,ALPHA)", 0.2 * k);
         else if (it.kind === "candelabra" || it.kind === "nightstand" || it.kind === "desk") glow(ctx, lx, ly - z - 30, 46, "rgba(255,180,80,ALPHA)", 0.14 * k);
         else if (it.kind === "pcdesk" || it.kind === "server") glow(ctx, lx, ly - z - 36, 60, "rgba(89,169,248,ALPHA)", 0.16 * k);
+        else if (it.kind === "campfire" || it.kind === "forge") glow(ctx, lx, ly - 14, 110, "rgba(255,140,50,ALPHA)", (0.3 + Math.sin(t / 130 + it.x) * 0.05) * k);
       }
+      for (const b of BUILDINGS) for (const [wx, wy] of buildingLights(b)) glow(ctx, wx, wy, night ? 46 : 26, b.style === "tower" ? "rgba(190,140,255,ALPHA)" : "rgba(246,200,110,ALPHA)", night ? 0.2 : 0.08);
       for (const w of WALL_DECOR) {
         const r = roomAt(w.x, w.y);
         if (!r) continue;
@@ -772,6 +1020,7 @@ export class WorldEngine {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.labelRects = [];
     if (d && this.settings.showLabels) this.drawRoomLabels(d);
+    if (d && this.settings.showIndicators) this.drawMarkers(d, t);
     for (const c of this.chars.values()) this.drawCharOverlay(c, t);
     if (d && this.settings.showIndicators) {
       d.habits.slice(0, PLANT_TILES.length).forEach((h, i) => {
@@ -846,7 +1095,7 @@ export class WorldEngine {
       ctx.fill();
     }
     // Telas estreitas: só o nome do avatar e do selecionado, para não poluir o mapa.
-    const showName = this.settings.showNames && (this.w >= 700 || c.isAvatar || this.selectedChar === c.id);
+    const showName = !c.isNpc && this.settings.showNames && (this.w >= 700 || c.isAvatar || this.selectedChar === c.id);
     if (showName) {
       ctx.font = "700 11px Inter, system-ui, sans-serif";
       const label = c.name;
@@ -858,9 +1107,13 @@ export class WorldEngine {
       ctx.fillText(label, s.x - w / 2 + 6, top - 5);
     }
     if (!this.settings.showIndicators) return;
-    const bt = top - (this.settings.showNames ? 20 : 2);
-    if (c.bubble) {
-      const tone = c.bubble.tone === "error" ? "#F16D75" : c.bubble.tone === "work" ? "#59A9F8" : "#4FD49A";
+    const bt = top - (this.settings.showNames && !c.isNpc ? 20 : 2);
+    // Mundo visto de longe: aldeões ficam em silêncio para não poluir o mapa.
+    if (c.isNpc && this.cam.zoom < 0.5) return;
+    if (c.bubble?.tone === "talk") {
+      this.speech(s.x, bt, c.bubble.text, c.isNpc ? "#8a5d3b" : c.look.accent);
+    } else if (c.bubble) {
+      const tone = c.bubble.tone === "error" ? "#F16D75" : c.bubble.tone === "work" ? "#59A9F8" : c.bubble.tone === "warn" ? "#F1C66A" : "#4FD49A";
       this.bubble(s.x, bt, c.bubble.text + (c.bubble.tone === "work" ? ".".repeat(Math.floor(t / 400) % 3) : ""), tone);
     } else if (c.brain.state === "resting" && c.station?.anim === "sleeping") {
       this.bubble(s.x + 14, bt + 10, "Zz", "#AAB6CC");
@@ -891,6 +1144,115 @@ export class WorldEngine {
     ctx.fillText(text, x - w / 2 + 8, y - 6);
   }
 
+  /** Balão de fala (pergaminho) das conversas e dos aldeões. */
+  private speech(x: number, y: number, text: string, edge: string) {
+    const ctx = this.ctx;
+    ctx.font = "600 11px Inter, system-ui, sans-serif";
+    const w = Math.min(230, ctx.measureText(text).width + 18);
+    const bx = Math.min(this.w - w - 4, Math.max(4, x - w / 2));
+    const by = y - 24;
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(bx + 2, by + 2, w, 22);
+    ctx.fillStyle = "#f6ecd2";
+    ctx.fillRect(bx, by, w, 22);
+    ctx.fillStyle = edge;
+    ctx.fillRect(bx, by, 3, 22);
+    ctx.strokeStyle = "#4a2f1b";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, 21);
+    ctx.fillStyle = "#f6ecd2";
+    ctx.beginPath();
+    ctx.moveTo(x - 5, by + 21);
+    ctx.lineTo(x + 5, by + 21);
+    ctx.lineTo(x - 2, by + 29);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#4a2f1b";
+    ctx.beginPath();
+    ctx.moveTo(x - 5, by + 22);
+    ctx.lineTo(x - 2, by + 29);
+    ctx.lineTo(x + 5, by + 22);
+    ctx.stroke();
+    ctx.fillStyle = "#2a1c10";
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bx + 6, by, w - 10, 22);
+    ctx.clip();
+    ctx.fillText(text, bx + 9, by + 15);
+    ctx.restore();
+  }
+
+  /** Marcadores de pendência estilo jogo: brasão com "!" (ou "?" para lembrete) e contador. */
+  private drawMarkers(d: EngineData, t: number) {
+    const ctx = this.ctx;
+    for (const [key, m] of Object.entries(d.markers) as Array<[PlaceKey, PlaceMarker]>) {
+      const rect = this.labelRects.find((l) => l.key === key);
+      const a = rect ? { x: rect.x + rect.w / 2, y: rect.y - 8 } : this.placeAnchor(key);
+      if (!a) continue;
+      const bob = this.settings.reducedMotion ? 0 : Math.sin(t / 280 + key.length) * 3;
+      const s = this.w < 700 ? 0.8 : 1;
+      const cx = a.x;
+      const by = a.y + bob;
+      const col = MARKER_COLOR[m.tone];
+      glow(ctx, cx, by - 16 * s, 26 * s, m.tone === "danger" ? "rgba(241,109,117,ALPHA)" : m.tone === "warn" ? "rgba(241,198,106,ALPHA)" : "rgba(89,169,248,ALPHA)", 0.45);
+      // brasão
+      const w = 22 * s;
+      const h = 26 * s;
+      const top = by - h;
+      ctx.beginPath();
+      ctx.moveTo(cx - w / 2, top);
+      ctx.lineTo(cx + w / 2, top);
+      ctx.lineTo(cx + w / 2, top + h * 0.62);
+      ctx.lineTo(cx, by);
+      ctx.lineTo(cx - w / 2, top + h * 0.62);
+      ctx.closePath();
+      ctx.fillStyle = "#1b1405";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#1b1405";
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - w / 2 + 2, top + 2);
+      ctx.lineTo(cx + w / 2 - 2, top + 2);
+      ctx.lineTo(cx + w / 2 - 2, top + h * 0.6);
+      ctx.lineTo(cx, by - 3);
+      ctx.lineTo(cx - w / 2 + 2, top + h * 0.6);
+      ctx.closePath();
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.fillRect(cx - w / 2 + 3, top + 3, w - 6, 3);
+      ctx.fillStyle = "#1b1405";
+      ctx.font = `900 ${Math.round(16 * s)}px Georgia, 'Times New Roman', serif`;
+      const sym = m.tone === "info" ? "?" : "!";
+      const sw = ctx.measureText(sym).width;
+      ctx.fillText(sym, cx - sw / 2, top + 17 * s);
+      if (m.count > 0) {
+        const txt = m.count > 99 ? "99+" : String(m.count);
+        ctx.font = "800 10px Inter, system-ui, sans-serif";
+        const cw = Math.max(16, ctx.measureText(txt).width + 8);
+        const kx = cx + w / 2 - 4;
+        const ky = top - 6;
+        ctx.fillStyle = "#1b1405";
+        ctx.fillRect(kx - 1, ky - 1, cw + 2, 16);
+        ctx.fillStyle = "#f6ecd2";
+        ctx.fillRect(kx, ky, cw, 14);
+        ctx.fillStyle = "#1b1405";
+        ctx.fillText(txt, kx + (cw - ctx.measureText(txt).width) / 2, ky + 11);
+      }
+      this.labelRects.push({ key, x: cx - w / 2 - 4, y: top - 8, w: w + 24, h: h + 10 });
+    }
+  }
+
+  /** Ponto de tela sobre o lugar (quando as placas estão ocultas). */
+  private placeAnchor(key: PlaceKey): { x: number; y: number } | null {
+    const b = BUILDINGS.find((x) => x.key === key);
+    if (b) return this.toScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, buildingTopZ(b) + 10);
+    const r = ROOMS.find((x) => x.key === key);
+    if (!r) return null;
+    return this.toScreen((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, r.walls ? 100 : 70);
+  }
+
   private badge(x: number, y: number, text: string, bg: string, fg: string) {
     const ctx = this.ctx;
     ctx.fillStyle = "#1b1405";
@@ -906,25 +1268,34 @@ export class WorldEngine {
     ctx.fillText(text, x - 2, y + 4);
   }
 
-  /** Placas de madeira com moldura dourada sobre a parede do fundo de cada ambiente. */
+  /** Placas de madeira com moldura dourada sobre cada ambiente e cada construção da vila. */
   private drawRoomLabels(d: EngineData) {
     const ctx = this.ctx;
+    const compact = this.w < 700 || this.cam.zoom < 0.42;
+    const places: Array<{ key: PlaceKey; name: string; status: string; accent: string; at: { x: number; y: number } }> = [];
     for (const r of ROOMS) {
       const anchor =
         r.key === "praca" ? { x: 14.5, y: 14.5, lift: 215 } : r.walls ? { x: (r.x0 + r.x1) / 2 + 0.5, y: r.y0, lift: 112 } : { x: 25, y: 22, lift: 96 };
-      const s = this.toScreen(anchor.x, anchor.y, anchor.lift);
-      const compact = this.w < 700;
-      const status = compact ? "" : d.roomStatus[r.key] ?? r.subtitle;
+      places.push({ key: r.key, name: r.name, status: d.roomStatus[r.key] ?? r.subtitle, accent: r.accent, at: this.toScreen(anchor.x, anchor.y, anchor.lift) });
+    }
+    for (const b of BUILDINGS) {
+      if (!b.route && !d.markers[b.key]) continue; // cenário puro (moinho) não ganha placa
+      places.push({ key: b.key, name: b.name, status: d.markers[b.key]?.text ?? b.subtitle, accent: b.accent, at: this.toScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, buildingTopZ(b) + 18) });
+    }
+    for (const p of places) {
+      const s = p.at;
+      const status = compact ? "" : p.status;
       ctx.font = compact ? "700 11px Georgia, 'Times New Roman', serif" : "700 14px Georgia, 'Times New Roman', serif";
-      const w1 = ctx.measureText(r.name).width;
+      const w1 = ctx.measureText(p.name).width;
       ctx.font = "600 11px Inter, system-ui, sans-serif";
       const w2 = status ? ctx.measureText(status).width : 0;
       const w = Math.max(w1, w2) + (compact ? 30 : 40);
       const h = compact ? 22 : 38;
-      // nunca sai da área do mapa
+      // fora da tela: não desenha (o mundo é maior que a viewport)
+      if (s.x + w / 2 < -20 || s.x - w / 2 > this.w + 20 || s.y < -20 || s.y - h > this.h + 20) continue;
       const x = Math.min(this.w - w - 6, Math.max(6, s.x - w / 2));
-      const y = Math.min(this.h - h - 50, Math.max(8, s.y - h));
-      const selected = this.selectedRoom === r.key;
+      const y = Math.min(this.h - h - 50, Math.max(34, s.y - h));
+      const selected = this.selectedRoom === p.key || this.selectedBuilding === p.key;
       // correntes
       ctx.fillStyle = "#6e4f1f";
       ctx.fillRect(x + 10, y - 6, 2, 6);
@@ -943,9 +1314,9 @@ export class WorldEngine {
       ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
       ctx.fillStyle = "#F1C66A";
       for (const [cx, cy] of [[x, y], [x + w - 4, y], [x, y + h - 4], [x + w - 4, y + h - 4]]) ctx.fillRect(cx!, cy!, 4, 4);
-      // brasão do ambiente
+      // brasão do lugar
       const sh = compact ? 0.55 : 1;
-      ctx.fillStyle = r.accent;
+      ctx.fillStyle = p.accent;
       ctx.beginPath();
       ctx.moveTo(x + 8, y + 5 * sh + 4);
       ctx.lineTo(x + 8 + 14 * sh, y + 5 * sh + 4);
@@ -956,22 +1327,26 @@ export class WorldEngine {
       ctx.fill();
       ctx.fillStyle = "#F6D27A";
       ctx.font = compact ? "700 11px Georgia, 'Times New Roman', serif" : "700 14px Georgia, 'Times New Roman', serif";
-      ctx.fillText(r.name, x + (compact ? 22 : 32), y + (compact ? 15 : 17));
+      ctx.fillText(p.name, x + (compact ? 22 : 32), y + (compact ? 15 : 17));
       if (status) {
-        ctx.fillStyle = "#c9d2e6";
+        const m = d.markers[p.key];
+        ctx.fillStyle = m ? MARKER_COLOR[m.tone] : "#c9d2e6";
         ctx.font = "600 11px Inter, system-ui, sans-serif";
         ctx.fillText(status, x + 32, y + 31);
       }
-      this.labelRects.push({ key: r.key, x, y, w, h });
+      this.labelRects.push({ key: p.key, x, y, w, h });
     }
   }
 
   /* ───────────── Entrada ───────────── */
 
   private pick(px: number, py: number): Selection | null {
-    for (const l of this.labelRects) if (px >= l.x && px <= l.x + l.w && py >= l.y && py <= l.y + l.h) return { type: "room", key: l.key };
-    // Personagens (caixa do sprite na tela)
-    const chars = [...this.chars.values()].sort((a, b) => b.x + b.y - (a.x + a.y));
+    for (let i = this.labelRects.length - 1; i >= 0; i--) {
+      const l = this.labelRects[i]!;
+      if (px >= l.x && px <= l.x + l.w && py >= l.y && py <= l.y + l.h) return this.placeSelection(l.key);
+    }
+    // Personagens (caixa do sprite na tela); aldeões não são selecionáveis
+    const chars = [...this.chars.values()].filter((c) => !c.isNpc).sort((a, b) => b.x + b.y - (a.x + a.y));
     for (const c of chars) {
       const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
       const hw = 22 * this.cam.zoom;
@@ -986,8 +1361,21 @@ export class WorldEngine {
       const i = PLANT_TILES.findIndex(([x, y]) => x === tile.x && y === tile.y);
       if (i >= 0 && this.data.habits[i]) return { type: "habit", id: this.data.habits[i]!.id };
     }
+    // Construções: telhado/paredes na tela (da frente para o fundo)
+    const wx = (px - this.cam.x) / this.cam.zoom;
+    const wy = (py - this.cam.y) / this.cam.zoom;
+    const byDepth = [...BUILDINGS].sort((a, b) => b.x0 + b.y0 - (a.x0 + a.y0));
+    for (const b of byDepth) {
+      if (insideHull(buildingHull(b), wx, wy)) return { type: "building", key: b.key };
+    }
+    const bt = buildingAt(tile.x, tile.y);
+    if (bt) return { type: "building", key: bt.key };
     const r = roomAt(tile.x, tile.y);
     return r ? { type: "room", key: r.key } : null;
+  }
+
+  private placeSelection(key: PlaceKey): Selection {
+    return BUILDINGS.some((b) => b.key === key) ? { type: "building", key: key as BuildingKey } : { type: "room", key: key as RoomKey };
   }
 
   /** Tile sob o cursor, considerando a altura das plataformas. */
@@ -1002,9 +1390,9 @@ export class WorldEngine {
   }
 
   private clampCam() {
-    const lim = 1400 * this.cam.zoom;
+    const lim = GRID * 34 * this.cam.zoom;
     this.cam.x = Math.min(this.w / 2 + lim, Math.max(this.w / 2 - lim, this.cam.x));
-    this.cam.y = Math.min(this.h / 2 + lim * 0.3, Math.max(this.h / 2 - lim * 1.2, this.cam.y));
+    this.cam.y = Math.min(this.h / 2 + lim * 0.3, Math.max(this.h / 2 - lim * 1.25, this.cam.y));
   }
 
   private bindInput() {

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { WorldEngine, type EngineData, type EngineSettings, type Selection } from "./engine/WorldEngine";
-import type { RoomKey } from "./engine/worldMap";
+import type { BuildingKey, RoomKey } from "./engine/worldMap";
 
 export interface WorldCanvasHandle {
   centerAvatar: () => void;
@@ -8,6 +8,7 @@ export interface WorldCanvasHandle {
   zoom: (f: number) => void;
   pan: (dx: number, dy: number) => void;
   centerRoom: (k: RoomKey) => void;
+  centerBuilding: (k: BuildingKey) => void;
   moveAvatar: (x: number, y: number) => boolean;
   celebrate: (id: string, text: string, xp?: number | null) => void;
 }
@@ -20,13 +21,14 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
   data: EngineData | null;
   settings: EngineSettings;
   selectedRoom: RoomKey | null;
+  selectedBuilding?: BuildingKey | null;
   decorMode: boolean;
   selectedChar?: { id: string; follow: boolean } | null;
   onSelect: (s: Selection) => void;
   onAvatarMoved: (p: { x: number; y: number }) => void;
   onFollowStop?: () => void;
   className?: string;
-}>(function WorldCanvas({ data, settings, selectedRoom, decorMode, selectedChar, onSelect, onAvatarMoved, onFollowStop, className }, ref) {
+}>(function WorldCanvas({ data, settings, selectedRoom, selectedBuilding, decorMode, selectedChar, onSelect, onAvatarMoved, onFollowStop, className }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<WorldEngine | null>(null);
   const cb = useRef({ onSelect, onAvatarMoved, onFollowStop });
@@ -60,6 +62,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
   }, [data]);
   useEffect(() => engineRef.current?.setSelectedRoom(selectedRoom), [selectedRoom]);
   useEffect(() => engineRef.current?.setDecorMode(decorMode), [decorMode]);
+  useEffect(() => engineRef.current?.setSelectedBuilding(selectedBuilding ?? null), [selectedBuilding]);
   useEffect(() => engineRef.current?.setSelectedChar(selectedChar?.id ?? null, selectedChar?.follow ?? false), [selectedChar?.id, selectedChar?.follow]);
 
   useImperativeHandle(ref, () => ({
@@ -68,6 +71,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
     zoom: (f) => engineRef.current?.zoomBy(f),
     pan: (dx, dy) => engineRef.current?.pan(dx, dy),
     centerRoom: (k) => engineRef.current?.centerOnRoom(k),
+    centerBuilding: (k) => engineRef.current?.centerOnBuilding(k),
     moveAvatar: (x, y) => engineRef.current?.moveAvatarTo({ x, y }) ?? false,
     celebrate: (id, text, xp) => engineRef.current?.celebrate(id, text, xp),
   }));
@@ -77,7 +81,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
       ref={canvasRef}
       className={className}
       role="img"
-      aria-label="Mapa isométrico do Meu Mundo. Use os botões de ambientes abaixo do mapa para navegar pelo teclado."
+      aria-label="Mapa isométrico do Meu Mundo. Use os botões de lugares abaixo do mapa e o painel Pendências do reino para navegar pelo teclado."
       style={{ touchAction: "none", imageRendering: "pixelated" }}
     />
   );

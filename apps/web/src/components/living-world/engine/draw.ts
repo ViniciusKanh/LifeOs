@@ -21,7 +21,7 @@ export function hash(x: number, y: number, s = 0): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
-function poly(ctx: Ctx, pts: ReadonlyArray<readonly [number, number]>, fill: string | CanvasGradient, stroke?: string) {
+export function poly(ctx: Ctx, pts: ReadonlyArray<readonly [number, number]>, fill: string | CanvasGradient, stroke?: string) {
   ctx.beginPath();
   ctx.moveTo(pts[0]![0], pts[0]![1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]![0], pts[i]![1]);
@@ -53,7 +53,7 @@ export function diamond(ctx: Ctx, x: number, y: number, fill: string, stroke?: s
 }
 
 /** Linha entre dois pontos em coordenadas de tile (u,v relativos ao centro do tile). */
-function isoLine(ctx: Ctx, x: number, y: number, u1: number, v1: number, u2: number, v2: number, color: string, w = 1) {
+export function isoLine(ctx: Ctx, x: number, y: number, u1: number, v1: number, u2: number, v2: number, color: string, w = 1) {
   const [ax, ay] = P(x + u1, y + v1);
   const [bx, by] = P(x + u2, y + v2);
   ctx.strokeStyle = color;
@@ -119,6 +119,38 @@ function grass(ctx: Ctx, x: number, y: number, lush: boolean) {
   }
 }
 
+/** Rua de terra batida da vila: tom quente, pedrinhas e marcas de roda. */
+function dirt(ctx: Ctx, x: number, y: number) {
+  const base = "#8a6a45";
+  diamond(ctx, x, y, shade(base, Math.round((hash(x, y, 4) - 0.5) * 12)));
+  const [sx, sy] = P(x, y);
+  for (let k = 0; k < 5; k++) {
+    ctx.fillStyle = k % 2 ? "#a3845c" : "#6e5236";
+    ctx.fillRect(sx + (hash(x, y, k + 60) - 0.5) * 36, sy + (hash(x, y, k + 70) - 0.5) * 14, 2 + (k % 2), 1 + (k % 2));
+  }
+  ctx.fillStyle = "rgba(60,40,20,0.22)";
+  ctx.fillRect(sx - 10, sy - 1, 8, 1);
+  ctx.fillRect(sx + 4, sy + 3, 9, 1);
+}
+
+/** Terra arada com fileiras de trigo (só cenário). */
+function field(ctx: Ctx, x: number, y: number) {
+  diamond(ctx, x, y, "#5a3d24");
+  for (let i = 0; i < 4; i++) {
+    const v = -0.375 + i * 0.25;
+    isoLine(ctx, x, y, -0.48, v, 0.48, v, "#3e2a18", 2);
+    for (let j = 0; j < 5; j++) {
+      const u = -0.4 + j * 0.2;
+      const [px, py] = P(x + u, y + v - 0.06);
+      const h = 7 + Math.round(hash(x * 5 + j, y * 5 + i) * 4);
+      ctx.fillStyle = "#b8962e";
+      ctx.fillRect(px, py - h, 1, h);
+      ctx.fillStyle = "#e3c36a";
+      ctx.fillRect(px - 1, py - h - 2, 3, 3);
+    }
+  }
+}
+
 /** Piso do tile (já com a altura aplicada pelo chamador). */
 export function drawTile(ctx: Ctx, x: number, y: number, kind: TileKind, room: RoomDef | null) {
   if ((kind === "floor" || kind === "wall") && room) {
@@ -128,7 +160,10 @@ export function drawTile(ctx: Ctx, x: number, y: number, kind: TileKind, room: R
   }
   if (kind === "plaza") return stoneFloor(ctx, x, y, (x + y) % 2 ? "#8b8579" : "#7f796d");
   if (kind === "path") return cobble(ctx, x, y);
-  if (kind === "water") return diamond(ctx, x, y, "#2a5f99");
+  if (kind === "dirt") return dirt(ctx, x, y);
+  if (kind === "field") return field(ctx, x, y);
+  if (kind === "building") return diamond(ctx, x, y, "#3e3428");
+  if (kind === "water" || kind === "dock") return diamond(ctx, x, y, "#2a5f99");
   grass(ctx, x, y, room?.key === "jardim");
 }
 
@@ -329,6 +364,19 @@ export function drawFlat(ctx: Ctx, it: Furniture) {
     diamond(ctx, it.x, it.y, shade(c, -20), undefined, 0.94);
     diamond(ctx, it.x, it.y, c, "#F1C66A", 0.82);
     diamond(ctx, it.x, it.y, shade(c, 25), undefined, 0.4);
+  } else if (it.kind === "flowerbed") {
+    diamond(ctx, it.x, it.y, "#7a6a58", undefined, 0.92);
+    diamond(ctx, it.x, it.y, "#4a3220", undefined, 0.78);
+    const cols = ["#F16D75", "#F1C66A", "#E78FC0", "#A875F5", "#f3f4fa", "#59A9F8"];
+    const [sx, sy] = P(it.x, it.y);
+    for (let i = 0; i < 14; i++) {
+      const ox = (hash(it.x, it.y, i + 3) - 0.5) * 34;
+      const oy = (hash(it.y, it.x, i + 3) - 0.5) * 12;
+      ctx.fillStyle = "#2f7a33";
+      ctx.fillRect(sx + ox, sy + oy - 3, 1, 4);
+      ctx.fillStyle = cols[i % cols.length]!;
+      ctx.fillRect(sx + ox - 1, sy + oy - 6, 3, 3);
+    }
   } else if (it.kind === "mat") {
     diamond(ctx, it.x, it.y, "#2d4f8a", "#59A9F8", 0.8);
   } else if (it.kind === "flowers") {
@@ -347,7 +395,7 @@ export function drawFlat(ctx: Ctx, it: Furniture) {
 
 /* ───────────────────────── Móveis e cenário ───────────────────────── */
 
-function flame(ctx: Ctx, sx: number, sy: number, t: number, seed: number, s = 1) {
+export function flame(ctx: Ctx, sx: number, sy: number, t: number, seed: number, s = 1) {
   const fl = Math.sin(t / 100 + seed) * 1.2;
   ctx.fillStyle = "#ff8a2a";
   ctx.fillRect(sx - 2 * s, sy - 6 * s + fl, 4 * s, 6 * s - fl);
@@ -355,7 +403,7 @@ function flame(ctx: Ctx, sx: number, sy: number, t: number, seed: number, s = 1)
   ctx.fillRect(sx - 1 * s, sy - 4 * s + fl, 2 * s, 3 * s);
 }
 
-function treeCrown(ctx: Ctx, sx: number, sy: number, r: number, c1: string, c2: string, seed: number) {
+export function treeCrown(ctx: Ctx, sx: number, sy: number, r: number, c1: string, c2: string, seed: number) {
   ctx.fillStyle = shade(c1, -30);
   ctx.beginPath();
   ctx.arc(sx, sy + 4, r, 0, Math.PI * 2);

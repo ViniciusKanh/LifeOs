@@ -9,7 +9,7 @@
  */
 import type { StationAnim } from "./worldMap";
 
-export type CharState = "idle" | "walking" | "working" | "studying" | "exercising" | "resting" | "interacting" | "celebrating" | "thinking" | "error";
+export type CharState = "idle" | "walking" | "working" | "studying" | "exercising" | "resting" | "interacting" | "celebrating" | "thinking" | "talking" | "error";
 export type IntentSource = "domain" | "manual" | "ambient";
 
 const RANK: Record<IntentSource, number> = { domain: 3, manual: 2, ambient: 1 };
@@ -24,15 +24,17 @@ export interface Intent {
 }
 
 const ALLOWED: Record<CharState, CharState[]> = {
-  idle: ["walking", "working", "studying", "exercising", "resting", "interacting", "celebrating", "thinking", "error"],
-  walking: ["idle", "walking", "working", "studying", "exercising", "resting", "interacting", "thinking", "error"],
+  idle: ["walking", "working", "studying", "exercising", "resting", "interacting", "celebrating", "thinking", "talking", "error"],
+  walking: ["idle", "walking", "working", "studying", "exercising", "resting", "interacting", "thinking", "talking", "error"],
   working: ["idle", "walking", "celebrating", "error", "thinking"],
   studying: ["idle", "walking", "celebrating", "error", "thinking"],
   exercising: ["idle", "walking", "celebrating", "error"],
   resting: ["idle", "walking", "celebrating"],
   interacting: ["idle", "walking", "celebrating", "error", "working"],
   celebrating: ["idle", "walking", "working", "studying", "exercising", "resting", "interacting"],
-  thinking: ["idle", "walking", "working", "studying", "error"],
+  thinking: ["idle", "walking", "working", "studying", "talking", "error"],
+  // Conversa entre agentes/aldeões é só visual: qualquer dado real a interrompe.
+  talking: ["idle", "walking", "working", "studying", "exercising", "celebrating", "thinking", "error"],
   error: ["idle", "walking", "thinking"],
 };
 

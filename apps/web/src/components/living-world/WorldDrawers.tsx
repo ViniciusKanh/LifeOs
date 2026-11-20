@@ -8,6 +8,8 @@ import { useAgentRuns, useDecorItems } from "@/hooks/useLivingWorld";
 import { livingWorldService, type WorldAgent, type WorldHabit, type WorldMission, type WorldSettings, type WorldState } from "@/services/livingWorldService";
 import { itemArtUrl } from "@/utils/inventoryDisplay";
 import { agentState, elapsedLabel, EVENT_CATEGORIES, EventRow } from "./WorldPanels";
+import { BUILDINGS, type BuildingKey } from "./engine/worldMap";
+import type { PlaceMarker } from "./engine/village";
 
 const R = { borderRadius: 4 };
 const STAGE_NAME = ["Broto", "Muda", "Planta", "Arbusto florido", "Árvore florida"];
@@ -217,6 +219,51 @@ export function AgentContent({ agent, pending, onRun }: { agent: WorldAgent; pen
 }
 
 /* ───────────── Ambientes ───────────── */
+
+/** Painel de uma construção da Vila: pendências reais e atalho para a tela do LifeOS. */
+export function BuildingContent({ building, world, marker }: { building: BuildingKey; world: WorldState; marker: PlaceMarker | undefined }) {
+  const b = BUILDINGS.find((x) => x.key === building);
+  if (!b) return <p className="text-sm text-rpg-muted">Construção não encontrada.</p>;
+  const p = world.pendencies;
+  const stats: Array<[string, ReactNode]> =
+    !p
+      ? []
+      : building === "banco"
+        ? [["Resgates disponíveis", p.claimable], ["Empréstimos vencidos", p.loanOverdue]]
+        : building === "loja"
+          ? [["Pedidos aguardando", p.ordersPending]]
+          : building === "torre"
+            ? [["Cartas para revisar", p.cardsDue]]
+            : building === "taverna"
+              ? [["Diário de hoje", p.journalToday ? "Escrito" : "Em branco"]]
+              : [];
+  return (
+    <div className="space-y-2.5">
+      <p className="text-sm text-rpg-muted">{b.subtitle}</p>
+      {marker ? (
+        <p className={clsx("border px-2.5 py-2 text-sm font-semibold", marker.tone === "danger" ? "border-rpg-red/60 text-rpg-red" : marker.tone === "warn" ? "border-rpg-gold/60 text-rpg-gold-light" : "border-rpg-blue/60 text-rpg-blue")} style={R}>
+          {marker.tone === "info" ? "?" : "!"} {marker.text}
+        </p>
+      ) : (
+        b.route && <p className="text-sm text-rpg-green">Nada pendente aqui hoje.</p>
+      )}
+      {stats.length > 0 && (
+        <div className="grid grid-cols-2 gap-1.5">
+          {stats.map(([l, v]) => (
+            <Stat key={l} label={l} value={v} />
+          ))}
+        </div>
+      )}
+      {b.route ? (
+        <Link to={b.route} className="rpg-btn rpg-btn-primary inline-flex text-xs">
+          Entrar: {b.name}
+        </Link>
+      ) : (
+        <p className="text-xs text-rpg-muted">Cenário da vila — não representa dados seus.</p>
+      )}
+    </div>
+  );
+}
 
 export function RoomContent({ room, world, children }: { room: string; world: WorldState; children?: ReactNode }) {
   const r = world.rooms;

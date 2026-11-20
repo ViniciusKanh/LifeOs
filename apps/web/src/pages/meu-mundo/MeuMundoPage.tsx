@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { BookOpen, Briefcase, Castle, Crosshair, Dumbbell, Eye, EyeOff, Home, Maximize2, Minimize2, Minus, Palette, Plus, RotateCcw, ScrollText, Settings2, Sofa, Sparkles, Sprout } from "lucide-react";
+import { Beer, BookOpen, Briefcase, Castle, Handshake, Landmark, Store, TowerControl, Crosshair, Dumbbell, Eye, EyeOff, Home, Maximize2, Minimize2, Minus, Palette, Plus, RotateCcw, ScrollText, Settings2, Sofa, Sparkles, Sprout } from "lucide-react";
 import { RPGButton, RPGToast } from "@/components/rpg";
 import { Modal } from "@/components/ui/Modal";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { WorldCanvas, type WorldCanvasHandle } from "@/components/living-world/WorldCanvas";
-import { ActivityPanel, AgentsPanel, QuickActions, RewardBanner, ROOM_LABEL, TimelineStrip, WorldHUD, type QuickAction } from "@/components/living-world/WorldPanels";
-import { AgentContent, AvatarContent, GardenContent, GuildContent, HabitRow, HistoryContent, RoomContent, SettingsContent, SlotContent } from "@/components/living-world/WorldDrawers";
+import { ActivityPanel, AgentsPanel, KingdomPanel, placeLabel, QuickActions, RewardBanner, TimelineStrip, WorldHUD, type QuickAction } from "@/components/living-world/WorldPanels";
+import { AgentContent, AvatarContent, BuildingContent, GardenContent, GuildContent, HabitRow, HistoryContent, RoomContent, SettingsContent, SlotContent } from "@/components/living-world/WorldDrawers";
 import type { EngineData, EngineSettings, Selection } from "@/components/living-world/engine/WorldEngine";
-import type { RoomKey } from "@/components/living-world/engine/worldMap";
+import type { BuildingKey, RoomKey } from "@/components/living-world/engine/worldMap";
+import { buildMarkers, type PlaceKey, type WorldFacts } from "@/components/living-world/engine/village";
 import { useLivingWorld, useWorldActions } from "@/hooks/useLivingWorld";
 import { taskService } from "@/services/taskService";
 import { habitService } from "@/services/habitService";
@@ -21,6 +22,7 @@ import { ApiError } from "@/services/api";
 
 type Drawer =
   | { kind: "room"; key: RoomKey; tab?: "andamento" | "disponiveis" | "concluidas" }
+  | { kind: "building"; key: BuildingKey }
   | { kind: "agent"; key: string }
   | { kind: "avatar" }
   | { kind: "habit"; id: string }
@@ -39,6 +41,17 @@ const ROOM_ICON: Record<RoomKey, React.ReactNode> = {
   casa: <Home size={14} />,
   jardim: <Sprout size={14} />,
 };
+
+/** Construções da vila com tela própria no LifeOS (atalhos abaixo do mapa). */
+const VILLAGE_ORDER: BuildingKey[] = ["banco", "loja", "torre", "taverna", "contratos"];
+const BUILDING_ICON: Record<string, React.ReactNode> = {
+  banco: <Landmark size={14} />,
+  loja: <Store size={14} />,
+  torre: <TowerControl size={14} />,
+  taverna: <Beer size={14} />,
+  contratos: <Handshake size={14} />,
+};
+const isBuilding = (k: PlaceKey): k is BuildingKey => (VILLAGE_ORDER as string[]).includes(k) || k === "moinho";
 
 function usePrefersReducedMotion() {
   const [v, setV] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -77,6 +90,7 @@ export function MeuMundoPage() {
   const canvas = useRef<WorldCanvasHandle>(null);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [selectedRoom, setSelectedRoom] = useState<RoomKey | null>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<BuildingKey | null>(null);
   const [decorMode, setDecorMode] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
@@ -106,6 +120,10 @@ export function MeuMundoPage() {
     };
   }, [w?.settings, reduced]);
 
+  // Fatos reais do dia → brasões de pendência nas casas e assunto das conversas dos agentes.
+  const facts: WorldFacts | null = useMemo(() => (w?.pendencies ? { ...w.pendencies, activityTitle: w.activity?.title ?? null } : null), [w]);
+  const markers = useMemo(() => buildMarkers(facts), [facts]);
+
   const engineData: EngineData | null = useMemo(() => {
     if (!w) return null;
     return {
@@ -122,8 +140,10 @@ export function MeuMundoPage() {
       slots: w.decor.slots,
       roomStatus: roomStatus(w, pendingAgent),
       localHour: w.localHour,
+      facts,
+      markers,
     };
-  }, [w, pendingAgent]);
+  }, [w, pendingAgent, facts, markers]);
 
   const timeline = useMemo(() => (w ? w.timeline.filter((e) => !filter || e.category === filter) : []), [w, filter]);
 
@@ -178,11 +198,22 @@ export function MeuMundoPage() {
     );
   };
 
+  const openPlace = (k: PlaceKey, center = false) => {
+    if (isBuilding(k)) {
+      setSelectedRoom(null);
+      setSelectedBuilding(k);
+      if (center) canvas.current?.centerBuilding(k);
+      setDrawer({ kind: "building", key: k });
+    } else {
+      setSelectedBuilding(null);
+      setSelectedRoom(k);
+      if (center) canvas.current?.centerRoom(k);
+      setDrawer({ kind: "room", key: k });
+    }
+  };
+
   const onSelect = (s: Selection) => {
-    if (s.type === "room") {
-      setSelectedRoom(s.key);
-      setDrawer({ kind: "room", key: s.key });
-    } else if (s.type === "avatar") {
+    if (s.type === "room" || s.type === "building") openPlace(s.key); else if (s.type === "avatar") {
       setSelectedChar({ id: "avatar", follow: false });
       setDrawer({ kind: "avatar" });
     } else if (s.type === "agent") {
@@ -233,7 +264,7 @@ export function MeuMundoPage() {
 
   const drawerTitle = (() => {
     if (!drawer || !w) return "";
-    if (drawer.kind === "room") return `${ROOM_LABEL[drawer.key]}`;
+    if (drawer.kind === "room" || drawer.kind === "building") return placeLabel(drawer.key);
     if (drawer.kind === "agent") return w.agents.find((a) => a.key === drawer.key)?.name ?? "Agente";
     if (drawer.kind === "avatar") return w.avatar.name;
     if (drawer.kind === "habit") return w.habits.find((h) => h.id === drawer.id)?.name ?? "Hábito";
@@ -275,9 +306,9 @@ export function MeuMundoPage() {
         </div>
       </header>
 
-      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_350px] xl:items-stretch">
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_350px]">
         {/* Mapa */}
-        <section className={clsx("rpg-ornate relative min-w-0 p-0", expanded ? "h-[82vh]" : "h-[440px] sm:h-[580px] xl:h-auto xl:min-h-[720px]")} aria-label="Mapa do Meu Mundo">
+        <section className={clsx("rpg-ornate relative min-w-0 p-0", expanded ? "h-[82vh]" : "h-[460px] sm:h-[600px] xl:sticky xl:top-3 xl:h-[calc(100vh-170px)] xl:max-h-[900px] xl:min-h-[640px]")} aria-label="Mapa do Meu Mundo">
           <RewardBanner reward={reward} onDone={clearReward} />
           {w && (
             <div className="absolute left-3 top-3 z-10 hidden sm:block">
@@ -292,6 +323,7 @@ export function MeuMundoPage() {
               data={engineData}
               settings={engineSettings}
               selectedRoom={selectedRoom}
+              selectedBuilding={selectedBuilding}
               decorMode={decorMode}
               selectedChar={selectedChar}
               onFollowStop={() => setSelectedChar((c) => (c ? { ...c, follow: false } : c))}
@@ -313,23 +345,36 @@ export function MeuMundoPage() {
               </button>
             ))}
           </div>
-          <nav className="absolute inset-x-2 bottom-2 z-10 flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:justify-center" aria-label="Ambientes">
+          <nav className="absolute inset-x-2 bottom-2 z-10 flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]" aria-label="Lugares do mundo">
             {ROOM_ORDER.map((k) => (
               <button
                 key={k}
                 type="button"
                 aria-pressed={selectedRoom === k}
-                onClick={() => {
-                  setSelectedRoom(k);
-                  canvas.current?.centerRoom(k);
-                  setDrawer({ kind: "room", key: k });
-                }}
+                onClick={() => openPlace(k, true)}
                 className={clsx("rpg-tile flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-semibold", selectedRoom === k ? "text-rpg-gold-light" : "text-rpg-text")}
               >
                 <span className="text-rpg-gold" aria-hidden>
                   {ROOM_ICON[k]}
                 </span>
-                {ROOM_LABEL[k]}
+                {placeLabel(k)}
+                {markers[k] && <span className={clsx("h-1.5 w-1.5 rounded-full", markers[k]!.tone === "danger" ? "bg-rpg-red" : markers[k]!.tone === "warn" ? "bg-rpg-gold" : "bg-rpg-blue")} aria-label="com pendência" />}
+              </button>
+            ))}
+            <span className="mx-0.5 w-px shrink-0 self-stretch bg-rpg-gold/30" aria-hidden />
+            {VILLAGE_ORDER.map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={selectedBuilding === k}
+                onClick={() => openPlace(k, true)}
+                className={clsx("rpg-tile flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-semibold", selectedBuilding === k ? "text-rpg-gold-light" : "text-rpg-text")}
+              >
+                <span className="text-rpg-gold" aria-hidden>
+                  {BUILDING_ICON[k]}
+                </span>
+                {placeLabel(k)}
+                {markers[k] && <span className={clsx("h-1.5 w-1.5 rounded-full", markers[k]!.tone === "danger" ? "bg-rpg-red" : "bg-rpg-gold")} aria-label="com pendência" />}
               </button>
             ))}
           </nav>
@@ -340,6 +385,7 @@ export function MeuMundoPage() {
           {w ? (
             <>
               <ActivityPanel world={w} busy={!!busyId && busyId === w.activity?.taskId} onPause={() => w.activity && void moveMission({ id: w.activity.taskId, title: w.activity.title }, "A Fazer")} onComplete={() => w.activity && void moveMission({ id: w.activity.taskId, title: w.activity.title, reward: w.activity.reward }, "Concluído")} onStart={() => onQuick("mission")} />
+              <KingdomPanel markers={markers} onOpen={(k) => openPlace(k, true)} />
               <AgentsPanel
                 agents={w.agents}
                 pendingKey={pendingAgent}
@@ -366,6 +412,7 @@ export function MeuMundoPage() {
         onClose={() => {
           setDrawer(null);
           setSelectedRoom(null);
+          setSelectedBuilding(null);
           setSelectedChar((c) => (c?.follow ? c : null));
         }}
         title={drawerTitle}
@@ -397,6 +444,7 @@ export function MeuMundoPage() {
             )}
           </RoomContent>
         )}
+        {w && drawer?.kind === "building" && <BuildingContent building={drawer.key} world={w} marker={markers[drawer.key]} />}
         {w && drawer?.kind === "agent" && (() => {
           const a = w.agents.find((x) => x.key === drawer.key);
           return a ? (

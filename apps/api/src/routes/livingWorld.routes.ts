@@ -56,8 +56,8 @@ const avatarSchema = z
     hair: color,
     shirt: color,
     pants: color,
-    x: z.number().int().min(0).max(29),
-    y: z.number().int().min(0).max(29),
+    x: z.number().int().min(0).max(39),
+    y: z.number().int().min(0).max(39),
   })
   .partial()
   .strict();

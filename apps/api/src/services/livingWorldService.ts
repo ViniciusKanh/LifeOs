@@ -234,6 +234,34 @@ async function roomFacts(db: Client, ownerId: string, tz: string, today: string)
   };
 }
 
+/* ─────────────────────────── Pendências do reino ─────────────────────────── */
+
+/**
+ * Contagens reais que viram marcadores sobre as casas do mundo (estilo
+ * "!" de missão). Cada número vem da fonte original; consulta falha = 0
+ * (melhor não marcar do que marcar errado).
+ */
+async function pendencies(db: Client, ownerId: string, today: string) {
+  const nowIso = new Date().toISOString();
+  const one = async (sql: string, args: Array<string | number>) => {
+    try {
+      const r = await db.execute({ sql, args });
+      return Number(r.rows[0]?.n ?? 0);
+    } catch {
+      return 0;
+    }
+  };
+  const [overdue, dueToday, cardsDue, claimable, loanOverdue, ordersPending] = await Promise.all([
+    one("SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND parent_task_id IS NULL AND archived_at IS NULL AND due_date IS NOT NULL AND substr(due_date, 1, 10) < ?", [ownerId, today]),
+    one("SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND parent_task_id IS NULL AND archived_at IS NULL AND substr(due_date, 1, 10) = ?", [ownerId, today]),
+    one("SELECT COUNT(*) AS n FROM flashcards WHERE owner_id = ? AND due_date <= ?", [ownerId, today]),
+    one("SELECT COUNT(*) AS n FROM bank_deposits WHERE owner_id = ? AND status = 'active' AND matures_at <= ?", [ownerId, nowIso]),
+    one("SELECT COUNT(*) AS n FROM bank_loans WHERE owner_id = ? AND status = 'active' AND due_at < ?", [ownerId, nowIso]),
+    one("SELECT COUNT(*) AS n FROM shop_orders WHERE owner_id = ? AND status = 'confirmado'", [ownerId]),
+  ]);
+  return { overdue, dueToday, cardsDue, claimable, loanOverdue, ordersPending };
+}
+
 /* ─────────────────────────── Agentes ─────────────────────────── */
 
 export interface AgentRunView {
@@ -434,7 +462,7 @@ export async function listWorldEvents(db: Client, ownerId: string, opts: { categ
 
 export async function getWorld(db: Client, ownerId: string) {
   const { tz, today } = await userDayContext(db, ownerId);
-  const [profileRow, player, activity, habits, missions, facts, agents, objects, timeline] = await Promise.all([
+  const [profileRow, player, activity, habits, missions, facts, agents, objects, timeline, pend] = await Promise.all([
     ensureProfile(db, ownerId),
     getPlayerProfile(db, ownerId),
     currentActivity(db, ownerId),
@@ -444,6 +472,7 @@ export async function getWorld(db: Client, ownerId: string) {
     agentsState(db, ownerId),
     listObjects(db, ownerId),
     listWorldEvents(db, ownerId, { limit: 8 }),
+    pendencies(db, ownerId, today),
   ]);
   const name = await db.execute({ sql: "SELECT name FROM users WHERE id = ?", args: [ownerId] });
   const { recentEvents: _omit, ...profile } = player;
@@ -462,6 +491,13 @@ export async function getWorld(db: Client, ownerId: string) {
     agents,
     decor: { slots: DECOR_SLOTS, objects },
     timeline: timeline.events,
+    pendencies: {
+      ...pend,
+      habitsPending: habits.filter((h) => h.pendingToday).length,
+      journalToday: facts.home.journalWordsToday > 0,
+      workoutToday: facts.gym.today.length > 0,
+      studyToday: facts.library.studyMinutesToday > 0 || facts.library.readingMinutesToday > 0,
+    },
     localHour: Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: tz }).format(new Date())) % 24,
   };
 }
