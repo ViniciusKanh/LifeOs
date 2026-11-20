@@ -131,7 +131,7 @@ export function CouncilDistributionStep({
   return (
     <div className="space-y-4">
       <p className="text-xs text-rpg-muted">
-        Proposta calculada com a sua capacidade livre real (janela útil menos a agenda e as tarefas fora do plano). Ajuste à vontade — nada é gravado antes de selar.
+        Proposta de distribuição das missões pelos dias. Ajuste à vontade — nada é gravado antes de selar.
         {desktop ? " Arraste as missões entre os dias ou use o seletor." : ""}
       </p>
 
@@ -171,19 +171,7 @@ export function CouncilDistributionStep({
                 {past ? (
                   <p className="text-[11px] text-rpg-muted">Já passou</p>
                 ) : (
-                  <>
-                    <RPGProgressBar
-                      className="mt-1"
-                      tone={over ? "red" : "green"}
-                      label={`Carga de ${fmtDay(d.date)}`}
-                      value={Math.min(d.plannedMinutes, Math.max(d.capacityMinutes, 1))}
-                      max={Math.max(d.capacityMinutes, 1)}
-                      showLabel={false}
-                    />
-                    <p className={clsx("text-[11px] mt-0.5", over ? "text-rpg-red" : "text-rpg-muted")}>
-                      {fmtMinutes(d.plannedMinutes)} de {fmtMinutes(d.capacityMinutes)} livres{over ? " — acima da capacidade" : ""}
-                    </p>
-                  </>
+                  <p className="text-[11px] text-rpg-muted">{tasks.length} missão(ões)</p>
                 )}
               </div>
               {tasks.length === 0 ? (

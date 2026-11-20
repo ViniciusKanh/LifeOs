@@ -91,6 +91,7 @@ const ForjaInteligenciaPage = lazy(() => import("@/pages/forja-inteligencia/Forj
 const ArvoreHabilidadesPage = lazy(() => import("@/pages/arvore/ArvoreHabilidadesPage").then((m) => ({ default: m.ArvoreHabilidadesPage })));
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const BancoPage = lazy(() => import("@/pages/banco/BancoPage").then((m) => ({ default: m.BancoPage })));
+const MeuMundoPage = lazy(() => import("@/pages/meu-mundo/MeuMundoPage").then((m) => ({ default: m.MeuMundoPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
 const RevisoesPage = lazy(() => import("@/pages/revisoes/RevisoesPage").then((m) => ({ default: m.RevisoesPage })));
@@ -203,6 +204,7 @@ export default function App() {
           <Route path="/data-health" element={<Navigate to="/dashboard" replace />} />
           {/* Lembretes/notificações removidos: o endereço antigo volta para Hoje. */}
           <Route path="/gatilhos" element={<Navigate to="/hoje" replace />} />
+          <Route path="/meu-mundo" element={<MeuMundoPage />} />
           <Route path="/diario" element={<DiarioPage />} />
           <Route path="/administracao" element={<AdministracaoPage />} />
           <Route path="/direcao" element={<Navigate to="/metas" replace />} />

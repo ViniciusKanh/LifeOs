@@ -37,6 +37,7 @@ import { workNotesRouter } from "./routes/work-notes.routes.js";
 import { professionalRouter } from "./routes/professional.routes.js";
 import { experimentsRouter } from "./routes/experiments.routes.js";
 import { cronRouter } from "./routes/cron.routes.js";
+import { livingWorldRouter } from "./routes/livingWorld.routes.js";
 import { signalsRouter } from "./routes/signals.routes.js";
 import { contextRouter } from "./routes/context.routes.js";
 import { capacityRouter } from "./routes/capacity.routes.js";
@@ -252,6 +253,7 @@ app.use("/api/reading", readingYearRouter);
 app.use("/api/war-council", warCouncilRouter);
 app.use("/api/rhythm", rhythmRouter);
 app.use("/api/bank", bankRouter);
+app.use("/api/world", livingWorldRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

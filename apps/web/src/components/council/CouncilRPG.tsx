@@ -78,51 +78,6 @@ export function CampaignsWeek({ hub }: { hub: CouncilHub }) {
   );
 }
 
-export function LoadBalance({ hub }: { hub: CouncilHub }) {
-  const l = hub.load;
-  const total = l.byArea.reduce((a, x) => a + x.minutes, 0);
-  return (
-    <KitSection title="Equilíbrio e carga" icon={<Scale size={16} />} tone={l.overloaded ? undefined : "gold"}>
-      <dl className="grid grid-cols-3 gap-2 text-center">
-        <div className="border border-rpg-border/70 bg-rpg-bg-2/60 p-2" style={R}>
-          <dt className="font-pixel text-[9px] uppercase text-rpg-muted">Disponível</dt>
-          <dd className="font-rpg text-lg font-bold text-rpg-text">{hm(l.freeMinutes)}</dd>
-        </div>
-        <div className="border border-rpg-border/70 bg-rpg-bg-2/60 p-2" style={R}>
-          <dt className="font-pixel text-[9px] uppercase text-rpg-muted">Planejado</dt>
-          <dd className="font-rpg text-lg font-bold text-rpg-text">{hm(l.plannedMinutes)}</dd>
-        </div>
-        <div className={clsx("border p-2", l.overloaded ? "border-rpg-red/70 bg-rpg-red/10" : "border-rpg-border/70 bg-rpg-bg-2/60")} style={R}>
-          <dt className="font-pixel text-[9px] uppercase text-rpg-muted">Ocupação</dt>
-          <dd className={clsx("font-rpg text-lg font-bold", l.overloaded ? "text-rpg-red" : "text-rpg-text")}>{l.occupancyPct == null ? "--" : `${l.occupancyPct}%`}</dd>
-        </div>
-      </dl>
-      {l.occupancyPct == null && <p className="mt-2 text-[11px] text-rpg-orange">Sem capacidade declarada — configure o Capacity Planner para medir a carga (não presumimos horas livres).</p>}
-      {l.overloaded && <p className="mt-2 text-[11px] text-rpg-red">O plano passa da capacidade declarada. Adie missões de menor prioridade antes de selar.</p>}
-      {l.unestimatedTasks > 0 && <p className="mt-1 text-[11px] text-rpg-muted">{l.unestimatedTasks} missão(ões) sem estimativa não entram na conta.</p>}
-      <ul className="mt-2 grid grid-cols-7 gap-1" aria-label="Carga por dia">
-        {l.byDay.map((d, i) => {
-          const pct = d.freeMinutes > 0 ? Math.min(100, Math.round((d.plannedMinutes / d.freeMinutes) * 100)) : d.plannedMinutes > 0 ? 100 : 0;
-          const over = d.freeMinutes > 0 ? d.plannedMinutes > d.freeMinutes : d.plannedMinutes > 0;
-          return (
-            <li key={d.date} className="text-center" title={`${dayBr(d.date)}: ${hm(d.plannedMinutes)} de ${hm(d.freeMinutes)}`}>
-              <div className="mx-auto flex h-16 w-4 items-end overflow-hidden border border-rpg-border bg-rpg-bg" style={{ borderRadius: 2 }}>
-                <span className={clsx("w-full", over ? "bg-rpg-red" : "bg-rpg-purple")} style={{ height: `${pct}%` }} />
-              </div>
-              <span className="font-pixel text-[9px] text-rpg-muted">{WD[i]}</span>
-            </li>
-          );
-        })}
-      </ul>
-      {total > 0 && (
-        <p className="mt-2 text-[11px] text-rpg-muted">
-          Por área: {l.byArea.map((a) => `${a.area} ${Math.round((a.minutes / total) * 100)}%`).join(" · ")}
-        </p>
-      )}
-    </KitSection>
-  );
-}
-
 export function PlanVersions({ hub }: { hub: CouncilHub }) {
   return (
     <KitSection title="Histórico de planos selados" icon={<History size={16} />}>

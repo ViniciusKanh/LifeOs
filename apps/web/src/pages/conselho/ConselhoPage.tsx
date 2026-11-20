@@ -10,7 +10,7 @@ import { blockError, CouncilAgendaStep, CouncilDistributionStep, SealSummaryBadg
 import { usePreviousWeekSummary, useWarCouncil } from "@/hooks/useWarCouncil";
 import { useCouncilHub } from "@/hooks/usePlanningHub";
 import { MODULE_ART, ModuleBanner } from "@/components/rpg-modules/ModuleKit";
-import { CampaignsWeek, CouncilGeneral, LoadBalance, PlanVersions, StrategyFlow } from "@/components/council/CouncilRPG";
+import { CampaignsWeek, CouncilGeneral, PlanVersions, StrategyFlow } from "@/components/council/CouncilRPG";
 import { useRhythm } from "@/hooks/useRhythm";
 import { useWide } from "@/hooks/useWide";
 import type { CouncilFocusRef, CouncilProposal } from "@/services/warCouncilService";
@@ -26,7 +26,7 @@ const STEPS: TavernStepDef[] = [
 const SUBTITLES = [
   "Como foi a semana passada, com os mesmos números da Revisão Semanal.",
   `Escolha até ${MAX_FOCUS} campanhas, projetos ou metas para guiar a semana.`,
-  "A proposta respeita a sua capacidade real de cada dia. Ajuste como quiser.",
+  "Distribua as missões pelos dias da semana. Ajuste como quiser.",
   "Opcional: proteja horários na Agenda para as missões mais importantes.",
   "Revise e confirme. Só aqui o plano é gravado.",
 ];
@@ -230,7 +230,7 @@ export function ConselhoPage() {
         storageKey="lifeos-conselho-como-funciona"
         steps={[
           { icon: ScrollText, title: "Olhe para trás", text: "O relatório da semana passada mostra o que você conseguiu cumprir.", tone: "blue" },
-          { icon: MapIcon, title: "Trace a rota", text: "Até 3 focos e as missões distribuídas pela sua capacidade real.", tone: "purple" },
+          { icon: MapIcon, title: "Trace a rota", text: "Até 3 focos e as missões distribuídas pelos dias da semana.", tone: "purple" },
           { icon: Shield, title: "Sele o plano", text: "Só ao selar as datas planejadas e os blocos da Agenda são gravados.", tone: "gold" },
         ]}
       />
@@ -254,10 +254,10 @@ export function ConselhoPage() {
         </RPGPanel>
       )}
 
+      {/* "Equilíbrio e carga" removido junto com a carga/estimativas do LifeOS. */}
       {councilHub && (
-        <div className="grid items-start gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(280px,0.9fr)]">
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,1fr)]">
           <CampaignsWeek hub={councilHub} />
-          <LoadBalance hub={councilHub} />
           <CouncilGeneral />
         </div>
       )}

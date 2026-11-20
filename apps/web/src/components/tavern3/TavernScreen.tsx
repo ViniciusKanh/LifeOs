@@ -164,13 +164,18 @@ function MoodPanel({ t, notify }: { t: Tavern3; notify: Toast }) {
       setBusy(false);
     }
   };
-  const scale = (label: string, v: number | null, set: (n: number) => void, icons?: string[]) => (
-    <fieldset>
-      <legend className="mb-1 text-[11px] text-rpg-muted">{label}</legend>
-      <div className="flex gap-1">
+  // Uma escala por linha (rótulo + 5 botões): nunca espreme, mesmo num card estreito de 3 colunas.
+  const scale = (label: string, v: number | null, set: (n: number) => void, icons?: string[], hint?: string) => (
+    <fieldset className="grid grid-cols-1 items-center gap-1 min-[380px]:grid-cols-[88px_minmax(0,1fr)]">
+      <legend className="sr-only">{label}</legend>
+      <span aria-hidden className="text-[11px] font-semibold text-rpg-muted">
+        {label}
+        {hint && <span className="block text-[9px] font-normal">{hint}</span>}
+      </span>
+      <div className="grid grid-cols-5 gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} type="button" aria-pressed={v === n} aria-label={`${label} ${n} de 5`} onClick={() => set(n)} className={clsx("flex h-10 min-w-[38px] flex-1 items-center justify-center border-2 text-sm", v === n ? "border-rpg-gold bg-rpg-gold/10 text-rpg-text" : "border-rpg-border text-rpg-muted")} style={{ borderRadius: 3 }}>
-            {icons ? <span className="text-lg">{icons[n - 1]}</span> : n}
+          <button key={n} type="button" aria-pressed={v === n} aria-label={`${label} ${n} de 5`} onClick={() => set(v === n && !icons ? 0 : n)} className={clsx("flex h-9 items-center justify-center border-2 text-sm tabular-nums", v === n ? "border-rpg-gold bg-rpg-gold/10 text-rpg-text" : "border-rpg-border text-rpg-muted hover:text-rpg-text")} style={{ borderRadius: 3 }}>
+            {icons ? <span className="text-base leading-none">{icons[n - 1]}</span> : n}
           </button>
         ))}
       </div>
@@ -183,13 +188,13 @@ function MoodPanel({ t, notify }: { t: Tavern3; notify: Toast }) {
           Último registro de hoje em Saúde: {MOOD_EMOJI[(t.mood.mood ?? 3) - 1]} humor {t.mood.mood}/5 · energia {t.mood.energy ?? "—"}/5
         </p>
       )}
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="space-y-2">
         {scale("Humor", mood, setMood, MOOD_EMOJI)}
-        {scale("Energia", energy, setEnergy)}
-        {scale("Estresse (opcional)", stress, setStress)}
+        {scale("Energia", energy, setEnergy, undefined, "1 baixa · 5 alta")}
+        {scale("Estresse", stress, (n) => setStress(n || null), undefined, "opcional")}
       </div>
       <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={180} placeholder="Observação opcional" className={`${FIELD} mt-2`} style={{ borderRadius: 3 }} aria-label="Observação do estado emocional" />
-      <RPGButton variant="pink" className="mt-2" disabled={!mood || !energy || busy} onClick={() => void save()}>
+      <RPGButton variant="pink" className="mt-2 w-full" disabled={!mood || !energy || busy} onClick={() => void save()}>
         {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Heart size={14} aria-hidden />} Registrar em Saúde
       </RPGButton>
       <p className="mt-1 text-[10px] text-rpg-muted">Saúde é a fonte única de humor e energia: o registro aparece lá e no Diário, sem duplicar.</p>

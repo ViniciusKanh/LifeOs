@@ -36,6 +36,7 @@ import {
   Swords,
   BookOpenText,
   History,
+  Globe2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -86,6 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // Tela principal: o painel do personagem (HUD) com nível, XP e ritmo.
       { to: "/dashboard", label: "Dashboard", rpgLabel: "Painel do Herói", icon: LayoutGrid, quote: "Disciplina de hoje, liberdade de amanhã." },
+      { to: "/meu-mundo", label: "Meu Mundo", icon: Globe2, quote: "Seu mundo cresce com o que você faz de verdade." },
       {
         to: "/hoje",
         label: "Hoje",
