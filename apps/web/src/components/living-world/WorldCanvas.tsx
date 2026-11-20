@@ -9,7 +9,7 @@ export interface WorldCanvasHandle {
   pan: (dx: number, dy: number) => void;
   centerRoom: (k: RoomKey) => void;
   moveAvatar: (x: number, y: number) => boolean;
-  celebrate: (id: string, text: string) => void;
+  celebrate: (id: string, text: string, xp?: number | null) => void;
 }
 
 /**
@@ -21,14 +21,16 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
   settings: EngineSettings;
   selectedRoom: RoomKey | null;
   decorMode: boolean;
+  selectedChar?: { id: string; follow: boolean } | null;
   onSelect: (s: Selection) => void;
   onAvatarMoved: (p: { x: number; y: number }) => void;
+  onFollowStop?: () => void;
   className?: string;
-}>(function WorldCanvas({ data, settings, selectedRoom, decorMode, onSelect, onAvatarMoved, className }, ref) {
+}>(function WorldCanvas({ data, settings, selectedRoom, decorMode, selectedChar, onSelect, onAvatarMoved, onFollowStop, className }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<WorldEngine | null>(null);
-  const cb = useRef({ onSelect, onAvatarMoved });
-  cb.current = { onSelect, onAvatarMoved };
+  const cb = useRef({ onSelect, onAvatarMoved, onFollowStop });
+  cb.current = { onSelect, onAvatarMoved, onFollowStop };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -36,6 +38,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
     const engine = new WorldEngine(canvas, settings);
     engine.onSelect = (s) => cb.current.onSelect(s);
     engine.onAvatarMoved = (p) => cb.current.onAvatarMoved(p);
+    engine.onFollowStop = () => cb.current.onFollowStop?.();
     engineRef.current = engine;
     const ro = new ResizeObserver(() => engine.resize());
     ro.observe(canvas);
@@ -57,6 +60,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
   }, [data]);
   useEffect(() => engineRef.current?.setSelectedRoom(selectedRoom), [selectedRoom]);
   useEffect(() => engineRef.current?.setDecorMode(decorMode), [decorMode]);
+  useEffect(() => engineRef.current?.setSelectedChar(selectedChar?.id ?? null, selectedChar?.follow ?? false), [selectedChar?.id, selectedChar?.follow]);
 
   useImperativeHandle(ref, () => ({
     centerAvatar: () => engineRef.current?.centerOn("avatar"),
@@ -65,7 +69,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
     pan: (dx, dy) => engineRef.current?.pan(dx, dy),
     centerRoom: (k) => engineRef.current?.centerOnRoom(k),
     moveAvatar: (x, y) => engineRef.current?.moveAvatarTo({ x, y }) ?? false,
-    celebrate: (id, text) => engineRef.current?.celebrate(id, text),
+    celebrate: (id, text, xp) => engineRef.current?.celebrate(id, text, xp),
   }));
 
   return (

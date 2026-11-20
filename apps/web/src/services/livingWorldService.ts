@@ -12,6 +12,8 @@ export interface WorldSettings {
   autonomous: boolean;
   showNames: boolean;
   showIndicators: boolean;
+  /** Placas com o nome dos ambientes (dá para ocultar e ver o cenário). */
+  showLabels: boolean;
   followAvatar: boolean;
 }
 

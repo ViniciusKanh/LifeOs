@@ -32,6 +32,7 @@ const settingsSchema = z
     autonomous: z.boolean(),
     showNames: z.boolean(),
     showIndicators: z.boolean(),
+    showLabels: z.boolean(),
     followAvatar: z.boolean(),
   })
   .partial()

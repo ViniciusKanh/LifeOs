@@ -5,8 +5,9 @@
  * `kind` em drawBody; para uma nova animação, um novo valor de Pose.
  */
 
-export const SPRITE_W = 24;
-export const SPRITE_H = 32;
+/** Área de desenho 24×32 + 1 px de contorno em volta. */
+export const SPRITE_W = 26;
+export const SPRITE_H = 34;
 
 export type Pose = "stand" | "walk" | "sit" | "typing" | "reading" | "exercise" | "celebrate" | "interact" | "think";
 
@@ -17,6 +18,10 @@ export interface Look {
   shirt: string;
   pants: string;
   accent: string;
+  /** Identidade visual do agente (robôs). */
+  variant?: "planner" | "mentor" | "analyst" | "habits";
+  /** Capa do avatar (aventureiro). */
+  cape?: string;
 }
 
 const cache = new Map<string, HTMLCanvasElement>();
@@ -40,6 +45,17 @@ function drawHuman(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
   const pantsD = shade(look.pants, -30);
   const skinD = shade(look.skin, -35);
 
+  // Capa (atrás do corpo; de costas cobre o tronco)
+  if (look.cape && !sitting) {
+    const sway = pose === "walk" ? [0, 1, 0, -1][frame % 4]! : 0;
+    if (back) {
+      px(7, 14 + dy, 10, 11, look.cape);
+      px(7 - Math.max(0, sway), 24 + dy, 10, 2, shade(look.cape, -30));
+    } else {
+      px(6, 14 + dy, 1, 9 + Math.abs(sway), shade(look.cape, -25));
+      px(17, 14 + dy, 1, 9 + Math.abs(sway), shade(look.cape, -40));
+    }
+  }
   // Pernas
   if (sitting) {
     px(8, 24 + dy - 4, 8, 3, look.pants);
@@ -51,15 +67,20 @@ function drawHuman(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
     const step = pose === "walk" ? [0, 1, 0, -1][frame % 4]! : 0;
     px(9, 23 + dy, 3, 7 - Math.max(0, step), look.pants);
     px(12, 23 + dy, 3, 7 - Math.max(0, -step), pantsD);
-    px(8 - (step > 0 ? 1 : 0), 30 + dy - Math.max(0, step), 4, 2, outline);
-    px(12 + (step < 0 ? 1 : 0), 30 + dy - Math.max(0, -step), 4, 2, outline);
+    px(8 - (step > 0 ? 1 : 0), 29 + dy - Math.max(0, step), 4, 3, "#4a2f1b");
+    px(12 + (step < 0 ? 1 : 0), 29 + dy - Math.max(0, -step), 4, 3, "#3a2414");
   }
   // Tronco
   px(8, 14 + dy, 8, 8, look.shirt);
   px(8, 14 + dy, 1, 8, shirtD);
   px(15, 14 + dy, 1, 8, shirtD);
   px(8, 22 + dy, 8, 1, "#3a2a1a");
-  if (!back) px(11, 14 + dy, 2, 2, shade(look.shirt, 30));
+  if (!back) {
+    px(11, 22 + dy, 2, 1, "#F1C66A");
+    px(10, 14 + dy, 4, 1, shade(look.shirt, 35));
+    px(11, 15 + dy, 2, 2, shade(look.shirt, 20));
+  }
+  if (look.cape && !back) px(8, 14 + dy, 8, 1, look.cape);
 
   // Braços
   const armL = (yy: number, hand: number) => {
@@ -147,7 +168,14 @@ function drawHuman(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
     const blink = pose === "stand" && frame % 6 === 5;
     px(10, hy + 4, 1, blink ? 1 : 2, outline);
     px(13, hy + 4, 1, blink ? 1 : 2, outline);
+    if (!blink) {
+      px(10, hy + 4, 1, 1, "#5a6fba");
+      px(13, hy + 4, 1, 1, "#5a6fba");
+    }
+    px(9, hy + 6, 1, 1, shade(look.skin, -15));
+    px(14, hy + 6, 1, 1, shade(look.skin, -15));
     px(11, hy + 6, 2, 1, skinD);
+    px(8, hy - 2, 9, 1, look.hair);
   }
 }
 
@@ -209,11 +237,50 @@ function drawRobot(px: Px, look: Look, pose: Pose, frame: number, back: boolean)
   } else {
     px(9, hy + 2, 6, 3, metalD);
   }
+  // Identidade de cada agente
+  switch (look.variant) {
+    case "planner":
+      px(5, 14 + dy, 3, 2, look.accent);
+      px(16, 14 + dy, 3, 2, look.accent);
+      if (!back) px(10, 21 + dy, 4, 1, "#bfe3ff");
+      break;
+    case "mentor":
+      // capelo acadêmico e óculos redondos
+      px(6, hy - 2, 12, 2, "#1b1430");
+      px(9, hy - 4, 6, 2, "#1b1430");
+      px(16, hy - 1, 1, 4, "#F1C66A");
+      if (!back) {
+        px(8, hy + 2, 4, 4, "#F1C66A");
+        px(12, hy + 2, 4, 4, "#F1C66A");
+        px(9, hy + 3, 2, 2, look.accent);
+        px(13, hy + 3, 2, 2, look.accent);
+        px(9, 19 + dy, 6, 4, "#7a3b2e");
+        px(11, 19 + dy, 2, 4, "#f3e7c9");
+      }
+      break;
+    case "analyst":
+      if (!back) {
+        px(8, hy + 2, 8, 4, "#06121e");
+        for (let i = 0; i < 4; i++) px(9 + i * 2, hy + 5 - ((frame + i) % 3), 1, 1 + ((frame + i) % 3), i % 2 ? "#4FD49A" : look.accent);
+      }
+      px(16, hy + 1, 2, 3, "#59A9F8");
+      break;
+    case "habits":
+      if (!back) {
+        const beat = frame % 2 ? 1 : 0;
+        px(10 - beat, 17 + dy, 2, 2, "#F16D75");
+        px(12, 17 + dy, 2 + beat, 2, "#F16D75");
+        px(10, 19 + dy, 4, 1, "#F16D75");
+        px(11, 20 + dy, 2, 1, "#F16D75");
+      }
+      px(13, hy - 6, 3, 2, "#4FD49A");
+      break;
+  }
 }
 
 /** Canvas 24×32 com a pose pronta (em cache). `back` = de costas (NE/NW). */
 export function getSprite(look: Look, pose: Pose, frame: number, back: boolean): HTMLCanvasElement {
-  const k = `${look.kind}|${look.skin}|${look.hair}|${look.shirt}|${look.pants}|${look.accent}|${pose}|${frame}|${back ? 1 : 0}`;
+  const k = `${look.kind}|${look.variant ?? ""}|${look.cape ?? ""}|${look.skin}|${look.hair}|${look.shirt}|${look.pants}|${look.accent}|${pose}|${frame}|${back ? 1 : 0}`;
   const hit = cache.get(k);
   if (hit) return hit;
   const c = document.createElement("canvas");
@@ -223,10 +290,27 @@ export function getSprite(look: Look, pose: Pose, frame: number, back: boolean):
   const px: Px = (x, y, w, h, col) => {
     if (w <= 0 || h <= 0) return;
     ctx.fillStyle = col;
-    ctx.fillRect(x, y, w, h);
+    ctx.fillRect(x + 1, y + 1, w, h);
   };
   if (look.kind === "robot") drawRobot(px, look, pose, frame, back);
   else drawHuman(px, look, pose, frame, back);
+  // Contorno escuro de 1 px em volta da silhueta (leitura em qualquer fundo).
+  const img = ctx.getImageData(0, 0, SPRITE_W, SPRITE_H);
+  const d = img.data;
+  const out = new Uint8ClampedArray(d);
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= SPRITE_W || y >= SPRITE_H ? 0 : d[(y * SPRITE_W + x) * 4 + 3]!);
+  for (let y = 0; y < SPRITE_H; y++)
+    for (let x = 0; x < SPRITE_W; x++) {
+      const i = (y * SPRITE_W + x) * 4;
+      if (d[i + 3]) continue;
+      if (at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1)) {
+        out[i] = 16;
+        out[i + 1] = 12;
+        out[i + 2] = 28;
+        out[i + 3] = 235;
+      }
+    }
+  ctx.putImageData(new ImageData(out, SPRITE_W, SPRITE_H), 0, 0);
   if (cache.size > 600) cache.clear();
   cache.set(k, c);
   return c;

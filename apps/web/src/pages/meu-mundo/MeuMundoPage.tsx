@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Crosshair, Globe2, Maximize2, Minimize2, Minus, Palette, Plus, RotateCcw, Settings2, Sofa } from "lucide-react";
+import { BookOpen, Briefcase, Castle, Crosshair, Dumbbell, Eye, EyeOff, Home, Maximize2, Minimize2, Minus, Palette, Plus, RotateCcw, ScrollText, Settings2, Sofa, Sparkles, Sprout } from "lucide-react";
 import { RPGButton, RPGToast } from "@/components/rpg";
 import { Modal } from "@/components/ui/Modal";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { WorldCanvas, type WorldCanvasHandle } from "@/components/living-world/WorldCanvas";
-import { ActivityPanel, AgentsPanel, QuickActions, ROOM_LABEL, TimelineStrip, WorldHUD, type QuickAction } from "@/components/living-world/WorldPanels";
+import { ActivityPanel, AgentsPanel, QuickActions, RewardBanner, ROOM_LABEL, TimelineStrip, WorldHUD, type QuickAction } from "@/components/living-world/WorldPanels";
 import { AgentContent, AvatarContent, GardenContent, GuildContent, HabitRow, HistoryContent, RoomContent, SettingsContent, SlotContent } from "@/components/living-world/WorldDrawers";
 import type { EngineData, EngineSettings, Selection } from "@/components/living-world/engine/WorldEngine";
 import type { RoomKey } from "@/components/living-world/engine/worldMap";
@@ -30,6 +30,15 @@ type Drawer =
   | null;
 
 const ROOM_ORDER: RoomKey[] = ["praca", "biblioteca", "escritorio", "guilda", "academia", "casa", "jardim"];
+const ROOM_ICON: Record<RoomKey, React.ReactNode> = {
+  praca: <Sparkles size={14} />,
+  biblioteca: <BookOpen size={14} />,
+  escritorio: <Briefcase size={14} />,
+  guilda: <ScrollText size={14} />,
+  academia: <Dumbbell size={14} />,
+  casa: <Home size={14} />,
+  jardim: <Sprout size={14} />,
+};
 
 function usePrefersReducedMotion() {
   const [v, setV] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -74,6 +83,9 @@ export function MeuMundoPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newMission, setNewMission] = useState(false);
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
+  const [selectedChar, setSelectedChar] = useState<{ id: string; follow: boolean } | null>(null);
+  const [reward, setReward] = useState<{ title: string; xp: number | null; coins: number | null } | null>(null);
+  const clearReward = useCallback(() => setReward(null), []);
   const notify = (msg: string, tone: "success" | "error" = "success") => setToast({ msg, tone });
   const w = q.data;
   const pendingAgent = actions.runAgent.isPending ? actions.runAgent.variables?.key ?? null : null;
@@ -88,6 +100,7 @@ export function MeuMundoPage() {
       autonomous: s?.autonomous ?? true,
       showNames: s?.showNames ?? true,
       showIndicators: s?.showIndicators ?? true,
+      showLabels: s?.showLabels ?? true,
       followAvatar: s?.followAvatar ?? false,
       reducedMotion: reduced,
     };
@@ -123,14 +136,14 @@ export function MeuMundoPage() {
 
   const errMsg = (e: unknown, fb: string) => (e instanceof ApiError || e instanceof Error ? e.message || fb : fb);
 
-  const moveMission = async (m: { id: string; title: string }, status: string) => {
+  const moveMission = async (m: { id: string; title: string; reward?: { xp: number; coins: number } | null }, status: string) => {
     setBusyId(m.id);
     try {
       await taskService.move(m.id, status);
       syncOthers();
       if (status === "Concluído") {
-        canvas.current?.celebrate("avatar", "Missão concluída!");
-        notify(`Missão concluída: ${m.title}`);
+        canvas.current?.celebrate("avatar", "Missão concluída!", m.reward?.xp ?? null);
+        setReward({ title: `Missão concluída: ${m.title}`, xp: m.reward?.xp ?? null, coins: m.reward?.coins ?? null });
       } else notify(status === "Em Andamento" ? `Em andamento: ${m.title}. O avatar vai até a estação.` : `Missão pausada: ${m.title}`);
     } catch (e) {
       notify(errMsg(e, "Não foi possível atualizar a missão."), "error");
@@ -146,7 +159,7 @@ export function MeuMundoPage() {
       await habitService.checkIn(h.id, w.today, 1);
       syncOthers();
       canvas.current?.celebrate("avatar", "Hábito registrado!");
-      notify(`Hábito registrado: ${h.name}`);
+      setReward({ title: `Hábito registrado: ${h.name}`, xp: null, coins: null });
     } catch (e) {
       notify(errMsg(e, "Não foi possível registrar o hábito."), "error");
     } finally {
@@ -169,8 +182,13 @@ export function MeuMundoPage() {
     if (s.type === "room") {
       setSelectedRoom(s.key);
       setDrawer({ kind: "room", key: s.key });
-    } else if (s.type === "avatar") setDrawer({ kind: "avatar" });
-    else if (s.type === "agent") setDrawer({ kind: "agent", key: s.key });
+    } else if (s.type === "avatar") {
+      setSelectedChar({ id: "avatar", follow: false });
+      setDrawer({ kind: "avatar" });
+    } else if (s.type === "agent") {
+      setSelectedChar({ id: s.key, follow: false });
+      setDrawer({ kind: "agent", key: s.key });
+    }
     else if (s.type === "habit") setDrawer({ kind: "habit", id: s.id });
     else if (s.type === "slot") setDrawer({ kind: "slot", key: s.key });
   };
@@ -226,44 +244,60 @@ export function MeuMundoPage() {
 
   return (
     <div className={clsx("space-y-3 px-3 py-4 sm:px-4 md:px-6", expanded && "fixed inset-0 z-40 overflow-y-auto bg-rpg-bg")}>
-      {/* Cabeçalho */}
+      {/* Seguindo um personagem: aviso discreto com opção de parar */}
+      {selectedChar?.follow && (
+        <button type="button" className="rpg-tile fixed bottom-20 left-1/2 z-30 -translate-x-1/2 px-3 py-1.5 text-xs font-semibold text-rpg-gold-light lg:bottom-6" onClick={() => setSelectedChar(null)}>
+          Acompanhando {selectedChar.id === "avatar" ? w?.avatar.name : w?.agents.find((a) => a.key === selectedChar.id)?.name} — parar
+        </button>
+      )}
+      {/* Cabeçalho (nível/moedas já estão na barra global; aqui só o selo de nível sobre o mapa) */}
       <header className="flex flex-wrap items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center border-2 border-rpg-gold/70 bg-rpg-bg-2 text-rpg-gold" style={{ borderRadius: 4 }} aria-hidden>
-          <Globe2 size={22} />
+        <span className="flex h-12 w-12 items-center justify-center border-2 border-rpg-gold/80 bg-gradient-to-b from-rpg-purple/40 to-rpg-bg text-rpg-gold-light shadow-[0_0_14px_rgba(241,198,106,0.35)]" style={{ borderRadius: 4 }} aria-hidden>
+          <Castle size={24} />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="rpg-title text-2xl font-bold leading-none sm:text-3xl">Meu Mundo</h1>
-          <p className="text-xs text-rpg-muted sm:text-sm">Seu centro de vida interativo · atividades, agentes e evolução a partir dos seus dados reais.</p>
+          <h1 className="rpg-title font-rpg text-3xl font-bold leading-none text-rpg-gold-light drop-shadow-[0_2px_0_rgba(0,0,0,0.6)] sm:text-4xl">Meu Mundo</h1>
+          <p className="mt-1 text-xs text-rpg-muted sm:text-sm">Seu centro de vida interativo · atividades, agentes e evolução a partir dos seus dados reais.</p>
         </div>
-        {w && <WorldHUD world={w} />}
-        <div className="flex gap-1.5">
-          <RPGButton variant="secondary" className="min-h-[38px] px-2.5 text-xs" onClick={() => setDrawer({ kind: "avatar" })} disabled={!w} aria-label="Personalizar avatar">
-            <Palette size={14} aria-hidden /> <span className="hidden sm:inline">Avatar</span>
-          </RPGButton>
-          <RPGButton variant={decorMode ? "gold" : "secondary"} className="min-h-[38px] px-2.5 text-xs" onClick={() => setDecorMode((v) => !v)} disabled={!w} aria-pressed={decorMode}>
-            <Sofa size={14} aria-hidden /> <span className="hidden sm:inline">{decorMode ? "Concluir decoração" : "Decorar"}</span>
-          </RPGButton>
-          <RPGButton variant="secondary" className="min-h-[38px] px-2.5 text-xs" onClick={() => setDrawer({ kind: "settings" })} disabled={!w} aria-label="Configurações do mundo">
-            <Settings2 size={14} aria-hidden />
-          </RPGButton>
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" className="rpg-tile flex min-h-[38px] items-center gap-1.5 px-3 text-xs font-semibold text-rpg-text" onClick={() => setDrawer({ kind: "avatar" })} disabled={!w}>
+            <Palette size={14} className="text-rpg-pink" aria-hidden /> Avatar
+          </button>
+          <button type="button" className="rpg-tile flex min-h-[38px] items-center gap-1.5 px-3 text-xs font-semibold text-rpg-text" onClick={() => setDecorMode((v) => !v)} disabled={!w} aria-pressed={decorMode}>
+            <Sofa size={14} className="text-rpg-gold" aria-hidden /> {decorMode ? "Concluir decoração" : "Decorar"}
+          </button>
+          <button type="button" className="rpg-tile flex min-h-[38px] items-center gap-1.5 px-3 text-xs font-semibold text-rpg-text" onClick={() => saveSettings({ showLabels: !(w?.settings.showLabels ?? true) })} disabled={!w} aria-pressed={!(w?.settings.showLabels ?? true)} title="Mostrar/ocultar as placas dos ambientes">
+            {w?.settings.showLabels ?? true ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />} Placas
+          </button>
+          <button type="button" className="rpg-tile flex min-h-[38px] items-center px-3 text-rpg-text" onClick={() => setDrawer({ kind: "settings" })} disabled={!w} aria-label="Configurações do mundo">
+            <Settings2 size={15} aria-hidden />
+          </button>
         </div>
       </header>
 
-      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_350px] xl:items-stretch">
         {/* Mapa */}
-        <section className="rpg-panel relative min-w-0 overflow-hidden p-0" aria-label="Mapa do Meu Mundo">
+        <section className={clsx("rpg-ornate relative min-w-0 p-0", expanded ? "h-[82vh]" : "h-[440px] sm:h-[580px] xl:h-auto xl:min-h-[720px]")} aria-label="Mapa do Meu Mundo">
+          <RewardBanner reward={reward} onDone={clearReward} />
+          {w && (
+            <div className="absolute left-3 top-3 z-10 hidden sm:block">
+              <WorldHUD world={w} />
+            </div>
+          )}
           {!w && <div className="absolute inset-0 z-10 flex items-center justify-center bg-rpg-bg/70 text-sm text-rpg-muted" aria-busy="true">Construindo o seu mundo…</div>}
-          {decorMode && <p className="absolute left-2 top-2 z-10 border border-rpg-gold bg-rpg-bg/90 px-2 py-1 text-xs text-rpg-gold-light" style={{ borderRadius: 4 }}>Modo decoração: clique num lugar brilhante para colocar um item do inventário.</p>}
-          <div tabIndex={0} onKeyDown={onMapKey} className="outline-none focus-visible:ring-2 focus-visible:ring-rpg-gold" aria-label="Mapa: setas movem a câmera, + e − aproximam, C centraliza o avatar">
+          {decorMode && <p className="absolute left-1/2 top-3 z-10 -translate-x-1/2 border border-rpg-gold bg-rpg-bg/90 px-2 py-1 text-xs text-rpg-gold-light" style={{ borderRadius: 4 }}>Modo decoração: clique num lugar brilhante para colocar um item do inventário.</p>}
+          <div tabIndex={0} onKeyDown={onMapKey} className="absolute inset-0 overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-rpg-gold" aria-label="Mapa: setas movem a câmera, + e − aproximam, C centraliza o avatar">
             <WorldCanvas
               ref={canvas}
               data={engineData}
               settings={engineSettings}
               selectedRoom={selectedRoom}
               decorMode={decorMode}
+              selectedChar={selectedChar}
+              onFollowStop={() => setSelectedChar((c) => (c ? { ...c, follow: false } : c))}
               onSelect={onSelect}
               onAvatarMoved={(p) => actions.saveAvatar.mutate({ x: p.x, y: p.y })}
-              className={clsx("block w-full", expanded ? "h-[78vh]" : "h-[420px] sm:h-[520px] xl:h-[600px]")}
+              className="block h-full w-full"
             />
           </div>
           <div className="absolute right-2 top-2 z-10 flex flex-col gap-1" role="toolbar" aria-label="Câmera">
@@ -274,12 +308,12 @@ export function MeuMundoPage() {
               [<RotateCcw key="i" size={14} />, "Restaurar enquadramento", () => canvas.current?.reset()],
               [expanded ? <Minimize2 key="i" size={14} /> : <Maximize2 key="i" size={14} />, expanded ? "Sair da visão expandida" : "Visão expandida", () => setExpanded((v) => !v)],
             ].map(([icon, label, fn]) => (
-              <button key={label as string} type="button" title={label as string} aria-label={label as string} onClick={fn as () => void} className="flex h-9 w-9 items-center justify-center border border-rpg-border bg-rpg-bg/90 text-rpg-text hover:border-rpg-gold" style={{ borderRadius: 4 }}>
+              <button key={label as string} type="button" title={label as string} aria-label={label as string} onClick={fn as () => void} className="rpg-tile flex h-9 w-9 items-center justify-center text-rpg-text">
                 {icon as React.ReactNode}
               </button>
             ))}
           </div>
-          <nav className="flex gap-1 overflow-x-auto border-t border-rpg-border/60 p-2 [scrollbar-width:none]" aria-label="Ambientes">
+          <nav className="absolute inset-x-2 bottom-2 z-10 flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:justify-center" aria-label="Ambientes">
             {ROOM_ORDER.map((k) => (
               <button
                 key={k}
@@ -290,9 +324,11 @@ export function MeuMundoPage() {
                   canvas.current?.centerRoom(k);
                   setDrawer({ kind: "room", key: k });
                 }}
-                className={clsx("shrink-0 border px-2.5 py-1.5 text-xs font-semibold", selectedRoom === k ? "border-rpg-gold bg-rpg-gold/10 text-rpg-gold-light" : "border-rpg-border text-rpg-muted hover:text-rpg-text")}
-                style={{ borderRadius: 4 }}
+                className={clsx("rpg-tile flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-semibold", selectedRoom === k ? "text-rpg-gold-light" : "text-rpg-text")}
               >
+                <span className="text-rpg-gold" aria-hidden>
+                  {ROOM_ICON[k]}
+                </span>
                 {ROOM_LABEL[k]}
               </button>
             ))}
@@ -303,8 +339,15 @@ export function MeuMundoPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
           {w ? (
             <>
-              <ActivityPanel world={w} busy={!!busyId && busyId === w.activity?.taskId} onPause={() => w.activity && void moveMission({ id: w.activity.taskId, title: w.activity.title }, "A Fazer")} onComplete={() => w.activity && void moveMission({ id: w.activity.taskId, title: w.activity.title }, "Concluído")} onStart={() => onQuick("mission")} />
-              <AgentsPanel agents={w.agents} pendingKey={pendingAgent} onOpen={(key) => setDrawer({ kind: "agent", key })} />
+              <ActivityPanel world={w} busy={!!busyId && busyId === w.activity?.taskId} onPause={() => w.activity && void moveMission({ id: w.activity.taskId, title: w.activity.title }, "A Fazer")} onComplete={() => w.activity && void moveMission({ id: w.activity.taskId, title: w.activity.title, reward: w.activity.reward }, "Concluído")} onStart={() => onQuick("mission")} />
+              <AgentsPanel
+                agents={w.agents}
+                pendingKey={pendingAgent}
+                onOpen={(key) => {
+                  setSelectedChar({ id: key, follow: false });
+                  setDrawer({ kind: "agent", key });
+                }}
+              />
               <div className="sm:col-span-2 xl:col-span-1">
                 <QuickActions onAction={onQuick} />
               </div>
@@ -323,6 +366,7 @@ export function MeuMundoPage() {
         onClose={() => {
           setDrawer(null);
           setSelectedRoom(null);
+          setSelectedChar((c) => (c?.follow ? c : null));
         }}
         title={drawerTitle}
         size={drawer?.kind === "history" || drawer?.kind === "slot" ? "lg" : "md"}
@@ -365,11 +409,33 @@ export function MeuMundoPage() {
                 ))}
               </div>
               <AgentContent agent={a} pending={pendingAgent === a.key} onRun={(question) => runAgent(a.key, question)} />
+              <RPGButton
+                variant="ghost"
+                className="text-xs"
+                onClick={() => {
+                  setSelectedChar({ id: a.key, follow: true });
+                  setDrawer(null);
+                }}
+              >
+                <Crosshair size={12} aria-hidden /> Acompanhar no mapa
+              </RPGButton>
             </div>
           ) : (
             <p className="text-sm text-rpg-muted">Agente indisponível.</p>
           );
         })()}
+        {w && drawer?.kind === "avatar" && (
+          <RPGButton
+            variant="ghost"
+            className="mb-2 text-xs"
+            onClick={() => {
+              setSelectedChar({ id: "avatar", follow: true });
+              setDrawer(null);
+            }}
+          >
+            <Crosshair size={12} aria-hidden /> Acompanhar no mapa
+          </RPGButton>
+        )}
         {w && drawer?.kind === "avatar" && <AvatarContent world={w} busy={actions.saveAvatar.isPending} onSave={(p) => actions.saveAvatar.mutate(p, { onSuccess: () => notify("Aparência salva."), onError: () => notify("Não foi possível salvar.", "error") })} />}
         {w && drawer?.kind === "habit" && (() => {
           const h = w.habits.find((x) => x.id === drawer.id);

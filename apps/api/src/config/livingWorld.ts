@@ -63,6 +63,7 @@ export const DEFAULT_WORLD_SETTINGS = {
   autonomous: true,
   showNames: true,
   showIndicators: true,
+  showLabels: true,
   followAvatar: false,
 };
 export type WorldSettings = typeof DEFAULT_WORLD_SETTINGS;

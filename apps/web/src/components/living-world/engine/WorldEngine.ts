@@ -5,7 +5,7 @@
  * nunca reinicia o motor.
  */
 import { CharacterBrain, stateForAnim, type CharState, type Intent } from "./characterMachine";
-import { box, diamond, drawFlat, drawFurniture, drawPlant, drawTile, drawWall, glow, isoPoint } from "./draw";
+import { box, cliff, diamond, drawFlat, drawFurniture, drawPlant, drawSky, drawTile, drawWall, drawWallDecor, drawWater, glow, isoPoint, platformSide, step, wallDecorLight } from "./draw";
 import { findPath, nearestFree, type Point } from "./pathfinding";
 import { framesFor, getSprite, SPRITE_H, SPRITE_W, type Look, type Pose } from "./sprites";
 import {
@@ -22,6 +22,10 @@ import {
   screenToIso,
   STATIONS,
   tileKind,
+  tileZ,
+  VOLUMETRIC_FREE,
+  WALL_DECOR,
+  zAtFloat,
   type Facing,
   type RoomKey,
   type Station,
@@ -35,6 +39,7 @@ export interface EngineSettings {
   autonomous: boolean;
   showNames: boolean;
   showIndicators: boolean;
+  showLabels: boolean;
   followAvatar: boolean;
   reducedMotion: boolean;
 }
@@ -98,6 +103,8 @@ export class WorldEngine {
   private w = 0;
   private h = 0;
   private cam = { x: 0, y: 0, zoom: 0.9 };
+  /** Enquanto o usuário não mexer na câmera, redimensionar reenquadra o mundo. */
+  private camTouched = false;
   private blocked = buildBlocked();
   private chars = new Map<string, Char>();
   private data: EngineData | null = null;
@@ -107,6 +114,13 @@ export class WorldEngine {
   private visible = true;
   private hover: Point | null = null;
   private selectedRoom: RoomKey | null = null;
+  private selectedChar: string | null = null;
+  private followChar: string | null = null;
+  private staticLayer: HTMLCanvasElement | null = null;
+  private staticScale = 0;
+  private labelRects: Array<{ key: RoomKey; x: number; y: number; w: number; h: number }> = [];
+  private floaters: Array<{ x: number; y: number; z: number; text: string; color: string; born: number }> = [];
+  private particles: Array<{ x: number; y: number; ox: number; oy: number; vx: number; vy: number; life: number; color: string }> = [];
   private decorMode = false;
   private drag: { x: number; y: number; cx: number; cy: number; moved: boolean } | null = null;
   private pointers = new Map<number, { x: number; y: number }>();
@@ -117,6 +131,8 @@ export class WorldEngine {
   private listeners: Array<() => void> = [];
   onSelect: (s: Selection) => void = () => undefined;
   onAvatarMoved: (p: Point) => void = () => undefined;
+  /** O usuário arrastou o mapa enquanto a câmera acompanhava alguém. */
+  onFollowStop: () => void = () => undefined;
 
   constructor(canvas: HTMLCanvasElement, settings: EngineSettings) {
     this.canvas = canvas;
@@ -137,7 +153,9 @@ export class WorldEngine {
   /* ───────────── API pública ───────────── */
 
   setSettings(s: EngineSettings) {
+    const rebuild = s.quality !== this.settings.quality;
     this.settings = s;
+    if (rebuild) this.staticLayer = null;
   }
 
   setVisible(v: boolean) {
@@ -151,6 +169,12 @@ export class WorldEngine {
 
   setSelectedRoom(r: RoomKey | null) {
     this.selectedRoom = r;
+  }
+
+  /** Destaca um personagem; com `follow`, a câmera acompanha até o usuário arrastar o mapa. */
+  setSelectedChar(id: string | null, follow = false) {
+    this.selectedChar = id;
+    this.followChar = id && follow ? id : null;
   }
 
   setData(d: EngineData) {
@@ -173,23 +197,27 @@ export class WorldEngine {
     this.h = Math.max(1, r.height);
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
+    if (!this.camTouched) this.resetCamera();
   }
 
   resetCamera() {
     const c = isoToScreen(GRID / 2, GRID / 2);
-    this.cam.zoom = Math.min(1.1, Math.max(0.45, Math.min(this.w / 1950, this.h / 1000)));
+    // Enquadra o mundo inteiro ocupando o espaço disponível (sem bordas vazias exageradas).
+    this.cam.zoom = Math.min(1.2, Math.max(0.3, Math.min(this.w / 1820, this.h / 1040)));
     this.cam.x = this.w / 2 - c.sx * this.cam.zoom;
-    this.cam.y = this.h / 2 - c.sy * this.cam.zoom + 20;
+    this.cam.y = this.h / 2 - (c.sy - 40) * this.cam.zoom;
   }
 
   zoomBy(f: number, ax = this.w / 2, ay = this.h / 2) {
-    const nz = Math.min(2.2, Math.max(0.4, this.cam.zoom * f));
+    this.camTouched = true;
+    const nz = Math.min(2.2, Math.max(0.3, this.cam.zoom * f));
     this.cam.x = ax - ((ax - this.cam.x) * nz) / this.cam.zoom;
     this.cam.y = ay - ((ay - this.cam.y) * nz) / this.cam.zoom;
     this.cam.zoom = nz;
   }
 
   pan(dx: number, dy: number) {
+    this.camTouched = true;
     this.cam.x += dx;
     this.cam.y += dy;
     this.clampCam();
@@ -219,10 +247,17 @@ export class WorldEngine {
   }
 
   /** Comemoração curta após uma ação real confirmada pelo servidor (missão/hábito). */
-  celebrate(id: string, text: string) {
+  celebrate(id: string, text: string, xp?: number | null) {
     const c = this.chars.get(id);
     if (!c) return;
     const now = performance.now();
+    if (xp) this.floaters.push({ x: c.x, y: c.y, z: 0, text: `+${xp} XP`, color: "#F1C66A", born: now });
+    if (!this.settings.reducedMotion && this.settings.effects > 0) {
+      for (let i = 0; i < 26; i++) {
+        const a = (i / 26) * Math.PI * 2;
+        this.particles.push({ x: c.x, y: c.y, ox: 0, oy: 0, vx: Math.cos(a) * (40 + Math.random() * 40), vy: -60 - Math.random() * 60, life: 1, color: ["#F1C66A", "#A875F5", "#4FD49A", "#f3f4fa"][i % 4]! });
+      }
+    }
     c.celebrateUntil = now + 2400;
     c.brain.set("celebrating");
     c.bubble = { text, until: now + 3500, tone: "info" };
@@ -286,7 +321,7 @@ export class WorldEngine {
   }
 
   private syncAvatar(d: EngineData, first: boolean) {
-    const look: Look = { kind: "human", skin: d.avatar.skin, hair: d.avatar.hair, shirt: d.avatar.shirt, pants: d.avatar.pants, accent: "#F1C66A" };
+    const look: Look = { kind: "human", skin: d.avatar.skin, hair: d.avatar.hair, shirt: d.avatar.shirt, pants: d.avatar.pants, accent: "#F1C66A", cape: "#7a1f3a" };
     let av = this.chars.get("avatar");
     if (!av) {
       const start = nearestFree(this.blocked, { x: d.avatar.x, y: d.avatar.y }) ?? AVATAR_SPAWN;
@@ -319,7 +354,8 @@ export class WorldEngine {
   private syncAgents(d: EngineData, first: boolean) {
     const now = performance.now();
     for (const a of d.agents) {
-      const look: Look = { kind: "robot", skin: "#cfd6e6", hair: "#000000", shirt: a.color, pants: "#8e97ab", accent: a.color };
+      const variant = ({ planejador: "planner", mentor: "mentor", analista: "analyst", habitos: "habits" } as const)[a.key as "planejador"];
+      const look: Look = { kind: "robot", skin: "#cfd6e6", hair: "#000000", shirt: a.color, pants: "#8e97ab", accent: a.color, variant };
       let c = this.chars.get(a.key);
       const idle = AGENT_IDLE[a.key] ?? AVATAR_SPAWN;
       const st = STATIONS[`agent-${a.key}`];
@@ -463,8 +499,17 @@ export class WorldEngine {
       }
     }
     this.ambientTick(now);
-    if (this.settings.followAvatar && !this.drag) {
-      const av = this.chars.get("avatar");
+    for (const p of this.particles) {
+      p.ox += p.vx * dt;
+      p.oy += p.vy * dt;
+      p.vy += 160 * dt;
+      p.life -= dt * 1.1;
+    }
+    this.particles = this.particles.filter((p) => p.life > 0);
+    this.floaters = this.floaters.filter((f) => now - f.born < 1800);
+    const followId = this.followChar ?? (this.settings.followAvatar ? "avatar" : null);
+    if (followId && !this.drag) {
+      const av = this.chars.get(followId);
       if (av) {
         const s = isoToScreen(av.x, av.y);
         const tx = this.w / 2 - s.sx * this.cam.zoom;
@@ -497,237 +542,442 @@ export class WorldEngine {
     }
   }
 
+  /** Limites do mundo em pixels (antes da câmera), para a camada estática. */
+  private static readonly WB = { x: -1010, y: -150, w: 2020, h: 1260 };
+
+  /**
+   * Camada estática em cache: pisos texturizados, plataformas, degraus,
+   * penhascos, tapetes e paredes. Redesenhada só quando a qualidade muda —
+   * o quadro a quadro desenha apenas o que se move ou brilha.
+   */
+  private buildStatic() {
+    const scale = this.settings.quality === "high" ? 2 : this.settings.quality === "medium" ? 1.5 : 1;
+    const WB = WorldEngine.WB;
+    const c = document.createElement("canvas");
+    c.width = Math.round(WB.w * scale);
+    c.height = Math.round(WB.h * scale);
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(scale, 0, 0, scale, -WB.x * scale, -WB.y * scale);
+    ctx.imageSmoothingEnabled = false;
+    // penhascos das bordas frontais (ilha flutuante)
+    for (let i = 0; i < GRID; i++) {
+      cliff(ctx, GRID - 1, i, "se");
+      cliff(ctx, i, GRID - 1, "sw");
+    }
+    for (let s = 0; s <= 2 * (GRID - 1); s++) {
+      for (let x = Math.max(0, s - GRID + 1); x <= Math.min(GRID - 1, s); x++) {
+        const y = s - x;
+        const z = tileZ(x, y);
+        const kind = tileKind(x, y);
+        const room = roomAt(x, y);
+        ctx.save();
+        ctx.translate(0, -z);
+        if (kind !== "water") drawTile(ctx, x, y, kind, room);
+        ctx.restore();
+        // laterais da plataforma e degraus para o vizinho mais baixo
+        for (const [nx, ny, side] of [[x, y + 1, "sw"], [x + 1, y, "se"]] as const) {
+          if (nx >= GRID || ny >= GRID) continue;
+          const nz = tileZ(nx, ny);
+          if (nz >= z) continue;
+          ctx.save();
+          ctx.translate(0, -z);
+          platformSide(ctx, x, y, side, z - nz, room?.wall ?? "#6d685e");
+          ctx.restore();
+          if (room && (tileKind(nx, ny) === "path" || tileKind(nx, ny) === "plaza") && (x + y) % 2 === 0) {
+            ctx.save();
+            ctx.translate(0, -nz);
+            step(ctx, nx, ny, side === "sw" ? "y" : "x", (z - nz) / 2);
+            ctx.restore();
+          }
+        }
+      }
+    }
+    for (const it of FURNITURE) {
+      if (it.blocks || VOLUMETRIC_FREE.has(it.kind)) continue;
+      ctx.save();
+      ctx.translate(0, -tileZ(it.x, it.y));
+      drawFlat(ctx, it);
+      ctx.restore();
+    }
+    for (const r of ROOMS) {
+      if (!r.walls) continue;
+      ctx.save();
+      ctx.translate(0, -tileZ(r.x0, r.y0));
+      for (let y = r.y1; y > r.y0; y--) drawWall(ctx, r.x0, y, r);
+      for (let x = r.x1; x >= r.x0; x--) drawWall(ctx, x, r.y0, r);
+      for (const d of WALL_DECOR) {
+        if (d.kind === "torch" || d.kind === "screen" || d.kind === "fireplace" || d.kind === "window") continue;
+        if (roomAt(d.x, d.y) === r) drawWallDecor(ctx, d, r, 0, false);
+      }
+      ctx.restore();
+    }
+    this.staticLayer = c;
+    this.staticScale = scale;
+  }
+
   private render(t: number) {
     const ctx = this.ctx;
     const d = this.data;
     const fx = this.settings.reducedMotion ? 0 : this.settings.effects;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const bg = ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-    bg.addColorStop(0, "#0b1430");
-    bg.addColorStop(1, "#080E22");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    const night = !!d && (d.localHour >= 19 || d.localHour < 6);
+    if (!this.staticLayer) this.buildStatic();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    drawSky(ctx, this.w, this.h, t, fx);
     ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom, this.dpr * this.cam.x, this.dpr * this.cam.y);
     ctx.imageSmoothingEnabled = false;
 
-    // 1) Chão
-    for (let s = 0; s <= 2 * (GRID - 1); s++) {
-      for (let x = Math.max(0, s - GRID + 1); x <= Math.min(GRID - 1, s); x++) {
-        const y = s - x;
-        drawTile(ctx, x, y, tileKind(x, y), roomAt(x, y), t, fx);
-      }
+    // 1) Camada estática + elementos animados de fundo
+    const WB = WorldEngine.WB;
+    if (this.staticLayer) ctx.drawImage(this.staticLayer, WB.x, WB.y, WB.w, WB.h);
+    for (let x = 0; x < GRID; x++) for (let y = 0; y < GRID; y++) if (tileKind(x, y) === "water") drawWater(ctx, x, y, t, fx);
+    for (const r of ROOMS) {
+      if (!r.walls) continue;
+      ctx.save();
+      ctx.translate(0, -tileZ(r.x0, r.y0));
+      for (const w of WALL_DECOR) if ((w.kind === "torch" || w.kind === "screen" || w.kind === "fireplace" || w.kind === "window") && roomAt(w.x, w.y) === r) drawWallDecor(ctx, w, r, t, night);
+      ctx.restore();
     }
-    for (const it of FURNITURE) if (!it.blocks) drawFlat(ctx, it, t);
     if (this.selectedRoom) {
       const r = ROOMS.find((x) => x.key === this.selectedRoom)!;
-      ctx.globalAlpha = 0.12 + (fx ? Math.sin(t / 400) * 0.04 : 0);
-      for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) diamond(ctx, x, y, r.accent);
+      ctx.globalAlpha = 0.14 + (fx ? Math.sin(t / 400) * 0.05 : 0);
+      for (let x = r.x0; x <= r.x1; x++)
+        for (let y = r.y0; y <= r.y1; y++) {
+          ctx.save();
+          ctx.translate(0, -tileZ(x, y));
+          diamond(ctx, x, y, r.accent);
+          ctx.restore();
+        }
       ctx.globalAlpha = 1;
     }
+    const lifted = (x: number, y: number, draw: () => void) => {
+      ctx.save();
+      ctx.translate(0, -tileZ(x, y));
+      draw();
+      ctx.restore();
+    };
     if (this.decorMode && d) {
       const used = new Set(d.decor.map((o) => o.slotKey));
-      for (const s of d.slots) diamond(ctx, s.x, s.y, used.has(s.key) ? "rgba(241,198,106,0.25)" : "rgba(79,212,154,0.35)", "#F1C66A", 0.9);
+      for (const sl of d.slots) lifted(sl.x, sl.y, () => diamond(ctx, sl.x, sl.y, used.has(sl.key) ? "rgba(241,198,106,0.3)" : `rgba(79,212,154,${0.3 + Math.sin(t / 300) * 0.12})`, "#F1C66A", 0.9));
     }
-    if (this.hover && this.hover.x >= 0 && this.hover.y >= 0 && this.hover.x < GRID && this.hover.y < GRID) diamond(ctx, this.hover.x, this.hover.y, "rgba(241,198,106,0.18)", "#F1C66A");
+    if (this.hover && this.hover.x >= 0 && this.hover.y >= 0 && this.hover.x < GRID && this.hover.y < GRID) {
+      const hv = this.hover;
+      lifted(hv.x, hv.y, () => diamond(ctx, hv.x, hv.y, "rgba(241,198,106,0.16)", "#F1C66A"));
+    }
+    // marcador do personagem selecionado (no chão)
+    const sel = this.selectedChar ? this.chars.get(this.selectedChar) : null;
+    if (sel) {
+      const [sx, sy] = isoPoint(sel.x, sel.y);
+      const z = zAtFloat(sel.x, sel.y);
+      ctx.strokeStyle = "#F1C66A";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy - z, 20 + Math.sin(t / 250) * 2, 9, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // 2) Objetos ordenados por profundidade
     type Item = { depth: number; draw: () => void };
     const items: Item[] = [];
-    for (const r of ROOMS) {
-      if (!r.walls) continue;
-      for (let x = r.x0; x <= r.x1; x++) items.push({ depth: x + r.y0 - 0.01, draw: () => drawWall(ctx, x, r.y0, r) });
-      for (let y = r.y0 + 1; y <= r.y1; y++) items.push({ depth: r.x0 + y - 0.01, draw: () => drawWall(ctx, r.x0, y, r) });
-    }
-    for (const it of FURNITURE) if (it.blocks) items.push({ depth: it.x + it.y + (it.kind === "crystal" ? 1 : 0), draw: () => drawFurniture(ctx, it, t) });
+    for (const it of FURNITURE) if (it.blocks || VOLUMETRIC_FREE.has(it.kind)) items.push({ depth: it.x + it.y + (it.kind === "crystal" ? 1 : 0) - (it.kind === "chair" ? 0.1 : 0), draw: () => lifted(it.x, it.y, () => drawFurniture(ctx, it, t)) });
     if (d) {
       d.habits.slice(0, PLANT_TILES.length).forEach((h, i) => {
         const [px, py] = PLANT_TILES[i]!;
-        items.push({ depth: px + py, draw: () => drawPlant(ctx, px, py, h.stage, h.doneToday, t) });
+        items.push({ depth: px + py, draw: () => lifted(px, py, () => drawPlant(ctx, px, py, h.stage, h.doneToday, t)) });
       });
-      PLANT_TILES.slice(d.habits.length).forEach(([px, py]) => items.push({ depth: px + py, draw: () => drawPlant(ctx, px, py, 0, false, t) }));
+      PLANT_TILES.slice(d.habits.length).forEach(([px, py]) => items.push({ depth: px + py, draw: () => lifted(px, py, () => drawPlant(ctx, px, py, 0, false, t)) }));
       for (const o of d.decor) {
         items.push({
           depth: o.x + o.y,
-          draw: () => {
-            box(ctx, o.x, o.y, 0.22, 0.22, 14, "#3b3150", 0, "#2c2440", "#211b31");
-            const img = o.art ? this.images.get(o.art) : null;
-            const [sx, sy] = isoPoint(o.x, o.y);
-            if (img?.complete && img.naturalWidth) ctx.drawImage(img, sx - 16, sy - 50, 32, 32);
-            else {
-              ctx.fillStyle = "#F1C66A";
-              ctx.fillRect(sx - 6, sy - 30, 12, 12);
-            }
-          },
+          draw: () =>
+            lifted(o.x, o.y, () => {
+              box(ctx, o.x, o.y, 0.22, 0.22, 14, "#4a3f63", 0, "#3a3150", "#2c2440");
+              box(ctx, o.x, o.y, 0.24, 0.24, 2, "#A77C34", 14);
+              const img = o.art ? this.images.get(o.art) : null;
+              const [sx, sy] = isoPoint(o.x, o.y);
+              const bob = fx ? Math.sin(t / 700 + o.x) * 2 : 0;
+              if (img?.complete && img.naturalWidth) ctx.drawImage(img, sx - 16, sy - 52 + bob, 32, 32);
+              else {
+                ctx.fillStyle = "#F1C66A";
+                ctx.fillRect(sx - 6, sy - 32, 12, 12);
+              }
+            }),
         });
       }
     }
-    for (const c of this.chars.values()) items.push({ depth: c.x + c.y + 0.5, draw: () => this.drawChar(c) });
+    for (const c of this.chars.values()) items.push({ depth: c.x + c.y + 0.5, draw: () => this.drawChar(c, t) });
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) it.draw();
 
-    // 3) Luz ambiente
-    if (this.settings.quality !== "low" && fx > 0) {
-      ctx.globalCompositeOperation = "lighter";
-      const pulse = 0.22 + Math.sin(t / 700) * 0.06;
-      const [cx, cy] = isoPoint(15, 15);
-      glow(ctx, cx, cy - 60, 150, "rgba(168,117,245,ALPHA)", pulse);
-      for (const it of FURNITURE) {
-        if (it.kind === "lamp" || it.kind === "lantern") {
-          const [lx, ly] = isoPoint(it.x, it.y);
-          glow(ctx, lx, ly - 46, 70, "rgba(241,198,106,ALPHA)", 0.18);
-        }
-      }
-      ctx.globalCompositeOperation = "source-over";
+    // partículas e números flutuantes (mundo)
+    for (const p of this.particles) {
+      const [sx, sy] = isoPoint(p.x, p.y);
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(sx + p.ox, sy - zAtFloat(p.x, p.y) - 40 + p.oy, 3, 3);
     }
-    if (d && (d.localHour >= 19 || d.localHour < 6)) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = "rgba(8,14,40,0.28)";
+    ctx.globalAlpha = 1;
+
+    // 3) Luz: noite escurece; tochas, velas, monitores e cristal iluminam
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (night) {
+      ctx.fillStyle = "rgba(6,10,32,0.22)";
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom, this.dpr * this.cam.x, this.dpr * this.cam.y);
+    if (this.settings.quality !== "low" && fx > 0) {
+      ctx.globalCompositeOperation = "lighter";
+      const k = night ? 1.4 : 1;
+      const pulse = (0.24 + Math.sin(t / 700) * 0.07) * k;
+      const [cx, cy] = isoPoint(15, 15);
+      glow(ctx, cx, cy - 6 - 95, 210, "rgba(168,117,245,ALPHA)", pulse);
+      for (const it of FURNITURE) {
+        const z = tileZ(it.x, it.y);
+        const [lx, ly] = isoPoint(it.x, it.y);
+        if (it.kind === "lamp" || it.kind === "lantern") glow(ctx, lx, ly - z - 50, 80, "rgba(255,190,90,ALPHA)", 0.2 * k);
+        else if (it.kind === "candelabra" || it.kind === "nightstand" || it.kind === "desk") glow(ctx, lx, ly - z - 30, 46, "rgba(255,180,80,ALPHA)", 0.14 * k);
+        else if (it.kind === "pcdesk" || it.kind === "server") glow(ctx, lx, ly - z - 36, 60, "rgba(89,169,248,ALPHA)", 0.16 * k);
+      }
+      for (const w of WALL_DECOR) {
+        const r = roomAt(w.x, w.y);
+        if (!r) continue;
+        const L = wallDecorLight(w, r);
+        const z = tileZ(w.x, w.y);
+        const flick = 0.9 + Math.sin(t / 110 + w.x * 7) * 0.1;
+        if (w.kind === "torch") glow(ctx, L.x, L.y - z, 90, "rgba(255,150,60,ALPHA)", 0.24 * k * flick);
+        else if (w.kind === "fireplace") glow(ctx, L.x, L.y - z, 120, "rgba(255,140,50,ALPHA)", 0.28 * k * flick);
+        else if (w.kind === "stained") glow(ctx, L.x, L.y - z - 30, 70, "rgba(170,120,255,ALPHA)", 0.14 * k);
+        else if (w.kind === "window" && night) glow(ctx, L.x, L.y - z, 50, "rgba(246,210,122,ALPHA)", 0.16);
+        else if (w.kind === "screen") glow(ctx, L.x, L.y - z, 60, "rgba(89,169,248,ALPHA)", 0.18 * k);
+      }
+      ctx.globalCompositeOperation = "source-over";
+      // vagalumes no jardim e faíscas mágicas na praça
+      if (fx > 1) {
+        for (let i = 0; i < 16; i++) {
+          const gx = 21.5 + ((i * 37) % 70) / 10 + Math.sin(t / 1500 + i) * 0.5;
+          const gy = 21.5 + ((i * 53) % 70) / 10 + Math.cos(t / 1700 + i) * 0.5;
+          const [sx, sy] = isoPoint(gx, gy);
+          ctx.fillStyle = `rgba(200,255,140,${0.4 + Math.sin(t / 300 + i) * 0.4})`;
+          ctx.fillRect(sx, sy - 18 - Math.sin(t / 600 + i) * 8, 2, 2);
+        }
+        for (let i = 0; i < 14; i++) {
+          const a = t / 2000 + i;
+          const r = 30 + (i % 4) * 14;
+          ctx.fillStyle = `rgba(220,190,255,${0.5 + Math.sin(t / 400 + i) * 0.4})`;
+          ctx.fillRect(cx + Math.cos(a) * r, cy - 6 - 40 - ((t / 20 + i * 30) % 90), 2, 2);
+        }
+      }
+    }
 
-    // 4) Interface no espaço de tela (rótulos sempre legíveis)
+    // 4) Interface no espaço de tela
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    if (d) this.drawRoomLabels(d);
+    this.labelRects = [];
+    if (d && this.settings.showLabels) this.drawRoomLabels(d);
     for (const c of this.chars.values()) this.drawCharOverlay(c, t);
     if (d && this.settings.showIndicators) {
       d.habits.slice(0, PLANT_TILES.length).forEach((h, i) => {
         if (!h.pendingToday) return;
         const [px, py] = PLANT_TILES[i]!;
-        const s = this.toScreen(px, py);
-        this.badge(s.x, s.y - 60 * this.cam.zoom, "!", "#F1C66A", "#1b1405");
+        const s = this.toScreen(px, py, tileZ(px, py));
+        this.badge(s.x, s.y - (58 + Math.sin(t / 300) * 3) * this.cam.zoom, "!", "#F1C66A", "#1b1405");
       });
     }
-    if (fx > 1 && this.settings.quality === "high") {
-      ctx.fillStyle = "rgba(241,198,106,0.5)";
-      for (let i = 0; i < 18; i++) {
-        const px = ((i * 197 + t / 40) % this.w + this.w) % this.w;
-        const py = ((i * 131 - t / 60) % this.h + this.h) % this.h;
-        ctx.fillRect(px, py, 2, 2);
-      }
+    const now = performance.now();
+    for (const f of this.floaters) {
+      const age = (now - f.born) / 1800;
+      const s = this.toScreen(f.x, f.y, zAtFloat(f.x, f.y));
+      ctx.globalAlpha = 1 - age;
+      ctx.font = "800 18px Inter, system-ui, sans-serif";
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#1b1405";
+      const y = s.y - (90 + age * 50) * this.cam.zoom;
+      const w = ctx.measureText(f.text).width;
+      ctx.strokeText(f.text, s.x - w / 2, y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, s.x - w / 2, y);
+      ctx.globalAlpha = 1;
     }
   }
 
-  private toScreen(x: number, y: number) {
+  private toScreen(x: number, y: number, z = 0) {
     const s = isoToScreen(x, y);
-    return { x: s.sx * this.cam.zoom + this.cam.x, y: s.sy * this.cam.zoom + this.cam.y };
+    return { x: s.sx * this.cam.zoom + this.cam.x, y: (s.sy - z) * this.cam.zoom + this.cam.y };
   }
 
-  private drawChar(c: Char) {
+  private drawChar(c: Char, t: number) {
     const ctx = this.ctx;
     const { pose, lying } = this.poseFor(c);
     const back = c.facing === "ne" || c.facing === "nw";
     const flip = c.facing === "se" || c.facing === "nw";
     const spr = getSprite(c.look, pose, c.frame % framesFor(pose), back && !lying);
-    const [sx, sy] = isoPoint(c.x, c.y);
-    const scale = 2;
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    const [sx, sy0] = isoPoint(c.x, c.y);
+    const z = zAtFloat(c.x, c.y);
+    const sy = sy0 - z;
+    const scale = 2.3;
+    // respiração sutil parado
+    const breath = pose === "stand" && !this.settings.reducedMotion ? Math.sin(t / 500 + c.x) * 0.6 : 0;
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
-    ctx.ellipse(sx, sy, 14, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, 15, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.save();
     if (lying) {
-      ctx.translate(sx, sy - 18);
+      ctx.translate(sx, sy - 16);
       ctx.rotate(-Math.PI / 2.4);
       ctx.drawImage(spr, (-SPRITE_W * scale) / 2, (-SPRITE_H * scale) / 2, SPRITE_W * scale, SPRITE_H * scale);
     } else {
-      ctx.translate(sx, sy);
+      ctx.translate(sx, sy + breath);
       if (flip) ctx.scale(-1, 1);
-      ctx.drawImage(spr, (-SPRITE_W * scale) / 2, -SPRITE_H * scale + 4, SPRITE_W * scale, SPRITE_H * scale);
+      ctx.drawImage(spr, (-SPRITE_W * scale) / 2, -SPRITE_H * scale + 6, SPRITE_W * scale, SPRITE_H * scale);
     }
     ctx.restore();
   }
 
   private drawCharOverlay(c: Char, t: number) {
     const ctx = this.ctx;
-    const s = this.toScreen(c.x, c.y);
-    const top = s.y - 70 * this.cam.zoom;
-    if (this.settings.showNames) {
-      ctx.font = "600 11px Inter, system-ui, sans-serif";
+    const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
+    const top = s.y - 78 * this.cam.zoom;
+    if (this.selectedChar === c.id) {
+      const by = top - (this.settings.showNames ? 24 : 6) + Math.sin(t / 220) * 3;
+      ctx.fillStyle = "#F1C66A";
+      ctx.beginPath();
+      ctx.moveTo(s.x - 6, by - 8);
+      ctx.lineTo(s.x + 6, by - 8);
+      ctx.lineTo(s.x, by);
+      ctx.fill();
+    }
+    // Telas estreitas: só o nome do avatar e do selecionado, para não poluir o mapa.
+    const showName = this.settings.showNames && (this.w >= 700 || c.isAvatar || this.selectedChar === c.id);
+    if (showName) {
+      ctx.font = "700 11px Inter, system-ui, sans-serif";
       const label = c.name;
-      const w = ctx.measureText(label).width + 10;
-      ctx.fillStyle = "rgba(8,14,34,0.78)";
+      const w = ctx.measureText(label).width + 12;
+      ctx.fillStyle = "rgba(8,14,34,0.85)";
       ctx.fillRect(s.x - w / 2, top - 16, w, 15);
       ctx.fillStyle = c.isAvatar ? "#F1C66A" : c.look.accent;
-      ctx.fillText(label, s.x - w / 2 + 5, top - 5);
+      ctx.fillRect(s.x - w / 2, top - 2, w, 1);
+      ctx.fillText(label, s.x - w / 2 + 6, top - 5);
     }
     if (!this.settings.showIndicators) return;
+    const bt = top - (this.settings.showNames ? 20 : 2);
     if (c.bubble) {
       const tone = c.bubble.tone === "error" ? "#F16D75" : c.bubble.tone === "work" ? "#59A9F8" : "#4FD49A";
-      this.bubble(s.x, top - 22, c.bubble.text + (c.bubble.tone === "work" ? ".".repeat(Math.floor(t / 400) % 3) : ""), tone);
+      this.bubble(s.x, bt, c.bubble.text + (c.bubble.tone === "work" ? ".".repeat(Math.floor(t / 400) % 3) : ""), tone);
     } else if (c.brain.state === "resting" && c.station?.anim === "sleeping") {
-      this.bubble(s.x + 10, top - 4, "Zz", "#AAB6CC");
+      this.bubble(s.x + 14, bt + 10, "Zz", "#AAB6CC");
     } else if (c.isAvatar && c.brain.intent?.source === "domain" && c.brain.intent.label && !c.path.length) {
-      this.bubble(s.x, top - 22, c.brain.intent.label.slice(0, 28), "#A875F5");
+      this.bubble(s.x, bt, c.brain.intent.label.slice(0, 30), "#A875F5");
     }
   }
 
   private bubble(x: number, y: number, text: string, color: string) {
     const ctx = this.ctx;
     ctx.font = "600 11px Inter, system-ui, sans-serif";
-    const w = ctx.measureText(text).width + 14;
-    ctx.fillStyle = "rgba(17,26,50,0.95)";
+    const w = ctx.measureText(text).width + 16;
+    ctx.fillStyle = "rgba(14,22,48,0.96)";
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.rect(x - w / 2, y - 18, w, 18);
+    ctx.rect(x - w / 2, y - 19, w, 19);
     ctx.fill();
     ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y);
+    ctx.lineTo(x + 4, y);
+    ctx.lineTo(x, y + 5);
+    ctx.closePath();
     ctx.fillStyle = color;
-    ctx.fillText(text, x - w / 2 + 7, y - 5);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillText(text, x - w / 2 + 8, y - 6);
   }
 
   private badge(x: number, y: number, text: string, bg: string, fg: string) {
     const ctx = this.ctx;
+    ctx.fillStyle = "#1b1405";
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = bg;
     ctx.beginPath();
     ctx.arc(x, y, 8, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = fg;
-    ctx.font = "700 11px Inter, system-ui, sans-serif";
+    ctx.font = "800 12px Inter, system-ui, sans-serif";
     ctx.fillText(text, x - 2, y + 4);
   }
 
+  /** Placas de madeira com moldura dourada sobre a parede do fundo de cada ambiente. */
   private drawRoomLabels(d: EngineData) {
     const ctx = this.ctx;
     for (const r of ROOMS) {
-      const s = this.toScreen(r.key === "praca" ? 14.5 : (r.x0 + r.x1) / 2 - 1.5, r.key === "praca" ? 11 : (r.y0 + r.y1) / 2 - 1.5);
-      const y = s.y - (r.walls ? 70 : 40) * this.cam.zoom;
-      const status = d.roomStatus[r.key] ?? r.subtitle;
-      ctx.font = "700 13px Inter, system-ui, sans-serif";
+      const anchor =
+        r.key === "praca" ? { x: 14.5, y: 14.5, lift: 215 } : r.walls ? { x: (r.x0 + r.x1) / 2 + 0.5, y: r.y0, lift: 112 } : { x: 25, y: 22, lift: 96 };
+      const s = this.toScreen(anchor.x, anchor.y, anchor.lift);
+      const compact = this.w < 700;
+      const status = compact ? "" : d.roomStatus[r.key] ?? r.subtitle;
+      ctx.font = compact ? "700 11px Georgia, 'Times New Roman', serif" : "700 14px Georgia, 'Times New Roman', serif";
       const w1 = ctx.measureText(r.name).width;
-      ctx.font = "500 11px Inter, system-ui, sans-serif";
-      const w2 = ctx.measureText(status).width;
-      const w = Math.max(w1, w2) + 34;
-      const x = s.x - w / 2;
-      ctx.fillStyle = this.selectedRoom === r.key ? "rgba(40,30,70,0.95)" : "rgba(17,26,50,0.9)";
-      ctx.strokeStyle = this.selectedRoom === r.key ? "#F1C66A" : "rgba(167,124,52,0.85)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.rect(x, y - 34, w, 34);
-      ctx.fill();
-      ctx.stroke();
+      ctx.font = "600 11px Inter, system-ui, sans-serif";
+      const w2 = status ? ctx.measureText(status).width : 0;
+      const w = Math.max(w1, w2) + (compact ? 30 : 40);
+      const h = compact ? 22 : 38;
+      // nunca sai da área do mapa
+      const x = Math.min(this.w - w - 6, Math.max(6, s.x - w / 2));
+      const y = Math.min(this.h - h - 50, Math.max(8, s.y - h));
+      const selected = this.selectedRoom === r.key;
+      // correntes
+      ctx.fillStyle = "#6e4f1f";
+      ctx.fillRect(x + 10, y - 6, 2, 6);
+      ctx.fillRect(x + w - 12, y - 6, 2, 6);
+      // tábua
+      const g = ctx.createLinearGradient(0, y, 0, y + h);
+      g.addColorStop(0, selected ? "#3a2a5a" : "#1c2448");
+      g.addColorStop(1, selected ? "#2a1f44" : "#121a36");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = selected ? "#F6D27A" : "#A77C34";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.strokeStyle = "rgba(246,210,122,0.25)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+      ctx.fillStyle = "#F1C66A";
+      for (const [cx, cy] of [[x, y], [x + w - 4, y], [x, y + h - 4], [x + w - 4, y + h - 4]]) ctx.fillRect(cx!, cy!, 4, 4);
+      // brasão do ambiente
+      const sh = compact ? 0.55 : 1;
       ctx.fillStyle = r.accent;
-      ctx.fillRect(x + 8, y - 25, 14, 14);
-      ctx.fillStyle = "#F3F4FA";
-      ctx.font = "700 13px Inter, system-ui, sans-serif";
-      ctx.fillText(r.name, x + 28, y - 19);
-      ctx.fillStyle = "#AAB6CC";
-      ctx.font = "500 11px Inter, system-ui, sans-serif";
-      ctx.fillText(status, x + 28, y - 6);
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 5 * sh + 4);
+      ctx.lineTo(x + 8 + 14 * sh, y + 5 * sh + 4);
+      ctx.lineTo(x + 8 + 14 * sh, y + 17 * sh + 4);
+      ctx.lineTo(x + 8 + 7 * sh, y + 23 * sh + 4);
+      ctx.lineTo(x + 8, y + 17 * sh + 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#F6D27A";
+      ctx.font = compact ? "700 11px Georgia, 'Times New Roman', serif" : "700 14px Georgia, 'Times New Roman', serif";
+      ctx.fillText(r.name, x + (compact ? 22 : 32), y + (compact ? 15 : 17));
+      if (status) {
+        ctx.fillStyle = "#c9d2e6";
+        ctx.font = "600 11px Inter, system-ui, sans-serif";
+        ctx.fillText(status, x + 32, y + 31);
+      }
+      this.labelRects.push({ key: r.key, x, y, w, h });
     }
   }
 
   /* ───────────── Entrada ───────────── */
 
   private pick(px: number, py: number): Selection | null {
-    // Personagens primeiro (caixa do sprite na tela)
+    for (const l of this.labelRects) if (px >= l.x && px <= l.x + l.w && py >= l.y && py <= l.y + l.h) return { type: "room", key: l.key };
+    // Personagens (caixa do sprite na tela)
     const chars = [...this.chars.values()].sort((a, b) => b.x + b.y - (a.x + a.y));
     for (const c of chars) {
-      const s = this.toScreen(c.x, c.y);
-      const hw = 16 * this.cam.zoom;
-      if (px > s.x - hw && px < s.x + hw && py > s.y - 64 * this.cam.zoom && py < s.y + 4) return c.isAvatar ? { type: "avatar" } : { type: "agent", key: c.id };
+      const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
+      const hw = 22 * this.cam.zoom;
+      if (px > s.x - hw && px < s.x + hw && py > s.y - 76 * this.cam.zoom && py < s.y + 4) return c.isAvatar ? { type: "avatar" } : { type: "agent", key: c.id };
     }
-    const tile = screenToIso((px - this.cam.x) / this.cam.zoom, (py - this.cam.y) / this.cam.zoom);
+    const tile = this.tileAt(px, py);
     if (this.decorMode && this.data) {
       const slot = this.data.slots.find((s) => s.x === tile.x && s.y === tile.y);
       if (slot) return { type: "slot", key: slot.key };
@@ -738,6 +988,17 @@ export class WorldEngine {
     }
     const r = roomAt(tile.x, tile.y);
     return r ? { type: "room", key: r.key } : null;
+  }
+
+  /** Tile sob o cursor, considerando a altura das plataformas. */
+  private tileAt(px: number, py: number): Point {
+    const wx = (px - this.cam.x) / this.cam.zoom;
+    const wy = (py - this.cam.y) / this.cam.zoom;
+    for (const z of [12, 6, 3, 0]) {
+      const t = screenToIso(wx, wy + z);
+      if (t.x >= 0 && t.y >= 0 && t.x < GRID && t.y < GRID && tileZ(t.x, t.y) === z) return t;
+    }
+    return screenToIso(wx, wy);
   }
 
   private clampCam() {
@@ -774,14 +1035,21 @@ export class WorldEngine {
       if (this.drag) {
         const dx = p.x - this.drag.x;
         const dy = p.y - this.drag.y;
-        if (Math.abs(dx) + Math.abs(dy) > 5) this.drag.moved = true;
+        if (Math.abs(dx) + Math.abs(dy) > 5) {
+          this.drag.moved = true;
+          this.camTouched = true;
+          if (this.followChar) {
+            this.followChar = null;
+            this.onFollowStop();
+          }
+        }
         if (this.drag.moved) {
           this.cam.x = this.drag.cx + dx;
           this.cam.y = this.drag.cy + dy;
           this.clampCam();
         }
       }
-      this.hover = screenToIso((p.x - this.cam.x) / this.cam.zoom, (p.y - this.cam.y) / this.cam.zoom);
+      this.hover = this.tileAt(p.x, p.y);
       el.style.cursor = this.drag?.moved ? "grabbing" : this.pick(p.x, p.y) ? "pointer" : "grab";
     };
     const up = (e: PointerEvent) => {
@@ -797,7 +1065,7 @@ export class WorldEngine {
     };
     const dbl = (e: MouseEvent) => {
       const p = rel(e);
-      const tile = screenToIso((p.x - this.cam.x) / this.cam.zoom, (p.y - this.cam.y) / this.cam.zoom);
+      const tile = this.tileAt(p.x, p.y);
       if (tile.x >= 0 && tile.y >= 0 && tile.x < GRID && tile.y < GRID) this.moveAvatarTo(tile);
     };
     const wheel = (e: WheelEvent) => {

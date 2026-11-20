@@ -344,7 +344,7 @@ export function SettingsContent({ settings, onChange }: { settings: WorldSetting
       </div>
     </fieldset>
   );
-  const sw = (label: string, k: "sound" | "autonomous" | "showNames" | "showIndicators" | "followAvatar", hint?: string) => (
+  const sw = (label: string, k: "sound" | "autonomous" | "showNames" | "showIndicators" | "showLabels" | "followAvatar", hint?: string) => (
     <div className="flex items-center justify-between gap-3 border-b border-rpg-border/50 py-1.5">
       <span className="text-sm text-rpg-text">
         {label}
@@ -360,6 +360,7 @@ export function SettingsContent({ settings, onChange }: { settings: WorldSetting
       {seg("Velocidade das animações", settings.animSpeed, [[0.5, "Lenta"], [1, "Normal"], [1.5, "Rápida"]], (v) => onChange({ animSpeed: v }))}
       <div>
         {sw("Modo Vida Autônoma", "autonomous", "Sem atividade real, os personagens passeiam. Só visual: não cria atividades nem recompensas.")}
+        {sw("Mostrar placas dos ambientes", "showLabels")}
         {sw("Mostrar nomes", "showNames")}
         {sw("Mostrar indicadores", "showIndicators", "Balões de tarefa e pendências do Jardim.")}
         {sw("Seguir o avatar", "followAvatar")}

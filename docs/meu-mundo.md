@@ -30,6 +30,39 @@ Não foram adicionadas bibliotecas. O motor usa Canvas 2D puro: Phaser e PixiJS 
   - Ordenação por profundidade.
   - O loop pausa com a aba oculta ou o mapa fora da tela, e cai para 30 fps na qualidade baixa.
 
+## Direção de arte (redesign RPG medieval)
+
+Toda a arte é **pixel art procedural** em código: nenhuma imagem de terceiros, nenhum crédito necessário. Cada objeto continua sendo uma entidade independente; o cenário não é uma imagem de fundo.
+
+- **Ilha flutuante**: penhascos nas bordas da frente, céu noturno com estrelas, lua e castelo distante (`drawSky`).
+- **Plataformas**:
+  - salas com paredes ficam 12 px acima do chão, a praça 6 px e o jardim 3 px (`tileZ`);
+  - há laterais de pedra e degraus nas entradas;
+  - personagens interpolam a altura ao subir (`zAtFloat`).
+- **Pisos**: tábuas de madeira, lajes de pedra (Escritório/Academia), calçamento nos caminhos e grama com flores. A variação vem de ruído determinístico (`hash`).
+- **Paredes**: pedra com tijolos, viga de madeira e friso dourado.
+- **Decoração de parede** (`WALL_DECOR`): vitrais, janelas (acendem à noite), tochas, telas luminosas, estandartes, brasões, escudos, quadro e lareira.
+- **Móveis por ambiente**:
+  - Biblioteca: estantes altas, candelabro, globo e livros;
+  - Escritório: monitores, servidores e cabos;
+  - Guilda: quadro de missões, barris e armas;
+  - Academia: boneco de treino, alvo e halteres;
+  - Casa: cama, guarda-roupa, criado-mudo e sofá;
+  - Jardim: lago com peixes, vitórias-régias e vagalumes;
+  - Praça: fonte de três níveis, cristal flutuante com runas e estandartes;
+  - em volta: floresta, pinheiros, sebes e pedras.
+- **Personagens**: sprites 24×32 com contorno de 1 px, desenhados em escala 2,3×.
+  - O avatar tem capa, botas e cinto.
+  - Cada agente tem identidade própria: Planejador com ombreiras azuis, Mentor com capelo e óculos, Analista com visor de gráficos animado, Hábitos com coração pulsando.
+- **Luz**: tochas e lareira tremulando, velas, monitores azuis, cristal roxo e janelas à noite. A noite escurece o cenário de leve.
+- **Desempenho**: pisos, plataformas, paredes e tapetes vão para uma **camada estática em cache** (resolução conforme a qualidade). A cada quadro só se desenham água, chamas, telas, móveis, personagens e luz.
+- **Interações**:
+  - placas de madeira clicáveis (ocultáveis em "Placas"; compactas no celular);
+  - marcador dourado no personagem selecionado;
+  - "Acompanhar no mapa" (para quando o usuário arrasta o mapa);
+  - "+XP" flutuante e partículas ao concluir uma missão;
+  - faixa de recompensa com os valores reais da dificuldade.
+
 ## Dados e fontes de verdade
 
 `GET /api/world` agrega, sem cópias:

@@ -44,7 +44,9 @@ export const ROOMS: RoomDef[] = [
 export type FurnitureKind =
   | "shelf" | "desk" | "pcdesk" | "lamp" | "armchair" | "board" | "banner" | "table" | "chest"
   | "treadmill" | "bench" | "dumbbells" | "bag" | "mat" | "bed" | "sofa" | "rug" | "pot" | "tree"
-  | "parkbench" | "crystal" | "server" | "lantern" | "flowers";
+  | "parkbench" | "crystal" | "server" | "lantern" | "flowers"
+  | "globe" | "bookpile" | "candelabra" | "chair" | "wardrobe" | "nightstand" | "dummy" | "weaponrack" | "barrel"
+  | "bush" | "rock" | "pine" | "bannerpole" | "hedge" | "cables" | "target" | "lilypad";
 
 export interface Furniture {
   id: string;
@@ -52,59 +54,90 @@ export interface Furniture {
   x: number;
   y: number;
   room: RoomKey | null;
-  /** Ocupa o tile (bloqueia caminho). Tapetes e flores não bloqueiam. */
+  /** Ocupa o tile (bloqueia caminho). Tapetes, flores e cadeiras não bloqueiam. */
   blocks: boolean;
   color?: string;
 }
 
+/** Itens que não bloqueiam, mas têm volume (precisam de ordenação por profundidade). */
+export const VOLUMETRIC_FREE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(["chair", "cables", "lilypad"]);
+
 const f = (id: string, kind: FurnitureKind, x: number, y: number, room: RoomKey | null, blocks = true, color?: string): Furniture => ({ id, kind, x, y, room, blocks, color });
 
 export const FURNITURE: Furniture[] = [
-  // Biblioteca
-  ...[2, 3, 4, 5, 6, 7].map((x) => f(`bib-shelf-${x}`, "shelf", x, 2, "biblioteca")),
+  // Biblioteca — estantes altas, vitral no fundo (x 4–5 livres para o vitral aparecer)
+  ...[2, 3, 6, 7].map((x) => f(`bib-shelf-${x}`, "shelf", x, 2, "biblioteca")),
+  f("bib-candles", "candelabra", 4, 2, "biblioteca"),
   f("bib-shelf-l1", "shelf", 2, 4, "biblioteca"),
-  f("bib-desk", "pcdesk", 4, 5, "biblioteca"),
+  f("bib-desk", "desk", 4, 5, "biblioteca"),
   f("bib-desk2", "desk", 7, 4, "biblioteca"),
   f("bib-lamp", "lamp", 3, 5, "biblioteca"),
+  f("bib-books", "bookpile", 5, 4, "biblioteca"),
+  f("bib-globe", "globe", 2, 6, "biblioteca"),
   f("bib-arm", "armchair", 6, 7, "biblioteca"),
+  f("bib-chair", "chair", 4, 6, "biblioteca", false, "#6b3fa0"),
+  f("bib-chair2", "chair", 7, 5, "biblioteca", false, "#6b3fa0"),
   f("bib-rug", "rug", 5, 7, "biblioteca", false, "#6a2f5a"),
-  // Escritório
+  f("bib-rug2", "rug", 5, 6, "biblioteca", false, "#6a2f5a"),
+  // Escritório — estações dos agentes, servidor, cabos e painéis luminosos na parede
   f("esc-desk1", "pcdesk", 23, 3, "escritorio"),
   f("esc-desk2", "pcdesk", 25, 3, "escritorio"),
   f("esc-desk3", "pcdesk", 27, 3, "escritorio"),
+  f("esc-chair1", "chair", 23, 4, "escritorio", false, "#2a3350"),
+  f("esc-chair2", "chair", 25, 4, "escritorio", false, "#2a3350"),
+  f("esc-chair3", "chair", 27, 4, "escritorio", false, "#2a3350"),
   f("esc-board", "board", 22, 3, "escritorio"),
   f("esc-server", "server", 28, 5, "escritorio"),
+  f("esc-server2", "server", 28, 4, "escritorio"),
   f("esc-pot", "pot", 22, 8, "escritorio"),
   f("esc-table", "table", 25, 6, "escritorio"),
-  // Guilda
+  f("esc-cables", "cables", 26, 5, "escritorio", false),
+  f("esc-rug", "rug", 24, 7, "escritorio", false, "#1f3a66"),
+  // Guilda — quadro de missões, mesa de planejamento, baú, barris
   f("gui-board", "board", 3, 12, "guilda"),
   f("gui-board2", "board", 4, 12, "guilda"),
-  f("gui-banner", "banner", 6, 12, "guilda"),
   f("gui-table", "table", 4, 15, "guilda"),
   f("gui-table2", "table", 5, 15, "guilda"),
   f("gui-chest", "chest", 2, 14, "guilda"),
+  f("gui-barrel", "barrel", 2, 16, "guilda"),
+  f("gui-barrel2", "barrel", 7, 15, "guilda"),
+  f("gui-rack", "weaponrack", 6, 12, "guilda"),
   f("gui-lantern", "lantern", 8, 12, "guilda"),
-  // Academia
+  f("gui-rug", "rug", 4, 17, "guilda", false, "#7a2a2a"),
+  // Academia — treino de aventureiro
   f("aca-tread", "treadmill", 23, 13, "academia"),
-  f("aca-tread2", "treadmill", 24, 13, "academia"),
+  f("aca-dummy", "dummy", 24, 13, "academia"),
   f("aca-bench", "bench", 27, 14, "academia"),
   f("aca-dumb", "dumbbells", 28, 12, "academia"),
   f("aca-bag", "bag", 26, 16, "academia"),
+  f("aca-rack", "weaponrack", 22, 13, "academia"),
+  f("aca-target", "target", 28, 15, "academia"),
   f("aca-mat", "mat", 24, 16, "academia", false),
-  // Casa
+  f("aca-mat2", "mat", 25, 16, "academia", false),
+  // Casa — quarto aconchegante (lareira fica na parede)
   f("cas-bed", "bed", 2, 22, "casa"),
   f("cas-bed2", "bed", 3, 22, "casa"),
+  f("cas-night", "nightstand", 4, 22, "casa"),
+  f("cas-wardrobe", "wardrobe", 5, 22, "casa"),
   f("cas-table", "table", 6, 23, "casa"),
   f("cas-sofa", "sofa", 5, 26, "casa"),
   f("cas-sofa2", "sofa", 6, 26, "casa"),
-  f("cas-lamp", "lamp", 2, 25, "casa"),
-  f("cas-rug", "rug", 4, 24, "casa", false, "#3a4a8a"),
+  f("cas-lamp", "lamp", 8, 24, "casa"),
+  f("cas-rug", "rug", 4, 24, "casa", false, "#7a2a3a"),
+  f("cas-rug2", "rug", 3, 25, "casa", false, "#7a2a3a"),
   // Jardim
   f("jar-tree1", "tree", 22, 22, "jardim"),
   f("jar-tree2", "tree", 27, 21, "jardim"),
   f("jar-tree3", "tree", 21, 28, "jardim"),
+  f("jar-bush", "bush", 21, 21, "jardim"),
   f("jar-bench", "parkbench", 24, 28, "jardim"),
   f("jar-lantern", "lantern", 28, 28, "jardim"),
+  f("jar-flw1", "flowers", 22, 21, "jardim", false),
+  f("jar-flw2", "flowers", 26, 21, "jardim", false),
+  f("jar-flw3", "flowers", 27, 24, "jardim", false),
+  f("jar-flw4", "flowers", 21, 25, "jardim", false),
+  f("jar-lily1", "lilypad", 25, 26, "jardim", false),
+  f("jar-lily2", "lilypad", 27, 25, "jardim", false),
   // Praça
   f("pra-crystal", "crystal", 14, 14, "praca"),
   f("pra-c2", "crystal", 15, 14, "praca"),
@@ -114,9 +147,85 @@ export const FURNITURE: Furniture[] = [
   f("pra-bench2", "parkbench", 17, 17, "praca"),
   f("pra-lantern1", "lantern", 11, 11, "praca"),
   f("pra-lantern2", "lantern", 18, 18, "praca"),
+  f("pra-banner1", "bannerpole", 11, 16, "praca", true, "#6b3fa0"),
+  f("pra-banner2", "bannerpole", 18, 13, "praca", true, "#6b3fa0"),
+  f("pra-bush1", "bush", 11, 18, "praca"),
+  f("pra-bush2", "bush", 18, 11, "praca"),
   f("pra-flowers1", "flowers", 13, 11, "praca", false),
   f("pra-flowers2", "flowers", 18, 15, "praca", false),
+  f("pra-flowers3", "flowers", 11, 13, "praca", false),
+  f("pra-flowers4", "flowers", 15, 18, "praca", false),
+  // Floresta em volta (atrás das paredes e nas bordas) — só cenário
+  ...[0, 2, 4, 6, 8, 10, 13, 16, 19, 21, 23, 25, 27, 29].map((x) => f(`wood-n-${x}`, x % 4 === 0 ? "pine" : "tree", x, 0, null)),
+  ...[2, 4, 6, 8, 10, 13, 16, 19, 22, 24, 26, 28].map((y) => f(`wood-w-${y}`, y % 4 === 0 ? "pine" : "tree", 0, y, null)),
+  ...[3, 7, 12, 17, 23, 27].map((x) => f(`bush-s-${x}`, "bush", x, 29, null)),
+  ...[3, 7, 12, 17, 24].map((y) => f(`bush-e-${y}`, "bush", 29, y, null)),
+  f("rock-1", "rock", 10, 3, null),
+  f("rock-2", "rock", 19, 26, null),
+  f("rock-3", "rock", 3, 10, null),
+  f("hedge-1", "hedge", 9, 9, null),
+  f("hedge-2", "hedge", 20, 9, null),
+  f("hedge-3", "hedge", 9, 20, null),
+  f("hedge-4", "hedge", 20, 20, null),
 ];
+
+/** Decoração presa às paredes (face visível da parede do tile). Só visual. */
+export type WallDecorKind = "stained" | "window" | "torch" | "banner" | "crest" | "screen" | "painting" | "fireplace" | "shields";
+export interface WallDecor {
+  x: number;
+  y: number;
+  kind: WallDecorKind;
+  color?: string;
+}
+export const WALL_DECOR: WallDecor[] = [
+  { x: 4, y: 1, kind: "stained" },
+  { x: 5, y: 1, kind: "stained" },
+  { x: 1, y: 3, kind: "window" },
+  { x: 1, y: 5, kind: "torch" },
+  { x: 1, y: 7, kind: "window" },
+  { x: 8, y: 1, kind: "torch" },
+  { x: 24, y: 1, kind: "screen" },
+  { x: 26, y: 1, kind: "screen" },
+  { x: 28, y: 1, kind: "window" },
+  { x: 21, y: 6, kind: "window" },
+  { x: 21, y: 8, kind: "torch" },
+  { x: 2, y: 11, kind: "banner", color: "#6b3fa0" },
+  { x: 5, y: 11, kind: "crest" },
+  { x: 7, y: 11, kind: "banner", color: "#6b3fa0" },
+  { x: 1, y: 13, kind: "torch" },
+  { x: 1, y: 15, kind: "shields" },
+  { x: 1, y: 17, kind: "torch" },
+  { x: 23, y: 11, kind: "banner", color: "#9e2b2b" },
+  { x: 26, y: 11, kind: "shields" },
+  { x: 28, y: 11, kind: "banner", color: "#9e2b2b" },
+  { x: 21, y: 15, kind: "torch" },
+  { x: 21, y: 17, kind: "window" },
+  { x: 3, y: 21, kind: "painting" },
+  { x: 7, y: 21, kind: "window" },
+  { x: 1, y: 25, kind: "fireplace" },
+  { x: 1, y: 23, kind: "torch" },
+  { x: 1, y: 28, kind: "window" },
+];
+
+/** Altura do piso (px): salas com paredes ficam sobre uma plataforma de pedra; a praça sobre um degrau. */
+export function tileZ(x: number, y: number): number {
+  const r = roomAt(x, y);
+  if (!r) return 0;
+  if (r.walls) return 12;
+  if (r.key === "praca") return 6;
+  return 3;
+}
+
+/** Altura suavizada para quem está entre dois tiles (movimento em 4 direções). */
+export function zAtFloat(x: number, y: number): number {
+  const fx = x - Math.floor(x);
+  const fy = y - Math.floor(y);
+  const ry = Math.round(y);
+  const rx = Math.round(x);
+  if (fx > 0.001) return tileZ(Math.floor(x), ry) * (1 - fx) + tileZ(Math.ceil(x), ry) * fx;
+  if (fy > 0.001) return tileZ(rx, Math.floor(y)) * (1 - fy) + tileZ(rx, Math.ceil(y)) * fy;
+  return tileZ(rx, ry);
+}
 
 /** Água do lago do Jardim. */
 export const WATER: Array<[number, number]> = [];
