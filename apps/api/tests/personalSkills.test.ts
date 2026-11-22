@@ -299,7 +299,7 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     expect((await agent.get("/api/habilidades")).body.ai.available).toBe(false);
   });
 
-  it("automações: prova liberada avisa uma vez", async () => {
+  it("automações: prova liberada roda sem gravar aviso (notificações removidas na v0.5.23)", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
     const mt = (await create(agent, { domain: "saude", name: "Boxe", linkKind: "modalidade", linkRef: "boxe", practiceMinutesPerLevel: 30 })).body;
     await agent.post("/api/health/workouts").send({ category: "luta", modality: "boxe", durationMinutes: 40 });
@@ -308,12 +308,12 @@ describe("Árvore de Habilidades 2.0 — API", () => {
     expect(ready).toBeTruthy();
     const run1 = await agent.post(`/api/automations/skills/proof_ready/run`).send({});
     expect(run1.status).toBe(200);
-    expect(JSON.stringify(run1.body)).toContain("1 aviso");
-    // Segunda execução (direta, sem o intervalo mínimo da rota) não repete o aviso.
+    // A execução direta também não quebra.
     const run2 = await runProofReady(getDb(), userId, { inApp: true });
-    expect(run2.summary).toContain("Nenhuma prova nova");
+    expect(run2.status).toBe("ok");
+    // recordInAppNotification virou no-op: nenhuma notificação in-app é gravada.
     const notes = await getDb().execute({ sql: "SELECT COUNT(*) AS n FROM in_app_notifications WHERE owner_id = ? AND event_type = 'skills.proof_ready'", args: [userId] });
-    expect(Number(notes.rows[0]?.n)).toBe(1);
+    expect(Number(notes.rows[0]?.n)).toBe(0);
     void mt;
   });
 });
