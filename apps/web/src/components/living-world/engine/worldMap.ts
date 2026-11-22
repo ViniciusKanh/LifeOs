@@ -12,6 +12,7 @@
  * Para uma construção da vila: inclua em BUILDINGS (pegada quadrada ou quase,
  * para a ordenação por profundidade funcionar) com a porta numa face visível.
  */
+import type { CharacterLook } from "./looks";
 
 export const GRID = 42;
 export const TILE_W = 64;
@@ -423,22 +424,18 @@ export interface Villager {
   id: string;
   home: { x: number; y: number };
   radius: number;
-  skin: string;
-  hair: string;
-  shirt: string;
-  pants: string;
-  hat: "straw" | "hood" | "helmet" | "cap" | null;
-  hatColor: string;
-  apron: string | null;
+  /** Visual do aldeão (completado com o padrão em looks.ts). */
+  look: Partial<CharacterLook>;
   lines: string[];
 }
+
 export const VILLAGERS: Villager[] = [
-  { id: "npc-taverneira", home: { x: 8, y: 36 }, radius: 2, skin: "#f0c8a0", hair: "#a0522d", shirt: "#7a2a3a", pants: "#3a2a1a", hat: null, hatColor: "#000000", apron: "#f3e7c9", lines: ["Bem-vindo à Taverna!", "Sopa quente hoje.", "Boa jornada, viajante!"] },
-  { id: "npc-ferreiro", home: { x: 18, y: 36 }, radius: 2, skin: "#a86f4c", hair: "#1e1410", shirt: "#4a4f5c", pants: "#2a2420", hat: null, hatColor: "#000000", apron: "#5a3a22", lines: ["O fogo da forja não apaga.", "Promessa é metal forjado."] },
-  { id: "npc-fazendeiro", home: { x: 37, y: 29 }, radius: 2, skin: "#e8b48a", hair: "#6b4a32", shirt: "#3f7a3c", pants: "#5a4a3a", hat: "straw", hatColor: "#e3c36a", apron: null, lines: ["A colheita vem com paciência.", "Que dia bom para plantar!"] },
-  { id: "npc-guarda", home: { x: 21, y: 31 }, radius: 6, skin: "#d9a57a", hair: "#2a1a10", shirt: "#7a1f3a", pants: "#3b3b46", hat: "helmet", hatColor: "#aab2c0", apron: null, lines: ["Tudo calmo na estrada.", "Ronda em andamento."] },
-  { id: "npc-mercadora", home: { x: 25, y: 34 }, radius: 3, skin: "#c98e66", hair: "#2b1a12", shirt: "#B7791F", pants: "#4a3a2a", hat: "hood", hatColor: "#2B6CB0", apron: null, lines: ["Frutas frescas!", "Volte sempre ao mercado."] },
-  { id: "npc-pescador", home: { x: 36, y: 33 }, radius: 1, skin: "#e8b48a", hair: "#7a7a7a", shirt: "#2B6CB0", pants: "#3a3020", hat: "cap", hatColor: "#3f5a3a", apron: null, lines: ["Os peixes estão tímidos.", "O lago está sereno hoje."] },
+  { id: "npc-taverneira", home: { x: 8, y: 36 }, radius: 2, look: { skin: "#F0C8A0", hair: "#A0522D", hairStyle: "rabo", outfit: "vestido", shirt: "#7A2A3A", trim: "#F3E7C9", prop: "nenhum", cape: null }, lines: ["Bem-vindo à Taverna!", "Sopa quente hoje.", "Boa jornada, viajante!"] },
+  { id: "npc-ferreiro", home: { x: 18, y: 36 }, radius: 2, look: { skin: "#A86F4C", hair: "#1E1410", hairStyle: "careca", beard: "cheia", outfit: "avental", shirt: "#4A4F5C", pants: "#2A2420", trim: "#5A3A22", prop: "nenhum", cape: null }, lines: ["O fogo da forja não apaga.", "Promessa é metal forjado."] },
+  { id: "npc-fazendeiro", home: { x: 37, y: 29 }, radius: 2, look: { skin: "#E8B48A", hair: "#6B4A32", beard: "bigode", outfit: "tunica", shirt: "#3F7A3C", pants: "#5A4A3A", trim: "#8A5D3B", hat: "palha", hatColor: "#8A5D3B", prop: "nenhum", cape: null }, lines: ["A colheita vem com paciência.", "Que dia bom para plantar!"] },
+  { id: "npc-guarda", home: { x: 21, y: 31 }, radius: 6, look: { skin: "#D9A57A", hair: "#2A1A10", outfit: "armadura", shirt: "#7A1F3A", pants: "#3B3B46", trim: "#F1C66A", hat: "elmo", hatColor: "#C8423B", prop: "escudo", cape: "#7A1F3A" }, lines: ["Tudo calmo na estrada.", "Ronda em andamento."] },
+  { id: "npc-mercadora", home: { x: 25, y: 34 }, radius: 3, look: { skin: "#C98E66", hair: "#2B1A12", hairStyle: "longo", outfit: "tunica", shirt: "#B7791F", pants: "#4A3A2A", trim: "#2B6CB0", hat: "capuz", hatColor: "#2B6CB0", prop: "nenhum", cape: null }, lines: ["Frutas frescas!", "Volte sempre ao mercado."] },
+  { id: "npc-pescador", home: { x: 36, y: 33 }, radius: 1, look: { skin: "#E8B48A", hair: "#7A7A7A", beard: "cheia", outfit: "tunica", shirt: "#2B6CB0", pants: "#3A3020", trim: "#E9E2CF", hat: "boina", hatColor: "#3F5A3A", prop: "lanterna", cape: null }, lines: ["Os peixes estão tímidos.", "O lago está sereno hoje."] },
 ];
 
 export type StationAnim = "typing" | "reading" | "exercising" | "sleeping" | "interacting" | "sitting";

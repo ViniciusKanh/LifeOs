@@ -2,13 +2,16 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Bot, Check, CheckCircle2, Loader2, Play, Sprout, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, Loader2, Play, Sprout, Trash2 } from "lucide-react";
 import { RPGBadge, RPGButton, RPGProgressBar, RPGSwitch } from "@/components/rpg";
 import { useAgentRuns, useDecorItems } from "@/hooks/useLivingWorld";
 import { livingWorldService, type WorldAgent, type WorldHabit, type WorldMission, type WorldSettings, type WorldState } from "@/services/livingWorldService";
 import { itemArtUrl } from "@/utils/inventoryDisplay";
 import { agentState, elapsedLabel, EVENT_CATEGORIES, EventRow } from "./WorldPanels";
 import { BUILDINGS, type BuildingKey } from "./engine/worldMap";
+import { agentLookFor, DEFAULT_AVATAR_LOOK, normalizeLook, type CharacterLook } from "./engine/looks";
+import { AgentPortrait } from "./AgentPortrait";
+import { CharacterEditor } from "./CharacterEditor";
 import type { PlaceMarker } from "./engine/village";
 
 const R = { borderRadius: 4 };
@@ -159,8 +162,8 @@ export function AgentContent({ agent, pending, onRun }: { agent: WorldAgent; pen
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 items-center justify-center border-2" style={{ ...R, borderColor: agent.color, color: agent.color }}>
-          <Bot size={24} aria-hidden />
+        <span className="flex h-12 w-12 shrink-0 items-end justify-center overflow-hidden border-2 bg-rpg-bg" style={{ ...R, borderColor: agent.color }}>
+          <AgentPortrait agentKey={agent.key} look={agent.look} size={44} working={last?.status === "running"} />
         </span>
         <div className="min-w-0">
           <p className="text-sm text-rpg-text">{agent.specialty}</p>
@@ -420,26 +423,10 @@ export function SettingsContent({ settings, onChange }: { settings: WorldSetting
 
 /* ───────────── Avatar ───────────── */
 
-const PALETTES = {
-  skin: ["#F2C9A0", "#E8B48A", "#C68A5E", "#8D5A3B", "#5C3A24"],
-  hair: ["#1D1410", "#3A2418", "#7A4A22", "#C99A4B", "#B23A3A", "#5A3FA0"],
-  shirt: ["#C8423B", "#3E7BD8", "#4FA86A", "#A875F5", "#F1C66A", "#2B2F3A"],
-  pants: ["#2B3A67", "#3A3A44", "#5A4030", "#1F4F4A", "#5A2A4A"],
-};
-
 export function AvatarContent({ world, onSave, busy }: { world: WorldState; onSave: (p: Partial<WorldState["avatar"]>) => void; busy: boolean }) {
   const a = world.avatar;
-  const [draft, setDraft] = useState({ name: a.name, skin: a.skin, hair: a.hair, shirt: a.shirt, pants: a.pants });
-  const row = (label: string, k: keyof typeof PALETTES) => (
-    <fieldset>
-      <legend className="mb-1 text-[11px] text-rpg-muted">{label}</legend>
-      <div className="flex flex-wrap gap-1.5">
-        {PALETTES[k].map((c) => (
-          <button key={c} type="button" aria-label={`${label} ${c}`} aria-pressed={draft[k] === c} onClick={() => setDraft((d) => ({ ...d, [k]: c }))} className={clsx("h-8 w-8 border-2", draft[k] === c ? "border-rpg-gold" : "border-rpg-border")} style={{ ...R, background: c }} />
-        ))}
-      </div>
-    </fieldset>
-  );
+  const [name, setName] = useState(a.name);
+  const [look, setLook] = useState<CharacterLook>(() => normalizeLook(a, DEFAULT_AVATAR_LOOK));
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-1.5">
@@ -450,16 +437,33 @@ export function AvatarContent({ world, onSave, busy }: { world: WorldState; onSa
       <p className="text-sm text-rpg-text">{world.activity ? `Em atividade: ${world.activity.title}` : "Sem atividade em andamento."}</p>
       <label className="block text-[11px] text-rpg-muted">
         Nome no mundo
-        <input value={draft.name} maxLength={40} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} className="mt-1 w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold" style={R} />
+        <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} className="mt-1 w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold" style={R} />
       </label>
-      {row("Pele", "skin")}
-      {row("Cabelo", "hair")}
-      {row("Roupa", "shirt")}
-      {row("Calça", "pants")}
-      <RPGButton variant="gold" disabled={busy || !draft.name.trim()} onClick={() => onSave({ ...draft, name: draft.name.trim() })}>
+      <CharacterEditor value={look} onChange={setLook} defaultLook={DEFAULT_AVATAR_LOOK} />
+      <RPGButton variant="gold" disabled={busy || !name.trim()} onClick={() => onSave({ ...look, name: name.trim() })}>
         {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />} Salvar aparência
       </RPGButton>
       <p className="text-[10px] text-rpg-muted">Dica: dê um duplo clique num ponto do mapa para mover o avatar quando não houver missão em andamento.</p>
+    </div>
+  );
+}
+
+/** Aparência e apelido de um agente (cosmético; o trabalho do agente não muda). */
+export function AgentLookContent({ agent, busy, onSave }: { agent: WorldAgent; busy: boolean; onSave: (body: { look: CharacterLook | null; nickname: string | null }) => void }) {
+  const base = agentLookFor(agent.key, null);
+  const [look, setLook] = useState<CharacterLook>(() => agentLookFor(agent.key, agent.look));
+  const [nickname, setNickname] = useState(agent.nickname ?? "");
+  const isDefault = JSON.stringify(look) === JSON.stringify(base);
+  return (
+    <div className="space-y-3">
+      <label className="block text-[11px] text-rpg-muted">
+        Apelido (opcional)
+        <input value={nickname} maxLength={24} placeholder={agent.name} onChange={(e) => setNickname(e.target.value)} className="mt-1 w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold" style={R} />
+      </label>
+      <CharacterEditor value={look} onChange={setLook} defaultLook={base} />
+      <RPGButton variant="gold" disabled={busy} onClick={() => onSave({ look: isDefault ? null : look, nickname: nickname.trim() || null })}>
+        {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />} Salvar aparência do agente
+      </RPGButton>
     </div>
   );
 }

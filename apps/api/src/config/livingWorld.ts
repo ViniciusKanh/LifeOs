@@ -68,13 +68,59 @@ export const DEFAULT_WORLD_SETTINGS = {
 };
 export type WorldSettings = typeof DEFAULT_WORLD_SETTINGS;
 
+/*
+ * Opções de aparência dos personagens (avatar e agentes). Espelham
+ * apps/web/src/components/living-world/engine/looks.ts — ao criar uma opção
+ * nova, adicione nos dois lados. Tudo é cosmético.
+ */
+export const HAIR_STYLES = ["curto", "longo", "rabo", "cacheado", "moicano", "coque", "trancas", "careca"] as const;
+export const BEARDS = ["nenhuma", "bigode", "cavanhaque", "cheia"] as const;
+export const OUTFITS = ["tunica", "manto", "armadura", "gibao", "vestido", "avental"] as const;
+export const HATS = ["nenhum", "capuz", "chapeu_mago", "elmo", "coroa", "bandana", "palha", "boina", "flores"] as const;
+export const PROPS = ["nenhum", "espada", "cajado", "livro", "pena", "regador", "lanterna", "pergaminho", "escudo"] as const;
+
+export interface CharacterLook {
+  skin: string;
+  hair: string;
+  hairStyle: (typeof HAIR_STYLES)[number];
+  beard: (typeof BEARDS)[number];
+  eyes: string;
+  glasses: boolean;
+  outfit: (typeof OUTFITS)[number];
+  shirt: string;
+  pants: string;
+  trim: string;
+  boots: string;
+  cape: string | null;
+  hat: (typeof HATS)[number];
+  hatColor: string;
+  prop: (typeof PROPS)[number];
+}
+
 export const DEFAULT_AVATAR = {
   name: null as string | null,
   skin: "#E8B48A",
   hair: "#3A2418",
+  hairStyle: "curto" as CharacterLook["hairStyle"],
+  beard: "nenhuma" as CharacterLook["beard"],
+  eyes: "#5A6FBA",
+  glasses: false,
+  outfit: "tunica" as CharacterLook["outfit"],
   shirt: "#C8423B",
   pants: "#2B3A67",
+  trim: "#F1C66A",
+  boots: "#4A2F1B",
+  cape: "#7A1F3A" as string | null,
+  hat: "nenhum" as CharacterLook["hat"],
+  hatColor: "#2B3A67",
+  prop: "espada" as CharacterLook["prop"],
   x: 14,
   y: 17,
 };
 export type WorldAvatar = typeof DEFAULT_AVATAR;
+
+/** Personalização de um agente: visual (parcial; o resto vem do padrão da especialidade) e apelido. */
+export interface WorldAgentCustom {
+  look?: Partial<CharacterLook> | null;
+  nickname?: string | null;
+}

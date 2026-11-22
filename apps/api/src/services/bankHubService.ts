@@ -95,7 +95,7 @@ export async function getBankHub(db: Client, ownerId: string): Promise<BankHub> 
       sql: `SELECT
               (SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ?) AS total,
               (SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND COALESCE(early_withdrawn, 0) = 0) AS claimed_on_time,
-              (SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= due_at) AS loans_on_time,
+              (SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= datetime(due_at)) AS loans_on_time,
               (SELECT COUNT(DISTINCT plan_id) FROM bank_deposits WHERE owner_id = ? AND status = 'active') AS plans_active`,
       args: [ownerId, ownerId, ownerId, ownerId],
     }),

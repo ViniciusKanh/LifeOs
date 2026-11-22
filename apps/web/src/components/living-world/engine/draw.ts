@@ -102,20 +102,65 @@ function cobble(ctx: Ctx, x: number, y: number) {
 }
 
 function grass(ctx: Ctx, x: number, y: number, lush: boolean) {
-  const base = lush ? "#3b7d3a" : "#2d6232";
-  diamond(ctx, x, y, shade(base, Math.round((hash(x, y) - 0.5) * 14)));
+  const base = lush ? "#3b7d3a" : "#2f6834";
+  // variação suave em manchas (ruído de baixa frequência) + leve xadrez
+  const patch = Math.round((hash(Math.floor(x / 3), Math.floor(y / 3), 11) - 0.5) * 16 + (hash(x, y) - 0.5) * 8 + ((x + y) % 2 ? 2 : -2));
+  diamond(ctx, x, y, shade(base, patch));
   const [sx, sy] = P(x, y);
-  for (let k = 0; k < 5; k++) {
-    const ox = (hash(x, y, k) - 0.5) * 40;
-    const oy = (hash(x, y, k + 5) - 0.5) * 18;
-    ctx.fillStyle = shade(base, 22);
+  // sombra suave no canto de trás (dá volume ao gramado)
+  ctx.fillStyle = "rgba(0,0,0,0.06)";
+  ctx.fillRect(sx - 8, sy - 12, 16, 3);
+  // tufos em V com luz e sombra
+  for (let k = 0; k < 7; k++) {
+    const ox = Math.round((hash(x, y, k) - 0.5) * 44);
+    const oy = Math.round((hash(x, y, k + 5) - 0.5) * 18);
+    ctx.fillStyle = shade(base, 30);
     ctx.fillRect(sx + ox, sy + oy - 3, 1, 3);
     ctx.fillRect(sx + ox + 2, sy + oy - 2, 1, 2);
+    ctx.fillStyle = shade(base, -22);
+    ctx.fillRect(sx + ox + 1, sy + oy - 1, 1, 2);
   }
-  if (hash(x, y, 99) > (lush ? 0.55 : 0.8)) {
-    const cols = ["#F16D75", "#F1C66A", "#f3f4fa", "#E78FC0", "#A875F5"];
+  const r = hash(x, y, 99);
+  if (r > (lush ? 0.5 : 0.78)) {
+    // florzinha com miolo
+    const cols = ["#F16D75", "#F1C66A", "#f3f4fa", "#E78FC0", "#A875F5", "#7FC8F8"];
+    const fx = sx + Math.round((hash(x, y, 55) - 0.5) * 30);
+    const fy = sy + Math.round((hash(x, y, 56) - 0.5) * 12);
+    ctx.fillStyle = "#2a5a2a";
+    ctx.fillRect(fx + 1, fy, 1, 3);
     ctx.fillStyle = cols[Math.floor(hash(x, y, 77) * cols.length)]!;
-    ctx.fillRect(sx + (hash(x, y, 55) - 0.5) * 30, sy + (hash(x, y, 56) - 0.5) * 12, 2, 2);
+    ctx.fillRect(fx, fy - 2, 3, 2);
+    ctx.fillRect(fx + 1, fy - 3, 1, 4);
+    ctx.fillStyle = "#FFF1B8";
+    ctx.fillRect(fx + 1, fy - 2, 1, 1);
+  } else if (r < 0.06) {
+    // pedrinha
+    const px = sx + Math.round((hash(x, y, 57) - 0.5) * 28);
+    const py = sy + Math.round((hash(x, y, 58) - 0.5) * 10);
+    ctx.fillStyle = "#6e7180";
+    ctx.fillRect(px, py - 2, 4, 2);
+    ctx.fillStyle = "#9a9dab";
+    ctx.fillRect(px, py - 2, 2, 1);
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(px, py, 4, 1);
+  } else if (r < 0.09 && !lush) {
+    // cogumelo
+    const px = sx + Math.round((hash(x, y, 59) - 0.5) * 26);
+    const py = sy + Math.round((hash(x, y, 60) - 0.5) * 10);
+    ctx.fillStyle = "#EFE9DA";
+    ctx.fillRect(px + 1, py - 2, 1, 2);
+    ctx.fillStyle = "#C8423B";
+    ctx.fillRect(px, py - 4, 3, 2);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(px + 1, py - 4, 1, 1);
+  } else if (r < 0.16) {
+    // trevos
+    const px = sx + Math.round((hash(x, y, 61) - 0.5) * 30);
+    const py = sy + Math.round((hash(x, y, 62) - 0.5) * 10);
+    ctx.fillStyle = shade(base, 40);
+    ctx.fillRect(px, py - 1, 2, 1);
+    ctx.fillRect(px + 3, py, 2, 1);
+    ctx.fillRect(px + 1, py + 1, 2, 1);
   }
 }
 
@@ -187,23 +232,108 @@ export function step(ctx: Ctx, x: number, y: number, dir: "x" | "y", h: number) 
   else box(ctx, x - 0.32, y, 0.18, 0.5, h, "#8a8478", 0, "#6d685e", "#58544b");
 }
 
-/** Borda da ilha: penhasco de pedra e terra nas bordas frontais do mundo. */
+/** Profundidade do penhasco num vértice da borda (igual para os dois tiles vizinhos). */
+function cliffDepth(vx: number, vy: number, along: number): number {
+  // Mais fundo perto da quina da frente: a base da ilha vira um "cone" de rocha.
+  return 56 + Math.pow(along, 1.6) * 210 + hash(Math.round(vx), Math.round(vy), 5) * 22;
+}
+
+/**
+ * Borda da ilha flutuante: camada de terra com raízes, estratos de rocha e a
+ * base em ponta irregular, com trepadeiras e raízes penduradas.
+ */
 export function cliff(ctx: Ctx, x: number, y: number, side: "sw" | "se") {
   const a = side === "sw" ? P(x - 0.5, y + 0.5) : P(x + 0.5, y - 0.5);
   const b = P(x + 0.5, y + 0.5);
-  const h = 70;
-  const g = ctx.createLinearGradient(0, a[1], 0, a[1] + h);
-  g.addColorStop(0, side === "sw" ? "#5a4a3a" : "#4a3c30");
-  g.addColorStop(0.3, side === "sw" ? "#4b4f5e" : "#3d4150");
-  g.addColorStop(1, "#151a2c");
-  poly(ctx, [a, b, [b[0], b[1] + h], [a[0], a[1] + h]], g);
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
-  for (let k = 0; k < 3; k++) {
-    const t = hash(x, y, k);
-    ctx.fillRect(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t + 14, 2, 20 + hash(y, x, k) * 30);
+  // posição ao longo da borda (0 = ponta de trás, 1 = quina da frente)
+  const n = 42;
+  const ta = side === "sw" ? x / n : y / n;
+  const tb = side === "sw" ? (x + 1) / n : (y + 1) / n;
+  const ha = cliffDepth(a[0], a[1], ta);
+  const hb = cliffDepth(b[0], b[1], tb);
+  const mx = (a[0] + b[0]) / 2 + (hash(x, y, 8) - 0.5) * 10;
+  const my = (a[1] + b[1]) / 2;
+  // estalactite só em alguns trechos (o resto acompanha a curva da base)
+  const spike = hash(x, y, 9) > 0.62 ? 18 + hash(x, y, 10) * 40 : 2;
+  const tip = (ha + hb) / 2 + spike;
+  const dark = side === "se";
+  const g = ctx.createLinearGradient(0, Math.min(a[1], b[1]), 0, my + tip);
+  g.addColorStop(0, dark ? "#4a3626" : "#5e4530");
+  g.addColorStop(0.14, dark ? "#3e3a44" : "#4f4b58");
+  g.addColorStop(0.55, dark ? "#2f3142" : "#3d4052");
+  g.addColorStop(1, dark ? "#1a1d2c" : "#23263a");
+  poly(ctx, [a, b, [b[0], b[1] + hb], [mx, my + tip], [a[0], a[1] + ha]], g);
+  // estratos: faixas paralelas à borda
+  for (let k = 1; k <= 4; k++) {
+    const off = 10 + k * 13 + hash(x, y, k + 30) * 4;
+    ctx.strokeStyle = k % 2 ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)";
+    ctx.lineWidth = k % 2 ? 2 : 1;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1] + off);
+    ctx.lineTo(b[0], b[1] + off);
+    ctx.stroke();
   }
+  // pedras salientes com brilho no topo
+  for (let k = 0; k < 3; k++) {
+    const t = 0.15 + hash(x, y, k + 40) * 0.7;
+    const sx = a[0] + (b[0] - a[0]) * t;
+    const sy = a[1] + (b[1] - a[1]) * t + 18 + hash(y, x, k + 41) * 34;
+    const w = 5 + hash(x, y, k + 42) * 6;
+    ctx.fillStyle = dark ? "#43465a" : "#55596e";
+    ctx.fillRect(sx, sy, w, 4);
+    ctx.fillStyle = dark ? "#5a5e74" : "#6e7390";
+    ctx.fillRect(sx, sy, w, 1);
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(sx, sy + 4, w, 1);
+  }
+  // terra do topo + grama que transborda da borda
   ctx.fillStyle = "#3b7d3a";
   ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]) - 1, Math.abs(b[0] - a[0]), 3);
+  for (let k = 0; k < 6; k++) {
+    const t = hash(x, y, k + 50);
+    const sx = a[0] + (b[0] - a[0]) * t;
+    const sy = a[1] + (b[1] - a[1]) * t;
+    ctx.fillStyle = k % 2 ? "#2d6232" : "#4a9147";
+    ctx.fillRect(sx, sy + 1, 2, 2 + hash(x, y, k + 51) * 4);
+  }
+  // raízes e trepadeiras penduradas
+  if (hash(x, y, 60) > 0.45) {
+    const t = 0.2 + hash(x, y, 61) * 0.6;
+    const sx = Math.round(a[0] + (b[0] - a[0]) * t);
+    const sy = a[1] + (b[1] - a[1]) * t;
+    const len = 18 + hash(x, y, 62) * 46;
+    const vine = hash(x, y, 63) > 0.4;
+    for (let i = 0; i < len; i += 2) {
+      const wob = Math.round(Math.sin(i / 7 + x) * 1.5);
+      ctx.fillStyle = vine ? (i % 6 < 2 ? "#4a9147" : "#2f6a32") : "#5a3d24";
+      ctx.fillRect(sx + wob, sy + 2 + i, vine ? 2 : 1, 2);
+      if (vine && i % 8 === 4) {
+        ctx.fillStyle = "#5fae58";
+        ctx.fillRect(sx + wob + (i % 16 === 4 ? 2 : -3), sy + 2 + i, 3, 2);
+      }
+    }
+    if (vine && hash(x, y, 64) > 0.6) {
+      ctx.fillStyle = hash(x, y, 65) > 0.5 ? "#E78FC0" : "#F1C66A";
+      ctx.fillRect(sx - 1, sy + 2 + len * 0.6, 3, 3);
+    }
+  }
+}
+
+/** Rochas flutuantes ao redor da ilha (cenário estático). */
+export function floatingRock(ctx: Ctx, sx: number, sy: number, r: number, seed: number) {
+  const top = "#3f7d3c";
+  poly(ctx, [[sx - r, sy], [sx, sy - r * 0.45], [sx + r, sy], [sx, sy + r * 0.45]], top);
+  const g = ctx.createLinearGradient(0, sy, 0, sy + r * 1.8);
+  g.addColorStop(0, "#4f4b58");
+  g.addColorStop(1, "#1f2234");
+  poly(ctx, [[sx - r, sy], [sx, sy + r * 0.45], [sx + r, sy], [sx + r * 0.35, sy + r * 1.1], [sx + (hash(seed, 1) - 0.5) * r * 0.4, sy + r * 1.9], [sx - r * 0.4, sy + r * 1.0]], g);
+  ctx.fillStyle = "#4a9147";
+  ctx.fillRect(sx - r * 0.5, sy - 2, 3, 2);
+  ctx.fillRect(sx + r * 0.3, sy - 1, 2, 2);
+  if (hash(seed, 2) > 0.5) {
+    ctx.fillStyle = "#2f6a32";
+    for (let i = 0; i < r * 0.8; i += 2) ctx.fillRect(sx + r * 0.2, sy + r * 0.4 + i, 1, 2);
+  }
 }
 
 /* ───────────────────────── Paredes ───────────────────────── */
@@ -403,21 +533,63 @@ export function flame(ctx: Ctx, sx: number, sy: number, t: number, seed: number,
   ctx.fillRect(sx - 1 * s, sy - 4 * s + fl, 2 * s, 3 * s);
 }
 
+/**
+ * Copa em três tons (sombra embaixo/direita, base, luz em cima/esquerda),
+ * formada por vários "cachos" e salpicada de folhas soltas — leitura de
+ * pixel art mesmo sendo desenhada com círculos.
+ */
 export function treeCrown(ctx: Ctx, sx: number, sy: number, r: number, c1: string, c2: string, seed: number) {
-  ctx.fillStyle = shade(c1, -30);
-  ctx.beginPath();
-  ctx.arc(sx, sy + 4, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = c1;
-  ctx.beginPath();
-  ctx.arc(sx, sy, r, 0, Math.PI * 2);
-  ctx.fill();
+  const dark = shade(c1, -34);
+  const blobs: Array<[number, number, number]> = [[0, 0, r]];
   for (let i = 0; i < 6; i++) {
-    ctx.fillStyle = i % 2 ? c2 : shade(c1, 15);
+    const ang = (i / 6) * Math.PI * 2 + hash(seed, i) * 0.6;
+    blobs.push([Math.cos(ang) * r * 0.62, Math.sin(ang) * r * 0.42, r * (0.5 + hash(i, seed) * 0.18)]);
+  }
+  const fill = (dx: number, dy: number, scale: number, col: string) => {
+    ctx.fillStyle = col;
+    for (const [bx, by, br] of blobs) {
+      ctx.beginPath();
+      ctx.arc(sx + bx + dx, sy + by + dy, br * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  fill(2, 4, 1, shade(dark, -14));
+  fill(0, 0, 1, dark);
+  fill(-2, -2, 0.82, c1);
+  // luz nos cachos de cima
+  ctx.fillStyle = c2;
+  for (const [bx, by, br] of blobs) {
+    if (by > r * 0.1) continue;
     ctx.beginPath();
-    ctx.arc(sx + (hash(seed, i) - 0.5) * r * 1.2, sy + (hash(i, seed) - 0.6) * r, r * 0.38, 0, Math.PI * 2);
+    ctx.arc(sx + bx - br * 0.25, sy + by - br * 0.3, br * 0.45, 0, Math.PI * 2);
     ctx.fill();
   }
+  // folhas soltas (pixels)
+  for (let i = 0; i < 14; i++) {
+    const px = sx + (hash(seed, i + 20) - 0.5) * r * 1.8;
+    const py = sy + (hash(i + 20, seed) - 0.5) * r * 1.2;
+    ctx.fillStyle = i % 3 === 0 ? shade(c2, 25) : i % 3 === 1 ? dark : c2;
+    ctx.fillRect(Math.round(px), Math.round(py), 2, 2);
+  }
+}
+
+/** Tronco afunilado com casca e raízes aparentes. */
+function trunk(ctx: Ctx, sx: number, sy: number, h: number, w: number) {
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath();
+  ctx.ellipse(sx + 4, sy, 26, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#4a2f1b";
+  ctx.fillRect(sx - w / 2 - 3, sy - 3, w + 6, 3);
+  ctx.fillRect(sx - w / 2 - 5, sy - 1, 3, 2);
+  ctx.fillRect(sx + w / 2 + 2, sy - 1, 3, 2);
+  ctx.fillStyle = "#6b4528";
+  ctx.fillRect(sx - w / 2, sy - h, w, h);
+  ctx.fillStyle = "#8a5d3b";
+  ctx.fillRect(sx - w / 2, sy - h, 2, h);
+  ctx.fillStyle = "#3e2716";
+  ctx.fillRect(sx + w / 2 - 2, sy - h, 2, h);
+  for (let i = 8; i < h - 4; i += 9) ctx.fillRect(sx - 1, sy - i, 2, 3);
 }
 
 export function drawFurniture(ctx: Ctx, it: Furniture, t: number) {
@@ -694,22 +866,48 @@ export function drawFurniture(ctx: Ctx, it: Furniture, t: number) {
       box(ctx, x + 0.1, y - 0.05, 0.12, 0.1, 6, "#7b7f8e", 10);
       break;
     case "tree": {
-      box(ctx, x, y, 0.08, 0.08, 40, "#5a3a22");
+      trunk(ctx, sx, sy, 44, 8);
       const pink = hash(x, y, 5) > 0.55 && (it.room === "jardim" || it.room === null);
-      treeCrown(ctx, sx, sy - 60, 28, pink ? "#d877aa" : "#3a8a3e", pink ? "#f5b3d2" : "#5aae55", x * 13 + y);
-      break;
-    }
-    case "pine":
-      box(ctx, x, y, 0.07, 0.07, 22, "#5a3a22");
-      for (let i = 0; i < 3; i++) {
-        ctx.fillStyle = i % 2 ? "#2a6a3a" : "#24583a";
-        ctx.beginPath();
-        ctx.moveTo(sx, sy - 90 + i * 16);
-        ctx.lineTo(sx + 22 - i * 2, sy - 40 + i * 6);
-        ctx.lineTo(sx - 22 + i * 2, sy - 40 + i * 6);
-        ctx.fill();
+      const autumn = !pink && hash(x, y, 6) > 0.82;
+      treeCrown(ctx, sx, sy - 62, 28, pink ? "#d877aa" : autumn ? "#c9792e" : "#3a8a3e", pink ? "#f8c4dc" : autumn ? "#efb45a" : "#6cc061", x * 13 + y);
+      if (!pink && !autumn && hash(x, y, 7) > 0.6) {
+        // frutinhas vermelhas
+        ctx.fillStyle = "#d8443b";
+        for (let i = 0; i < 4; i++) ctx.fillRect(sx + (hash(x, i, 8) - 0.5) * 40, sy - 62 + (hash(i, y, 8) - 0.4) * 26, 3, 3);
       }
       break;
+    }
+    case "pine": {
+      trunk(ctx, sx, sy, 24, 6);
+      // quatro camadas de galhos, cada uma com lado iluminado e lado na sombra
+      for (let i = 0; i < 4; i++) {
+        const top = sy - 104 + i * 17;
+        const base = sy - 34 - (3 - i) * 4;
+        const half = 14 + i * 4;
+        ctx.fillStyle = "#1f4f34";
+        ctx.beginPath();
+        ctx.moveTo(sx, top);
+        ctx.lineTo(sx + half + 2, base + 2);
+        ctx.lineTo(sx - half, base + 2);
+        ctx.fill();
+        ctx.fillStyle = "#2f6e44";
+        ctx.beginPath();
+        ctx.moveTo(sx, top);
+        ctx.lineTo(sx, base);
+        ctx.lineTo(sx - half, base);
+        ctx.fill();
+        ctx.fillStyle = "#26593a";
+        ctx.beginPath();
+        ctx.moveTo(sx, top);
+        ctx.lineTo(sx + half, base);
+        ctx.lineTo(sx, base);
+        ctx.fill();
+        ctx.fillStyle = "#4a8f5a";
+        ctx.fillRect(sx - half + 3, base - 2, 4, 2);
+        ctx.fillRect(sx - 4, top + 6, 2, 3);
+      }
+      break;
+    }
     case "parkbench":
       box(ctx, x, y, 0.42, 0.16, 3, "#8a5d3b", 9);
       box(ctx, x, y - 0.14, 0.42, 0.03, 12, "#7a5230", 12);
@@ -856,32 +1054,90 @@ export function glow(ctx: Ctx, sx: number, sy: number, radius: number, color: st
 }
 
 /** Céu noturno de fundo (espaço de tela): degradê, estrelas, lua e castelo distante. */
-export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: number) {
+/** Fase do dia a partir da hora local real do usuário. */
+export type DayPhase = "dawn" | "day" | "dusk" | "night";
+export function dayPhase(hour: number): DayPhase {
+  if (hour >= 5 && hour < 7) return "dawn";
+  if (hour >= 7 && hour < 17) return "day";
+  if (hour >= 17 && hour < 19) return "dusk";
+  return "night";
+}
+
+const SKY: Record<DayPhase, [string, string, string]> = {
+  dawn: ["#3b3f7a", "#c8789a", "#f3b27a"],
+  day: ["#3f86d8", "#7fbcf0", "#cfe8f7"],
+  dusk: ["#2a2f6a", "#b2557a", "#f19a5a"],
+  night: ["#151c45", "#0c1330", "#070b1c"],
+};
+
+/** Nuvem em pixel art (blocos arredondados), clara de dia e azulada à noite. */
+function cloud(ctx: Ctx, x: number, y: number, s: number, phase: DayPhase, seed: number) {
+  const top = phase === "night" ? "rgba(70,84,140,0.55)" : phase === "day" ? "rgba(255,255,255,0.92)" : "rgba(255,214,196,0.85)";
+  const base = phase === "night" ? "rgba(40,50,96,0.55)" : phase === "day" ? "rgba(214,230,244,0.92)" : "rgba(214,150,150,0.8)";
+  const blobs = 4 + Math.floor(hash(seed, 3) * 3);
+  ctx.fillStyle = base;
+  ctx.fillRect(x - 8 * s, y, (blobs * 14 + 10) * s, 8 * s);
+  for (let i = 0; i < blobs; i++) {
+    const bw = (16 + hash(seed, i) * 14) * s;
+    const bh = (8 + hash(seed, i + 9) * 10) * s;
+    const bx = x + i * 14 * s;
+    ctx.fillStyle = top;
+    ctx.fillRect(bx, y - bh + 4 * s, bw, bh);
+    ctx.fillRect(bx + 3 * s, y - bh + 1 * s, bw - 6 * s, 3 * s);
+  }
+}
+
+/**
+ * Céu em camadas conforme a hora real: gradiente da fase, sol ou lua,
+ * estrelas só à noite, nuvens à deriva e o castelo distante.
+ */
+export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: number, hour = 21) {
+  const phase = dayPhase(hour);
+  const [c0, c1, c2] = SKY[phase];
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, "#151c45");
-  g.addColorStop(0.55, "#0c1330");
-  g.addColorStop(1, "#070b1c");
+  g.addColorStop(0, c0);
+  g.addColorStop(0.55, c1);
+  g.addColorStop(1, c2);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  for (let i = 0; i < 90; i++) {
-    const sx = hash(i, 1) * w;
-    const sy = hash(i, 2) * h * 0.6;
-    const tw = effects > 0 ? 0.5 + Math.sin(t / 700 + i) * 0.5 : 0.7;
-    ctx.fillStyle = `rgba(255,255,255,${0.25 + tw * 0.55})`;
-    ctx.fillRect(sx, sy, hash(i, 3) > 0.85 ? 2 : 1, hash(i, 3) > 0.85 ? 2 : 1);
+  if (phase === "night" || phase === "dawn") {
+    const a = phase === "night" ? 1 : 0.35;
+    for (let i = 0; i < 110; i++) {
+      const sx = hash(i, 1) * w;
+      const sy = hash(i, 2) * h * 0.6;
+      const tw = effects > 0 ? 0.5 + Math.sin(t / 700 + i) * 0.5 : 0.7;
+      ctx.fillStyle = `rgba(255,255,255,${(0.25 + tw * 0.55) * a})`;
+      ctx.fillRect(sx, sy, hash(i, 3) > 0.85 ? 2 : 1, hash(i, 3) > 0.85 ? 2 : 1);
+    }
   }
-  const mx = w * 0.82;
-  const my = h * 0.12;
-  glow(ctx, mx, my, 70, "rgba(246,210,122,ALPHA)", 0.25);
-  ctx.fillStyle = "#f6e7b8";
-  ctx.beginPath();
-  ctx.arc(mx, my, 22, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "rgba(200,180,130,0.5)";
-  ctx.fillRect(mx - 8, my - 6, 5, 4);
-  ctx.fillRect(mx + 5, my + 4, 6, 4);
-  // castelo distante (silhueta)
-  ctx.fillStyle = "#1a1f44";
+  // astro: lua à noite, sol durante o dia (baixo e quente no amanhecer/entardecer)
+  if (phase === "night") {
+    const mx = w * 0.82;
+    const my = h * 0.12;
+    glow(ctx, mx, my, 70, "rgba(246,210,122,ALPHA)", 0.25);
+    ctx.fillStyle = "#f6e7b8";
+    ctx.beginPath();
+    ctx.arc(mx, my, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(200,180,130,0.5)";
+    ctx.fillRect(mx - 8, my - 6, 5, 4);
+    ctx.fillRect(mx + 5, my + 4, 6, 4);
+  } else {
+    const low = phase !== "day";
+    const sx = w * (phase === "dawn" ? 0.18 : phase === "dusk" ? 0.86 : 0.8);
+    const sy = h * (low ? 0.3 : 0.1);
+    glow(ctx, sx, sy, low ? 160 : 120, low ? "rgba(255,170,90,ALPHA)" : "rgba(255,240,180,ALPHA)", low ? 0.45 : 0.35);
+    ctx.fillStyle = low ? "#ffcf7a" : "#fff4c4";
+    ctx.beginPath();
+    ctx.arc(sx, sy, low ? 26 : 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = low ? "#ffe3a8" : "#ffffff";
+    ctx.beginPath();
+    ctx.arc(sx - 5, sy - 5, low ? 12 : 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // castelo distante (silhueta) — some na névoa durante o dia
+  ctx.fillStyle = phase === "day" ? "rgba(120,160,205,0.55)" : phase === "night" ? "#1a1f44" : "rgba(80,50,90,0.7)";
   const bx = w * 0.7;
   const by = h * 0.24;
   ctx.fillRect(bx, by, 120, 30);
@@ -893,9 +1149,29 @@ export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: numb
     ctx.lineTo(bx + dx + tw + 2, by - th + 30);
     ctx.fill();
   }
-  ctx.fillStyle = "#f6d27a";
-  ctx.fillRect(bx + 45, by - 10, 2, 3);
-  ctx.fillRect(bx + 75, by + 4, 2, 3);
+  if (phase === "night") {
+    ctx.fillStyle = "#f6d27a";
+    ctx.fillRect(bx + 45, by - 10, 2, 3);
+    ctx.fillRect(bx + 75, by + 4, 2, 3);
+  }
+  // nuvens à deriva (três camadas com velocidades diferentes = profundidade)
+  const drift = effects > 0 ? t / 1000 : 0;
+  for (let i = 0; i < 7; i++) {
+    const layer = i % 3;
+    const speed = 4 + layer * 5;
+    const span = w + 400;
+    const x = ((hash(i, 21) * span + drift * speed) % span) - 200;
+    const y = h * (0.08 + hash(i, 22) * 0.5) + layer * 10;
+    cloud(ctx, x, y, 0.8 + layer * 0.35, phase, i);
+  }
+}
+
+/** Tinta de cor sobre o mundo (amanhecer rosado, entardecer alaranjado, noite azul). */
+export function phaseTint(phase: DayPhase): string | null {
+  if (phase === "dawn") return "rgba(255,150,170,0.10)";
+  if (phase === "dusk") return "rgba(255,120,60,0.13)";
+  if (phase === "night") return "rgba(6,10,32,0.24)";
+  return null;
 }
 
 export { P as isoPoint, TILE_W, TILE_H, roomAt, tileKind, tileZ };

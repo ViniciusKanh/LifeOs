@@ -5,9 +5,10 @@
  * nunca reinicia o motor.
  */
 import { CharacterBrain, stateForAnim, type CharState, type Intent } from "./characterMachine";
-import { box, cliff, diamond, drawFlat, drawFurniture, drawPlant, drawSky, drawTile, drawWall, drawWallDecor, drawWater, glow, isoPoint, platformSide, step, wallDecorLight } from "./draw";
+import { box, cliff, dayPhase, floatingRock, diamond, drawFlat, drawFurniture, drawPlant, drawSky, phaseTint, drawTile, drawWall, drawWallDecor, drawWater, glow, isoPoint, platformSide, step, wallDecorLight } from "./draw";
 import { findPath, nearestFree, type Point } from "./pathfinding";
 import { framesFor, getSprite, SPRITE_H, SPRITE_W, type Look, type Pose } from "./sprites";
+import { agentLookFor, DEFAULT_AVATAR_LOOK, normalizeLook, type CharacterLook } from "./looks";
 import { buildingBounds, buildingHull, buildingLights, insideHull, buildingTopZ, drawBuilding, drawBuildingAnim, drawDock, drawVillageItem, VILLAGE_KINDS } from "./drawVillage";
 import { buildConversation, type PlaceKey, type PlaceMarker, type TalkLine, type WorldFacts } from "./village";
 import {
@@ -60,10 +61,13 @@ export interface EngineAgent {
   /** Estado REAL da última execução (servidor) — ou "running" enquanto o pedido está em curso. */
   status: "idle" | "running" | "done" | "failed";
   finishedAt: string | null;
+  /** Visual personalizado pelo usuário (null = padrão da especialidade). */
+  look?: Partial<CharacterLook> | null;
 }
 
 export interface EngineData {
-  avatar: { name: string; skin: string; hair: string; shirt: string; pants: string; x: number; y: number };
+  /** Nome, posição e visual (campos ausentes caem no padrão de looks.ts). */
+  avatar: Partial<CharacterLook> & { name: string; x: number; y: number };
   activity: { room: RoomKey; title: string } | null;
   agents: EngineAgent[];
   habits: Array<{ id: string; name: string; stage: number; doneToday: boolean; pendingToday: boolean }>;
@@ -178,6 +182,8 @@ export class WorldEngine {
   private nextTalkAt = performance.now() + 6000;
   private talkSeed = 0;
   private floaters: Array<{ x: number; y: number; z: number; text: string; color: string; born: number }> = [];
+  /** Tiles de grama (vida ambiente: borboletas, vaga-lumes, pétalas). */
+  private grassSpots: Point[] | null = null;
   private particles: Array<{ x: number; y: number; ox: number; oy: number; vx: number; vy: number; life: number; color: string }> = [];
   private decorMode = false;
   private drag: { x: number; y: number; cx: number; cy: number; moved: boolean } | null = null;
@@ -400,7 +406,7 @@ export class WorldEngine {
   private spawnVillagers() {
     for (const v of VILLAGERS) {
       if (this.chars.has(v.id)) continue;
-      const look: Look = { kind: "human", skin: v.skin, hair: v.hair, shirt: v.shirt, pants: v.pants, accent: v.shirt, ...(v.hat ? { hat: v.hat, hatColor: v.hatColor } : {}), ...(v.apron ? { apron: v.apron } : {}) };
+      const look: Look = normalizeLook(v.look, { ...DEFAULT_AVATAR_LOOK, cape: null, prop: "nenhum" });
       const at = nearestFree(this.blocked, v.home) ?? v.home;
       const c = this.makeChar(v.id, false, "", look, at);
       c.isNpc = true;
@@ -413,7 +419,7 @@ export class WorldEngine {
   }
 
   private syncAvatar(d: EngineData, first: boolean) {
-    const look: Look = { kind: "human", skin: d.avatar.skin, hair: d.avatar.hair, shirt: d.avatar.shirt, pants: d.avatar.pants, accent: "#F1C66A", cape: "#7a1f3a" };
+    const look: Look = normalizeLook(d.avatar, DEFAULT_AVATAR_LOOK);
     let av = this.chars.get("avatar");
     if (!av) {
       const start = nearestFree(this.blocked, { x: d.avatar.x, y: d.avatar.y }) ?? AVATAR_SPAWN;
@@ -446,8 +452,7 @@ export class WorldEngine {
   private syncAgents(d: EngineData, first: boolean) {
     const now = performance.now();
     for (const a of d.agents) {
-      const variant = ({ planejador: "planner", mentor: "mentor", analista: "analyst", habitos: "habits" } as const)[a.key as "planejador"];
-      const look: Look = { kind: "robot", skin: "#cfd6e6", hair: "#000000", shirt: a.color, pants: "#8e97ab", accent: a.color, variant };
+      const look: Look = agentLookFor(a.key, a.look);
       let c = this.chars.get(a.key);
       const idle = AGENT_IDLE[a.key] ?? AVATAR_SPAWN;
       const st = STATIONS[`agent-${a.key}`];
@@ -456,6 +461,7 @@ export class WorldEngine {
         this.chars.set(a.key, c);
       }
       c.look = look;
+      c.name = a.name;
       const prev = this.prevAgent.get(a.key);
       this.prevAgent.set(a.key, a.status);
       if (a.status === "running" && st) {
@@ -735,7 +741,7 @@ export class WorldEngine {
   }
 
   /** Limites do mundo em pixels (antes da câmera), para a camada estática. */
-  private static readonly WB = { x: -(GRID * 32) - 90, y: -260, w: GRID * 64 + 180, h: GRID * 32 + 400 };
+  private static readonly WB = { x: -(GRID * 32) - 90, y: -260, w: GRID * 64 + 180, h: GRID * 32 + 560 };
 
   /**
    * Camada estática em cache: pisos texturizados, plataformas, degraus,
@@ -752,6 +758,11 @@ export class WorldEngine {
     const ctx = c.getContext("2d")!;
     ctx.setTransform(scale, 0, 0, scale, -WB.x * scale, -WB.y * scale);
     ctx.imageSmoothingEnabled = false;
+    // ilhotas flutuando em volta (atrás dos penhascos)
+    for (const [rx, ry, rr, seed] of [[46, 6, 34, 1], [44, 30, 22, 2], [8, 46, 28, 3], [30, 47, 18, 4], [-4, 24, 20, 5], [24, -4, 16, 6]] as const) {
+      const [sx, sy] = isoPoint(rx, ry);
+      floatingRock(ctx, sx, sy + 60, rr * 1.5, seed);
+    }
     // penhascos das bordas frontais (ilha flutuante)
     for (let i = 0; i < GRID; i++) {
       cliff(ctx, GRID - 1, i, "se");
@@ -827,7 +838,9 @@ export class WorldEngine {
     const night = !!d && (d.localHour >= 19 || d.localHour < 6);
     if (!this.staticLayer) this.buildStatic();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    drawSky(ctx, this.w, this.h, t, fx);
+    const phase = dayPhase(d?.localHour ?? 21);
+    drawSky(ctx, this.w, this.h, t, fx, d?.localHour ?? 21);
+    if (fx > 0 && (phase === "day" || phase === "dawn")) this.drawBirds(t);
     ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom, this.dpr * this.cam.x, this.dpr * this.cam.y);
     ctx.imageSmoothingEnabled = false;
 
@@ -954,6 +967,9 @@ export class WorldEngine {
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) it.draw();
 
+    // vida ambiente (só visual; some com movimento reduzido ou efeitos desligados)
+    if (fx > 0 && this.settings.quality !== "low") this.drawAmbient(t, phase);
+
     // partículas e números flutuantes (mundo)
     for (const p of this.particles) {
       const [sx, sy] = isoPoint(p.x, p.y);
@@ -965,8 +981,9 @@ export class WorldEngine {
 
     // 3) Luz: noite escurece; tochas, velas, monitores e cristal iluminam
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (night) {
-      ctx.fillStyle = "rgba(6,10,32,0.22)";
+    const tint = phaseTint(phase);
+    if (tint) {
+      ctx.fillStyle = tint;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
     ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom, this.dpr * this.cam.x, this.dpr * this.cam.y);
@@ -1047,6 +1064,89 @@ export class WorldEngine {
     }
   }
 
+  /**
+   * Borboletas e pétalas de dia, vaga-lumes à noite. Posições derivadas de
+   * `t` e de sementes fixas — nada é guardado nem sorteado a cada quadro.
+   */
+  private drawAmbient(t: number, phase: ReturnType<typeof dayPhase>) {
+    const ctx = this.ctx;
+    if (!this.grassSpots) {
+      this.grassSpots = [];
+      for (let x = 0; x < GRID; x++) for (let y = 0; y < GRID; y++) if (tileKind(x, y) === "grass" && (x * 7 + y * 13) % 9 === 0) this.grassSpots.push({ x, y });
+    }
+    const spots = this.grassSpots;
+    if (!spots.length) return;
+    const pick = (i: number) => spots[(i * 37) % spots.length]!;
+    if (phase === "night") {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 28; i++) {
+        const sp = pick(i + 3);
+        const [bx, by] = isoPoint(sp.x, sp.y);
+        const x = bx + Math.sin(t / 1700 + i * 2.1) * 26;
+        const y = by - zAtFloat(sp.x, sp.y) - 18 + Math.cos(t / 1300 + i) * 10;
+        const a = 0.35 + Math.max(0, Math.sin(t / 600 + i * 1.7)) * 0.65;
+        glow(ctx, x, y, 9, "rgba(190,255,120,ALPHA)", 0.35 * a);
+        ctx.fillStyle = `rgba(230,255,160,${a})`;
+        ctx.fillRect(x - 1, y - 1, 2, 2);
+      }
+      ctx.restore();
+      return;
+    }
+    // borboletas: voo em oito com bater de asas
+    const colors = ["#F1C66A", "#F3F4FA", "#E78FC0", "#7FC8F8", "#F19A5A"];
+    for (let i = 0; i < 9; i++) {
+      const sp = pick(i * 5 + 1);
+      const [bx, by] = isoPoint(sp.x, sp.y);
+      const k = t / 2400 + i * 1.3;
+      const x = bx + Math.sin(k) * 34;
+      const y = by - zAtFloat(sp.x, sp.y) - 22 + Math.sin(k * 2) * 10 + Math.sin(t / 160 + i) * 1.5;
+      const open = Math.floor(t / 110 + i) % 2 === 0;
+      ctx.fillStyle = colors[i % colors.length]!;
+      if (open) {
+        ctx.fillRect(x - 3, y - 2, 2, 3);
+        ctx.fillRect(x + 1, y - 2, 2, 3);
+      } else {
+        ctx.fillRect(x - 1, y - 3, 1, 3);
+        ctx.fillRect(x + 1, y - 3, 1, 3);
+      }
+      ctx.fillStyle = "#2a1a10";
+      ctx.fillRect(x, y - 2, 1, 3);
+    }
+    // pétalas de cerejeira levadas pelo vento
+    ctx.fillStyle = "#F7B6D2";
+    for (let i = 0; i < 16; i++) {
+      const sp = pick(i * 11 + 7);
+      const [bx, by] = isoPoint(sp.x, sp.y);
+      const life = ((t / 9000 + i * 0.37) % 1 + 1) % 1;
+      const x = bx - 30 + life * 90 + Math.sin(t / 500 + i) * 4;
+      const y = by - zAtFloat(sp.x, sp.y) - 60 + life * 58;
+      ctx.globalAlpha = Math.min(1, (1 - life) * 3, life * 6);
+      ctx.fillRect(x, y, 2, 1 + (Math.floor(t / 300 + i) % 2));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Pássaros cruzando o céu de dia (espaço de tela, atrás de nada). */
+  private drawBirds(t: number) {
+    const ctx = this.ctx;
+    for (let flock = 0; flock < 2; flock++) {
+      const period = 38000 + flock * 9000;
+      const p = ((t + flock * 17000) % period) / period;
+      const ox = -80 + p * (this.w + 160);
+      const oy = this.h * (0.12 + flock * 0.1) + Math.sin(p * 6) * 12;
+      ctx.fillStyle = "rgba(30,40,70,0.75)";
+      for (let i = 0; i < 4 + flock; i++) {
+        const x = ox - i * 14 - (i % 2) * 4;
+        const y = oy + (i % 2 ? 6 : 0) + i * 3;
+        const flap = Math.floor(t / 180 + i) % 2;
+        ctx.fillRect(x - 4, y - flap, 3, 1);
+        ctx.fillRect(x + 1, y - flap, 3, 1);
+        ctx.fillRect(x - 1, y + 1 - flap, 2, 1);
+      }
+    }
+  }
+
   private toScreen(x: number, y: number, z = 0) {
     const s = isoToScreen(x, y);
     return { x: s.sx * this.cam.zoom + this.cam.x, y: (s.sy - z) * this.cam.zoom + this.cam.y };
@@ -1061,7 +1161,9 @@ export class WorldEngine {
     const [sx, sy0] = isoPoint(c.x, c.y);
     const z = zAtFloat(c.x, c.y);
     const sy = sy0 - z;
-    const scale = 2.3;
+    // Sprites 32×46: escala menor que a dos antigos 24×32 para manter a altura
+    // na tela, com o dobro de detalhe.
+    const scale = 1.85;
     // respiração sutil parado
     const breath = pose === "stand" && !this.settings.reducedMotion ? Math.sin(t / 500 + c.x) * 0.6 : 0;
     ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -1076,15 +1178,20 @@ export class WorldEngine {
     } else {
       ctx.translate(sx, sy + breath);
       if (flip) ctx.scale(-1, 1);
-      ctx.drawImage(spr, (-SPRITE_W * scale) / 2, -SPRITE_H * scale + 6, SPRITE_W * scale, SPRITE_H * scale);
+      ctx.drawImage(spr, (-SPRITE_W * scale) / 2, -SPRITE_H * scale + 5, SPRITE_W * scale, SPRITE_H * scale);
     }
     ctx.restore();
+  }
+
+  /** Cor de destaque do personagem (agente: cor da especialidade). */
+  private accentOf(c: Char): string {
+    return this.data?.agents.find((a) => a.key === c.id)?.color ?? "#F1C66A";
   }
 
   private drawCharOverlay(c: Char, t: number) {
     const ctx = this.ctx;
     const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
-    const top = s.y - 78 * this.cam.zoom;
+    const top = s.y - 88 * this.cam.zoom;
     if (this.selectedChar === c.id) {
       const by = top - (this.settings.showNames ? 24 : 6) + Math.sin(t / 220) * 3;
       ctx.fillStyle = "#F1C66A";
@@ -1102,7 +1209,7 @@ export class WorldEngine {
       const w = ctx.measureText(label).width + 12;
       ctx.fillStyle = "rgba(8,14,34,0.85)";
       ctx.fillRect(s.x - w / 2, top - 16, w, 15);
-      ctx.fillStyle = c.isAvatar ? "#F1C66A" : c.look.accent;
+      ctx.fillStyle = c.isAvatar ? "#F1C66A" : this.accentOf(c);
       ctx.fillRect(s.x - w / 2, top - 2, w, 1);
       ctx.fillText(label, s.x - w / 2 + 6, top - 5);
     }
@@ -1111,7 +1218,7 @@ export class WorldEngine {
     // Mundo visto de longe: aldeões ficam em silêncio para não poluir o mapa.
     if (c.isNpc && this.cam.zoom < 0.5) return;
     if (c.bubble?.tone === "talk") {
-      this.speech(s.x, bt, c.bubble.text, c.isNpc ? "#8a5d3b" : c.look.accent);
+      this.speech(s.x, bt, c.bubble.text, c.isNpc ? "#8a5d3b" : this.accentOf(c));
     } else if (c.bubble) {
       const tone = c.bubble.tone === "error" ? "#F16D75" : c.bubble.tone === "work" ? "#59A9F8" : c.bubble.tone === "warn" ? "#F1C66A" : "#4FD49A";
       this.bubble(s.x, bt, c.bubble.text + (c.bubble.tone === "work" ? ".".repeat(Math.floor(t / 400) % 3) : ""), tone);

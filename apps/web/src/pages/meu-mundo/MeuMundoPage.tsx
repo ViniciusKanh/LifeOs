@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { WorldCanvas, type WorldCanvasHandle } from "@/components/living-world/WorldCanvas";
 import { ActivityPanel, AgentsPanel, KingdomPanel, placeLabel, QuickActions, RewardBanner, TimelineStrip, WorldHUD, type QuickAction } from "@/components/living-world/WorldPanels";
-import { AgentContent, AvatarContent, BuildingContent, GardenContent, GuildContent, HabitRow, HistoryContent, RoomContent, SettingsContent, SlotContent } from "@/components/living-world/WorldDrawers";
+import { AgentContent, AgentLookContent, AvatarContent, BuildingContent, GardenContent, GuildContent, HabitRow, HistoryContent, RoomContent, SettingsContent, SlotContent } from "@/components/living-world/WorldDrawers";
 import type { EngineData, EngineSettings, Selection } from "@/components/living-world/engine/WorldEngine";
 import type { BuildingKey, RoomKey } from "@/components/living-world/engine/worldMap";
 import { buildMarkers, type PlaceKey, type WorldFacts } from "@/components/living-world/engine/village";
@@ -129,7 +129,7 @@ export function MeuMundoPage() {
     return {
       avatar: w.avatar,
       activity: w.activity ? { room: w.activity.room, title: w.activity.title } : null,
-      agents: w.agents.map((a) => ({ key: a.key, name: a.name, color: a.color, status: pendingAgent === a.key ? "running" : a.lastRun ? a.lastRun.status : "idle", finishedAt: a.lastRun?.finishedAt ?? null })),
+      agents: w.agents.map((a) => ({ key: a.key, name: a.nickname ?? a.name, color: a.color, look: a.look, status: pendingAgent === a.key ? "running" : a.lastRun ? a.lastRun.status : "idle", finishedAt: a.lastRun?.finishedAt ?? null })),
       habits: w.habits.map((h) => ({ id: h.id, name: h.name, stage: h.stage, doneToday: h.doneToday, pendingToday: h.pendingToday })),
       decor: w.decor.objects
         .map((o) => {
@@ -265,7 +265,7 @@ export function MeuMundoPage() {
   const drawerTitle = (() => {
     if (!drawer || !w) return "";
     if (drawer.kind === "room" || drawer.kind === "building") return placeLabel(drawer.key);
-    if (drawer.kind === "agent") return w.agents.find((a) => a.key === drawer.key)?.name ?? "Agente";
+    if (drawer.kind === "agent") return (() => { const ag = w.agents.find((a) => a.key === drawer.key); return ag ? ag.nickname ?? ag.name : "Agente"; })();
     if (drawer.kind === "avatar") return w.avatar.name;
     if (drawer.kind === "habit") return w.habits.find((h) => h.id === drawer.id)?.name ?? "Hábito";
     if (drawer.kind === "slot") return "Decorar este lugar";
@@ -278,7 +278,7 @@ export function MeuMundoPage() {
       {/* Seguindo um personagem: aviso discreto com opção de parar */}
       {selectedChar?.follow && (
         <button type="button" className="rpg-tile fixed bottom-20 left-1/2 z-30 -translate-x-1/2 px-3 py-1.5 text-xs font-semibold text-rpg-gold-light lg:bottom-6" onClick={() => setSelectedChar(null)}>
-          Acompanhando {selectedChar.id === "avatar" ? w?.avatar.name : w?.agents.find((a) => a.key === selectedChar.id)?.name} — parar
+          Acompanhando {selectedChar.id === "avatar" ? w?.avatar.name : (() => { const ag = w?.agents.find((a) => a.key === selectedChar.id); return ag?.nickname ?? ag?.name; })()} — parar
         </button>
       )}
       {/* Cabeçalho (nível/moedas já estão na barra global; aqui só o selo de nível sobre o mapa) */}
@@ -428,7 +428,7 @@ export function MeuMundoPage() {
                 <div className="flex flex-wrap gap-2">
                   {w.agents.filter((a) => a.room === "escritorio").map((a) => (
                     <RPGButton key={a.key} variant="secondary" className="text-xs" onClick={() => setDrawer({ kind: "agent", key: a.key })}>
-                      Falar com {a.name}
+                      Falar com {a.nickname ?? a.name}
                     </RPGButton>
                   ))}
                   <RPGButton variant="ghost" className="text-xs" onClick={() => navigate("/projetos")}>
@@ -452,11 +452,22 @@ export function MeuMundoPage() {
               <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
                 {w.agents.map((x) => (
                   <button key={x.key} type="button" aria-pressed={x.key === a.key} onClick={() => setDrawer({ kind: "agent", key: x.key })} className={clsx("shrink-0 border px-2 py-1 text-[11px] font-semibold", x.key === a.key ? "border-rpg-gold text-rpg-gold-light" : "border-rpg-border text-rpg-muted")} style={{ borderRadius: 4 }}>
-                    {x.name}
+                    {x.nickname ?? x.name}
                   </button>
                 ))}
               </div>
               <AgentContent agent={a} pending={pendingAgent === a.key} onRun={(question) => runAgent(a.key, question)} />
+              <details className="border-2 border-rpg-border bg-rpg-bg-2/50 p-2" style={{ borderRadius: 4 }}>
+                <summary className="cursor-pointer text-sm font-semibold text-rpg-gold-light">Personalizar aparência</summary>
+                <div className="mt-2">
+                  <AgentLookContent
+                    key={a.key}
+                    agent={a}
+                    busy={actions.saveAgentLook.isPending}
+                    onSave={(body) => actions.saveAgentLook.mutate({ key: a.key, ...body }, { onSuccess: () => notify("Aparência do agente salva."), onError: () => notify("Não foi possível salvar.", "error") })}
+                  />
+                </div>
+              </details>
               <RPGButton
                 variant="ghost"
                 className="text-xs"

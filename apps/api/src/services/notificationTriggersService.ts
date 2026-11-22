@@ -515,7 +515,7 @@ export async function runBankTriggers(ownerId: string, date?: string) {
   const [matured, overdueLoan] = await Promise.all([
     db.execute({
       sql: `SELECT id, plan_label FROM bank_deposits
-            WHERE owner_id = ? AND status = 'active' AND matures_at <= datetime('now')
+            WHERE owner_id = ? AND status = 'active' AND datetime(matures_at) <= datetime('now')
             ORDER BY matures_at ASC LIMIT 10`,
       args: [ownerId],
     }),

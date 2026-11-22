@@ -6,6 +6,7 @@ import {
   DEFAULT_AVATAR,
   DEFAULT_WORLD_SETTINGS,
   WORLD_AGENTS,
+  type WorldAgentCustom,
   type WorldAvatar,
   type WorldRoom,
   type WorldSettings,
@@ -49,9 +50,13 @@ async function ensureProfile(db: Client, ownerId: string) {
   await db.execute({ sql: "INSERT OR IGNORE INTO world_profiles (owner_id) VALUES (?)", args: [ownerId] });
   const r = await db.execute({ sql: "SELECT version, settings_json, avatar_json FROM world_profiles WHERE owner_id = ?", args: [ownerId] });
   const row = r.rows[0] as unknown as Row;
+  // A personalização dos agentes mora no mesmo JSON das preferências (sem
+  // migration), mas é separada aqui para não vazar no objeto de settings.
+  const { agentLooks, ...settings } = parseJson<WorldSettings & { agentLooks?: Record<string, WorldAgentCustom> }>(row?.settings_json, DEFAULT_WORLD_SETTINGS);
   return {
     version: Number(row?.version ?? 1),
-    settings: parseJson<WorldSettings>(row?.settings_json, DEFAULT_WORLD_SETTINGS),
+    settings: settings as WorldSettings,
+    agentLooks: agentLooks ?? {},
     avatar: parseJson<WorldAvatar>(row?.avatar_json, DEFAULT_AVATAR),
   };
 }
@@ -386,8 +391,23 @@ async function listObjects(db: Client, ownerId: string) {
 export async function saveSettings(db: Client, ownerId: string, patch: Partial<WorldSettings>) {
   const cur = await ensureProfile(db, ownerId);
   const next = { ...cur.settings, ...patch };
-  await db.execute({ sql: "UPDATE world_profiles SET settings_json = ?, updated_at = datetime('now') WHERE owner_id = ?", args: [JSON.stringify(next), ownerId] });
+  await db.execute({ sql: "UPDATE world_profiles SET settings_json = ?, updated_at = datetime('now') WHERE owner_id = ?", args: [JSON.stringify({ ...next, agentLooks: cur.agentLooks }), ownerId] });
   return next;
+}
+
+/** Visual e apelido de um agente (null em `look` volta ao visual padrão da especialidade). */
+export async function saveAgentLook(db: Client, ownerId: string, agentKey: string, custom: WorldAgentCustom) {
+  if (!WORLD_AGENTS.some((a) => a.key === agentKey)) throw new WorldError("Agente desconhecido.", 404);
+  const cur = await ensureProfile(db, ownerId);
+  const prev = cur.agentLooks[agentKey] ?? {};
+  const merged: WorldAgentCustom = {
+    look: custom.look === undefined ? prev.look ?? null : custom.look,
+    nickname: custom.nickname === undefined ? prev.nickname ?? null : custom.nickname?.trim() || null,
+  };
+  const agentLooks = { ...cur.agentLooks, [agentKey]: merged };
+  await db.execute({ sql: "UPDATE world_profiles SET settings_json = ?, updated_at = datetime('now') WHERE owner_id = ?", args: [JSON.stringify({ ...cur.settings, agentLooks }), ownerId] });
+  await recordWorldEvent(db, ownerId, { type: "agent.customized", title: `Visual do agente ${WORLD_AGENTS.find((a) => a.key === agentKey)!.name} atualizado` });
+  return merged;
 }
 
 export async function saveAvatar(db: Client, ownerId: string, patch: Partial<WorldAvatar>, lookChanged: boolean) {
@@ -488,7 +508,7 @@ export async function getWorld(db: Client, ownerId: string) {
     habits,
     missions,
     rooms: facts,
-    agents,
+    agents: agents.map((a) => ({ ...a, look: profileRow.agentLooks[a.key]?.look ?? null, nickname: profileRow.agentLooks[a.key]?.nickname ?? null })),
     decor: { slots: DECOR_SLOTS, objects },
     timeline: timeline.events,
     pendencies: {

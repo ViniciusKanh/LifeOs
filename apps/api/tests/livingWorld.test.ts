@@ -72,6 +72,31 @@ describe("Meu Mundo — preferências, avatar e isolamento", () => {
   });
 });
 
+describe("Meu Mundo — aparência do avatar e dos agentes", () => {
+  it("salva visual completo do avatar, personaliza e restaura um agente, e valida opções", async () => {
+    const a = await createAuthenticatedAgent();
+    const b = await createAuthenticatedAgent();
+    const av = await a.agent.put("/api/world/avatar").send({ hairStyle: "trancas", beard: "cheia", outfit: "armadura", hat: "elmo", prop: "escudo", cape: null, glasses: true, x: 41, y: 40 });
+    expect(av.status).toBe(200);
+    expect((await a.agent.put("/api/world/avatar").send({ hat: "tiara" })).status).toBe(400);
+    expect((await a.agent.put("/api/world/agents/mentor/look").send({ look: { outfit: "vestido", hairStyle: "longo" }, nickname: "Merlina" })).status).toBe(200);
+    expect((await a.agent.put("/api/world/agents/mentor/look").send({ look: { outfit: "biquini" } })).status).toBe(400);
+    expect((await a.agent.put("/api/world/agents/inexistente/look").send({ nickname: "x" })).status).toBe(404);
+    // preferências continuam funcionando sem apagar a personalização do agente
+    expect((await a.agent.put("/api/world/settings").send({ quality: "medium" })).status).toBe(200);
+    const wa = await a.agent.get("/api/world");
+    expect(wa.body.avatar).toMatchObject({ hairStyle: "trancas", outfit: "armadura", cape: null, glasses: true, x: 41 });
+    const mentor = wa.body.agents.find((x: { key: string }) => x.key === "mentor");
+    expect(mentor).toMatchObject({ nickname: "Merlina", look: { outfit: "vestido", hairStyle: "longo" } });
+    expect(wa.body.settings.agentLooks).toBeUndefined();
+    expect((await a.agent.put("/api/world/agents/mentor/look").send({ look: null })).status).toBe(200);
+    const again = await a.agent.get("/api/world");
+    expect(again.body.agents.find((x: { key: string }) => x.key === "mentor")).toMatchObject({ look: null, nickname: "Merlina" });
+    const wb = await b.agent.get("/api/world");
+    expect(wb.body.agents.find((x: { key: string }) => x.key === "mentor")).toMatchObject({ look: null, nickname: null });
+  });
+});
+
 describe("Meu Mundo — decoração com o inventário real", () => {
   it("só coloca item que o usuário possui, respeita a quantidade e o slot válido", async () => {
     const { agent, userId } = await createAuthenticatedAgent();

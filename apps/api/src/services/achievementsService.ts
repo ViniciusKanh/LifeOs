@@ -161,7 +161,7 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
     "bank_deposits_claimed",
     "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND (COALESCE(early_withdrawn, 0) = 0 OR COALESCE(actual_payout, net_payout) > amount)",
   );
-  addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= due_at");
+  addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= datetime(due_at)");
   addScalar("journal_days_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND thoughts IS NOT NULL AND thoughts <> ''");
   addScalar("journal_favorites_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND is_favorite = 1");
   addScalar("journal_takeaways_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND night_takeaway IS NOT NULL AND night_takeaway <> ''");

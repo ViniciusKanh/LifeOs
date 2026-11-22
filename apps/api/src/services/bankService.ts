@@ -235,9 +235,11 @@ export async function getCreditScore(db: Client, ownerId: string): Promise<numbe
   const [loanStats, depositCount] = await Promise.all([
     db.execute({
       sql: `SELECT
-              COALESCE(SUM(CASE WHEN status = 'repaid' AND repaid_at <= due_at THEN 1 ELSE 0 END), 0) AS on_time,
-              COALESCE(SUM(CASE WHEN status = 'repaid' AND repaid_at > due_at THEN 1 ELSE 0 END), 0) AS late,
-              COALESCE(SUM(CASE WHEN status = 'active' AND due_at < datetime('now') THEN 1 ELSE 0 END), 0) AS overdue_now
+              -- due_at é ISO e repaid_at vem de datetime('now'): datetime(due_at) normaliza
+              -- os dois para "YYYY-MM-DD HH:MM:SS" antes de comparar (mesmo bug do resgate).
+              COALESCE(SUM(CASE WHEN status = 'repaid' AND repaid_at <= datetime(due_at) THEN 1 ELSE 0 END), 0) AS on_time,
+              COALESCE(SUM(CASE WHEN status = 'repaid' AND repaid_at > datetime(due_at) THEN 1 ELSE 0 END), 0) AS late,
+              COALESCE(SUM(CASE WHEN status = 'active' AND datetime(due_at) < datetime('now') THEN 1 ELSE 0 END), 0) AS overdue_now
             FROM bank_loans WHERE owner_id = ?`,
       args: [ownerId],
     }),
@@ -717,7 +719,13 @@ export async function claimDeposit(db: Client, ownerId: string, depositId: strin
   if (!row) return { ok: false, code: "not_found", message: "Investimento não encontrado." };
   const current = mapRow(row);
   if (current.status === "claimed") return { ok: false, code: "already_claimed", message: "Este investimento já foi resgatado." };
-  if (current.maturesAt > new Date().toISOString()) {
+  // matures_at é gravado em ISO ("2026-11-22T15:00:00.000Z"). Comparar com
+  // datetime('now') do SQLite ("2026-11-22 15:00:00") falha no dia do
+  // vencimento ('T' > ' ' na ordem de texto): o card aparecia como "pronto
+  // para resgatar", mas o UPDATE não pegava a linha e a API respondia "já foi
+  // resgatado". Por isso o "agora" vai como parâmetro, no mesmo formato ISO.
+  const nowIso = new Date().toISOString();
+  if (current.maturesAt > nowIso) {
     return { ok: false, code: "not_matured", message: "Este investimento ainda não venceu." };
   }
 
@@ -725,8 +733,8 @@ export async function claimDeposit(db: Client, ownerId: string, depositId: strin
     [
       {
         sql: `UPDATE bank_deposits SET status = 'claimed', claimed_at = datetime('now'), actual_payout = ?, actual_tax = ?
-              WHERE id = ? AND owner_id = ? AND status = 'active' AND matures_at <= datetime('now')`,
-        args: [current.netPayout, current.payout - current.netPayout, depositId, ownerId],
+              WHERE id = ? AND owner_id = ? AND status = 'active' AND matures_at <= ?`,
+        args: [current.netPayout, current.payout - current.netPayout, depositId, ownerId, nowIso],
       },
       {
         sql: `INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label)
@@ -740,8 +748,10 @@ export async function claimDeposit(db: Client, ownerId: string, depositId: strin
   );
 
   if (results[0].rowsAffected === 0) {
-    // Outra requisição venceu a corrida (clique duplo) — devolve o estado atual.
-    return { ok: false, code: "already_claimed", message: "Este investimento já foi resgatado." };
+    // Confere o motivo real em vez de supor clique duplo.
+    const recheck = await db.execute({ sql: "SELECT status FROM bank_deposits WHERE id = ?", args: [depositId] });
+    if (String(recheck.rows[0]?.status) === "claimed") return { ok: false, code: "already_claimed", message: "Este investimento já foi resgatado." };
+    return { ok: false, code: "not_matured", message: "Este investimento ainda não venceu." };
   }
 
   const balance = await coinBalance(db, ownerId);
@@ -769,7 +779,8 @@ export async function claimDepositEarly(db: Client, ownerId: string, depositId: 
   if (!row) return { ok: false, code: "not_found", message: "Investimento não encontrado." };
   const current = mapRow(row);
   if (current.status === "claimed") return { ok: false, code: "already_claimed", message: "Este investimento já foi resgatado." };
-  if (current.maturesAt <= new Date().toISOString()) {
+  const nowIso = new Date().toISOString();
+  if (current.maturesAt <= nowIso) {
     return { ok: false, code: "already_matured", message: "Este investimento já venceu — resgate sem penalidade na lista de prontos para resgatar." };
   }
 
@@ -794,8 +805,8 @@ export async function claimDepositEarly(db: Client, ownerId: string, depositId: 
     [
       {
         sql: `UPDATE bank_deposits SET status = 'claimed', claimed_at = datetime('now'), early_withdrawn = 1, actual_payout = ?, actual_tax = ?
-              WHERE id = ? AND owner_id = ? AND status = 'active' AND matures_at > datetime('now')`,
-        args: [payout, taxCharged, depositId, ownerId],
+              WHERE id = ? AND owner_id = ? AND status = 'active' AND matures_at > ?`,
+        args: [payout, taxCharged, depositId, ownerId, nowIso],
       },
       {
         sql: `INSERT INTO coin_ledger (id, owner_id, amount, source_type, source_id, event_type, label)

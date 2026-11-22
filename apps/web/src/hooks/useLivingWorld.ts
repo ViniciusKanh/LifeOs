@@ -22,6 +22,10 @@ export function useWorldActions() {
       onSuccess: refresh,
     }),
     saveAvatar: useMutation({ mutationFn: livingWorldService.saveAvatar, onSuccess: refresh }),
+    saveAgentLook: useMutation({
+      mutationFn: ({ key, ...body }: { key: string; look?: Parameters<typeof livingWorldService.saveAgentLook>[1]["look"]; nickname?: string | null }) => livingWorldService.saveAgentLook(key, body),
+      onSuccess: refresh,
+    }),
     runAgent: useMutation({
       mutationFn: ({ key, question }: { key: string; question: string | null }) => livingWorldService.runAgent(key, question),
       onSettled: () => {

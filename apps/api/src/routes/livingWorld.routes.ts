@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { aiRateLimit } from "../middleware/rateLimit.js";
-import { agentHistory, getWorld, listWorldEvents, placeable, placeDecor, removeDecor, runAgent, saveAvatar, saveSettings, WorldError } from "../services/livingWorldService.js";
+import { agentHistory, getWorld, listWorldEvents, placeable, placeDecor, removeDecor, runAgent, saveAgentLook, saveAvatar, saveSettings, WorldError } from "../services/livingWorldService.js";
+import { BEARDS, HAIR_STYLES, HATS, OUTFITS, PROPS } from "../config/livingWorld.js";
 
 /** Meu Mundo (/api/world): leitura agregada dos dados reais + ações do próprio mundo. */
 export const livingWorldRouter = Router();
@@ -49,15 +50,32 @@ livingWorldRouter.put("/settings", async (req, res) => {
 });
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+/** Aparência de personagem (avatar e agentes) — só opções conhecidas e cores hex. */
+const lookShape = {
+  skin: color,
+  hair: color,
+  hairStyle: z.enum(HAIR_STYLES),
+  beard: z.enum(BEARDS),
+  eyes: color,
+  glasses: z.boolean(),
+  outfit: z.enum(OUTFITS),
+  shirt: color,
+  pants: color,
+  trim: color,
+  boots: color,
+  cape: color.nullable(),
+  hat: z.enum(HATS),
+  hatColor: color,
+  prop: z.enum(PROPS),
+};
+const LOOK_KEYS = Object.keys(lookShape);
 const avatarSchema = z
   .object({
     name: z.string().trim().min(1).max(40).nullable(),
-    skin: color,
-    hair: color,
-    shirt: color,
-    pants: color,
-    x: z.number().int().min(0).max(39),
-    y: z.number().int().min(0).max(39),
+    ...lookShape,
+    // grade do mapa é 42×42 (0..41)
+    x: z.number().int().min(0).max(41),
+    y: z.number().int().min(0).max(41),
   })
   .partial()
   .strict();
@@ -65,9 +83,27 @@ const avatarSchema = z
 livingWorldRouter.put("/avatar", async (req, res) => {
   const p = avatarSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: "Dados do avatar inválidos." });
-  const look = ["name", "skin", "hair", "shirt", "pants"].some((k) => k in p.data);
+  const look = ["name", ...LOOK_KEYS].some((k) => k in p.data);
   try {
     return res.json(await saveAvatar(getDb(), req.user!.id, p.data, look));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+const agentLookSchema = z
+  .object({
+    look: z.object(lookShape).partial().strict().nullable(),
+    nickname: z.string().trim().max(24).nullable(),
+  })
+  .partial()
+  .strict();
+
+livingWorldRouter.put("/agents/:key/look", async (req, res) => {
+  const p = agentLookSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: "Aparência do agente inválida." });
+  try {
+    return res.json(await saveAgentLook(getDb(), req.user!.id, req.params.key, p.data));
   } catch (err) {
     return fail(res, err);
   }

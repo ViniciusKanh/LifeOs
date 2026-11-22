@@ -26,6 +26,24 @@ async function forceLoanDue(loanId: string, overdue: boolean) {
   });
 }
 
+describe("Banco — resgate no dia do vencimento (matures_at em ISO)", () => {
+  it("resgata quando venceu há 1 minuto no mesmo dia, sem responder 'já foi resgatado'", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await giveCoins(userId, 1000);
+    const dep = await agent.post("/api/bank/deposits").send({ planId: "cofre-aventureiro", amount: 100 });
+    expect(dep.status).toBe(201);
+    // Formato real gravado pelo createDeposit (toISOString), não o datetime() do SQLite.
+    await getDb().execute({ sql: "UPDATE bank_deposits SET matures_at = ? WHERE id = ?", args: [new Date(Date.now() - 60_000).toISOString(), dep.body.deposit.id] });
+    const summary = await agent.get("/api/bank");
+    expect(summary.body.claimable).toHaveLength(1);
+    const claimed = await agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
+    expect(claimed.status).toBe(200);
+    const again = await agent.post(`/api/bank/deposits/${dep.body.deposit.id}/claim`);
+    expect(again.status).toBe(409);
+    expect(again.body.error).toContain("já foi resgatado");
+  });
+});
+
 describe("Banco — investimentos de moedas", () => {
   it("lista os planos e o saldo mesmo sem nenhum depósito", async () => {
     const { agent } = await createAuthenticatedAgent();

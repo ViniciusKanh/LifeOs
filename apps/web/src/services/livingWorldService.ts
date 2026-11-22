@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { AdvisorAnswer } from "./moduleHubService";
+import type { CharacterLook } from "@/components/living-world/engine/looks";
 
 /** Meu Mundo (/api/world) — tipos espelham livingWorldService.ts da API. */
 export type WorldRoomKey = "biblioteca" | "escritorio" | "academia" | "guilda" | "casa" | "jardim" | "praca";
@@ -17,12 +18,9 @@ export interface WorldSettings {
   followAvatar: boolean;
 }
 
-export interface WorldAvatar {
+/** Nome, posição e aparência completa do avatar (ver engine/looks.ts). */
+export interface WorldAvatar extends CharacterLook {
   name: string;
-  skin: string;
-  hair: string;
-  shirt: string;
-  pants: string;
   x: number;
   y: number;
 }
@@ -46,6 +44,10 @@ export interface WorldAgent {
   defaultQuestion: string;
   lastRun: AgentRun | null;
   completedRuns: number;
+  /** Visual personalizado (null = padrão da especialidade). */
+  look: Partial<CharacterLook> | null;
+  /** Apelido dado pelo usuário (null = nome da especialidade). */
+  nickname: string | null;
 }
 
 export interface WorldMission {
@@ -153,6 +155,8 @@ export const livingWorldService = {
   get: () => api.get<WorldState>("/world"),
   saveSettings: (patch: Partial<WorldSettings>) => api.put<WorldSettings>("/world/settings", patch),
   saveAvatar: (patch: Partial<Omit<WorldAvatar, "name">> & { name?: string | null }) => api.put<WorldAvatar>("/world/avatar", patch),
+  saveAgentLook: (key: string, body: { look?: Partial<CharacterLook> | null; nickname?: string | null }) =>
+    api.put<{ look: Partial<CharacterLook> | null; nickname: string | null }>(`/world/agents/${key}/look`, body),
   events: (q: { category?: string | null; before?: string | null; limit?: number }) => {
     const p = new URLSearchParams();
     if (q.category) p.set("category", q.category);

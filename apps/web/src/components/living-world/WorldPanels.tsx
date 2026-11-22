@@ -170,13 +170,13 @@ export function AgentsPanel({ agents, pendingKey, onOpen }: { agents: WorldAgent
             const working = st.tone === "blue";
             return (
               <li key={a.key}>
-                <button type="button" onClick={() => onOpen(a.key)} className="rpg-tile flex w-full items-center gap-2.5 p-1.5 text-left" aria-label={`${a.name}: ${st.label}`}>
+                <button type="button" onClick={() => onOpen(a.key)} className="rpg-tile flex w-full items-center gap-2.5 p-1.5 text-left" aria-label={`${a.nickname ?? a.name}: ${st.label}`}>
                   <span className={clsx("relative shrink-0 border-2 bg-rpg-bg", working && "shadow-[0_0_10px_rgba(89,169,248,0.7)]")} style={{ ...R, borderColor: a.color }}>
-                    <AgentPortrait agentKey={a.key} color={a.color} size={40} working={working} />
+                    <AgentPortrait agentKey={a.key} look={a.look} size={40} working={working} />
                     <span className={clsx("absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-rpg-bg", working ? "animate-pulse bg-rpg-blue" : st.tone === "red" ? "bg-rpg-red" : "bg-rpg-green")} aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-rpg text-sm font-bold text-rpg-text">{a.name}</span>
+                    <span className="block truncate font-rpg text-sm font-bold text-rpg-text">{a.nickname ?? a.name}</span>
                     <span className="block truncate text-[11px] text-rpg-muted">{a.specialty}</span>
                     <span className={clsx("mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide", st.tone === "red" ? "text-rpg-red" : working ? "text-rpg-blue" : st.tone === "green" ? "text-rpg-green" : "text-rpg-muted")}>
                       {working && <Loader2 size={10} className="animate-spin" aria-hidden />} {st.label}
