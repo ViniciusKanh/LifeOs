@@ -213,7 +213,7 @@ function CreateTrophyModal({
 }
 
 export function ConquistasPage() {
-  const { achievements, unlocked, isLoading, isError, refetch } = useAchievements();
+  const { achievements, unlocked, isLoading, isError, refetch } = useAchievements(true);
   // Nesta tela o progresso precisa estar atualizado (o catálogo fica em cache nas demais).
   useEffect(() => {
     void refetch();

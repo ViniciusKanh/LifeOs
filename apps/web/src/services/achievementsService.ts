@@ -12,6 +12,8 @@ export interface CustomAchievementInput {
 
 export const achievementsService = {
   list: () => api.get<Achievement[]>("/achievements"),
+  /** Catálogo sem progresso recalculado — só serve para saber o que já foi destravado. */
+  listUnlockedOnly: () => api.get<Achievement[]>("/achievements?progress=0"),
   /**
    * Pede pro backend recalcular as métricas reais e desbloquear
    * qualquer conquista já atingida. Chamado depois de ações que podem
@@ -64,12 +66,12 @@ export function scheduleAchievementsCheck() {
 }
 
 /**
- * Chamado depois de ações que podem destravar uma conquista. Se algo novo
- * for destravado, emite um evento global — o AchievementToast (montado no
- * AppShell) mostra a comemoração em qualquer tela.
+ * Chamado depois de ações que podem render XP/conquistas. Hoje só avisa a
+ * gamificação; a checagem de conquistas fica com a tela Conquistas.
  */
 export function triggerAchievementsCheck() {
   // Mesmos gatilhos de conquista também podem render XP/moedas.
+  // A checagem de conquistas NÃO roda mais a cada ação (custo de CPU na
+  // Vercel): os desbloqueios são conferidos ao abrir a tela Conquistas.
   notifyGamification();
-  scheduleAchievementsCheck();
 }

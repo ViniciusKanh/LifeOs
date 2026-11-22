@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useAuth } from "@/hooks/useAuth";
-import { useAchievements } from "@/hooks/useAchievements";
+import { useUnlockedAchievements } from "@/hooks/useAchievements";
 import { useRpgPreferences } from "@/hooks/useRpgPreferences";
 import { isFrameUnlocked, unlockedTiers } from "@/utils/cosmetics";
 import { RPGAvatar } from "./RPGAvatar";
@@ -15,7 +15,7 @@ const FRAME_BORDER = { gold: "border-rpg-gold", silver: "border-rpg-muted", bron
 export function RPGPortrait({ size = "md", className }: { size?: keyof typeof SIZE; className?: string }) {
   const { user } = useAuth();
   const { prefs } = useRpgPreferences();
-  const { achievements } = useAchievements(false);
+  const { achievements } = useUnlockedAchievements();
   const frame = isFrameUnlocked(prefs.frame, unlockedTiers(achievements)) ? prefs.frame : "bronze";
   const px = SIZE[size];
   // Aura Arcana (Loja Arcana — Moldura Épica de Avatar): só visual, nunca troca a moldura conquistada de verdade.

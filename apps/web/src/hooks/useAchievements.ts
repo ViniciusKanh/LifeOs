@@ -5,16 +5,17 @@ import { ACHIEVEMENT_UNLOCKED_EVENT, achievementsService, scheduleAchievementsCh
 const KEY = ["achievements"];
 
 /**
- * Catálogo de conquistas com o progresso real do usuário. Ao montar,
- * agenda um recálculo no backend (idempotente e agrupado — ver
- * scheduleAchievementsCheck) para cobrir desbloqueios sem gatilho
- * explícito (ex.: dado importado).
+ * Catálogo de conquistas com o progresso real do usuário. O recálculo no
+ * backend (POST /achievements/check) é a consulta mais cara do app, então só
+ * roda quando `runCheck` é pedido explicitamente — hoje apenas na tela
+ * Conquistas. Antes rodava em todo carregamento do app e a cada ação, e era o
+ * principal consumo de CPU das functions na Vercel.
  */
-export function useAchievements(runCheck = true) {
+export function useAchievements(runCheck = false) {
   const queryClient = useQueryClient();
-  // O catálogo calcula o progresso sobre todo o histórico: cache de 10 min,
+  // O catálogo calcula o progresso sobre todo o histórico: cache de 30 min,
   // renovado quando uma conquista é destravada.
-  const query = useQuery({ queryKey: KEY, queryFn: achievementsService.list, staleTime: 10 * 60_000 });
+  const query = useQuery({ queryKey: KEY, queryFn: achievementsService.list, staleTime: 30 * 60_000 });
 
   useEffect(() => {
     const onUnlock = () => {
@@ -37,4 +38,15 @@ export function useAchievements(runCheck = true) {
     isError: query.isError,
     refetch: query.refetch,
   };
+}
+
+/**
+ * Versão leve: só as conquistas já destravadas, sem recalcular métricas no
+ * backend. Para componentes sempre montados (ex.: moldura do avatar no
+ * cabeçalho), que não podem disparar a consulta cara a cada abertura do app.
+ * A chave fica sob ["achievements"], então é invalidada junto quando algo destrava.
+ */
+export function useUnlockedAchievements() {
+  const query = useQuery({ queryKey: [...KEY, "unlocked-only"], queryFn: achievementsService.listUnlockedOnly, staleTime: 60 * 60_000 });
+  return { achievements: query.data ?? [], isLoading: query.isLoading };
 }

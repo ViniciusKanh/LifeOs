@@ -9,7 +9,7 @@ export const WORLD_KEY = ["world"] as const;
  * 60 s com a tela visível (barato: uma leitura agregada).
  */
 export function useLivingWorld() {
-  return useQuery({ queryKey: WORLD_KEY, queryFn: livingWorldService.get, refetchInterval: 60_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true });
+  return useQuery({ queryKey: WORLD_KEY, queryFn: livingWorldService.get, refetchInterval: 5 * 60_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true });
 }
 
 export function useWorldActions() {

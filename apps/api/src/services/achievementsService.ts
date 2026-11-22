@@ -477,7 +477,8 @@ function rewardFor(tier: string) {
 }
 
 /** Catálogo completo com o progresso real do usuário em cada conquista (destravada ou não). */
-export async function listAchievements(ownerId: string): Promise<AchievementView[]> {
+export async function listAchievements(ownerId: string, options: { withProgress?: boolean } = {}): Promise<AchievementView[]> {
+  const withProgress = options.withProgress ?? true;
   const db = getDb();
   const [catalog, unlocked] = await Promise.all([
     db.execute("SELECT * FROM achievements ORDER BY threshold ASC"),
@@ -496,7 +497,12 @@ export async function listAchievements(ownerId: string): Promise<AchievementView
   const unlockedMap = new Map(
     (unlocked.rows as unknown as Array<{ achievement_id: string; unlocked_at: string }>).map((r) => [r.achievement_id, r.unlocked_at])
   );
-  const metrics = await computeMetrics(db, ownerId, catalogRows.map((row) => row.metric).filter((metric): metric is string => !!metric));
+  // Modo leve (withProgress=false): só o que já foi destravado, sem recalcular
+  // métricas sobre todo o histórico — usado por telas que só precisam saber
+  // quais conquistas/tiers o usuário tem (ex.: moldura do avatar no cabeçalho).
+  const metrics = withProgress
+    ? await computeMetrics(db, ownerId, catalogRows.map((row) => row.metric).filter((metric): metric is string => !!metric))
+    : {};
 
   // Conquistas de Foco (módulo removido): ficam só as já desbloqueadas, como histórico.
   const visible = catalogRows.filter((row) => !(row.metric?.startsWith("focus_") && !unlockedMap.has(row.id)));

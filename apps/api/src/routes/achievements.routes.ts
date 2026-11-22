@@ -18,7 +18,8 @@ achievementsRouter.use(requireAuth);
 
 /** GET /api/achievements — catálogo completo com o progresso real do usuário em cada uma. */
 achievementsRouter.get("/", async (req, res) => {
-  const achievements = await listAchievements(req.user!.id);
+  // ?progress=0 devolve o catálogo sem recalcular métricas (bem mais barato).
+  const achievements = await listAchievements(req.user!.id, { withProgress: req.query.progress !== "0" });
   return res.json(achievements);
 });
 

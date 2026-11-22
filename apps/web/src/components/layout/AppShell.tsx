@@ -10,7 +10,6 @@ import { RPGPlayerHUD } from "@/components/rpg/RPGPlayerHUD";
 import { HeroClassChip } from "@/components/rpg/HeroClass";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { AppUpdateWatcher } from "./AppUpdateWatcher";
-import { AchievementHeaderPulse } from "./AchievementHeaderPulse";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { DesktopGlobalSearch, MobileGlobalSearch } from "./GlobalSearch";
 import { CopilotAssistant } from "./CopilotAssistant";
@@ -210,10 +209,6 @@ export function AppShell() {
             <MobileGlobalSearch />
             {isRpg && <HeroClassChip />}
             {isRpg && <RPGPlayerHUD compact />}
-            {/* Em telas muito estreitas o troféu sai do cabeçalho (continua em Conquistas) para o título não ser esmagado. */}
-            <div className="hidden min-[400px]:block">
-              <AchievementHeaderPulse />
-            </div>
             <span className="hidden sm:block w-px h-6 bg-paper-border dark:bg-ink-border mx-0.5" aria-hidden />
             <ProfileMenu />
           </div>

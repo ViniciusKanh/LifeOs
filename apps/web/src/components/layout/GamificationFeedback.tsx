@@ -77,7 +77,11 @@ export function GamificationFeedback() {
     const onRefresh = () => {
       // Pequeno atraso para cobrir hooks encadeados no backend (ex.: hábito vinculado).
       window.setTimeout(() => {
-        void qc.invalidateQueries({ queryKey: ["gamification"] });
+        // Só o perfil (HUD) é refeito na hora; o resto da gamificação fica
+        // marcado como desatualizado e recarrega quando a tela for aberta —
+        // antes toda ação refazia várias consultas de uma vez na Vercel.
+        void qc.invalidateQueries({ queryKey: ["gamification"], refetchType: "none" });
+        void qc.invalidateQueries({ queryKey: ["gamification", "profile"] });
         // Classe dinâmica/build mudam com o XP novo.
         void qc.invalidateQueries({ queryKey: ["codex", "hud"] });
       }, 150);
