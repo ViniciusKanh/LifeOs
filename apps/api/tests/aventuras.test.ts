@@ -368,6 +368,16 @@ describe("Tempo de Jogo (Steam)", () => {
     expect((await agent.post("/api/integrations/steam/trophies").send({ appid: 10, apiName: "NADA", pin: true })).status).toBe(404);
   });
 
+  it("admin_settings aceita as credenciais de Strava, Spotify e Steam (migration 0107)", async () => {
+    const db = getDb();
+    for (const integration of ["strava", "spotify", "steam"]) {
+      await db.execute({ sql: "INSERT OR REPLACE INTO admin_settings (id, integration, key_name, encrypted_value, is_active) VALUES (?, ?, 'teste', ?, 1)", args: [nanoid(), integration, encryptSecret("x")] });
+    }
+    const r = await db.execute("SELECT COUNT(*) AS n FROM admin_settings WHERE key_name = 'teste'");
+    expect(Number(r.rows[0]!.n)).toBe(3);
+    await db.execute("DELETE FROM admin_settings WHERE key_name = 'teste'");
+  });
+
   it("isolamento: um usuário não vê a Steam do outro e conectar exige configuração", async () => {
     const { agent } = await createAuthenticatedAgent();
     const ov = await agent.get("/api/integrations/steam");

@@ -32,13 +32,19 @@ function SecretField({
 }) {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
+  // Feedback visível: antes um erro do servidor deixava o botão "Salvar" sem nenhuma reação.
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const handleSave = async () => {
     if (!value.trim()) return;
     setSaving(true);
+    setStatus(null);
     try {
       await onSave(value.trim());
       setValue("");
+      setStatus({ ok: true, msg: "Salvo." });
+    } catch (err) {
+      setStatus({ ok: false, msg: err instanceof Error && err.message ? err.message : "Não foi possível salvar." });
     } finally {
       setSaving(false);
     }
@@ -70,6 +76,11 @@ function SecretField({
         <p className="text-[11px] text-slate mt-1">
           Configurado — valor atual: {existing.masked_preview} (atualizado em{" "}
           {new Date(existing.updated_at).toLocaleDateString("pt-BR")})
+        </p>
+      )}
+      {status && (
+        <p role={status.ok ? "status" : "alert"} className={`mt-1 text-[11px] ${status.ok ? "text-emerald-500" : "text-rose-500"}`}>
+          {status.msg}
         </p>
       )}
     </div>
