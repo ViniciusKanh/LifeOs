@@ -389,7 +389,7 @@ export function AtlasPage() {
                 ))}
               </ul>
             )}
-            <div className={clsx("relative h-[420px] overflow-hidden border-2 border-rpg-purple/50 sm:h-[480px]", picking && "cursor-crosshair")} style={R}>
+            <div className={clsx("relative isolate z-0 h-[420px] overflow-hidden border-2 border-rpg-purple/50 sm:h-[480px]", picking && "cursor-crosshair")} style={R}>
               <MapContainer center={center} zoom={13} className="h-full w-full" scrollWheelZoom attributionControl>
                 <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
                 <FogLayer cells={o.cells} cellDeg={o.cellDeg} />

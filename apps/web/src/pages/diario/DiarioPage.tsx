@@ -2241,7 +2241,7 @@ function JournalPlacesTab({ onOpenDay }: { onOpenDay: (date: string) => void }) 
       <div className="space-y-3">
         {withCoords.length > 0 && (
           <Card className="p-0 overflow-hidden">
-            <div className="h-72">
+            <div className="relative isolate z-0 h-72">
               <MapContainer center={center} zoom={4} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
                 <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 {withCoords.map((loc) => (
