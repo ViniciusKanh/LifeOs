@@ -46,6 +46,19 @@ export interface FetchJsonOptions {
   retries?: number;
   /** Rótulo usado nas mensagens de erro (ex.: "Strava"). */
   label: string;
+  /** Mensagem específica para 403 (ex.: conta fora da lista de usuários do app). */
+  forbiddenMessage?: string;
+}
+
+async function apiErrorDetail(res: Response): Promise<string> {
+  try {
+    const text = (await res.text()).slice(0, 500);
+    const j = JSON.parse(text) as { error?: string | { message?: string }; message?: string; error_description?: string };
+    const msg = typeof j.error === "object" ? j.error?.message : j.error_description ?? j.message ?? j.error;
+    return msg ? ` (${String(msg).slice(0, 160)})` : "";
+  } catch {
+    return "";
+  }
 }
 
 export async function fetchJson<T>(url: string, init: RequestInit, opts: FetchJsonOptions): Promise<T> {
@@ -61,8 +74,10 @@ export async function fetchJson<T>(url: string, init: RequestInit, opts: FetchJs
         const text = await res.text();
         return (text ? JSON.parse(text) : null) as T;
       }
-      if (res.status === 401) throw new IntegrationError(401, `${opts.label}: autorização expirada ou revogada.`, "nao_autorizado");
-      if (res.status === 403) throw new IntegrationError(403, `${opts.label}: acesso negado (perfil privado ou permissão ausente).`, "acesso_negado");
+      // Motivo devolvido pela própria API (sem tokens), para a mensagem não ficar genérica.
+      const detail = await apiErrorDetail(res);
+      if (res.status === 401) throw new IntegrationError(401, `${opts.label}: autorização expirada ou revogada.${detail}`, "nao_autorizado");
+      if (res.status === 403) throw new IntegrationError(403, opts.forbiddenMessage ?? `${opts.label}: acesso negado.${detail}`, "acesso_negado");
       if (res.status === 404) throw new IntegrationError(404, `${opts.label}: recurso não encontrado.`, "nao_encontrado");
       lastErr =
         res.status === 429

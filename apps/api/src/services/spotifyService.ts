@@ -74,7 +74,16 @@ async function tokenRequest(db: Client, body: Record<string, string>): Promise<T
 export async function exchangeSpotifyCode(db: Client, ownerId: string, code: string, redirectUri: string) {
   const t = await tokenRequest(db, { grant_type: "authorization_code", code, redirect_uri: redirectUri });
   if (!t.refresh_token) throw new IntegrationError(502, "Spotify não devolveu o token de renovação.");
-  const me = await fetchJson<{ id: string; display_name?: string; product?: string; images?: Array<{ url: string }> }>(`${API}/me`, { headers: { Authorization: `Bearer ${t.access_token}` } }, { label: "Spotify" });
+  const me = await fetchJson<{ id: string; display_name?: string; product?: string; images?: Array<{ url: string }> }>(
+    `${API}/me`,
+    { headers: { Authorization: `Bearer ${t.access_token}` } },
+    {
+      label: "Spotify",
+      // Em modo de desenvolvimento o Spotify devolve 403 para contas fora da lista do app.
+      forbiddenMessage:
+        "O Spotify recusou o acesso: no app (developer.spotify.com → seu app → User Management) adicione o e-mail da conta Spotify que você está conectando. Se já adicionou, o Spotify pode exigir Premium na conta dona do app em modo de desenvolvimento.",
+    }
+  );
   await db.execute({
     sql: `INSERT INTO spotify_connections (owner_id, spotify_user_id, display_name, product, avatar_url, access_token_enc, refresh_token_enc, expires_at, scope)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
