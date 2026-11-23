@@ -10,13 +10,13 @@ import { normalizeLook, DEFAULT_AVATAR_LOOK } from "./looks";
 export const SCENE_W = 320;
 export const SCENE_H = 180;
 
-type R = (x: number, y: number, w: number, h: number, c: string) => void;
-const hash = (a: number, b: number) => {
+export type R = (x: number, y: number, w: number, h: number, c: string) => void;
+export const hash = (a: number, b: number) => {
   const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return s - Math.floor(s);
 };
 
-function painter(ctx: CanvasRenderingContext2D): R {
+export function painter(ctx: CanvasRenderingContext2D): R {
   return (x, y, w, h, c) => {
     ctx.fillStyle = c;
     ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
@@ -24,7 +24,7 @@ function painter(ctx: CanvasRenderingContext2D): R {
 }
 
 /** Brilho radial (luz de fogo/vela/cristal). */
-function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rgb: string, a: number) {
+export function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rgb: string, a: number) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0, `rgba(${rgb},${a})`);
   g.addColorStop(1, `rgba(${rgb},0)`);
@@ -32,7 +32,7 @@ function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rg
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
 }
 
-function stoneWall(r: R, x0: number, y0: number, w: number, h: number, base: string) {
+export function stoneWall(r: R, x0: number, y0: number, w: number, h: number, base: string) {
   r(x0, y0, w, h, base);
   for (let row = 0; row * 9 < h; row++) {
     const y = y0 + row * 9;
@@ -47,7 +47,7 @@ function stoneWall(r: R, x0: number, y0: number, w: number, h: number, base: str
   }
 }
 
-function planks(r: R, y0: number, h: number, base: string) {
+export function planks(r: R, y0: number, h: number, base: string) {
   r(0, y0, SCENE_W, h, base);
   for (let y = y0; y < y0 + h; y += 7) {
     r(0, y, SCENE_W, 1, shade(base, -22));
@@ -57,7 +57,7 @@ function planks(r: R, y0: number, h: number, base: string) {
 }
 
 /** Janela em arco com céu noturno, estrelas e o castelo distante. */
-function nightWindow(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number, rain: boolean) {
+export function nightWindow(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number, rain: boolean) {
   const sky = ctx.createLinearGradient(0, y, 0, y + h);
   sky.addColorStop(0, "#1b2457");
   sky.addColorStop(1, "#3a3f7a");
@@ -101,7 +101,7 @@ function nightWindow(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /** Chamas em camadas (vermelho → laranja → amarelo), dançando com o tempo. */
-function flames(r: R, x: number, y: number, w: number, h: number, t: number, power: number) {
+export function flames(r: R, x: number, y: number, w: number, h: number, t: number, power: number) {
   const cols = ["#b8321f", "#e8641f", "#f4a331", "#ffe08a"];
   for (let layer = 0; layer < 4; layer++) {
     for (let i = 0; i < w; i += 2) {
@@ -113,7 +113,7 @@ function flames(r: R, x: number, y: number, w: number, h: number, t: number, pow
   }
 }
 
-function lantern(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
+export function lantern(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
   r(x + 2, 0, 1, y, "#3a2a1a");
   r(x - 1, y, 7, 2, "#2a2a32");
   r(x, y + 2, 5, 7, "#3a3f48");
@@ -122,7 +122,7 @@ function lantern(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, t: n
   glow(ctx, x + 2.5, y + 6, 26, "255,190,90", 0.28);
 }
 
-function spriteAt(ctx: CanvasRenderingContext2D, look: Look, pose: Pose, frame: number, x: number, feetY: number, scale: number, flip = false) {
+export function spriteAt(ctx: CanvasRenderingContext2D, look: Look, pose: Pose, frame: number, x: number, feetY: number, scale: number, flip = false) {
   const spr = getSprite(look, pose, frame, false);
   ctx.save();
   ctx.translate(x, feetY);
@@ -292,7 +292,7 @@ export function drawForgeScene(ctx: CanvasRenderingContext2D, t: number, level: 
 export const LIBRARIAN: Look = normalizeLook({ skin: "#F6D3B3", hair: "#3A2418", hairStyle: "longo", beard: "nenhuma", eyes: "#5A6FBA", outfit: "manto", shirt: "#2B3A67", pants: "#1B2B55", trim: "#F1C66A", hat: "chapeu_mago", hatColor: "#2B3A67", prop: "nenhum", cape: null, glasses: false }, DEFAULT_AVATAR_LOOK);
 const SPINES = ["#7a2a3a", "#2b6cb0", "#3f7a3c", "#b7791f", "#5b3f8c", "#a0522d", "#2b3a67", "#8a3a5a", "#c8742e", "#4a6a5a"];
 
-function bookshelf(r: R, x: number, y: number, w: number, h: number, seed: number) {
+export function bookshelf(r: R, x: number, y: number, w: number, h: number, seed: number) {
   r(x, y, w, h, "#3e2716");
   r(x, y, 3, h, "#5a3a22");
   r(x + w - 3, y, 3, h, "#2a1a10");
@@ -322,7 +322,7 @@ function bookshelf(r: R, x: number, y: number, w: number, h: number, seed: numbe
   }
 }
 
-function candle(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
+export function candle(r: R, ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
   r(x, y, 3, 8, "#efe9da");
   r(x - 1, y + 8, 5, 2, "#c9b48a");
   const f = Math.sin(t / 120 + x) > 0 ? 1 : 0;

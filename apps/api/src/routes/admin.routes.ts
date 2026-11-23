@@ -35,7 +35,7 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
 
 const upsertSettingSchema = z.object({
-  integration: z.enum(["gemini", "turso", "smtp", "google_oauth", "redis"]),
+  integration: z.enum(["gemini", "turso", "smtp", "google_oauth", "redis", "strava", "spotify", "steam"]),
   keyName: z.string().min(1).max(60),
   value: z.string().min(1).max(4000),
   extraConfig: z.record(z.unknown()).optional(),

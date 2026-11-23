@@ -531,6 +531,12 @@ export async function buildTimelineEvents(db: Client, ownerId: string, fromDay: 
 
 const SOURCE_LABEL: Record<string, string> = {
   task: "Missões",
+  raid: "Chefe da Semana",
+  companion: "Companheiro",
+  workout: "Treinos importados",
+  atlas: "Atlas de Exploração",
+  music: "Trilha Sonora",
+  steam: "Conquistas Steam",
   day: "Bônus do dia",
   habit_entry: "Hábitos",
   habit_streak: "Sequências de hábito",

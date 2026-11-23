@@ -1,4 +1,5 @@
 import {
+  Castle,
   Boxes,
   Store,
   Map as MapIcon,
@@ -97,6 +98,21 @@ export const NAV_GROUPS: NavGroup[] = [
         tabs: [
           { to: "/meu-mundo", label: "Vila" },
           { to: "/meu-mundo/clima", label: "Clima real" },
+        ],
+      },
+      {
+        // Sistemas de aventura agrupados num só item (abas) para não alongar a barra lateral.
+        to: "/raid",
+        label: "Aventuras",
+        icon: Castle,
+        quote: "Cada registro real é um passo da aventura.",
+        tabs: [
+          { to: "/raid", label: "Chefe da Semana" },
+          { to: "/companheiro", label: "Companheiro" },
+          { to: "/atlas", label: "Atlas" },
+          { to: "/strava", label: "Strava" },
+          { to: "/trilha-sonora", label: "Trilha Sonora" },
+          { to: "/tempo-de-jogo", label: "Tempo de Jogo" },
         ],
       },
       {

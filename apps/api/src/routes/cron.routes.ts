@@ -1,6 +1,7 @@
 import { getDb } from "../db/client.js";
 import { runDueAutomationsForAll } from "../services/automationRunner.js";
 import { Router } from "express";
+import { steamDailySnapshots } from "../services/steamService.js";
 
 /**
  * Endpoints de cron — chamados por um agendador externo (Vercel Cron,
@@ -41,7 +42,9 @@ cronRouter.get("/notification-triggers", async (req, res) => {
     console.error("[cron] automações falharam:", err);
     return { ran: 0, skipped: 0, errors: 1 };
   });
-  return res.json({ automations });
+  // Snapshots diários da Steam (o gráfico de tempo por dia depende deles).
+  const steamSnapshots = await steamDailySnapshots(getDb()).catch(() => 0);
+  return res.json({ automations, steamSnapshots });
 });
 
 // Lembrete do Diário removido junto com as notificações.

@@ -85,6 +85,8 @@ import { bankRouter } from "./routes/bank.routes.js";
 import { personalSkillsRouter } from "./routes/personalSkills.routes.js";
 import { codeForgeRouter } from "./routes/codeForge.routes.js";
 import { researchRouter } from "./routes/research.routes.js";
+import { integrationsRouter } from "./routes/integrations.routes.js";
+import { adventuresRouter, atlasRouter, companionRouter, raidRouter } from "./routes/adventures.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -185,6 +187,8 @@ app.use("/api/push", pushRouter);
 // /api/cron/* (que usa segredo próprio, sem sessão de usuário — ver
 // cron.routes.ts) antes mesmo de chegar no roteador de verdade.
 app.use("/api/cron", cronRouter);
+// Integrações (Strava/Spotify/Steam) têm callbacks e webhook públicos: também antes dos roteadores em "/api".
+app.use("/api/integrations", integrationsRouter);
 app.use("/api", libraryRouter);
 app.use("/api", educationRouter);
 app.use("/api/health", healthRouter);
@@ -258,6 +262,10 @@ app.use("/api/bank", bankRouter);
 app.use("/api/world", livingWorldRouter);
 app.use("/api/code-forge", codeForgeRouter);
 app.use("/api/research", researchRouter);
+app.use("/api/raid", raidRouter);
+app.use("/api/companion", companionRouter);
+app.use("/api/atlas", atlasRouter);
+app.use("/api/adventures", adventuresRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

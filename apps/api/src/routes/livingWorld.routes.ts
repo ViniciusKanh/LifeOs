@@ -87,8 +87,8 @@ const avatarSchema = z
     name: z.string().trim().min(1).max(40).nullable(),
     ...lookShape,
     // grade do mapa é 42×42 (0..41)
-    x: z.number().int().min(0).max(41),
-    y: z.number().int().min(0).max(41),
+    x: z.number().int().min(0).max(49),
+    y: z.number().int().min(0).max(49),
   })
   .partial()
   .strict();

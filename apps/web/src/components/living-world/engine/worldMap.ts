@@ -14,7 +14,8 @@
  */
 import type { CharacterLook } from "./looks";
 
-export const GRID = 42;
+/** 50×50: o núcleo original (0–41) + Distrito das Aventuras a leste (x 42–48) e ao sul (y 42–48). */
+export const GRID = 50;
 export const TILE_W = 64;
 export const TILE_H = 32;
 export const WALL_H = 56;
@@ -268,6 +269,36 @@ export const FURNITURE: Furniture[] = [
   // Borda frontal (só arbustos baixos, para não esconder o mapa)
   ...[5, 15, 27].map((y) => f(`bush-e-${y}`, "bush", 41, y, null)),
   ...[5, 16, 26].map((x) => f(`bush-s-${x}`, "bush", x, 41, null)),
+  // Distrito das Aventuras: floresta da borda, tochas da Arena e o Campo de Treinamento
+  ...[42, 44, 46, 48].map((x) => f(`wood-n-${x}`, x % 4 === 0 ? "pine" : "tree", x, 0, null)),
+  ...[41, 43, 45, 47].map((y) => f(`wood-w-${y}`, y % 4 === 0 ? "pine" : "tree", 0, y, null)),
+  ...[6, 18, 28, 38, 44].map((y) => f(`bush-e2-${y}`, "bush", 49, y, null)),
+  ...[3, 22, 30, 44].map((x) => f(`bush-s2-${x}`, "bush", x, 49, null)),
+  f("arena-pole1", "bannerpole", 42, 8, null),
+  f("arena-pole2", "bannerpole", 47, 8, null),
+  f("arena-rack", "weaponrack", 48, 4, null),
+  f("expl-sign", "signpost", 48, 17, null),
+  f("expl-globe", "globe", 42, 14, null),
+  f("expl-pine", "pine", 48, 12, null),
+  f("aven-crystal", "crystal", 42, 25, null),
+  f("aven-chest", "chest", 48, 24, null),
+  f("leste-tree1", "tree", 41, 34, null),
+  f("leste-tree2", "pine", 44, 33, null),
+  f("leste-tree3", "tree", 47, 36, null),
+  f("leste-rock", "rock", 45, 40, null),
+  f("leste-bush", "bush", 42, 44, null),
+  f("leste-pine", "pine", 46, 46, null),
+  f("treino-dummy1", "dummy", 13, 42, null),
+  f("treino-dummy2", "dummy", 16, 42, null),
+  f("treino-target", "target", 17, 47, null),
+  f("treino-rack", "weaponrack", 11, 47, null),
+  f("canil-bowl", "pot", 6, 42, null),
+  f("canil-flowers", "flowers", 3, 45, null),
+  f("sul-tree3", "tree", 24, 44, null),
+  f("sul-tree4", "pine", 28, 46, null),
+  f("sul-rock2", "rock", 31, 43, null),
+  f("sul-bush3", "bush", 33, 47, null),
+  f("sul-tree5", "tree", 22, 47, null),
 ];
 
 /** Decoração presa às paredes (face visível da parede do tile). Só visual. */
@@ -333,6 +364,8 @@ export const WATER: Array<[number, number]> = [];
 for (let x = 25; x <= 27; x++) for (let y = 25; y <= 27; y++) WATER.push([x, y]);
 for (let x = 34; x <= 38; x++) for (let y = 34; y <= 38; y++) if (!((x === 34 || x === 38) && (y === 34 || y === 38))) WATER.push([x, y]);
 for (const t of [[39, 36], [40, 36], [41, 36], [36, 39], [36, 40], [36, 41]] as const) WATER.push([t[0], t[1]]);
+// O riacho segue até a nova borda sul.
+for (let y = 42; y < GRID; y++) WATER.push([36, y]);
 /** Cais de madeira sobre o lago (caminhável). */
 export const DOCK: Array<[number, number]> = [[36, 34], [36, 35]];
 const DOCK_SET = new Set(DOCK.map(([x, y]) => x * 100 + y));
@@ -345,8 +378,8 @@ const MARKET = { x0: 22, y0: 33, x1: 28, y1: 39 };
 
 /* ───────────────────────── Vila ───────────────────────── */
 
-export type BuildingKey = "banco" | "loja" | "torre" | "taverna" | "contratos" | "moinho";
-export type BuildingStyle = "bank" | "house" | "tower" | "mill" | "hall";
+export type BuildingKey = "banco" | "loja" | "torre" | "taverna" | "contratos" | "moinho" | "arena" | "exploradores" | "aventureiro" | "treino" | "canil";
+export type BuildingStyle = "bank" | "house" | "tower" | "mill" | "hall" | "arena" | "kennel" | "camp";
 
 export interface BuildingDef {
   key: BuildingKey;
@@ -376,6 +409,12 @@ export const BUILDINGS: BuildingDef[] = [
   { key: "torre", name: "Torre do Grimório", subtitle: "Cartas de revisão", x0: 34, y0: 22, x1: 36, y1: 24, style: "tower", height: 118, wall: "#8d8fa3", roof: "#4b2a7a", trim: "#F1C66A", accent: "#A875F5", door: { face: "y", at: 35 }, route: "/grimorio", chimney: false },
   { key: "moinho", name: "Moinho", subtitle: "Plantação da vila", x0: 38, y0: 23, x1: 39, y1: 24, style: "mill", height: 84, wall: "#d9c9a8", roof: "#8a3b2a", trim: "#4a2f1b", accent: "#4FD49A", door: { face: "x", at: 24 }, route: null, chimney: false },
   { key: "taverna", name: "Taverna", subtitle: "Como foi meu dia", x0: 2, y0: 34, x1: 6, y1: 38, style: "house", height: 54, wall: "#ead9b9", roof: "#9e2b2b", trim: "#4a2f1b", accent: "#E78FC0", door: { face: "x", at: 36 }, route: "/taverna", chimney: true },
+  // Distrito das Aventuras
+  { key: "arena", name: "Arena dos Chefes", subtitle: "Chefe da Semana", x0: 42, y0: 2, x1: 47, y1: 7, style: "arena", height: 46, wall: "#8d8796", roof: "#5b2a7a", trim: "#F1C66A", accent: "#A875F5", door: { face: "y", at: 44 }, route: "/raid", chimney: false },
+  { key: "exploradores", name: "Guilda dos Exploradores", subtitle: "Atlas de Exploração", x0: 43, y0: 12, x1: 47, y1: 16, style: "hall", height: 52, wall: "#d9c9a8", roof: "#2b6cb0", trim: "#3a2414", accent: "#4FD49A", door: { face: "y", at: 45 }, route: "/atlas", chimney: true },
+  { key: "aventureiro", name: "Sala do Aventureiro", subtitle: "Tempo de Jogo", x0: 43, y0: 22, x1: 47, y1: 26, style: "house", height: 50, wall: "#c9c2d8", roof: "#3a2a6a", trim: "#59A9F8", accent: "#59A9F8", door: { face: "y", at: 45 }, route: "/tempo-de-jogo", chimney: false },
+  { key: "treino", name: "Campo de Treinamento", subtitle: "Strava → Saúde", x0: 12, y0: 43, x1: 16, y1: 46, style: "camp", height: 8, wall: "#e9e2cf", roof: "#d0673a", trim: "#8a5d3b", accent: "#F16D75", door: { face: "x", at: 45 }, route: "/strava", chimney: false },
+  { key: "canil", name: "Casa do Companheiro", subtitle: "Companheiro", x0: 4, y0: 43, x1: 5, y1: 44, style: "kennel", height: 20, wall: "#b98a5a", roof: "#9e2b2b", trim: "#5a3a22", accent: "#E78FC0", door: { face: "x", at: 44 }, route: "/companheiro", chimney: false },
   { key: "contratos", name: "Salão dos Contratos", subtitle: "Compromissos firmados", x0: 12, y0: 34, x1: 16, y1: 38, style: "hall", height: 56, wall: "#cdb48e", roof: "#3f5a3a", trim: "#3a2414", accent: "#F1C66A", door: { face: "x", at: 36 }, route: "/contratos", chimney: true },
 ];
 
@@ -395,7 +434,7 @@ const APPROACH_SET = new Set<number>();
 for (const b of BUILDINGS) {
   const { entrance } = doorOf(b);
   let { x, y } = entrance;
-  for (let i = 0; i < 8 && x <= 40 && y <= 40; i++) {
+  for (let i = 0; i < 8 && x <= GRID - 2 && y <= GRID - 2; i++) {
     if (ESTRADA.includes(y) || LANES.includes(x) || LANES.includes(y)) break;
     APPROACH_SET.add(x * 100 + y);
     if (b.door.face === "y") y++;
@@ -430,6 +469,7 @@ export interface Villager {
 }
 
 export const VILLAGERS: Villager[] = [
+  { id: "npc-bardo", home: { x: 8, y: 38 }, radius: 1, look: { skin: "#E8B48A", hair: "#C8742E", hairStyle: "cacheado", outfit: "gibao", shirt: "#5B3F8C", pants: "#2A2420", trim: "#F1C66A", hat: "boina", hatColor: "#7A1F3A", prop: "nenhum", cape: null }, lines: ["Que trilha tocamos hoje?", "Música para a jornada!", "A Taverna canta contigo."] },
   { id: "npc-taverneira", home: { x: 8, y: 36 }, radius: 2, look: { skin: "#F0C8A0", hair: "#A0522D", hairStyle: "rabo", outfit: "vestido", shirt: "#7A2A3A", trim: "#F3E7C9", prop: "nenhum", cape: null }, lines: ["Bem-vindo à Taverna!", "Sopa quente hoje.", "Boa jornada, viajante!"] },
   { id: "npc-ferreiro", home: { x: 18, y: 36 }, radius: 2, look: { skin: "#A86F4C", hair: "#1E1410", hairStyle: "careca", beard: "cheia", outfit: "avental", shirt: "#4A4F5C", pants: "#2A2420", trim: "#5A3A22", prop: "nenhum", cape: null }, lines: ["O fogo da forja não apaga.", "Promessa é metal forjado."] },
   { id: "npc-fazendeiro", home: { x: 37, y: 29 }, radius: 2, look: { skin: "#E8B48A", hair: "#6B4A32", beard: "bigode", outfit: "tunica", shirt: "#3F7A3C", pants: "#5A4A3A", trim: "#8A5D3B", hat: "palha", hatColor: "#8A5D3B", prop: "nenhum", cape: null }, lines: ["A colheita vem com paciência.", "Que dia bom para plantar!"] },
@@ -502,8 +542,8 @@ export function tileKind(x: number, y: number): TileKind {
 /** Pedra no núcleo e na Estrada do Reino; terra batida nas ruas da vila. */
 function roadKind(x: number, y: number): TileKind | null {
   const inCore = x <= 29 && y <= 29;
-  if (ESTRADA.includes(y) && x >= 1 && x <= 40) return "path";
-  if ((LANES.includes(x) && y >= 1 && y <= 40) || (LANES.includes(y) && x >= 1 && x <= 40)) return inCore ? "path" : "dirt";
+  if (ESTRADA.includes(y) && x >= 1 && x <= GRID - 2) return "path";
+  if ((LANES.includes(x) && y >= 1 && y <= GRID - 2) || (LANES.includes(y) && x >= 1 && x <= GRID - 2)) return inCore ? "path" : "dirt";
   if (APPROACH_SET.has(x * 100 + y)) return "dirt";
   return null;
 }

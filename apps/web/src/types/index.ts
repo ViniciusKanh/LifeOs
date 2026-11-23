@@ -103,7 +103,7 @@ export interface AdminUserOverview {
   audit: Array<{ action: string; created_at: string; actor_name: string | null }>;
 }
 
-export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth" | "redis";
+export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth" | "redis" | "strava" | "spotify" | "steam";
 
 export interface AdminSetting {
   id: string;

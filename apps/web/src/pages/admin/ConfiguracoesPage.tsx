@@ -4,6 +4,7 @@ import { CheckCircle2, Coins, Gauge, KeyRound, Mail, Plus, Send, ShieldCheck, Tr
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminSettings, useAdminUsers, useGeminiModels, useGoogleRedirectUri, useSecurityInfo } from "@/hooks/useAdmin";
 import { adminService } from "@/services/adminService";
+import { api } from "@/services/api";
 import { NovoUsuarioModal } from "@/components/admin/NovoUsuarioModal";
 import { BankSettingsCard } from "@/components/bank/BankSettingsCard";
 import { Button, Card, IconBadge, PageHeader } from "@/components/ui/primitives";
@@ -411,6 +412,8 @@ export function ConfiguracoesPage() {
         </p>
       </SectionCard>
 
+      <AdventureIntegrationsCards settings={settings} upsertSetting={upsertSetting} removeSetting={removeSetting} />
+
       <SectionCard
         icon={<IconBadge tone="blue" size={30} icon={<KeyRound size={14} />} />}
         title="Login com Google"
@@ -475,5 +478,84 @@ export function ConfiguracoesPage() {
       {userModalOpen && <NovoUsuarioModal onClose={() => setUserModalOpen(false)} onCreate={createUser} />}
       </div>
     </div>
+  );
+}
+
+
+/* ─────────────── Strava, Spotify e Steam (Aventuras) ─────────────── */
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div>
+      <label className="text-xs text-slate">{label}</label>
+      <div className="flex flex-wrap items-center gap-2 mt-1.5">
+        <input readOnly value={value} onFocus={(e) => e.target.select()} className="flex-1 min-w-[220px] rounded-lg px-3 py-2.5 text-sm bg-paper dark:bg-ink outline-none border border-paper-border dark:border-ink-border" />
+        <Button variant="secondary" className="shrink-0" onClick={() => navigator.clipboard.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })}>
+          {copied ? "Copiado!" : "Copiar"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type SettingsApi = ReturnType<typeof useAdminSettings>;
+
+/**
+ * Credenciais dos apps de Strava, Spotify e Steam. Ficam criptografadas no
+ * servidor como as demais; o navegador só vê a prévia mascarada.
+ */
+function AdventureIntegrationsCards({ settings, upsertSetting, removeSetting }: Pick<SettingsApi, "settings" | "upsertSetting" | "removeSetting">) {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const [subMsg, setSubMsg] = useState<string | null>(null);
+  const field = (integration: AdminIntegration, keyName: string, label: string, placeholder: string) => (
+    <SecretField
+      label={label}
+      placeholder={placeholder}
+      existing={findSetting(settings, integration, keyName)}
+      onSave={(value) => upsertSetting({ integration, keyName, value })}
+      onRemove={() => removeSetting({ integration, keyName })}
+    />
+  );
+  const subscribe = async () => {
+    setSubMsg("Criando assinatura…");
+    try {
+      const body = await api.post<{ subscriptionId: number | null }>("/integrations/strava/webhook/subscribe");
+      setSubMsg(`Webhook ativo (assinatura ${body.subscriptionId ?? "criada"}).`);
+    } catch (e) {
+      setSubMsg(e instanceof Error ? e.message : "Falha ao criar a assinatura.");
+    }
+  };
+  return (
+    <>
+      <SectionCard icon={<IconBadge tone="orange" size={30} icon={<KeyRound size={14} />} />} title="Strava (Saúde automática)" description="App do Strava para importar treinos. Crie em strava.com/settings/api; em “Authorization Callback Domain” use só o domínio do LifeOS.">
+        <CopyField label="URL de callback (OAuth)" value={`${origin}/api/integrations/strava/callback`} />
+        <CopyField label="URL do webhook" value={`${origin}/api/integrations/strava/webhook`} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {field("strava", "client_id", "Client ID", "123456")}
+          {field("strava", "client_secret", "Client Secret", "••••")}
+          {field("strava", "webhook_verify_token", "Token de verificação do webhook", "uma frase secreta qualquer")}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" onClick={() => void subscribe()}>Ativar webhook</Button>
+          {subMsg && <span className="text-xs text-slate">{subMsg}</span>}
+        </div>
+        <p className="text-[11px] text-slate">Sem webhook, os treinos entram quando o usuário abre a tela ou toca em “Sincronizar”. Apps novos do Strava atendem poucos atletas até a aprovação do Strava.</p>
+      </SectionCard>
+
+      <SectionCard icon={<IconBadge tone="green" size={30} icon={<KeyRound size={14} />} />} title="Spotify (Trilha Sonora)" description="App em developer.spotify.com/dashboard com a Web API habilitada. Em modo de desenvolvimento, cada usuário precisa ser adicionado em “User Management”.">
+        <CopyField label="Redirect URI" value={`${origin}/api/integrations/spotify/callback`} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {field("spotify", "client_id", "Client ID", "32 caracteres")}
+          {field("spotify", "client_secret", "Client Secret", "••••")}
+        </div>
+        <p className="text-[11px] text-slate">Controles de reprodução exigem Spotify Premium do usuário. O histórico vem de “tocadas recentemente” (últimas 50 faixas).</p>
+      </SectionCard>
+
+      <SectionCard icon={<IconBadge tone="blue" size={30} icon={<KeyRound size={14} />} />} title="Steam (Tempo de Jogo)" description="Chave da Steam Web API (steamcommunity.com/dev/apikey). O login do usuário usa o OpenID oficial da Steam e não precisa de outra credencial.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{field("steam", "web_api_key", "Web API Key", "32 caracteres hexadecimais")}</div>
+        <p className="text-[11px] text-slate">O gráfico diário depende dos snapshots coletados pelo cron diário e pelas visitas à tela.</p>
+      </SectionCard>
+    </>
   );
 }

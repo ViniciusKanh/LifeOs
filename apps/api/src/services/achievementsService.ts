@@ -8,6 +8,18 @@ type Db = ReturnType<typeof getDb>;
 type MetricMap = Record<string, number>;
 
 const METRIC_KEYS = [
+  "raids_defeated",
+  "companion_stage",
+  "strava_activities",
+  "atlas_places",
+  "atlas_neighborhoods",
+  "atlas_cities",
+  "atlas_states",
+  "atlas_cells",
+  "music_sessions_total",
+  "steam_connected",
+  "steam_games_owned",
+  "steam_achievements",
   "code_commits_total",
   "code_prs_merged",
   "code_releases_total",
@@ -171,6 +183,19 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("code_commits_total", "SELECT COUNT(*) FROM code_events WHERE owner_id = ? AND kind = 'commit'");
   addScalar("code_prs_merged", "SELECT COUNT(*) FROM code_events WHERE owner_id = ? AND kind = 'pr_merged'");
   addScalar("code_releases_total", "SELECT COUNT(*) FROM code_events WHERE owner_id = ? AND kind = 'release'");
+  // Raid, Companheiro, Strava, Atlas, Trilha Sonora e Steam (só dados reais persistidos).
+  addScalar("raids_defeated", "SELECT COUNT(*) FROM raids WHERE owner_id = ? AND status = 'derrotado'");
+  addScalar("companion_stage", "SELECT COALESCE(MAX(CASE WHEN peak_xp >= 3500 THEN 5 WHEN peak_xp >= 1800 THEN 4 WHEN peak_xp >= 800 THEN 3 WHEN peak_xp >= 250 THEN 2 ELSE 1 END), 0) FROM companions WHERE owner_id = ?");
+  addScalar("strava_activities", "SELECT COUNT(*) FROM workouts WHERE owner_id = ? AND source = 'strava'");
+  addScalar("atlas_places", "SELECT COUNT(*) FROM atlas_places WHERE owner_id = ?");
+  addScalar("atlas_neighborhoods", "SELECT COUNT(DISTINCT COALESCE(city, '') || '|' || neighborhood) FROM atlas_places WHERE owner_id = ? AND neighborhood IS NOT NULL");
+  addScalar("atlas_cities", "SELECT COUNT(DISTINCT COALESCE(state, '') || '|' || city) FROM atlas_places WHERE owner_id = ? AND city IS NOT NULL");
+  addScalar("atlas_states", "SELECT COUNT(DISTINCT COALESCE(country, '') || '|' || state) FROM atlas_places WHERE owner_id = ? AND state IS NOT NULL");
+  addScalar("atlas_cells", "SELECT COUNT(*) FROM atlas_cells WHERE owner_id = ?");
+  addScalar("music_sessions_total", "SELECT COUNT(*) FROM music_sessions WHERE owner_id = ? AND ended_at IS NOT NULL AND (julianday(ended_at) - julianday(started_at)) * 1440 >= 15");
+  addScalar("steam_connected", "SELECT COUNT(*) FROM steam_accounts WHERE owner_id = ?");
+  addScalar("steam_games_owned", "SELECT COUNT(*) FROM steam_games WHERE owner_id = ?");
+  addScalar("steam_achievements", "SELECT COUNT(*) FROM steam_achievements WHERE owner_id = ?");
   addScalar("papers_saved", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ?");
   addScalar("papers_read", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status IN ('lido', 'fichado')");
   addScalar("papers_reviewed", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status = 'fichado'");

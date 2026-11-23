@@ -39,7 +39,7 @@ export function roomStatus(w: WorldState, pendingAgent: string | null): Partial<
 }
 
 
-export function useWorldEngineInputs(w: WorldState | undefined, pendingAgent: string | null, reduced: boolean) {
+export function useWorldEngineInputs(w: WorldState | undefined, pendingAgent: string | null, reduced: boolean, pet: EngineData["pet"] = null) {
   const engineSettings: EngineSettings = useMemo(() => {
     const s = w?.settings;
     return {
@@ -78,8 +78,9 @@ export function useWorldEngineInputs(w: WorldState | undefined, pendingAgent: st
       localHour: w.localHour,
       facts,
       markers,
+      pet,
     };
-  }, [w, pendingAgent, facts, markers]);
+  }, [w, pendingAgent, facts, markers, pet]);
 
   return { engineSettings, engineData, facts, markers };
 }

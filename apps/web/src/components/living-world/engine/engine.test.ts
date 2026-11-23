@@ -44,8 +44,8 @@ describe("Mapa do Meu Mundo", () => {
     }
   });
 
-  it("plantas ficam no Jardim e fora da água; grade 42×42 com a vila", () => {
-    expect(GRID).toBe(42);
+  it("plantas ficam no Jardim e fora da água; grade 50×50 com a vila e o Distrito das Aventuras", () => {
+    expect(GRID).toBe(50);
     for (const [x, y] of PLANT_TILES) expect(["grass"]).toContain(tileKind(x, y));
   });
 
@@ -120,5 +120,26 @@ describe("Máquina de estados", () => {
     b.release("domain");
     expect(b.intent).toBeNull();
     expect(canOverride({ source: "ambient", target: { x: 0, y: 0 }, arriveState: "idle" }, { source: "manual", target: { x: 1, y: 0 }, arriveState: "idle" })).toBe(true);
+  });
+});
+
+
+describe("Distrito das Aventuras", () => {
+  it("cada nova construção tem entrada livre, alcançável a partir do spawn e rota na tela", () => {
+    const blocked = buildBlocked();
+    const keys = ["arena", "exploradores", "aventureiro", "treino", "canil"] as const;
+    for (const k of keys) {
+      const b = BUILDINGS.find((x) => x.key === k)!;
+      expect(b.route).toMatch(/^\//);
+      const { entrance } = doorOf(b);
+      expect(blocked[entrance.x]![entrance.y]).toBe(false);
+      expect(findPath(blocked, AVATAR_SPAWN, entrance)).not.toBeNull();
+    }
+  });
+
+  it("decoração e aldeões novos não ficam dentro de construções nem na água", () => {
+    for (const f of FURNITURE) expect(buildingAt(f.x, f.y)).toBeNull();
+    for (const v of VILLAGERS) expect(["water", "building", "wall"]).not.toContain(tileKind(v.home.x, v.home.y));
+    expect(VILLAGERS.some((v) => v.id === "npc-bardo")).toBe(true);
   });
 });

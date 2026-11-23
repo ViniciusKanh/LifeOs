@@ -13,6 +13,7 @@ import type { Selection } from "@/components/living-world/engine/WorldEngine";
 import type { BuildingKey, RoomKey } from "@/components/living-world/engine/worldMap";
 import type { PlaceKey } from "@/components/living-world/engine/village";
 import { useLivingWorld, useWorldActions, useWorldWeather } from "@/hooks/useLivingWorld";
+import { useAdventureWorld } from "@/hooks/useAdventures";
 import { usePrefersReducedMotion, useWorldEngineInputs } from "@/components/living-world/useWorldEngineInputs";
 import type { WorldWeather } from "@/components/living-world/engine/weather";
 import { WeatherChip } from "@/components/living-world/weather/WeatherWidgets";
@@ -91,7 +92,11 @@ export function MeuMundoPage() {
     [weatherOn, weatherData, w?.settings.weatherIntensity, w?.settings.weatherParticles],
   );
 
-  const { engineSettings, engineData, markers } = useWorldEngineInputs(w, pendingAgent, reduced);
+  // Companheiro e estado das aventuras (Raid, Atlas…) para a Vila.
+  const adventure = useAdventureWorld();
+  const petData = adventure.data?.companion;
+  const pet = useMemo(() => (petData ? { name: petData.name, color: petData.color, mood: petData.mood, stage: petData.stage, appearance: petData.appearance } : null), [petData]);
+  const { engineSettings, engineData, markers } = useWorldEngineInputs(w, pendingAgent, reduced, pet);
 
   const timeline = useMemo(() => (w ? w.timeline.filter((e) => !filter || e.category === filter) : []), [w, filter]);
 
@@ -169,6 +174,8 @@ export function MeuMundoPage() {
       setDrawer({ kind: "agent", key: s.key });
     }
     else if (s.type === "npc" && s.id === "npc-ferreiro") navigate("/forja-codigo");
+    else if (s.type === "npc" && s.id === "npc-bardo") navigate("/trilha-sonora");
+    else if (s.type === "pet") navigate("/companheiro");
     else if (s.type === "habit") setDrawer({ kind: "habit", id: s.id });
     else if (s.type === "slot") setDrawer({ kind: "slot", key: s.key });
   };

@@ -1,3 +1,4 @@
+import { describeAdventureItem } from "./adventureCollection.js";
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { RELICS, TITLES, type Rarity } from "../config/codex.js";
@@ -203,7 +204,7 @@ export async function isEmblemUnlocked(db: Client, ownerId: string, setId: strin
   return r.rows.length > 0;
 }
 
-const ORIGIN_LINK: Record<string, string> = { campaign: "/forja-campanhas", milestone: "/forja-campanhas", achievement: "/conquistas", codex: "/codex", treasure: "/tesouro", level: "/perfil", set: "/inventario", season: "/quests" };
+const ORIGIN_LINK: Record<string, string> = { campaign: "/forja-campanhas", milestone: "/forja-campanhas", achievement: "/conquistas", codex: "/codex", treasure: "/tesouro", level: "/perfil", set: "/inventario", season: "/quests", raid: "/raid", companion: "/companheiro", steam: "/tempo-de-jogo" };
 
 function seasonItemName(key: string): string {
   const p = parseSeasonRewardKey(key);
@@ -316,6 +317,12 @@ export async function getInventory(db: Client, ownerId: string): Promise<Invento
     if (!firstTx.has(key)) continue;
     const equipped = prefs.emblem === s.id;
     items.push({ key, name: s.emblem.name, description: `Bônus cosmético do ${s.name}.`, type: "cosmetic", rarity: s.emblem.rarity, art: "emblem", artSet: "items", quantity: 1, stackable: false, maxStack: 1, effectText: "Emblema no perfil — sem bônus", durationText: null, obtainedBy: `Completar o ${s.name}`, equipped, actions: [equipped ? "unequip" : "equip"], locked: false, ...base(key) });
+  }
+  // Troféus de chefes, acessórios do Companheiro e troféus Steam fixados (só cosméticos).
+  for (const key of firstTx.keys()) {
+    const adv = describeAdventureItem(key, firstTx.get(key)?.label ?? null);
+    if (!adv) continue;
+    items.push({ key, name: adv.name, description: adv.description, type: "cosmetic", rarity: adv.rarity, art: adv.art, artSet: "items", quantity: 1, stackable: false, maxStack: 1, effectText: adv.effectText, durationText: "Permanente", obtainedBy: adv.obtainedBy, equipped: false, actions: [], locked: false, ...base(key) });
   }
   // Cosméticos da Temporada mensal (Quadro de Quests): só exibição, sem bônus.
   for (const key of firstTx.keys()) {

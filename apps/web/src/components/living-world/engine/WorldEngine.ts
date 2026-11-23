@@ -11,6 +11,7 @@ import { framesFor, getSprite, SPRITE_H, SPRITE_W, type Look, type Pose } from "
 import { agentLookFor, DEFAULT_AVATAR_LOOK, normalizeLook, type CharacterLook } from "./looks";
 import { drawBolt, drawFog, drawPuddle, drawRain, drawSnow, drawUmbrella, isWet, lightningAt, overcastOf, weatherTint, WeatherSound, type WorldWeather } from "./weather";
 import { buildingBounds, buildingHull, buildingLights, insideHull, buildingTopZ, drawBuilding, drawBuildingAnim, drawDock, drawVillageItem, VILLAGE_KINDS } from "./drawVillage";
+import { drawHusky, type PetLook } from "./adventureScenes";
 import { buildConversation, type PlaceKey, type PlaceMarker, type TalkLine, type WorldFacts } from "./village";
 import {
   AGENT_IDLE,
@@ -79,6 +80,8 @@ export interface EngineData {
   /** Pendências reais do usuário (alimentam marcadores e conversas). */
   facts: WorldFacts | null;
   markers: Partial<Record<PlaceKey, PlaceMarker>>;
+  /** Companheiro que segue o herói (null = sem companheiro ou oculto). */
+  pet?: (PetLook & { name: string }) | null;
 }
 
 export type Selection =
@@ -88,7 +91,8 @@ export type Selection =
   | { type: "habit"; id: string }
   | { type: "slot"; key: string }
   | { type: "building"; key: BuildingKey }
-  | { type: "npc"; id: string };
+  | { type: "npc"; id: string }
+  | { type: "pet" };
 
 interface Char {
   id: string;
@@ -162,6 +166,9 @@ export class WorldEngine {
   private w = 0;
   private h = 0;
   private cam = { x: 0, y: 0, zoom: 0.9 };
+  /** Companheiro: segue o rastro do avatar (sempre por tiles já caminhados). */
+  private pet = { x: 0, y: 0, placed: false, flip: false, moving: false };
+  private trail: Array<{ x: number; y: number }> = [];
   /** Enquanto o usuário não mexer na câmera, redimensionar reenquadra o mundo. */
   private camTouched = false;
   private blocked = buildBlocked();
@@ -697,7 +704,36 @@ export class WorldEngine {
     this.raf = requestAnimationFrame(loop);
   }
 
+  private updatePet(dt: number) {
+    const av = this.chars.get("avatar");
+    if (!av || !this.data?.pet) return;
+    if (!this.pet.placed) {
+      this.pet = { x: av.x, y: av.y + 0.6, placed: true, flip: false, moving: false };
+      this.trail = [];
+    }
+    const last = this.trail[this.trail.length - 1];
+    if (!last || Math.hypot(last.x - av.x, last.y - av.y) > 0.25) this.trail.push({ x: av.x, y: av.y });
+    if (this.trail.length > 40) this.trail.shift();
+    // Fica ~1 tile atrás no rastro; parado, senta ao lado.
+    const target = this.trail.length > 4 ? this.trail[this.trail.length - 5]! : null;
+    this.pet.moving = false;
+    if (!target) return;
+    const dx = target.x - this.pet.x;
+    const dy = target.y - this.pet.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.05) return;
+    const step = Math.min(dist, (dist > 2 ? 4.2 : 3) * dt * (this.settings.reducedMotion ? 0.6 : this.settings.animSpeed));
+    const before = isoPoint(this.pet.x, this.pet.y)[0];
+    this.pet.x += (dx / dist) * step;
+    this.pet.y += (dy / dist) * step;
+    this.pet.flip = isoPoint(this.pet.x, this.pet.y)[0] < before;
+    this.pet.moving = true;
+    // Avatar teleportou (troca de sala): o companheiro vai junto.
+    if (dist > 6) this.pet = { ...this.pet, x: av.x, y: av.y + 0.6 };
+  }
+
   private update(dt: number, now: number) {
+    this.updatePet(dt);
     const speed = 2.8 * (this.settings.reducedMotion ? 0.6 : this.settings.animSpeed);
     for (const c of this.chars.values()) {
       if (c.path.length) {
@@ -1017,6 +1053,19 @@ export class WorldEngine {
       }
     }
     for (const c of this.chars.values()) items.push({ depth: c.x + c.y + 0.5, draw: () => this.drawChar(c, t) });
+    const pet = this.data?.pet;
+    if (pet && this.pet.placed) {
+      const { x: qx, y: qy, flip, moving } = this.pet;
+      items.push({
+        depth: qx + qy + 0.45,
+        draw: () => {
+          const [sx, sy] = isoPoint(qx, qy);
+          // Andando ele está sempre "feliz"; parado mostra o humor real.
+          const mood = moving ? "feliz" : pet.mood;
+          drawHusky(this.ctx, sx, sy - zAtFloat(qx, qy) + (moving ? -Math.abs(Math.sin(t / 90)) * 2 : 0), 1.7, { ...pet, mood }, this.settings.reducedMotion ? 0 : t, flip);
+        },
+      });
+    }
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) it.draw();
 
@@ -1566,11 +1615,15 @@ export class WorldEngine {
       if (px >= l.x && px <= l.x + l.w && py >= l.y && py <= l.y + l.h) return this.placeSelection(l.key);
     }
     // Personagens (caixa do sprite na tela). Dos aldeões, só o ferreiro (abre a Forja do Código).
-    const chars = [...this.chars.values()].filter((c) => !c.isNpc || c.id === "npc-ferreiro").sort((a, b) => b.x + b.y - (a.x + a.y));
+    const chars = [...this.chars.values()].filter((c) => !c.isNpc || c.id === "npc-ferreiro" || c.id === "npc-bardo").sort((a, b) => b.x + b.y - (a.x + a.y));
     for (const c of chars) {
       const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
       const hw = 22 * this.cam.zoom;
       if (px > s.x - hw && px < s.x + hw && py > s.y - 76 * this.cam.zoom && py < s.y + 4) return c.isAvatar ? { type: "avatar" } : c.isNpc ? { type: "npc", id: c.id } : { type: "agent", key: c.id };
+    }
+    if (this.data?.pet && this.pet.placed) {
+      const s = this.toScreen(this.pet.x, this.pet.y, zAtFloat(this.pet.x, this.pet.y));
+      if (Math.abs(px - s.x) < 18 * this.cam.zoom && py > s.y - 30 * this.cam.zoom && py < s.y + 4) return { type: "pet" };
     }
     const tile = this.tileAt(px, py);
     if (this.decorMode && this.data) {

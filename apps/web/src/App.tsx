@@ -94,6 +94,12 @@ const BancoPage = lazy(() => import("@/pages/banco/BancoPage").then((m) => ({ de
 const MeuMundoPage = lazy(() => import("@/pages/meu-mundo/MeuMundoPage").then((m) => ({ default: m.MeuMundoPage })));
 const ClimaPage = lazy(() => import("@/pages/meu-mundo/ClimaPage").then((m) => ({ default: m.ClimaPage })));
 const ForjaCodigoPage = lazy(() => import("@/pages/forja-codigo/ForjaCodigoPage").then((m) => ({ default: m.ForjaCodigoPage })));
+const RaidPage = lazy(() => import("@/pages/aventuras/RaidPage").then((m) => ({ default: m.RaidPage })));
+const CompanheiroPage = lazy(() => import("@/pages/aventuras/CompanheiroPage").then((m) => ({ default: m.CompanheiroPage })));
+const AtlasPage = lazy(() => import("@/pages/aventuras/AtlasPage").then((m) => ({ default: m.AtlasPage })));
+const StravaPage = lazy(() => import("@/pages/aventuras/StravaPage").then((m) => ({ default: m.StravaPage })));
+const TrilhaSonoraPage = lazy(() => import("@/pages/aventuras/TrilhaSonoraPage").then((m) => ({ default: m.TrilhaSonoraPage })));
+const TempoDeJogoPage = lazy(() => import("@/pages/aventuras/TempoDeJogoPage").then((m) => ({ default: m.TempoDeJogoPage })));
 const BibliotecaMestradoPage = lazy(() => import("@/pages/biblioteca-mestrado/BibliotecaMestradoPage").then((m) => ({ default: m.BibliotecaMestradoPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
@@ -211,6 +217,12 @@ export default function App() {
           <Route path="/meu-mundo/clima" element={<ClimaPage />} />
           <Route path="/forja-codigo" element={<ForjaCodigoPage />} />
           <Route path="/biblioteca-mestrado" element={<BibliotecaMestradoPage />} />
+          <Route path="/raid" element={<RaidPage />} />
+          <Route path="/companheiro" element={<CompanheiroPage />} />
+          <Route path="/atlas" element={<AtlasPage />} />
+          <Route path="/strava" element={<StravaPage />} />
+          <Route path="/trilha-sonora" element={<TrilhaSonoraPage />} />
+          <Route path="/tempo-de-jogo" element={<TempoDeJogoPage />} />
           <Route path="/diario" element={<DiarioPage />} />
           <Route path="/administracao" element={<AdministracaoPage />} />
           <Route path="/direcao" element={<Navigate to="/metas" replace />} />

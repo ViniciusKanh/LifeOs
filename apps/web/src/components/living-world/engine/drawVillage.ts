@@ -160,6 +160,43 @@ function signIcon(ctx: Ctx, key: BuildingDef["key"], cx: number, cy: number) {
       ctx.fillStyle = "#f3e7c9";
       ctx.fillRect(cx - 1, cy - 4, 2, 8);
       break;
+    case "arena":
+      ctx.strokeStyle = "#e9e2cf";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 5, cy - 5);
+      ctx.lineTo(cx + 5, cy + 5);
+      ctx.moveTo(cx + 5, cy - 5);
+      ctx.lineTo(cx - 5, cy + 5);
+      ctx.stroke();
+      break;
+    case "exploradores":
+      ctx.strokeStyle = "#4FD49A";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#C8423B";
+      ctx.fillRect(cx - 1, cy - 4, 2, 4);
+      ctx.fillStyle = "#e9e2cf";
+      ctx.fillRect(cx - 1, cy, 2, 4);
+      break;
+    case "aventureiro":
+      ctx.fillStyle = "#59A9F8";
+      ctx.fillRect(cx - 6, cy - 3, 12, 7);
+      ctx.fillStyle = "#1d1a24";
+      ctx.fillRect(cx - 4, cy, 3, 1);
+      ctx.fillRect(cx - 3, cy - 1, 1, 3);
+      ctx.fillRect(cx + 3, cy - 1, 2, 2);
+      break;
+    case "treino":
+    case "canil":
+      ctx.fillStyle = key === "treino" ? "#F16D75" : "#E78FC0";
+      for (const [dx, dy] of [[-4, -3], [-1, -5], [2, -5], [5, -3]] as const) ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
     case "moinho":
       ctx.fillStyle = "#e3c36a";
       for (let i = -2; i <= 2; i++) ctx.fillRect(cx + i * 2, cy - 4 + Math.abs(i), 1, 8 - Math.abs(i));
@@ -299,18 +336,21 @@ export function drawBuilding(ctx: Ctx, b: BuildingDef) {
   poly(ctx, [Q(f.X0 - 0.1, f.Y0 + 0.2), Q(f.X1 + 0.35, f.Y0 + 0.2), Q(f.X1 + 0.35, f.Y1 + 0.35), Q(f.X0 - 0.1, f.Y1 + 0.35)], "rgba(0,0,0,0.25)");
   if (b.style === "tower") return drawTower(ctx, b, f);
   if (b.style === "mill") return drawMill(ctx, b, f);
+  if (b.style === "arena") return drawArena(ctx, b, f);
   if (b.style === "bank") stoneWalls(ctx, b, f);
   else timberWalls(ctx, b, f);
   const du = doorU(b, f);
+  // Canil e tenda do Campo de Treinamento não têm janelas.
+  const bare = b.style === "kennel" || b.style === "camp";
   // janelas nas duas faces visíveis (sem cobrir a porta)
-  for (const face of ["y", "x"] as const) {
+  for (const face of bare ? ([] as const) : (["y", "x"] as const)) {
     for (const u of [0.18, 0.5, 0.82]) {
       if (face === b.door.face && Math.abs(u - du) < 0.2) continue;
       windowAt(ctx, f, face, u, FOUND + b.height * 0.5 + 6, 0.06, 14, b.style === "bank" ? "#e8e2d4" : b.trim);
       if (b.style !== "bank") windowAt(ctx, f, face, u, FOUND + 10, 0.05, 11, b.trim);
     }
   }
-  doorAt(ctx, f, b.door.face, du, 0.08, b.style === "bank" ? 34 : 28);
+  doorAt(ctx, f, b.door.face, du, b.style === "kennel" ? 0.16 : 0.08, b.style === "bank" ? 34 : b.style === "kennel" ? 13 : b.style === "camp" ? 7 : 28);
   if (b.style === "bank") {
     // colunas e frontão sobre a porta + moeda dourada
     for (const k of [-0.13, 0.13]) faceQuad(ctx, f, b.door.face, du + k - 0.02, du + k + 0.02, FOUND, FOUND + 40, "#e8e2d4");
@@ -340,6 +380,29 @@ export function drawBuilding(ctx: Ctx, b: BuildingDef) {
   }
   hangingSign(ctx, b, f);
   gableRoof(ctx, f, b.roof, b.wall, b.trim, b.chimney ? () => drawChimney(ctx, f) : null);
+}
+
+/** Arena dos Chefes: muralha de pedra com ameias, portão em arco e estandartes. */
+function drawArena(ctx: Ctx, b: BuildingDef, f: Frame) {
+  stoneWalls(ctx, b, f);
+  const du = doorU(b, f);
+  doorAt(ctx, f, b.door.face, du, 0.13, 32);
+  // estandartes roxos nas faces
+  for (const face of ["y", "x"] as const)
+    for (const u of [0.2, 0.8]) {
+      if (face === b.door.face && Math.abs(u - du) < 0.2) continue;
+      faceQuad(ctx, f, face, u - 0.05, u + 0.05, FOUND + 12, FOUND + b.height - 6, b.roof);
+      faceQuad(ctx, f, face, u - 0.05, u + 0.05, FOUND + b.height - 9, FOUND + b.height - 6, b.trim);
+      faceQuad(ctx, f, face, u - 0.015, u + 0.015, FOUND + 22, FOUND + 30, b.trim);
+    }
+  // topo da muralha (pátio) e ameias nas bordas visíveis
+  const z = f.top;
+  poly(ctx, [Q(f.X0, f.Y0, z), Q(f.X1, f.Y0, z), Q(f.X1, f.Y1, z), Q(f.X0, f.Y1, z)], shade(b.wall, -30));
+  poly(ctx, [Q(f.X0 + 0.5, f.Y0 + 0.5, z), Q(f.X1 - 0.5, f.Y0 + 0.5, z), Q(f.X1 - 0.5, f.Y1 - 0.5, z), Q(f.X0 + 0.5, f.Y1 - 0.5, z)], "#6a5a48");
+  const step = 0.5;
+  for (let x = f.X0; x < f.X1 - 0.1; x += step * 2) prism(ctx, x, f.Y1 - 0.3, Math.min(f.X1, x + step), f.Y1, z, 7, shade(b.wall, 12), shade(b.wall, -4), shade(b.wall, -22));
+  for (let y = f.Y0; y < f.Y1 - 0.1; y += step * 2) prism(ctx, f.X1 - 0.3, y, f.X1, Math.min(f.Y1, y + step), z, 7, shade(b.wall, 12), shade(b.wall, -4), shade(b.wall, -22));
+  hangingSign(ctx, b, f);
 }
 
 function cylinder(ctx: Ctx, cx: number, cy: number, rx: number, h: number, z: number, light: string, dark: string, rTop = rx) {
@@ -520,7 +583,7 @@ export function buildingBounds(b: BuildingDef): { x: number; y: number; w: numbe
   const f = frameOf(b);
   const left = Q(f.X0 - 0.4, f.Y1 + 0.4)[0] - 30;
   const right = Q(f.X1 + 0.4, f.Y0 - 0.4)[0] + 60;
-  const roofTop = b.style === "tower" ? f.top + 115 : b.style === "mill" ? f.top + 60 : f.top + f.rise + 30;
+  const roofTop = b.style === "tower" ? f.top + 115 : b.style === "mill" ? f.top + 60 : b.style === "arena" ? f.top + 30 : f.top + f.rise + 30;
   const top = Q(f.X0, f.Y0)[1] - roofTop - 10;
   const bottom = Q(f.X1 + 0.4, f.Y1 + 0.4)[1] + 12;
   return { x: Math.floor(left), y: Math.floor(top), w: Math.ceil(right - left), h: Math.ceil(bottom - top) };
@@ -561,7 +624,7 @@ export function insideHull(hull: Pt[], x: number, y: number): boolean {
 /** Altura (px) do topo visual — onde ficam o letreiro e o marcador de pendência. */
 export function buildingTopZ(b: BuildingDef): number {
   const f = frameOf(b);
-  return b.style === "tower" ? f.top + 84 : b.style === "mill" ? f.top + 40 : f.top + f.rise;
+  return b.style === "tower" ? f.top + 84 : b.style === "mill" ? f.top + 40 : b.style === "arena" ? f.top + 8 : f.top + f.rise;
 }
 
 /** Luz das janelas à noite (pontos em px de mundo). */
@@ -571,7 +634,7 @@ export function buildingLights(b: BuildingDef): Pt[] {
     const [cx, cy] = Q((f.X0 + f.X1) / 2, (f.Y0 + f.Y1) / 2);
     return [[cx - 14, cy - 64], [cx + 16, cy - 88]];
   }
-  if (b.style === "mill") return [];
+  if (b.style === "mill" || b.style === "kennel" || b.style === "camp") return [];
   const pts: Pt[] = [];
   for (const face of ["y", "x"] as const) pts.push(facePt(f, face, 0.25, FOUND + b.height * 0.5), facePt(f, face, 0.75, FOUND + b.height * 0.5));
   return pts;
