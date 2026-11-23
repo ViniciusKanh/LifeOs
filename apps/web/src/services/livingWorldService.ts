@@ -16,7 +16,43 @@ export interface WorldSettings {
   /** Placas com o nome dos ambientes (dá para ocultar e ver o cenário). */
   showLabels: boolean;
   followAvatar: boolean;
+  /** Clima real da cidade do Contexto do Dia aplicado à Vila. */
+  weatherEnabled: boolean;
+  weatherIntensity: 0 | 1 | 2;
+  weatherParticles: boolean;
 }
+
+export type WeatherVisual = "clear" | "cloudy" | "fog" | "drizzle" | "rain" | "heavy_rain" | "snow" | "storm";
+export interface WorldWeatherHour {
+  time: string;
+  temperature: number;
+  code: number;
+  label: string;
+  visual: WeatherVisual;
+  precipitationProbability: number | null;
+}
+export interface WorldWeatherData {
+  configured: true;
+  location: { city: string | null; region: string | null; country: string | null; timezone: string };
+  current: {
+    time: string;
+    temperature: number;
+    apparentTemperature: number;
+    humidity: number | null;
+    windSpeedKmh: number | null;
+    windDirection: number | null;
+    isDay: boolean | null;
+    code: number;
+    label: string;
+    visual: WeatherVisual;
+    precipitationProbability: number | null;
+  };
+  hourly: WorldWeatherHour[];
+  fetchedAt: string;
+  stale: boolean;
+  source: "Open-Meteo";
+}
+export type WorldWeatherResponse = WorldWeatherData | { configured: false } | { configured: true; unavailable: true; message: string };
 
 /** Nome, posição e aparência completa do avatar (ver engine/looks.ts). */
 export interface WorldAvatar extends CharacterLook {
@@ -155,6 +191,7 @@ export const livingWorldService = {
   get: () => api.get<WorldState>("/world"),
   saveSettings: (patch: Partial<WorldSettings>) => api.put<WorldSettings>("/world/settings", patch),
   saveAvatar: (patch: Partial<Omit<WorldAvatar, "name">> & { name?: string | null }) => api.put<WorldAvatar>("/world/avatar", patch),
+  weather: () => api.get<WorldWeatherResponse>("/world/weather"),
   saveAgentLook: (key: string, body: { look?: Partial<CharacterLook> | null; nickname?: string | null }) =>
     api.put<{ look: Partial<CharacterLook> | null; nickname: string | null }>(`/world/agents/${key}/look`, body),
   events: (q: { category?: string | null; before?: string | null; limit?: number }) => {

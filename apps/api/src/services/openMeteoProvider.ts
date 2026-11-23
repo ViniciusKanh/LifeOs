@@ -27,6 +27,10 @@ export interface WeatherCurrent {
   weatherCode: number;
   humidity: number | null;
   windSpeedKmh: number | null;
+  /** Direção de onde o vento sopra, em graus (0 = norte). */
+  windDirection: number | null;
+  /** 1 = dia, 0 = noite no local (segundo a Open-Meteo). */
+  isDay: number | null;
   time: string;
 }
 
@@ -132,13 +136,13 @@ export const OpenMeteoWeatherProvider: WeatherProvider = {
     return cached(key, FORECAST_TTL_MS, async () => {
       const url =
         `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=${encodeURIComponent(timezone)}` +
-        `&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m` +
+        `&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,wind_direction_10m,is_day` +
         `&hourly=temperature_2m,apparent_temperature,precipitation_probability,weather_code` +
         `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,uv_index_max,sunrise,sunset,daylight_duration` +
         `&forecast_days=7`;
 
       const data = await getJson<{
-        current: { temperature_2m: number; apparent_temperature: number; weather_code: number; relative_humidity_2m: number; wind_speed_10m: number; time: string };
+        current: { temperature_2m: number; apparent_temperature: number; weather_code: number; relative_humidity_2m: number; wind_speed_10m: number; wind_direction_10m?: number; is_day?: number; time: string };
         hourly: { time: string[]; temperature_2m: number[]; apparent_temperature: number[]; precipitation_probability: number[]; weather_code: number[] };
         daily: {
           time: string[];
@@ -159,6 +163,8 @@ export const OpenMeteoWeatherProvider: WeatherProvider = {
         weatherCode: data.current.weather_code,
         humidity: data.current.relative_humidity_2m ?? null,
         windSpeedKmh: data.current.wind_speed_10m ?? null,
+        windDirection: data.current.wind_direction_10m ?? null,
+        isDay: data.current.is_day ?? null,
         time: data.current.time,
       };
 

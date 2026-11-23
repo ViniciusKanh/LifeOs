@@ -65,6 +65,11 @@ export const DEFAULT_WORLD_SETTINGS = {
   showIndicators: true,
   showLabels: true,
   followAvatar: false,
+  /** Clima real (Open-Meteo) aplicado à Vila. */
+  weatherEnabled: true,
+  /** 0 = sutil, 1 = médio, 2 = completo. */
+  weatherIntensity: 2 as 0 | 1 | 2,
+  weatherParticles: true,
 };
 export type WorldSettings = typeof DEFAULT_WORLD_SETTINGS;
 

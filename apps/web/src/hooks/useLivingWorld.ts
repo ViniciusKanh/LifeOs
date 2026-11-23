@@ -12,6 +12,11 @@ export function useLivingWorld() {
   return useQuery({ queryKey: WORLD_KEY, queryFn: livingWorldService.get, refetchInterval: 5 * 60_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true });
 }
 
+/** Clima real da Vila: a Open-Meteo atualiza a cada 15 min, então consultar mais que isso é desperdício. */
+export function useWorldWeather(enabled = true) {
+  return useQuery({ queryKey: [...WORLD_KEY, "weather"], queryFn: livingWorldService.weather, enabled, staleTime: 10 * 60_000, refetchInterval: 15 * 60_000, refetchIntervalInBackground: false });
+}
+
 export function useWorldActions() {
   const qc = useQueryClient();
   const refresh = () => void qc.invalidateQueries({ queryKey: WORLD_KEY });

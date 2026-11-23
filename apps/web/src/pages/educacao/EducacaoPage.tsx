@@ -1,6 +1,7 @@
 import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { GraduationCap, Plus, X } from "lucide-react";
+import { GraduationCap, LibraryBig, Plus, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useTheme } from "@/hooks/useTheme";
 import { useEducations } from "@/hooks/useEducations";
 import { Button, EmptyState, Field, PageHeader } from "@/components/ui/primitives";
@@ -102,9 +103,15 @@ export function EducacaoPage() {
             mage={`${MODULE_ART}/education/banner-mage.webp`}
             scene={`${MODULE_ART}/education/banner-scene.webp`}
             actions={
-              <Button onClick={() => setModalOpen(true)}>
-                <Plus size={15} /> Nova formação
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setModalOpen(true)}>
+                  <Plus size={15} /> Nova formação
+                </Button>
+                {/* Artigos, leitura e fichamentos ligados aos projetos acadêmicos */}
+                <Link to="/biblioteca-mestrado" className="rpg-btn rpg-btn-gold">
+                  <LibraryBig size={15} aria-hidden /> Biblioteca do Mestrado
+                </Link>
+              </div>
             }
             aside={hub ? <EducationRankPanel hub={hub} /> : <div className="rpg-panel h-40 animate-pulse" aria-busy aria-label="Carregando rank" />}
           />
@@ -117,9 +124,14 @@ export function EducacaoPage() {
             <p className="font-display font-bold text-2xl">Educação</p>
             <p className="text-sm text-slate mt-0.5">Organize seus estudos, disciplinas, projetos e prazos em um só lugar.</p>
           </div>
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus size={15} /> Nova formação
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/biblioteca-mestrado" className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold">
+              <LibraryBig size={15} aria-hidden /> Biblioteca do Mestrado
+            </Link>
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus size={15} /> Nova formação
+            </Button>
+          </div>
         </div>
       )}
 

@@ -1,6 +1,8 @@
 import { itemDef } from "../config/items.js";
 import { buildTimelineEvents } from "../services/heroHubService.js";
 import { skillTimelineEvents } from "../services/personalSkillsService.js";
+import { codeTimelineEvents } from "../services/codeForgeService.js";
+import { researchTimelineEvents } from "../services/researchLibraryService.js";
 import { Router } from "express";
 import { KNOWLEDGE, RELICS, TITLES } from "../config/codex.js";
 import { getDb } from "../db/client.js";
@@ -412,10 +414,14 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const archetypeEvents = await buildTimelineEvents(db, ownerId, qFrom, qTo);
   // Árvore de Habilidades: um evento por nível comprovado em prova.
   const skillEvents = await skillTimelineEvents(db, ownerId, qFrom, qTo);
+  // Forja do Código e Biblioteca do Mestrado: só marcos (PR mesclada, release, dia de commits, fichamento).
+  const [codeEvents, researchEvents] = await Promise.all([codeTimelineEvents(db, ownerId, qFrom, qTo), researchTimelineEvents(db, ownerId, qFrom, qTo)]);
 
   const events = [
     ...guildEvents,
     ...skillEvents,
+    ...codeEvents,
+    ...researchEvents,
     ...warCouncilEvents,
     ...archetypeEvents,
     ...asRows(tasks.rows).map((r) => ({ type: "task", icon: "✅", ...r })),

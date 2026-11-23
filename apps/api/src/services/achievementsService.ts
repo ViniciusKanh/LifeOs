@@ -8,6 +8,12 @@ type Db = ReturnType<typeof getDb>;
 type MetricMap = Record<string, number>;
 
 const METRIC_KEYS = [
+  "code_commits_total",
+  "code_prs_merged",
+  "code_releases_total",
+  "papers_saved",
+  "papers_read",
+  "papers_reviewed",
   "tasks_completed_total",
   "books_completed_total",
   "focus_minutes_total",
@@ -161,6 +167,13 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
     "bank_deposits_claimed",
     "SELECT COUNT(*) FROM bank_deposits WHERE owner_id = ? AND status = 'claimed' AND (COALESCE(early_withdrawn, 0) = 0 OR COALESCE(actual_payout, net_payout) > amount)",
   );
+  // Forja do Código e Biblioteca do Mestrado (só atividade real importada/registrada).
+  addScalar("code_commits_total", "SELECT COUNT(*) FROM code_events WHERE owner_id = ? AND kind = 'commit'");
+  addScalar("code_prs_merged", "SELECT COUNT(*) FROM code_events WHERE owner_id = ? AND kind = 'pr_merged'");
+  addScalar("code_releases_total", "SELECT COUNT(*) FROM code_events WHERE owner_id = ? AND kind = 'release'");
+  addScalar("papers_saved", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ?");
+  addScalar("papers_read", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status IN ('lido', 'fichado')");
+  addScalar("papers_reviewed", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status = 'fichado'");
   addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= datetime(due_at)");
   addScalar("journal_days_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND thoughts IS NOT NULL AND thoughts <> ''");
   addScalar("journal_favorites_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND is_favorite = 1");
@@ -466,7 +479,7 @@ export function achievementCategory(metric: string | null): AchievementCategory 
   if (metric.startsWith("focus_")) return "foco";
   if (metric.startsWith("weekly_reviews")) return "revisoes";
   if (metric.startsWith("goals_")) return "metas";
-  if (metric.startsWith("study_")) return "educacao";
+  if (metric.startsWith("study_") || metric.startsWith("papers_")) return "educacao";
   if (metric.startsWith("experiments_")) return "experimentos";
   if (metric.startsWith("bank_")) return "banco";
   return "outros";

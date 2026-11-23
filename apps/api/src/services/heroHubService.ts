@@ -546,6 +546,8 @@ const SOURCE_LABEL: Record<string, string> = {
   grimoire: "Grimório",
   quest: "Quadro de Avisos",
   bank: "Banco",
+  code: "Forja do Código",
+  research: "Biblioteca do Mestrado",
 };
 export const sourceLabel = (s: string) => SOURCE_LABEL[s] ?? s;
 

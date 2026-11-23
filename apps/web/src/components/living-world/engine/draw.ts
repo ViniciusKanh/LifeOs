@@ -1071,9 +1071,14 @@ const SKY: Record<DayPhase, [string, string, string]> = {
 };
 
 /** Nuvem em pixel art (blocos arredondados), clara de dia e azulada à noite. */
-function cloud(ctx: Ctx, x: number, y: number, s: number, phase: DayPhase, seed: number) {
-  const top = phase === "night" ? "rgba(70,84,140,0.55)" : phase === "day" ? "rgba(255,255,255,0.92)" : "rgba(255,214,196,0.85)";
-  const base = phase === "night" ? "rgba(40,50,96,0.55)" : phase === "day" ? "rgba(214,230,244,0.92)" : "rgba(214,150,150,0.8)";
+function cloud(ctx: Ctx, x: number, y: number, s: number, phase: DayPhase, seed: number, overcast = 0) {
+  let top = phase === "night" ? "rgba(70,84,140,0.55)" : phase === "day" ? "rgba(255,255,255,0.92)" : "rgba(255,214,196,0.85)";
+  let base = phase === "night" ? "rgba(40,50,96,0.55)" : phase === "day" ? "rgba(214,230,244,0.92)" : "rgba(214,150,150,0.8)";
+  // Tempo fechado: nuvens cinzentas e carregadas.
+  if (overcast > 0.5) {
+    top = phase === "night" ? "rgba(52,58,84,0.85)" : "rgba(150,158,175,0.95)";
+    base = phase === "night" ? "rgba(30,34,54,0.85)" : "rgba(105,112,130,0.95)";
+  }
   const blobs = 4 + Math.floor(hash(seed, 3) * 3);
   ctx.fillStyle = base;
   ctx.fillRect(x - 8 * s, y, (blobs * 14 + 10) * s, 8 * s);
@@ -1091,17 +1096,19 @@ function cloud(ctx: Ctx, x: number, y: number, s: number, phase: DayPhase, seed:
  * Céu em camadas conforme a hora real: gradiente da fase, sol ou lua,
  * estrelas só à noite, nuvens à deriva e o castelo distante.
  */
-export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: number, hour = 21) {
+export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: number, hour = 21, overcast = 0) {
   const phase = dayPhase(hour);
-  const [c0, c1, c2] = SKY[phase];
+  // Céu encoberto: o gradiente da fase puxa para cinza-azulado.
+  const grey = phase === "night" ? "#151824" : "#6d7688";
+  const [c0, c1, c2] = SKY[phase].map((c) => mixHex(c, grey, overcast * 0.85)) as [string, string, string];
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, c0);
   g.addColorStop(0.55, c1);
   g.addColorStop(1, c2);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  if (phase === "night" || phase === "dawn") {
-    const a = phase === "night" ? 1 : 0.35;
+  if ((phase === "night" || phase === "dawn") && overcast < 0.9) {
+    const a = (phase === "night" ? 1 : 0.35) * (1 - overcast);
     for (let i = 0; i < 110; i++) {
       const sx = hash(i, 1) * w;
       const sy = hash(i, 2) * h * 0.6;
@@ -1110,7 +1117,9 @@ export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: numb
       ctx.fillRect(sx, sy, hash(i, 3) > 0.85 ? 2 : 1, hash(i, 3) > 0.85 ? 2 : 1);
     }
   }
-  // astro: lua à noite, sol durante o dia (baixo e quente no amanhecer/entardecer)
+  // astro: lua à noite, sol durante o dia (baixo e quente no amanhecer/entardecer); some atrás das nuvens
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, 1 - overcast * 1.1);
   if (phase === "night") {
     const mx = w * 0.82;
     const my = h * 0.12;
@@ -1136,6 +1145,7 @@ export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: numb
     ctx.arc(sx - 5, sy - 5, low ? 12 : 10, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
   // castelo distante (silhueta) — some na névoa durante o dia
   ctx.fillStyle = phase === "day" ? "rgba(120,160,205,0.55)" : phase === "night" ? "#1a1f44" : "rgba(80,50,90,0.7)";
   const bx = w * 0.7;
@@ -1156,14 +1166,23 @@ export function drawSky(ctx: Ctx, w: number, h: number, t: number, effects: numb
   }
   // nuvens à deriva (três camadas com velocidades diferentes = profundidade)
   const drift = effects > 0 ? t / 1000 : 0;
-  for (let i = 0; i < 7; i++) {
+  const clouds = 7 + Math.round(overcast * 14);
+  for (let i = 0; i < clouds; i++) {
     const layer = i % 3;
-    const speed = 4 + layer * 5;
+    const speed = 4 + layer * 5 + overcast * 6;
     const span = w + 400;
     const x = ((hash(i, 21) * span + drift * speed) % span) - 200;
-    const y = h * (0.08 + hash(i, 22) * 0.5) + layer * 10;
-    cloud(ctx, x, y, 0.8 + layer * 0.35, phase, i);
+    const y = h * (0.04 + hash(i, 22) * (0.5 - overcast * 0.25)) + layer * 10;
+    cloud(ctx, x, y, 0.8 + layer * 0.35 + overcast * 0.6, phase, i, overcast);
   }
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const p = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const [r1, g1, b1] = p(a);
+  const [r2, g2, b2] = p(b);
+  const c = (x: number, y: number) => Math.round(x + (y - x) * Math.min(1, Math.max(0, t)));
+  return `#${((c(r1!, r2!) << 16) | (c(g1!, g2!) << 8) | c(b1!, b2!)).toString(16).padStart(6, "0")}`;
 }
 
 /** Tinta de cor sobre o mundo (amanhecer rosado, entardecer alaranjado, noite azul). */

@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { WorldEngine, type EngineData, type EngineSettings, type Selection } from "./engine/WorldEngine";
 import type { BuildingKey, RoomKey } from "./engine/worldMap";
+import type { WorldWeather } from "./engine/weather";
 
 export interface WorldCanvasHandle {
   centerAvatar: () => void;
@@ -27,8 +28,10 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
   onSelect: (s: Selection) => void;
   onAvatarMoved: (p: { x: number; y: number }) => void;
   onFollowStop?: () => void;
+  /** Clima aplicado à Vila (real ou prévia); null = sem efeito de clima. */
+  weather?: WorldWeather | null;
   className?: string;
-}>(function WorldCanvas({ data, settings, selectedRoom, selectedBuilding, decorMode, selectedChar, onSelect, onAvatarMoved, onFollowStop, className }, ref) {
+}>(function WorldCanvas({ data, settings, selectedRoom, selectedBuilding, decorMode, selectedChar, onSelect, onAvatarMoved, onFollowStop, weather = null, className }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<WorldEngine | null>(null);
   const cb = useRef({ onSelect, onAvatarMoved, onFollowStop });
@@ -62,6 +65,7 @@ export const WorldCanvas = forwardRef<WorldCanvasHandle, {
   }, [data]);
   useEffect(() => engineRef.current?.setSelectedRoom(selectedRoom), [selectedRoom]);
   useEffect(() => engineRef.current?.setDecorMode(decorMode), [decorMode]);
+  useEffect(() => engineRef.current?.setWeather(weather), [weather]);
   useEffect(() => engineRef.current?.setSelectedBuilding(selectedBuilding ?? null), [selectedBuilding]);
   useEffect(() => engineRef.current?.setSelectedChar(selectedChar?.id ?? null, selectedChar?.follow ?? false), [selectedChar?.id, selectedChar?.follow]);
 

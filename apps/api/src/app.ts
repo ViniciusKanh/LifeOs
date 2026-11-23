@@ -83,6 +83,8 @@ import { warCouncilRouter } from "./routes/war-council.routes.js";
 import { rhythmRouter } from "./routes/rhythm.routes.js";
 import { bankRouter } from "./routes/bank.routes.js";
 import { personalSkillsRouter } from "./routes/personalSkills.routes.js";
+import { codeForgeRouter } from "./routes/codeForge.routes.js";
+import { researchRouter } from "./routes/research.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
 /**
@@ -254,6 +256,8 @@ app.use("/api/war-council", warCouncilRouter);
 app.use("/api/rhythm", rhythmRouter);
 app.use("/api/bank", bankRouter);
 app.use("/api/world", livingWorldRouter);
+app.use("/api/code-forge", codeForgeRouter);
+app.use("/api/research", researchRouter);
 // Handler de erro central — nunca vaza stack trace para o cliente.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

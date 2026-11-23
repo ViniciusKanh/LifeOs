@@ -120,3 +120,22 @@ export function isSunnyDay(weatherCode: number | null, cloudCoverPct: number | n
   if (cloudCoverPct != null && cloudCoverPct > 50) return false;
   return true;
 }
+
+/**
+ * Estado VISUAL do clima no Meu Mundo (fonte única: o frontend nunca
+ * interpreta weather_code). Códigos desconhecidos caem em "cloudy".
+ */
+export type WorldWeatherVisual = "clear" | "cloudy" | "fog" | "drizzle" | "rain" | "heavy_rain" | "snow" | "storm";
+
+export function worldWeatherVisual(code: number | null | undefined): WorldWeatherVisual {
+  if (code == null) return "cloudy";
+  if (code === 0 || code === 1) return "clear";
+  if (code === 2 || code === 3) return "cloudy";
+  if (code === 45 || code === 48) return "fog";
+  if (code >= 51 && code <= 57) return "drizzle";
+  if (code === 65 || code === 67 || code === 82) return "heavy_rain";
+  if ((code >= 61 && code <= 66) || code === 80 || code === 81) return "rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  if (code >= 95 && code <= 99) return "storm";
+  return "cloudy";
+}

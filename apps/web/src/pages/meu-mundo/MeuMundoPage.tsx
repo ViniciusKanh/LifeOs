@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -9,14 +9,16 @@ import { TaskModal } from "@/components/tasks/TaskModal";
 import { WorldCanvas, type WorldCanvasHandle } from "@/components/living-world/WorldCanvas";
 import { ActivityPanel, AgentsPanel, KingdomPanel, placeLabel, QuickActions, RewardBanner, TimelineStrip, WorldHUD, type QuickAction } from "@/components/living-world/WorldPanels";
 import { AgentContent, AgentLookContent, AvatarContent, BuildingContent, GardenContent, GuildContent, HabitRow, HistoryContent, RoomContent, SettingsContent, SlotContent } from "@/components/living-world/WorldDrawers";
-import type { EngineData, EngineSettings, Selection } from "@/components/living-world/engine/WorldEngine";
+import type { Selection } from "@/components/living-world/engine/WorldEngine";
 import type { BuildingKey, RoomKey } from "@/components/living-world/engine/worldMap";
-import { buildMarkers, type PlaceKey, type WorldFacts } from "@/components/living-world/engine/village";
-import { useLivingWorld, useWorldActions } from "@/hooks/useLivingWorld";
+import type { PlaceKey } from "@/components/living-world/engine/village";
+import { useLivingWorld, useWorldActions, useWorldWeather } from "@/hooks/useLivingWorld";
+import { usePrefersReducedMotion, useWorldEngineInputs } from "@/components/living-world/useWorldEngineInputs";
+import type { WorldWeather } from "@/components/living-world/engine/weather";
+import { WeatherChip } from "@/components/living-world/weather/WeatherWidgets";
 import { taskService } from "@/services/taskService";
 import { habitService } from "@/services/habitService";
-import { type WorldHabit, type WorldMission, type WorldSettings, type WorldState } from "@/services/livingWorldService";
-import { itemArtUrl } from "@/utils/inventoryDisplay";
+import { type WorldHabit, type WorldMission, type WorldSettings } from "@/services/livingWorldService";
 import { TASK_STATUSES } from "@/utils/taskStatus";
 import { ApiError } from "@/services/api";
 
@@ -53,33 +55,6 @@ const BUILDING_ICON: Record<string, React.ReactNode> = {
 };
 const isBuilding = (k: PlaceKey): k is BuildingKey => (VILLAGE_ORDER as string[]).includes(k) || k === "moinho";
 
-function usePrefersReducedMotion() {
-  const [v, setV] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  useEffect(() => {
-    const m = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const on = () => setV(m.matches);
-    m.addEventListener("change", on);
-    return () => m.removeEventListener("change", on);
-  }, []);
-  return v;
-}
-
-/** Status curto de cada ambiente, sempre derivado de dado real. */
-function roomStatus(w: WorldState, pendingAgent: string | null): Partial<Record<RoomKey, string>> {
-  const busy = (key: string) => pendingAgent === key || w.agents.find((a) => a.key === key)?.lastRun?.status === "running";
-  const done = w.habits.filter((h) => h.doneToday).length;
-  const inProgress = w.missions.open.filter((m) => m.status === "Em Andamento").length;
-  return {
-    biblioteca: w.activity?.room === "biblioteca" ? "Estudando" : busy("mentor") ? "Mentor analisando" : w.rooms.library.studyMinutesToday ? `${w.rooms.library.studyMinutesToday} min de estudo hoje` : "Estudos e leitura",
-    escritorio: w.activity?.room === "escritorio" ? "Trabalhando" : busy("planejador") || busy("analista") ? "Agente ativo" : `${inProgress} em andamento`,
-    guilda: `${w.missions.open.length} missão(ões) aberta(s)`,
-    academia: w.rooms.gym.today.length ? "Treino feito hoje" : "Disponível",
-    casa: w.rooms.home.journalWordsToday ? "Diário escrito hoje" : "Descanso e diário",
-    jardim: w.habits.length ? `${done}/${w.habits.length} hábitos hoje` : "Sem hábitos",
-    praca: "Centro do mundo",
-  };
-}
-
 /** 🌍 Meu Mundo — o LifeOS como um pequeno mundo vivo, sempre sobre dados reais. */
 export function MeuMundoPage() {
   const q = useLivingWorld();
@@ -104,46 +79,19 @@ export function MeuMundoPage() {
   const w = q.data;
   const pendingAgent = actions.runAgent.isPending ? actions.runAgent.variables?.key ?? null : null;
 
-  const engineSettings: EngineSettings = useMemo(() => {
-    const s = w?.settings;
-    return {
-      quality: s?.quality ?? "high",
-      effects: s?.effects ?? 2,
-      animSpeed: s?.animSpeed ?? 1,
-      sound: s?.sound ?? false,
-      autonomous: s?.autonomous ?? true,
-      showNames: s?.showNames ?? true,
-      showIndicators: s?.showIndicators ?? true,
-      showLabels: s?.showLabels ?? true,
-      followAvatar: s?.followAvatar ?? false,
-      reducedMotion: reduced,
-    };
-  }, [w?.settings, reduced]);
+  // Clima real da cidade do Contexto do Dia (desligável nas configurações do mundo).
+  const weatherOn = w?.settings.weatherEnabled ?? true;
+  const weatherQ = useWorldWeather(!!w && weatherOn);
+  const weatherData = weatherQ.data && "current" in weatherQ.data ? weatherQ.data : null;
+  const engineWeather: WorldWeather | null = useMemo(
+    () =>
+      weatherOn && weatherData
+        ? { visual: weatherData.current.visual, intensity: w?.settings.weatherIntensity ?? 2, particles: w?.settings.weatherParticles ?? true, windDirection: weatherData.current.windDirection, windSpeedKmh: weatherData.current.windSpeedKmh }
+        : null,
+    [weatherOn, weatherData, w?.settings.weatherIntensity, w?.settings.weatherParticles],
+  );
 
-  // Fatos reais do dia → brasões de pendência nas casas e assunto das conversas dos agentes.
-  const facts: WorldFacts | null = useMemo(() => (w?.pendencies ? { ...w.pendencies, activityTitle: w.activity?.title ?? null } : null), [w]);
-  const markers = useMemo(() => buildMarkers(facts), [facts]);
-
-  const engineData: EngineData | null = useMemo(() => {
-    if (!w) return null;
-    return {
-      avatar: w.avatar,
-      activity: w.activity ? { room: w.activity.room, title: w.activity.title } : null,
-      agents: w.agents.map((a) => ({ key: a.key, name: a.nickname ?? a.name, color: a.color, look: a.look, status: pendingAgent === a.key ? "running" : a.lastRun ? a.lastRun.status : "idle", finishedAt: a.lastRun?.finishedAt ?? null })),
-      habits: w.habits.map((h) => ({ id: h.id, name: h.name, stage: h.stage, doneToday: h.doneToday, pendingToday: h.pendingToday })),
-      decor: w.decor.objects
-        .map((o) => {
-          const slot = w.decor.slots.find((s) => s.key === o.slotKey);
-          return slot ? { slotKey: o.slotKey, x: slot.x, y: slot.y, art: itemArtUrl(o.art, o.artSet), name: o.name } : null;
-        })
-        .filter((x): x is NonNullable<typeof x> => !!x),
-      slots: w.decor.slots,
-      roomStatus: roomStatus(w, pendingAgent),
-      localHour: w.localHour,
-      facts,
-      markers,
-    };
-  }, [w, pendingAgent, facts, markers]);
+  const { engineSettings, engineData, markers } = useWorldEngineInputs(w, pendingAgent, reduced);
 
   const timeline = useMemo(() => (w ? w.timeline.filter((e) => !filter || e.category === filter) : []), [w, filter]);
 
@@ -220,6 +168,7 @@ export function MeuMundoPage() {
       setSelectedChar({ id: s.key, follow: false });
       setDrawer({ kind: "agent", key: s.key });
     }
+    else if (s.type === "npc" && s.id === "npc-ferreiro") navigate("/forja-codigo");
     else if (s.type === "habit") setDrawer({ kind: "habit", id: s.id });
     else if (s.type === "slot") setDrawer({ kind: "slot", key: s.key });
   };
@@ -316,6 +265,11 @@ export function MeuMundoPage() {
             </div>
           )}
           {!w && <div className="absolute inset-0 z-10 flex items-center justify-center bg-rpg-bg/70 text-sm text-rpg-muted" aria-busy="true">Construindo o seu mundo…</div>}
+          {w && weatherOn && (
+            <div className="absolute bottom-3 left-3 z-10">
+              <WeatherChip query={weatherQ} />
+            </div>
+          )}
           {decorMode && <p className="absolute left-1/2 top-3 z-10 -translate-x-1/2 border border-rpg-gold bg-rpg-bg/90 px-2 py-1 text-xs text-rpg-gold-light" style={{ borderRadius: 4 }}>Modo decoração: clique num lugar brilhante para colocar um item do inventário.</p>}
           <div tabIndex={0} onKeyDown={onMapKey} className="absolute inset-0 overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-rpg-gold" aria-label="Mapa: setas movem a câmera, + e − aproximam, C centraliza o avatar">
             <WorldCanvas
@@ -327,6 +281,7 @@ export function MeuMundoPage() {
               decorMode={decorMode}
               selectedChar={selectedChar}
               onFollowStop={() => setSelectedChar((c) => (c ? { ...c, follow: false } : c))}
+              weather={engineWeather}
               onSelect={onSelect}
               onAvatarMoved={(p) => actions.saveAvatar.mutate({ x: p.x, y: p.y })}
               className="block h-full w-full"
@@ -438,9 +393,14 @@ export function MeuMundoPage() {
               </div>
             )}
             {drawer.key === "biblioteca" && (
-              <RPGButton variant="secondary" className="text-xs" onClick={() => setDrawer({ kind: "agent", key: "mentor" })}>
-                Falar com o Mentor de Estudos
-              </RPGButton>
+              <div className="flex flex-wrap gap-1.5">
+                <RPGButton variant="secondary" className="text-xs" onClick={() => setDrawer({ kind: "agent", key: "mentor" })}>
+                  Falar com o Mentor de Estudos
+                </RPGButton>
+                <RPGButton variant="gold" className="text-xs" onClick={() => navigate("/biblioteca-mestrado")}>
+                  Biblioteca do Mestrado
+                </RPGButton>
+              </div>
             )}
           </RoomContent>
         )}

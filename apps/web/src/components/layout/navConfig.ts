@@ -38,6 +38,8 @@ import {
   History,
   Globe2,
   type LucideIcon,
+  Github,
+  LibraryBig,
 } from "lucide-react";
 
 /**
@@ -87,7 +89,16 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // Tela principal: o painel do personagem (HUD) com nível, XP e ritmo.
       { to: "/dashboard", label: "Dashboard", rpgLabel: "Painel do Herói", icon: LayoutGrid, quote: "Disciplina de hoje, liberdade de amanhã." },
-      { to: "/meu-mundo", label: "Meu Mundo", icon: Globe2, quote: "Seu mundo cresce com o que você faz de verdade." },
+      {
+        to: "/meu-mundo",
+        label: "Meu Mundo",
+        icon: Globe2,
+        quote: "Seu mundo cresce com o que você faz de verdade.",
+        tabs: [
+          { to: "/meu-mundo", label: "Vila" },
+          { to: "/meu-mundo/clima", label: "Clima real" },
+        ],
+      },
       {
         to: "/hoje",
         label: "Hoje",
@@ -120,6 +131,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/contratos", label: "Contratos", icon: Scroll, quote: "Um pacto cumprido vale mais que mil promessas." },
       { to: "/projetos", label: "Projetos", icon: GanttChartSquare, quote: "Projetos claros avançam mais rápido." },
       { to: "/profissional", label: "Profissional", icon: Briefcase, quote: "Foco no que move os ponteiros." },
+      { to: "/forja-codigo", label: "Forja do Código", icon: Github, quote: "Cada commit real tempera a lâmina." },
     ],
   },
   {
@@ -132,6 +144,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
       { to: "/educacao", label: "Educação", icon: GraduationCap, quote: "Estudo hoje, liberdade amanhã." },
+      { to: "/biblioteca-mestrado", label: "Biblioteca do Mestrado", icon: LibraryBig, quote: "Quem ficha, escreve." },
       { to: "/grimorio", label: "Memorização", rpgLabel: "Grimório", icon: BookOpenText, quote: "O que se revisa, não se esquece." },
       { to: "/administracao", label: "Administração", icon: FolderLock, quote: "O que é lembrado a tempo não vira problema." },
     ],

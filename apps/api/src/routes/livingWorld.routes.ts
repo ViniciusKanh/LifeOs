@@ -4,6 +4,7 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { aiRateLimit } from "../middleware/rateLimit.js";
 import { agentHistory, getWorld, listWorldEvents, placeable, placeDecor, removeDecor, runAgent, saveAgentLook, saveAvatar, saveSettings, WorldError } from "../services/livingWorldService.js";
+import { getWorldWeather } from "../services/worldWeatherService.js";
 import { BEARDS, HAIR_STYLES, HATS, OUTFITS, PROPS } from "../config/livingWorld.js";
 
 /** Meu Mundo (/api/world): leitura agregada dos dados reais + ações do próprio mundo. */
@@ -24,6 +25,15 @@ livingWorldRouter.get("/", async (req, res) => {
   }
 });
 
+/** Clima real da localização do Contexto do Dia (Open-Meteo, com cache e último valor válido). */
+livingWorldRouter.get("/weather", async (req, res) => {
+  try {
+    return res.json(await getWorldWeather(getDb(), req.user!.id));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
 const settingsSchema = z
   .object({
     quality: z.enum(["low", "medium", "high"]),
@@ -35,6 +45,9 @@ const settingsSchema = z
     showIndicators: z.boolean(),
     showLabels: z.boolean(),
     followAvatar: z.boolean(),
+    weatherEnabled: z.boolean(),
+    weatherIntensity: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    weatherParticles: z.boolean(),
   })
   .partial()
   .strict();

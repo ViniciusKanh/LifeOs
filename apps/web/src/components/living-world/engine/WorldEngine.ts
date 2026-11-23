@@ -9,6 +9,7 @@ import { box, cliff, dayPhase, floatingRock, diamond, drawFlat, drawFurniture, d
 import { findPath, nearestFree, type Point } from "./pathfinding";
 import { framesFor, getSprite, SPRITE_H, SPRITE_W, type Look, type Pose } from "./sprites";
 import { agentLookFor, DEFAULT_AVATAR_LOOK, normalizeLook, type CharacterLook } from "./looks";
+import { drawBolt, drawFog, drawPuddle, drawRain, drawSnow, drawUmbrella, isWet, lightningAt, overcastOf, weatherTint, WeatherSound, type WorldWeather } from "./weather";
 import { buildingBounds, buildingHull, buildingLights, insideHull, buildingTopZ, drawBuilding, drawBuildingAnim, drawDock, drawVillageItem, VILLAGE_KINDS } from "./drawVillage";
 import { buildConversation, type PlaceKey, type PlaceMarker, type TalkLine, type WorldFacts } from "./village";
 import {
@@ -86,7 +87,8 @@ export type Selection =
   | { type: "agent"; key: string }
   | { type: "habit"; id: string }
   | { type: "slot"; key: string }
-  | { type: "building"; key: BuildingKey };
+  | { type: "building"; key: BuildingKey }
+  | { type: "npc"; id: string };
 
 interface Char {
   id: string;
@@ -182,6 +184,17 @@ export class WorldEngine {
   private nextTalkAt = performance.now() + 6000;
   private talkSeed = 0;
   private floaters: Array<{ x: number; y: number; z: number; text: string; color: string; born: number }> = [];
+  private weather: WorldWeather | null = null;
+  private weatherSound = new WeatherSound(() => {
+    try {
+      return (this.audio ??= new AudioContext());
+    } catch {
+      return null;
+    }
+  });
+  private lastFlash = -1;
+  /** Ruas e praça onde a chuva forma poças. */
+  private puddleSpots: Point[] | null = null;
   /** Tiles de grama (vida ambiente: borboletas, vaga-lumes, pétalas). */
   private grassSpots: Point[] | null = null;
   private particles: Array<{ x: number; y: number; ox: number; oy: number; vx: number; vy: number; life: number; color: string }> = [];
@@ -220,6 +233,12 @@ export class WorldEngine {
     const rebuild = s.quality !== this.settings.quality;
     this.settings = s;
     if (rebuild) this.staticLayer = null;
+  }
+
+  /** Clima real (ou prévia de demonstração) aplicado à Vila. null = sem clima. */
+  setWeather(w: WorldWeather | null) {
+    this.weather = w;
+    if (!w || !isWet(w.visual) || !this.settings.sound) this.weatherSound.setRain(0);
   }
 
   setVisible(v: boolean) {
@@ -349,6 +368,7 @@ export class WorldEngine {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     for (const off of this.listeners) off();
+    this.weatherSound.stop();
     void this.audio?.close().catch(() => undefined);
   }
 
@@ -512,6 +532,18 @@ export class WorldEngine {
           c.idleSince = now;
           continue;
         }
+        const wx = this.weather;
+        if (wx && (wx.visual === "storm" || (isWet(wx.visual) && !this.usesUmbrella(c)))) {
+          // Tempestade (ou chuva sem guarda-chuva): procura a porta coberta mais próxima e espera lá.
+          const door = this.nearestShelter(c);
+          if (door && (Math.abs(door.x - c.x) + Math.abs(door.y - c.y) > 1)) {
+            c.idleSince = now;
+            if (Math.random() < 0.5) c.say = { text: wx.visual === "storm" ? "Que tempestade! Vou me abrigar." : "Esqueci o guarda-chuva!", tone: "talk" };
+            this.walk(c, { source: "ambient", target: door, arriveState: "idle" });
+          } else c.idleSince = now;
+          continue;
+        }
+        if (wx && isWet(wx.visual) && Math.random() < 0.25) c.say = { text: ["Chuva boa pra plantação.", "Cuidado com as poças!", "Dia de ficar perto da lareira."][Math.floor(Math.random() * 3)]!, tone: "talk" };
         target = { x: c.home.x + Math.round((Math.random() * 2 - 1) * c.roam), y: c.home.y + Math.round((Math.random() * 2 - 1) * c.roam) };
         if (Math.random() < 0.2 && c.lines.length) c.say = { text: c.lines[Math.floor(Math.random() * c.lines.length)]!, tone: "talk" };
       } else if (c.isAvatar) {
@@ -839,8 +871,13 @@ export class WorldEngine {
     if (!this.staticLayer) this.buildStatic();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const phase = dayPhase(d?.localHour ?? 21);
-    drawSky(ctx, this.w, this.h, t, fx, d?.localHour ?? 21);
-    if (fx > 0 && (phase === "day" || phase === "dawn")) this.drawBirds(t);
+    const wx = this.weather;
+    const wet = !!wx && isWet(wx.visual);
+    drawSky(ctx, this.w, this.h, t, fx, d?.localHour ?? 21, wx ? overcastOf(wx.visual) * (0.55 + wx.intensity * 0.225) : 0);
+    if (fx > 0 && (phase === "day" || phase === "dawn") && !wet && wx?.visual !== "fog") this.drawBirds(t);
+    // relâmpago: o clarão ilumina o céu e o raio aparece por trás da ilha
+    const bolt = wx?.visual === "storm" && fx > 0 ? lightningAt(t) : null;
+    if (bolt && bolt.flash > 0.5) drawBolt(ctx, this.w, this.h * 0.6, bolt.seed, bolt.flash);
     ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom, this.dpr * this.cam.x, this.dpr * this.cam.y);
     ctx.imageSmoothingEnabled = false;
 
@@ -853,6 +890,22 @@ export class WorldEngine {
         if (k === "water" || k === "dock") drawWater(ctx, x, y, t, fx);
         if (k === "dock") drawDock(ctx, x, y);
       }
+    // poças nas ruas e na praça enquanto chove
+    if (wet) {
+      if (!this.puddleSpots) {
+        this.puddleSpots = [];
+        for (let x = 0; x < GRID; x++) for (let y = 0; y < GRID; y++) {
+          const k = tileKind(x, y);
+          if ((k === "path" || k === "plaza" || k === "dirt") && (x * 31 + y * 17) % 7 === 0) this.puddleSpots.push({ x, y });
+        }
+      }
+      for (const p of this.puddleSpots) {
+        ctx.save();
+        ctx.translate(0, -tileZ(p.x, p.y));
+        drawPuddle(ctx, p.x, p.y, t, p.x * 41 + p.y, fx > 0 && wx!.particles);
+        ctx.restore();
+      }
+    }
     // anel de missão no chão, na porta de cada construção com pendência
     if (d && this.settings.showIndicators) {
       for (const b of BUILDINGS) {
@@ -968,7 +1021,7 @@ export class WorldEngine {
     for (const it of items) it.draw();
 
     // vida ambiente (só visual; some com movimento reduzido ou efeitos desligados)
-    if (fx > 0 && this.settings.quality !== "low") this.drawAmbient(t, phase);
+    if (fx > 0 && this.settings.quality !== "low" && !wet && wx?.visual !== "snow") this.drawAmbient(t, phase);
 
     // partículas e números flutuantes (mundo)
     for (const p of this.particles) {
@@ -986,10 +1039,18 @@ export class WorldEngine {
       ctx.fillStyle = tint;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    if (wx) {
+      const wt = weatherTint(wx.visual, wx.intensity);
+      if (wt) {
+        ctx.fillStyle = wt;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+    }
     ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom, this.dpr * this.cam.x, this.dpr * this.cam.y);
     if (this.settings.quality !== "low" && fx > 0) {
       ctx.globalCompositeOperation = "lighter";
-      const k = night ? 1.4 : 1;
+      // Tempo fechado acende e aquece as luzes da Vila (janelas, postes, lareiras).
+      const k = (night ? 1.4 : 1) * (wet ? 1.35 : wx?.visual === "fog" || wx?.visual === "cloudy" ? 1.15 : 1);
       const pulse = (0.24 + Math.sin(t / 700) * 0.07) * k;
       const [cx, cy] = isoPoint(15, 15);
       glow(ctx, cx, cy - 6 - 95, 210, "rgba(168,117,245,ALPHA)", pulse);
@@ -1001,7 +1062,8 @@ export class WorldEngine {
         else if (it.kind === "pcdesk" || it.kind === "server") glow(ctx, lx, ly - z - 36, 60, "rgba(89,169,248,ALPHA)", 0.16 * k);
         else if (it.kind === "campfire" || it.kind === "forge") glow(ctx, lx, ly - 14, 110, "rgba(255,140,50,ALPHA)", (0.3 + Math.sin(t / 130 + it.x) * 0.05) * k);
       }
-      for (const b of BUILDINGS) for (const [wx, wy] of buildingLights(b)) glow(ctx, wx, wy, night ? 46 : 26, b.style === "tower" ? "rgba(190,140,255,ALPHA)" : "rgba(246,200,110,ALPHA)", night ? 0.2 : 0.08);
+      const lit = night || wet || wx?.visual === "fog";
+      for (const b of BUILDINGS) for (const [lx, ly] of buildingLights(b)) glow(ctx, lx, ly, lit ? 46 : 26, b.style === "tower" ? "rgba(190,140,255,ALPHA)" : "rgba(246,200,110,ALPHA)", lit ? 0.2 : 0.08);
       for (const w of WALL_DECOR) {
         const r = roomAt(w.x, w.y);
         if (!r) continue;
@@ -1011,12 +1073,12 @@ export class WorldEngine {
         if (w.kind === "torch") glow(ctx, L.x, L.y - z, 90, "rgba(255,150,60,ALPHA)", 0.24 * k * flick);
         else if (w.kind === "fireplace") glow(ctx, L.x, L.y - z, 120, "rgba(255,140,50,ALPHA)", 0.28 * k * flick);
         else if (w.kind === "stained") glow(ctx, L.x, L.y - z - 30, 70, "rgba(170,120,255,ALPHA)", 0.14 * k);
-        else if (w.kind === "window" && night) glow(ctx, L.x, L.y - z, 50, "rgba(246,210,122,ALPHA)", 0.16);
+        else if (w.kind === "window" && (night || wet)) glow(ctx, L.x, L.y - z, 50, "rgba(246,210,122,ALPHA)", 0.16);
         else if (w.kind === "screen") glow(ctx, L.x, L.y - z, 60, "rgba(89,169,248,ALPHA)", 0.18 * k);
       }
       ctx.globalCompositeOperation = "source-over";
       // vagalumes no jardim e faíscas mágicas na praça
-      if (fx > 1) {
+      if (fx > 1 && !wet) {
         for (let i = 0; i < 16; i++) {
           const gx = 21.5 + ((i * 37) % 70) / 10 + Math.sin(t / 1500 + i) * 0.5;
           const gy = 21.5 + ((i * 53) % 70) / 10 + Math.cos(t / 1700 + i) * 0.5;
@@ -1031,6 +1093,28 @@ export class WorldEngine {
           ctx.fillRect(cx + Math.cos(a) * r, cy - 6 - 40 - ((t / 20 + i * 30) % 90), 2, 2);
         }
       }
+    }
+
+    // 3b) Clima no espaço de tela: neblina, chuva/neve e clarão do relâmpago
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    if (wx) {
+      if (wx.visual === "fog") drawFog(ctx, this.w, this.h, fx > 0 ? t : 0, wx);
+      if (wx.particles && fx > 0) {
+        if (wet) drawRain(ctx, this.w, this.h, t, wx);
+        else if (wx.visual === "snow") drawSnow(ctx, this.w, this.h, t, wx);
+      }
+      if (bolt && bolt.flash > 0) {
+        ctx.fillStyle = `rgba(225,225,255,${0.35 * bolt.flash})`;
+        ctx.fillRect(0, 0, this.w, this.h);
+      }
+      // som: chuva contínua e trovão a cada novo relâmpago (só com o som do mundo ligado)
+      if (this.settings.sound) {
+        this.weatherSound.setRain(wet ? (wx.visual === "drizzle" ? 0.4 : wx.visual === "rain" ? 0.7 : 1) * (0.5 + wx.intensity * 0.25) : 0);
+        if (bolt && bolt.flash > 0 && bolt.seed !== this.lastFlash) {
+          this.lastFlash = bolt.seed;
+          this.weatherSound.thunder();
+        }
+      } else this.weatherSound.setRain(0);
     }
 
     // 4) Interface no espaço de tela
@@ -1181,6 +1265,34 @@ export class WorldEngine {
       ctx.drawImage(spr, (-SPRITE_W * scale) / 2, -SPRITE_H * scale + 5, SPRITE_W * scale, SPRITE_H * scale);
     }
     ctx.restore();
+    // Chuva: quem está ao ar livre abre o guarda-chuva (parte dos aldeões prefere correr pro abrigo).
+    if (!lying && this.underUmbrella(c)) {
+      drawUmbrella(ctx, sx, sy + breath - SPRITE_H * scale + 2, c.isNpc ? c.look.shirt : this.accentOf(c), flip);
+    }
+  }
+
+  /** Entrada de construção mais próxima (abrigo na chuva forte). */
+  private nearestShelter(c: Char): Point | null {
+    let best: Point | null = null;
+    let bd = Infinity;
+    for (const b of BUILDINGS) {
+      const e = doorOf(b).entrance;
+      const dist = Math.abs(e.x - c.x) + Math.abs(e.y - c.y);
+      if (dist < bd) (bd = dist), (best = e);
+    }
+    return best ? nearestFree(this.blocked, best) ?? best : null;
+  }
+
+  private underUmbrella(c: Char): boolean {
+    return !!this.weather && isWet(this.weather.visual) && !roomAt(Math.round(c.x), Math.round(c.y))?.walls && this.usesUmbrella(c);
+  }
+
+  /** Dois terços dos aldeões levam guarda-chuva; avatar e agentes sempre. */
+  private usesUmbrella(c: Char): boolean {
+    if (!c.isNpc) return true;
+    let h = 0;
+    for (const ch of c.id) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    return Math.abs(h) % 3 !== 0;
   }
 
   /** Cor de destaque do personagem (agente: cor da especialidade). */
@@ -1191,7 +1303,8 @@ export class WorldEngine {
   private drawCharOverlay(c: Char, t: number) {
     const ctx = this.ctx;
     const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
-    const top = s.y - 88 * this.cam.zoom;
+    // Com guarda-chuva aberto, nome e balões sobem para não cobrir a lona.
+    const top = s.y - (this.underUmbrella(c) ? 118 : 88) * this.cam.zoom;
     if (this.selectedChar === c.id) {
       const by = top - (this.settings.showNames ? 24 : 6) + Math.sin(t / 220) * 3;
       ctx.fillStyle = "#F1C66A";
@@ -1452,12 +1565,12 @@ export class WorldEngine {
       const l = this.labelRects[i]!;
       if (px >= l.x && px <= l.x + l.w && py >= l.y && py <= l.y + l.h) return this.placeSelection(l.key);
     }
-    // Personagens (caixa do sprite na tela); aldeões não são selecionáveis
-    const chars = [...this.chars.values()].filter((c) => !c.isNpc).sort((a, b) => b.x + b.y - (a.x + a.y));
+    // Personagens (caixa do sprite na tela). Dos aldeões, só o ferreiro (abre a Forja do Código).
+    const chars = [...this.chars.values()].filter((c) => !c.isNpc || c.id === "npc-ferreiro").sort((a, b) => b.x + b.y - (a.x + a.y));
     for (const c of chars) {
       const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
       const hw = 22 * this.cam.zoom;
-      if (px > s.x - hw && px < s.x + hw && py > s.y - 76 * this.cam.zoom && py < s.y + 4) return c.isAvatar ? { type: "avatar" } : { type: "agent", key: c.id };
+      if (px > s.x - hw && px < s.x + hw && py > s.y - 76 * this.cam.zoom && py < s.y + 4) return c.isAvatar ? { type: "avatar" } : c.isNpc ? { type: "npc", id: c.id } : { type: "agent", key: c.id };
     }
     const tile = this.tileAt(px, py);
     if (this.decorMode && this.data) {

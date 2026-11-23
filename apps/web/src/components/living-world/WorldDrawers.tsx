@@ -394,7 +394,7 @@ export function SettingsContent({ settings, onChange }: { settings: WorldSetting
       </div>
     </fieldset>
   );
-  const sw = (label: string, k: "sound" | "autonomous" | "showNames" | "showIndicators" | "showLabels" | "followAvatar", hint?: string) => (
+  const sw = (label: string, k: "sound" | "autonomous" | "showNames" | "showIndicators" | "showLabels" | "followAvatar" | "weatherEnabled" | "weatherParticles", hint?: string) => (
     <div className="flex items-center justify-between gap-3 border-b border-rpg-border/50 py-1.5">
       <span className="text-sm text-rpg-text">
         {label}
@@ -414,8 +414,15 @@ export function SettingsContent({ settings, onChange }: { settings: WorldSetting
         {sw("Mostrar nomes", "showNames")}
         {sw("Mostrar indicadores", "showIndicators", "Balões de tarefa e pendências do Jardim.")}
         {sw("Seguir o avatar", "followAvatar")}
-        {sw("Sons", "sound", "Bipes curtos ao concluir.")}
+        {sw("Sons", "sound", "Bipes curtos ao concluir, chuva e trovões do clima real.")}
       </div>
+      <div>
+        <p className="font-pixel text-[9px] uppercase text-rpg-muted">Clima real</p>
+        {sw("Clima real na Vila", "weatherEnabled", "Usa a cidade configurada no Contexto do Dia (Open-Meteo).")}
+        {sw("Partículas de chuva e neve", "weatherParticles")}
+      </div>
+      {seg("Intensidade do clima", settings.weatherIntensity ?? 2, [[0, "Sutil"], [1, "Média"], [2, "Completa"]], (v) => onChange({ weatherIntensity: v }))}
+      <Link to="/meu-mundo/clima" className="block text-xs text-rpg-blue underline">Abrir painel do clima (cidade, previsão e prévias)</Link>
       <p className="text-[10px] text-rpg-muted">Com “reduzir movimento” ligado no sistema, os efeitos são desligados automaticamente.</p>
     </div>
   );

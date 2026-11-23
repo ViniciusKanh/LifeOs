@@ -92,6 +92,9 @@ const ArvoreHabilidadesPage = lazy(() => import("@/pages/arvore/ArvoreHabilidade
 const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) => ({ default: m.TesouroPage })));
 const BancoPage = lazy(() => import("@/pages/banco/BancoPage").then((m) => ({ default: m.BancoPage })));
 const MeuMundoPage = lazy(() => import("@/pages/meu-mundo/MeuMundoPage").then((m) => ({ default: m.MeuMundoPage })));
+const ClimaPage = lazy(() => import("@/pages/meu-mundo/ClimaPage").then((m) => ({ default: m.ClimaPage })));
+const ForjaCodigoPage = lazy(() => import("@/pages/forja-codigo/ForjaCodigoPage").then((m) => ({ default: m.ForjaCodigoPage })));
+const BibliotecaMestradoPage = lazy(() => import("@/pages/biblioteca-mestrado/BibliotecaMestradoPage").then((m) => ({ default: m.BibliotecaMestradoPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
 const RevisoesPage = lazy(() => import("@/pages/revisoes/RevisoesPage").then((m) => ({ default: m.RevisoesPage })));
@@ -205,6 +208,9 @@ export default function App() {
           {/* Lembretes/notificações removidos: o endereço antigo volta para Hoje. */}
           <Route path="/gatilhos" element={<Navigate to="/hoje" replace />} />
           <Route path="/meu-mundo" element={<MeuMundoPage />} />
+          <Route path="/meu-mundo/clima" element={<ClimaPage />} />
+          <Route path="/forja-codigo" element={<ForjaCodigoPage />} />
+          <Route path="/biblioteca-mestrado" element={<BibliotecaMestradoPage />} />
           <Route path="/diario" element={<DiarioPage />} />
           <Route path="/administracao" element={<AdministracaoPage />} />
           <Route path="/direcao" element={<Navigate to="/metas" replace />} />
