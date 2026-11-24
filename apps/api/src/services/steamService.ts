@@ -19,7 +19,6 @@ import { grantCollectionItem, revokeCollectionItem } from "./adventureCollection
 const API = "https://api.steampowered.com";
 const MIN_SYNC_MS = 30 * 60_000;
 const ACH_REFRESH_MS = 12 * 3_600_000;
-const ACH_GAMES_PER_SYNC = 6;
 export const STEAM_XP = { perAchievement: 5, dailyCap: 10 } as const;
 export const STEAM_OPENID = "https://steamcommunity.com/openid/login";
 export const STEAM_CALLBACK_PATH = "/api/integrations/steam/callback";
@@ -66,11 +65,11 @@ export async function verifySteamOpenId(query: Record<string, unknown>): Promise
   return m[1]!;
 }
 
-async function steamGet<T>(db: Client, path: string, params: Record<string, string>): Promise<T> {
+async function steamGet<T>(db: Client, path: string, params: Record<string, string>, opts: { retries?: number; timeoutMs?: number } = {}): Promise<T> {
   const key = await steamApiKey(db);
   if (!key) throw new IntegrationError(503, "Steam não configurada pelo administrador.", "nao_configurado");
   const p = new URLSearchParams({ ...params, key, format: "json" });
-  return fetchJson<T>(`${API}/${path}?${p.toString()}`, {}, { label: "Steam" });
+  return fetchJson<T>(`${API}/${path}?${p.toString()}`, {}, { label: "Steam", ...opts });
 }
 
 /** Aceita SteamID64, URL de perfil (/profiles/ ou /id/) ou nome personalizado. */
@@ -159,21 +158,209 @@ export function dailyFromSnapshots(snaps: Array<{ day: string; total: number }>,
   return out;
 }
 
-async function fetchAchievements(db: Client, ownerId: string, steamId: string, appid: number) {
+interface PlayerAch {
+  apiname: string;
+  achieved: number;
+  unlocktime: number;
+  name?: string;
+  description?: string;
+}
+interface SchemaAch {
+  name: string;
+  displayName: string;
+  description?: string;
+  icon?: string;
+  icongray?: string;
+  hidden?: number;
+}
+
+/** Conquistas do jogador + esquema (nomes/ícones). Uma tentativa só: 4xx da Steam é definitivo. */
+async function fetchAchievements(db: Client, steamId: string, appid: number) {
   const [player, schema] = await Promise.all([
-    steamGet<{ playerstats: { success?: boolean; achievements?: Array<{ apiname: string; achieved: number; unlocktime: number; name?: string; description?: string }> } }>(
+    steamGet<{ playerstats: { success?: boolean; error?: string; achievements?: PlayerAch[] } }>(
       db,
       "ISteamUserStats/GetPlayerAchievements/v1/",
-      { steamid: steamId, appid: String(appid), l: "brazilian" }
+      { steamid: steamId, appid: String(appid), l: "brazilian" },
+      { retries: 0, timeoutMs: 8000 }
     ),
-    steamGet<{ game?: { availableGameStats?: { achievements?: Array<{ name: string; displayName: string; description?: string; icon?: string }> } } }>(db, "ISteamUserStats/GetSchemaForGame/v2/", {
-      appid: String(appid),
-      l: "brazilian",
-    }).catch(() => null),
+    steamGet<{ game?: { availableGameStats?: { achievements?: SchemaAch[] } } }>(db, "ISteamUserStats/GetSchemaForGame/v2/", { appid: String(appid), l: "brazilian" }, { retries: 0, timeoutMs: 8000 }).catch(() => null),
   ]);
-  const list = player.playerstats.achievements ?? [];
-  const icons = new Map((schema?.game?.availableGameStats?.achievements ?? []).map((a) => [a.name, a]));
-  return { total: list.length, unlocked: list.filter((a) => a.achieved === 1).map((a) => ({ ...a, icon: icons.get(a.apiname)?.icon ?? null, displayName: a.name ?? icons.get(a.apiname)?.displayName ?? a.apiname, desc: a.description ?? icons.get(a.apiname)?.description ?? null })) };
+  if (player.playerstats?.success === false) throw new IntegrationError(400, player.playerstats.error ?? "Jogo sem estatísticas.", "requisicao_invalida");
+  const list = player.playerstats?.achievements ?? [];
+  const schemaList = schema?.game?.availableGameStats?.achievements ?? [];
+  const bySchema = new Map(schemaList.map((a) => [a.name, a]));
+  const all = list.map((a) => {
+    const sc = bySchema.get(a.apiname);
+    return {
+      apiname: a.apiname,
+      achieved: a.achieved === 1,
+      unlocktime: a.unlocktime,
+      displayName: a.name || sc?.displayName || a.apiname,
+      desc: a.description || sc?.description || null,
+      icon: sc?.icon ?? null,
+      iconGray: sc?.icongray ?? null,
+      hidden: sc?.hidden === 1,
+    };
+  });
+  return { total: all.length, all, unlocked: all.filter((a) => a.achieved) };
+}
+
+/** Classifica o erro da Steam para mostrar o motivo real na tela. */
+function achStatusFromError(err: unknown): { status: "sem_conquistas" | "privado" | "erro"; message: string } {
+  if (err instanceof IntegrationError) {
+    if (err.code === "requisicao_invalida" || err.code === "nao_encontrado") return { status: "sem_conquistas", message: "Este jogo não tem conquistas na Steam." };
+    if (err.code === "acesso_negado") return { status: "privado", message: "A Steam negou acesso às conquistas (detalhes de jogo privados)." };
+    return { status: "erro", message: err.message.slice(0, 200) };
+  }
+  return { status: "erro", message: "Falha inesperada ao ler conquistas." };
+}
+
+/** Grava conquistas desbloqueadas novas e dá XP só às desbloqueadas depois da conexão (teto diário). */
+async function storeUnlocked(db: Client, ownerId: string, appid: number, unlocked: Array<{ apiname: string; displayName: string; desc: string | null; icon: string | null; unlocktime: number }>, ctx: { connectedMs: number; tz: string; xpOn: boolean }) {
+  let added = 0;
+  const known = await db.execute({ sql: "SELECT api_name FROM steam_achievements WHERE owner_id = ? AND appid = ?", args: [ownerId, appid] });
+  const knownSet = new Set(known.rows.map((r) => String(r.api_name)));
+  for (const a of unlocked) {
+    if (knownSet.has(a.apiname)) continue;
+    await db.execute({
+      sql: `INSERT INTO steam_achievements (owner_id, appid, api_name, name, description, icon, unlock_time) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (owner_id, appid, api_name) DO NOTHING`,
+      args: [ownerId, appid, a.apiname, a.displayName.slice(0, 200), a.desc?.slice(0, 400) ?? null, a.icon, a.unlocktime],
+    });
+    added++;
+    if (ctx.xpOn && a.unlocktime * 1000 >= ctx.connectedMs) {
+      const day = localDayOfStored(new Date(a.unlocktime * 1000).toISOString(), ctx.tz);
+      const n = await db.execute({ sql: "SELECT COUNT(*) AS n FROM xp_events WHERE owner_id = ? AND source_type = 'steam' AND day_key = ?", args: [ownerId, day] });
+      if (Number(n.rows[0]?.n ?? 0) < STEAM_XP.dailyCap) {
+        await award(db, ownerId, { sourceType: "steam", sourceId: `${appid}:${a.apiname}`, eventType: "achievement", xp: STEAM_XP.perAchievement, coins: 0, label: `Conquista Steam: ${a.displayName}`.slice(0, 120) }, day);
+      }
+    }
+  }
+  return added;
+}
+
+/**
+ * Lê conquistas em lotes, dentro de um orçamento de tempo (a função serverless
+ * não pode ficar presa). Jogos jogados primeiro; cada jogo é revisitado a cada
+ * 12 h. Chamado pela tela em sequência até não restar pendência.
+ */
+export async function syncSteamAchievements(db: Client, ownerId: string, opts: { budgetMs?: number; force?: boolean } = {}) {
+  const acc = await db.execute({ sql: "SELECT steam_id, connected_at, settings_json FROM steam_accounts WHERE owner_id = ?", args: [ownerId] });
+  const row = acc.rows[0];
+  if (!row) throw new IntegrationError(404, "Steam não conectada.", "desconectado");
+  const steamId = String(row.steam_id);
+  const settings = parseSettings(row.settings_json, DEFAULTS);
+  const connectedMs = Date.parse(normalizeStoredUtc(String(row.connected_at)));
+  const { tz } = await userDayContext(db, ownerId);
+  const staleBefore = new Date(Date.now() - (opts.force ? 0 : ACH_REFRESH_MS)).toISOString();
+  const pendingSql = `FROM steam_games WHERE owner_id = ? AND playtime_forever > 0 AND (ach_checked_at IS NULL OR ach_checked_at < ?)`;
+  const pend = await db.execute({ sql: `SELECT appid ${pendingSql} ORDER BY COALESCE(rtime_last_played, 0) DESC, playtime_forever DESC LIMIT 40`, args: [ownerId, staleBefore] });
+  const started = Date.now();
+  const budget = opts.budgetMs ?? 20_000;
+  let checked = 0;
+  let added = 0;
+  const queue = pend.rows.map((r) => Number(r.appid));
+  // 3 jogos em paralelo; para ao estourar o orçamento.
+  const worker = async () => {
+    while (queue.length && Date.now() - started < budget) {
+      const appid = queue.shift()!;
+      const now = new Date().toISOString();
+      try {
+        const res = await fetchAchievements(db, steamId, appid);
+        added += await storeUnlocked(db, ownerId, appid, res.unlocked, { connectedMs, tz, xpOn: settings.achievementXp });
+        await db.execute({
+          sql: "UPDATE steam_games SET ach_total = ?, ach_unlocked = ?, ach_checked_at = ?, ach_status = ?, ach_error = NULL WHERE owner_id = ? AND appid = ?",
+          args: [res.total, res.unlocked.length, now, res.total ? "ok" : "sem_conquistas", ownerId, appid],
+        });
+      } catch (err) {
+        const st = achStatusFromError(err);
+        // Erro transitório volta à fila em ~1 h; os definitivos esperam o ciclo normal.
+        const checkedAt = st.status === "erro" ? new Date(Date.now() - ACH_REFRESH_MS + 3_600_000).toISOString() : now;
+        await db.execute({ sql: "UPDATE steam_games SET ach_checked_at = ?, ach_status = ?, ach_error = ? WHERE owner_id = ? AND appid = ?", args: [checkedAt, st.status, st.message, ownerId, appid] });
+      }
+      checked++;
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  const left = await db.execute({ sql: `SELECT COUNT(*) AS n ${pendingSql}`, args: [ownerId, new Date(Date.now() - ACH_REFRESH_MS).toISOString()] });
+  return { checked, newAchievements: added, pending: Number(left.rows[0]?.n ?? 0) };
+}
+
+const gameCache = new Map<string, { at: number; value: unknown }>();
+
+/** Detalhe de um jogo: todas as conquistas (com bloqueadas) e raridade global. Também importa as novas. */
+export async function getSteamGame(db: Client, ownerId: string, appid: number) {
+  const acc = await db.execute({ sql: "SELECT steam_id, connected_at, settings_json FROM steam_accounts WHERE owner_id = ?", args: [ownerId] });
+  const row = acc.rows[0];
+  if (!row) throw new IntegrationError(404, "Steam não conectada.", "desconectado");
+  const g = await db.execute({ sql: "SELECT * FROM steam_games WHERE owner_id = ? AND appid = ?", args: [ownerId, appid] });
+  if (!g.rows[0]) throw new IntegrationError(404, "Jogo não encontrado na sua biblioteca.");
+  const key = `${ownerId}:${appid}`;
+  const hit = gameCache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.value as Awaited<ReturnType<typeof loadGame>>;
+  const value = await loadGame(db, ownerId, String(row.steam_id), appid, g.rows[0] as Record<string, unknown>, {
+    connectedMs: Date.parse(normalizeStoredUtc(String(row.connected_at))),
+    xpOn: parseSettings(row.settings_json, DEFAULTS).achievementXp,
+  });
+  gameCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+async function loadGame(db: Client, ownerId: string, steamId: string, appid: number, g: Record<string, unknown>, ctx: { connectedMs: number; xpOn: boolean }) {
+  const { tz } = await userDayContext(db, ownerId);
+  const pinned = await db.execute({ sql: "SELECT item_key FROM inventory_transactions WHERE owner_id = ? AND type = 'acquire' AND item_key LIKE ?", args: [ownerId, `trophy:steam:${appid}:%`] });
+  const pinnedSet = new Set(pinned.rows.map((r) => String(r.item_key)));
+  let achievements: Array<{ apiName: string; name: string; description: string | null; icon: string | null; achieved: boolean; unlockedAt: string | null; globalPct: number | null; hidden: boolean; pinned: boolean }> = [];
+  let status: string = "ok";
+  let error: string | null = null;
+  try {
+    const [res, global] = await Promise.all([
+      fetchAchievements(db, steamId, appid),
+      fetchJson<{ achievementpercentages?: { achievements?: Array<{ name: string; percent: number | string }> } }>(
+        `${API}/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${appid}`,
+        {},
+        { label: "Steam", retries: 0, timeoutMs: 8000 }
+      ).catch(() => null),
+    ]);
+    await storeUnlocked(db, ownerId, appid, res.unlocked, { connectedMs: ctx.connectedMs, tz, xpOn: ctx.xpOn });
+    await db.execute({
+      sql: "UPDATE steam_games SET ach_total = ?, ach_unlocked = ?, ach_checked_at = ?, ach_status = ?, ach_error = NULL WHERE owner_id = ? AND appid = ?",
+      args: [res.total, res.unlocked.length, new Date().toISOString(), res.total ? "ok" : "sem_conquistas", ownerId, appid],
+    });
+    const pct = new Map((global?.achievementpercentages?.achievements ?? []).map((a) => [a.name, Number(a.percent)]));
+    achievements = res.all
+      .map((a) => ({
+        apiName: a.apiname,
+        name: a.displayName,
+        // Conquista oculta e bloqueada: não revela a descrição.
+        description: a.hidden && !a.achieved ? null : a.desc,
+        icon: a.achieved ? a.icon : a.iconGray ?? a.icon,
+        achieved: a.achieved,
+        unlockedAt: a.achieved && a.unlocktime ? new Date(a.unlocktime * 1000).toISOString() : null,
+        globalPct: pct.has(a.apiname) ? Math.round(pct.get(a.apiname)! * 10) / 10 : null,
+        hidden: a.hidden,
+        pinned: pinnedSet.has(`trophy:steam:${appid}:${a.apiname}`),
+      }))
+      .sort((x, y) => Number(y.achieved) - Number(x.achieved) || (y.unlockedAt ?? "").localeCompare(x.unlockedAt ?? "") || (y.globalPct ?? 0) - (x.globalPct ?? 0));
+    if (!res.total) status = "sem_conquistas";
+  } catch (err) {
+    const st = achStatusFromError(err);
+    status = st.status;
+    error = st.message;
+    await db.execute({ sql: "UPDATE steam_games SET ach_checked_at = ?, ach_status = ?, ach_error = ? WHERE owner_id = ? AND appid = ?", args: [new Date().toISOString(), st.status, st.message, ownerId, appid] });
+  }
+  return {
+    appid,
+    name: String(g.name),
+    header: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`,
+    totalMin: Number(g.playtime_forever),
+    recentMin: Number(g.playtime_2weeks),
+    lastPlayed: g.rtime_last_played ? new Date(Number(g.rtime_last_played) * 1000).toISOString() : null,
+    storeUrl: `https://store.steampowered.com/app/${appid}`,
+    status,
+    error,
+    achievements,
+  };
 }
 
 export async function syncSteam(db: Client, ownerId: string, opts: { force?: boolean } = {}) {
@@ -183,9 +370,7 @@ export async function syncSteam(db: Client, ownerId: string, opts: { force?: boo
   const last = row.last_sync_at ? Date.parse(normalizeStoredUtc(String(row.last_sync_at))) : 0;
   if (!opts.force && last && Date.now() - last < MIN_SYNC_MS) return { skipped: true, games: 0, newAchievements: 0 };
   const steamId = String(row.steam_id);
-  const settings = parseSettings(row.settings_json, DEFAULTS);
-  const connectedMs = Date.parse(normalizeStoredUtc(String(row.connected_at)));
-  const { tz, today } = await userDayContext(db, ownerId);
+  const { today } = await userDayContext(db, ownerId);
   const now = new Date().toISOString();
   try {
     const owned = await steamGet<{ response: { game_count?: number; games?: OwnedGame[] } }>(db, "IPlayerService/GetOwnedGames/v1/", {
@@ -210,48 +395,10 @@ export async function syncSteam(db: Client, ownerId: string, opts: { force?: boo
     }
     await writeSnapshots(db, ownerId, today, games, now);
 
-    // Conquistas: jogos jogados recentemente primeiro, com intervalo mínimo por jogo.
-    const candidates = await db.execute({
-      sql: `SELECT appid, name, ach_checked_at FROM steam_games WHERE owner_id = ? AND playtime_forever > 0
-            ORDER BY playtime_2weeks DESC, rtime_last_played DESC LIMIT 25`,
-      args: [ownerId],
-    });
-    let checked = 0;
-    let newAch = 0;
-    for (const g of candidates.rows) {
-      if (checked >= ACH_GAMES_PER_SYNC) break;
-      const at = g.ach_checked_at ? Date.parse(String(g.ach_checked_at)) : 0;
-      if (at && Date.now() - at < ACH_REFRESH_MS) continue;
-      checked++;
-      const appid = Number(g.appid);
-      try {
-        const res = await fetchAchievements(db, ownerId, steamId, appid);
-        for (const a of res.unlocked) {
-          const ins = await db.execute({
-            sql: `INSERT INTO steam_achievements (owner_id, appid, api_name, name, description, icon, unlock_time) VALUES (?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT (owner_id, appid, api_name) DO NOTHING`,
-            args: [ownerId, appid, a.apiname, a.displayName.slice(0, 200), a.desc?.slice(0, 400) ?? null, a.icon, a.unlocktime],
-          });
-          if (ins.rowsAffected > 0) {
-            newAch++;
-            // XP só para conquistas desbloqueadas depois da conexão (sem backfill), com teto diário.
-            if (settings.achievementXp && a.unlocktime * 1000 >= connectedMs) {
-              const day = localDayOfStored(new Date(a.unlocktime * 1000).toISOString(), tz);
-              const n = await db.execute({ sql: "SELECT COUNT(*) AS n FROM xp_events WHERE owner_id = ? AND source_type = 'steam' AND day_key = ?", args: [ownerId, day] });
-              if (Number(n.rows[0]?.n ?? 0) < STEAM_XP.dailyCap) {
-                await award(db, ownerId, { sourceType: "steam", sourceId: `${appid}:${a.apiname}`, eventType: "achievement", xp: STEAM_XP.perAchievement, coins: 0, label: `Conquista Steam: ${a.displayName}`.slice(0, 120) }, day);
-              }
-            }
-          }
-        }
-        await db.execute({ sql: "UPDATE steam_games SET ach_total = ?, ach_unlocked = ?, ach_checked_at = ? WHERE owner_id = ? AND appid = ?", args: [res.total, res.unlocked.length, now, ownerId, appid] });
-      } catch {
-        // Jogo sem conquistas ou estatísticas privadas: marca como verificado para não insistir.
-        await db.execute({ sql: "UPDATE steam_games SET ach_checked_at = ? WHERE owner_id = ? AND appid = ?", args: [now, ownerId, appid] });
-      }
-    }
     await db.execute({ sql: "UPDATE steam_accounts SET last_sync_at = ?, last_error = NULL WHERE owner_id = ?", args: [now, ownerId] });
-    return { skipped: false, games: games.length, newAchievements: newAch };
+    // Conquistas num orçamento curto aqui; a tela continua o resto em /steam/achievements/sync.
+    const ach = await syncSteamAchievements(db, ownerId, { budgetMs: 8_000 }).catch(() => ({ newAchievements: 0, pending: 0, checked: 0 }));
+    return { skipped: false, games: games.length, newAchievements: ach.newAchievements, pendingAchievements: ach.pending };
   } catch (err) {
     await db.execute({ sql: "UPDATE steam_accounts SET last_error = ? WHERE owner_id = ?", args: [err instanceof IntegrationError ? err.message : "Falha ao sincronizar com a Steam.", ownerId] });
     throw err;
@@ -293,7 +440,7 @@ export async function getSteamOverview(db: Client, ownerId: string, rangeDays: 7
     db.execute({ sql: "SELECT day_key, playtime_forever FROM steam_playtime_snapshots WHERE owner_id = ? AND appid = 0 AND day_key >= ? ORDER BY day_key", args: [ownerId, shiftDayKey(prevFrom, -1)] }),
     db.execute({
       sql: `SELECT a.appid, a.api_name, a.name, a.description, a.icon, a.unlock_time, g.name AS game FROM steam_achievements a
-            LEFT JOIN steam_games g ON g.owner_id = a.owner_id AND g.appid = a.appid WHERE a.owner_id = ? ORDER BY a.unlock_time DESC LIMIT 12`,
+            LEFT JOIN steam_games g ON g.owner_id = a.owner_id AND g.appid = a.appid WHERE a.owner_id = ? ORDER BY a.unlock_time DESC LIMIT 400`,
       args: [ownerId],
     }),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM steam_achievements WHERE owner_id = ?", args: [ownerId] }),
@@ -309,6 +456,8 @@ export async function getSteamOverview(db: Client, ownerId: string, rangeDays: 7
     lastPlayed: g.rtime_last_played ? new Date(Number(g.rtime_last_played) * 1000).toISOString() : null,
     achTotal: g.ach_total == null ? null : Number(g.ach_total),
     achUnlocked: g.ach_unlocked == null ? null : Number(g.ach_unlocked),
+    achStatus: g.ach_status == null ? (g.ach_checked_at ? "ok" : "pendente") : String(g.ach_status),
+    achError: g.ach_error == null ? null : String(g.ach_error),
     storeUrl: `https://store.steampowered.com/app/${String(g.appid)}`,
     launchUrl: `steam://run/${String(g.appid)}`,
   }));
@@ -366,7 +515,12 @@ export async function getSteamOverview(db: Client, ownerId: string, rangeDays: 7
       weekGameMin: weekGame,
       weeklyLimitHours: settings.weeklyLimitHours,
     },
-    games: gameRows.slice(0, 40),
+    games: gameRows,
+    achievementSync: (() => {
+      const played = gameRows.filter((g) => g.totalMin > 0);
+      const count = (st: string) => played.filter((g) => g.achStatus === st).length;
+      return { playedGames: played.length, withAchievements: count("ok"), noAchievements: count("sem_conquistas"), privateGames: count("privado"), errors: count("erro"), pending: count("pendente"), lastError: played.find((g) => g.achStatus === "erro")?.achError ?? null };
+    })(),
     recentAchievements: achRecent.rows.map((a) => ({
       appid: Number(a.appid),
       apiName: String(a.api_name),

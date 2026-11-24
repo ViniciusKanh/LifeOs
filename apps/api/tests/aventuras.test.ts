@@ -8,7 +8,7 @@ import { computeStatus, resolveAppearance, stageForXp, traitsFromHits } from "..
 import { categoryForSport, handleStravaWebhook, importActivity, xpForActivity, type StravaActivity } from "../src/services/stravaService.js";
 import { cellsAround, decodePolyline } from "../src/services/atlasService.js";
 import { musicInsight, summarizeSessions } from "../src/services/spotifyService.js";
-import { dailyFromSnapshots, writeSnapshots } from "../src/services/steamService.js";
+import { dailyFromSnapshots, getSteamGame, syncSteamAchievements, writeSnapshots } from "../src/services/steamService.js";
 import { setIntegrationFetchForTests } from "../src/services/integrationsCore.js";
 import { encryptSecret } from "../src/services/cryptoService.js";
 
@@ -376,6 +376,37 @@ describe("Tempo de Jogo (Steam)", () => {
     const r = await db.execute("SELECT COUNT(*) AS n FROM admin_settings WHERE key_name = 'teste'");
     expect(Number(r.rows[0]!.n)).toBe(3);
     await db.execute("DELETE FROM admin_settings WHERE key_name = 'teste'");
+  });
+
+  it("conquistas: lê em lote, classifica jogo sem conquistas sem repetir chamadas e mostra bloqueadas no detalhe", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    process.env.STEAM_WEB_API_KEY = "chave-teste";
+    await db.execute({ sql: "INSERT INTO steam_accounts (owner_id, steam_id, persona_name, visibility, connected_at) VALUES (?, '76561198000000001', 'v', 3, '2020-01-01 00:00:00')", args: [userId] });
+    await db.execute({ sql: "INSERT INTO steam_games (owner_id, appid, name, playtime_forever, rtime_last_played) VALUES (?, 10, 'Com conquistas', 300, 1700000000), (?, 20, 'Sem conquistas', 100, 1600000000), (?, 30, 'Nunca jogado', 0, NULL)", args: [userId, userId, userId] });
+    const calls: string[] = [];
+    setIntegrationFetchForTests(async (url) => {
+      calls.push(url);
+      if (url.includes("appid=20")) return new Response(JSON.stringify({ playerstats: { error: "Requested app has no stats", success: false } }), { status: 400 });
+      if (url.includes("GetPlayerAchievements")) return new Response(JSON.stringify({ playerstats: { success: true, achievements: [{ apiname: "A1", achieved: 1, unlocktime: 1700000000, name: "Primeiro passo" }, { apiname: "A2", achieved: 0, unlocktime: 0, name: "Lenda" }] } }), { status: 200 });
+      if (url.includes("GetSchemaForGame")) return new Response(JSON.stringify({ game: { availableGameStats: { achievements: [{ name: "A1", displayName: "Primeiro passo", icon: "https://x/a1.jpg" }, { name: "A2", displayName: "Lenda", icon: "https://x/a2.jpg", icongray: "https://x/a2g.jpg" }] } } }), { status: 200 });
+      if (url.includes("GlobalAchievement")) return new Response(JSON.stringify({ achievementpercentages: { achievements: [{ name: "A1", percent: 81.2 }, { name: "A2", percent: "3.4" }] } }), { status: 200 });
+      return new Response("{}", { status: 404 });
+    });
+    const r = await syncSteamAchievements(db, userId);
+    expect(r).toMatchObject({ checked: 2, newAchievements: 1, pending: 0 });
+    // O jogo sem estatísticas foi consultado uma vez só (sem retentativas).
+    expect(calls.filter((u) => u.includes("GetPlayerAchievements") && u.includes("appid=20"))).toHaveLength(1);
+    const st = await db.execute({ sql: "SELECT appid, ach_status, ach_total, ach_unlocked FROM steam_games WHERE owner_id = ? ORDER BY appid", args: [userId] });
+    expect(st.rows.map((x) => [x.appid, x.ach_status, x.ach_total, x.ach_unlocked])).toEqual([[10, "ok", 2, 1], [20, "sem_conquistas", null, null], [30, null, null, null]]);
+    expect((await syncSteamAchievements(db, userId)).checked).toBe(0);
+    const game = await getSteamGame(db, userId, 10);
+    expect(game.achievements.map((a) => [a.apiName, a.achieved, a.globalPct])).toEqual([["A1", true, 81.2], ["A2", false, 3.4]]);
+    expect(game.achievements[1]!.icon).toBe("https://x/a2g.jpg");
+    const ov = await agent.get("/api/integrations/steam");
+    expect(ov.body.achievementSync).toMatchObject({ playedGames: 2, withAchievements: 1, noAchievements: 1, pending: 0 });
+    expect(ov.body.recentAchievements[0]).toMatchObject({ name: "Primeiro passo", game: "Com conquistas" });
+    delete process.env.STEAM_WEB_API_KEY;
   });
 
   it("isolamento: um usuário não vê a Steam do outro e conectar exige configuração", async () => {

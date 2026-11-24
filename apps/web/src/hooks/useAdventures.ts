@@ -93,12 +93,16 @@ export function useSpotifyActions() {
 }
 
 export const useSteam = (range: 7 | 14 | 30) => useQuery({ queryKey: [...K.steam, range], queryFn: () => adventuresService.steam(range), staleTime: 60_000 });
+export const useSteamGame = (appid: number | null) =>
+  useQuery({ queryKey: [...K.steam, "game", appid], queryFn: () => adventuresService.steamGame(appid!), enabled: appid != null, staleTime: 5 * 60_000, retry: false });
+
 export function useSteamActions() {
   const refresh = useRefresh();
   const r = () => refresh(K.steam, ["inventory"]);
   return {
     link: useMutation({ mutationFn: adventuresService.steamLink, onSuccess: r }),
     sync: useMutation({ mutationFn: adventuresService.steamSync, onSettled: r }),
+    achSync: useMutation({ mutationFn: (force: boolean) => adventuresService.steamAchSync(force), onSettled: r }),
     settings: useMutation({ mutationFn: adventuresService.steamSettings, onSuccess: r }),
     pin: useMutation({ mutationFn: ({ appid, apiName, pin }: { appid: number; apiName: string; pin: boolean }) => adventuresService.steamPin(appid, apiName, pin), onSuccess: r }),
     disconnect: useMutation({ mutationFn: adventuresService.steamDisconnect, onSuccess: r }),

@@ -79,11 +79,12 @@ export async function fetchJson<T>(url: string, init: RequestInit, opts: FetchJs
       if (res.status === 401) throw new IntegrationError(401, `${opts.label}: autorização expirada ou revogada.${detail}`, "nao_autorizado");
       if (res.status === 403) throw new IntegrationError(403, opts.forbiddenMessage ?? `${opts.label}: acesso negado.${detail}`, "acesso_negado");
       if (res.status === 404) throw new IntegrationError(404, `${opts.label}: recurso não encontrado.`, "nao_encontrado");
+      // 4xx que não seja limite: erro definitivo (ex.: Steam "app sem estatísticas"). Não repete.
+      if (res.status !== 429 && res.status < 500) throw new IntegrationError(400, `${opts.label} recusou a requisição (${res.status}).${detail}`, "requisicao_invalida");
       lastErr =
         res.status === 429
           ? new IntegrationError(429, `${opts.label}: limite de requisições atingido. Tente mais tarde.`, "limite")
-          : new IntegrationError(502, `${opts.label} respondeu com erro ${res.status}.`, "indisponivel");
-      if (res.status !== 429 && res.status < 500) throw lastErr;
+          : new IntegrationError(502, `${opts.label} respondeu com erro ${res.status}.${detail}`, "indisponivel");
     } catch (err) {
       if (err instanceof IntegrationError && err.code !== "indisponivel" && err.code !== "limite") throw err;
       lastErr = err instanceof IntegrationError ? err : new IntegrationError(503, `${opts.label} indisponível no momento.`, "indisponivel");

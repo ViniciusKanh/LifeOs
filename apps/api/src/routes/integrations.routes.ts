@@ -46,8 +46,10 @@ import {
   getSteamOverview,
   pinSteamTrophy,
   resolveSteamId,
+  getSteamGame,
   steamApiKey,
   syncSteam,
+  syncSteamAchievements,
   updateSteamSettings,
   verifySteamOpenId,
 } from "../services/steamService.js";
@@ -351,6 +353,25 @@ integrationsRouter.post("/steam/link", requireAuth, async (req, res) => {
 integrationsRouter.post("/steam/sync", requireAuth, syncLimit, async (req, res) => {
   try {
     return res.json(await syncSteam(getDb(), req.user!.id, { force: true }));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+// Lê conquistas em lotes (a tela chama em sequência enquanto houver pendência).
+integrationsRouter.post("/steam/achievements/sync", requireAuth, syncLimit, async (req, res) => {
+  try {
+    const force = req.body?.force === true;
+    return res.json(await syncSteamAchievements(getDb(), req.user!.id, { force, budgetMs: 20_000 }));
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+integrationsRouter.get("/steam/games/:appid", requireAuth, async (req, res) => {
+  try {
+    const appid = z.coerce.number().int().positive().parse(req.params.appid);
+    return res.json(await getSteamGame(getDb(), req.user!.id, appid));
   } catch (err) {
     return fail(res, err);
   }

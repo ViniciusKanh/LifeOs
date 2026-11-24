@@ -181,10 +181,40 @@ export interface SteamOverview {
   period?: { rangeDays: number; from: string; to: string; gameMin: number; coveredDays: number; prevGameMin: number | null; estimated: boolean; note: string };
   daily?: Array<{ day: string; minutes: number | null; spanDays: number; productiveMin: number }>;
   balance?: { gameMin: number; productiveMin: number; productiveSources: string; weekGameMin: number; weeklyLimitHours: number | null };
-  games?: Array<{ appid: number; name: string; icon: string | null; header: string; totalMin: number; recentMin: number; lastPlayed: string | null; achTotal: number | null; achUnlocked: number | null; storeUrl: string; launchUrl: string }>;
+  games?: SteamGame[];
+  achievementSync?: { playedGames: number; withAchievements: number; noAchievements: number; privateGames: number; errors: number; pending: number; lastError: string | null };
   recentAchievements?: Array<{ appid: number; apiName: string; name: string; description: string | null; icon: string | null; unlockedAt: string; game: string | null; pinned: boolean }>;
   pinnedTrophies?: number;
   xpRules?: { perAchievement: number; dailyCap: number };
+}
+
+export type SteamAchStatus = "ok" | "sem_conquistas" | "privado" | "erro" | "pendente";
+export interface SteamGame {
+  appid: number;
+  name: string;
+  icon: string | null;
+  header: string;
+  totalMin: number;
+  recentMin: number;
+  lastPlayed: string | null;
+  achTotal: number | null;
+  achUnlocked: number | null;
+  achStatus: SteamAchStatus;
+  achError: string | null;
+  storeUrl: string;
+  launchUrl: string;
+}
+export interface SteamGameDetail {
+  appid: number;
+  name: string;
+  header: string;
+  totalMin: number;
+  recentMin: number;
+  lastPlayed: string | null;
+  storeUrl: string;
+  status: string;
+  error: string | null;
+  achievements: Array<{ apiName: string; name: string; description: string | null; icon: string | null; achieved: boolean; unlockedAt: string | null; globalPct: number | null; hidden: boolean; pinned: boolean }>;
 }
 
 export interface AdventureWorld {
@@ -246,7 +276,9 @@ export const adventuresService = {
   steam: (range: 7 | 14 | 30) => api.get<SteamOverview>(`/integrations/steam?range=${range}`),
   steamConnect: () => api.get<{ url: string }>("/integrations/steam/connect"),
   steamLink: (profile: string) => api.post<{ ok: true }>("/integrations/steam/link", { profile }),
-  steamSync: () => api.post<{ skipped: boolean; games: number; newAchievements: number }>("/integrations/steam/sync"),
+  steamSync: () => api.post<{ skipped: boolean; games: number; newAchievements: number; pendingAchievements?: number }>("/integrations/steam/sync"),
+  steamAchSync: (force = false) => api.post<{ checked: number; newAchievements: number; pending: number }>("/integrations/steam/achievements/sync", { force }),
+  steamGame: (appid: number) => api.get<SteamGameDetail>(`/integrations/steam/games/${appid}`),
   steamSettings: (p: Partial<NonNullable<SteamOverview["account"]>["settings"]>) => api.put<{ ok: true }>("/integrations/steam/settings", p),
   steamPin: (appid: number, apiName: string, pin: boolean) => api.post<{ ok: true }>("/integrations/steam/trophies", { appid, apiName, pin }),
   steamDisconnect: (deleteData: boolean) => api.post<{ ok: true }>("/integrations/steam/disconnect", { deleteData }),
