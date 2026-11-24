@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import clsx from "clsx";
 import { BookOpen, Building2, Compass, Download, Footprints, Landmark, LocateFixed, Lock, MapPin, Navigation, Route, Search, Shield, Star, Trash2, Trees, Utensils, Mountain, ShoppingBag, Theater, Church, Trophy, Camera } from "lucide-react";
-import { RPGButton, RPGSwitch, RPGToast } from "@/components/rpg";
+import { RPGButton, RPGSwitch, RPGTabs, RPGToast } from "@/components/rpg";
 import { Modal } from "@/components/ui/Modal";
 import { useAtlas, useAtlasActions } from "@/hooks/useAdventures";
+import { useLivingWorld } from "@/hooks/useLivingWorld";
+import { getSprite } from "@/components/living-world/engine/sprites";
+import { DEFAULT_AVATAR_LOOK, normalizeLook } from "@/components/living-world/engine/looks";
 import { adventuresService, type AtlasOverview, type AtlasPlace, type PlaceSearchResult } from "@/services/adventuresService";
 import { AdventureHeader, BackToWorld, EmptyNote, INPUT, PageError, PageSkeleton, Panel, R, StatusPill, ago, errMsg, fmtDay, nf, Spinner } from "@/components/adventures/AdventureKit";
 
@@ -25,14 +29,86 @@ const CATEGORY: Record<string, { label: string; icon: typeof MapPin; color: stri
 };
 const CATS = Object.keys(CATEGORY);
 
-function pinIcon(color: string, star: boolean) {
+/** Título de explorador derivado do número real de lugares descobertos. */
+const TIERS = [
+  { min: 0, name: "Forasteiro" },
+  { min: 1, name: "Novato do Atlas" },
+  { min: 5, name: "Andarilho" },
+  { min: 15, name: "Explorador" },
+  { min: 40, name: "Desbravador" },
+  { min: 100, name: "Cartógrafo Lendário" },
+];
+const MAP_STYLES = [
+  { key: "pergaminho", label: "Pergaminho" },
+  { key: "noite", label: "Noite" },
+  { key: "padrao", label: "Padrão" },
+] as const;
+type MapStyle = (typeof MAP_STYLES)[number]["key"];
+// Filtros só nos tiles (marcadores e névoa mantêm as cores).
+const MAP_CSS = `.atlas-pergaminho .leaflet-tile-pane{filter:sepia(.55) saturate(1.25) hue-rotate(-12deg) brightness(.92) contrast(1.05)}
+.atlas-noite .leaflet-tile-pane{filter:invert(.92) hue-rotate(195deg) saturate(.7) brightness(.85) contrast(.9)}
+.atlas-map .leaflet-container{background:#1b1638}`;
+const ACH_METRIC: Record<string, keyof AtlasOverview["progress"]> = { atlas_first: "places", atlas_urban: "places", atlas_hoods: "neighborhoods", atlas_regional: "cities", atlas_nomad: "states", atlas_carto: "cells" };
+
+function pinIcon(category: string, star: boolean) {
+  const C = CATEGORY[category] ?? CATEGORY.outro!;
+  const icon = renderToStaticMarkup(<C.icon size={14} color="#1d1a24" strokeWidth={2.5} />);
   return L.divIcon({
     className: "",
-    html: `<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #1d1a24;box-shadow:0 0 10px ${color}"><div style="transform:rotate(45deg);text-align:center;line-height:22px;font-size:12px">${star ? "★" : "●"}</div></div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 26],
-    popupAnchor: [0, -24],
+    html: `<div style="position:relative;width:32px;height:40px">
+      <div style="position:absolute;left:2px;top:0;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:linear-gradient(135deg,${C.color},#ffffff55);border:2px solid #1d1a24;box-shadow:0 0 12px ${C.color}"></div>
+      <div style="position:absolute;left:2px;top:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
+      ${star ? '<div style="position:absolute;right:-4px;top:-6px;color:#F1C66A;font-size:14px;text-shadow:0 0 4px #000">★</div>' : ""}
+      <div style="position:absolute;left:11px;bottom:0;width:10px;height:4px;border-radius:50%;background:#0006"></div>
+    </div>`,
+    iconSize: [32, 40],
+    iconAnchor: [9, 36],
+    popupAnchor: [7, -34],
   });
+}
+
+/** Marcador do explorador: o sprite do seu herói (mesmo visual da Vila). */
+function heroIcon(look: Parameters<typeof getSprite>[0]) {
+  let src = "";
+  try {
+    src = getSprite(look, "stand", 0, false).toDataURL();
+  } catch {
+    src = "";
+  }
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:44px;height:58px">
+      <div style="position:absolute;left:4px;bottom:0;width:36px;height:12px;border-radius:50%;background:radial-gradient(#59D4F8aa,#59D4F800 70%)"></div>
+      ${src ? `<img src="${src}" style="position:absolute;left:5px;bottom:4px;width:34px;height:48px;image-rendering:pixelated;filter:drop-shadow(0 0 4px #59D4F8)" alt="" />` : ""}
+    </div>`,
+    iconSize: [44, 58],
+    iconAnchor: [22, 54],
+  });
+}
+
+/** Textura de nuvens da névoa (gerada uma vez, sem imagens externas). */
+let cloudPattern: HTMLCanvasElement | null = null;
+function cloudCanvas() {
+  if (cloudPattern) return cloudPattern;
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d")!;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 70; i++) {
+    const x = rnd() * 256;
+    const y = rnd() * 256;
+    const r = 20 + rnd() * 60;
+    for (const [dx, dy] of [[0, 0], [256, 0], [-256, 0], [0, 256], [0, -256]] as const) {
+      const grd = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      grd.addColorStop(0, `rgba(${150 + rnd() * 60},${120 + rnd() * 40},255,0.16)`);
+      grd.addColorStop(1, "rgba(150,120,255,0)");
+      g.fillStyle = grd;
+      g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+    }
+  }
+  cloudPattern = c;
+  return c;
 }
 
 /**
@@ -58,13 +134,25 @@ function FogLayer({ cells, cellDeg }: { cells: string[]; cellDeg: number }) {
       canvas.height = size.y;
       L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
       const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "rgba(14,12,34,0.72)";
+      const grad = ctx.createLinearGradient(0, 0, size.x, size.y);
+      grad.addColorStop(0, "rgba(22,14,52,0.82)");
+      grad.addColorStop(1, "rgba(12,10,32,0.86)");
+      ctx.fillStyle = grad;
       ctx.fillRect(0, 0, size.x, size.y);
+      // Nuvens deslizam junto com o mapa (padrão ancorado na origem do mundo).
+      const origin = map.latLngToContainerPoint([0, 0]);
+      const pat = ctx.createPattern(cloudCanvas(), "repeat");
+      if (pat) {
+        pat.setTransform(new DOMMatrix().translate(origin.x % 256, origin.y % 256));
+        ctx.fillStyle = pat;
+        ctx.fillRect(0, 0, size.x, size.y);
+      }
       ctx.globalCompositeOperation = "destination-out";
       ctx.shadowColor = "black";
       ctx.shadowBlur = Math.max(6, Math.min(30, map.getZoom() * 1.6));
       ctx.fillStyle = "black";
       const b = map.getBounds().pad(0.2);
+      const visible: Array<[number, number, number, number]> = [];
       for (const c of cellsRef.current) {
         const [i, j] = c.split(":").map(Number) as [number, number];
         const s = i * cellDeg;
@@ -73,7 +161,16 @@ function FogLayer({ cells, cellDeg }: { cells: string[]; cellDeg: number }) {
         const p1 = map.latLngToContainerPoint([s + cellDeg, w]);
         const p2 = map.latLngToContainerPoint([s, w + cellDeg]);
         ctx.fillRect(p1.x - 1, p1.y - 1, p2.x - p1.x + 2, p2.y - p1.y + 2);
+        visible.push([p1.x, p1.y, p2.x - p1.x, p2.y - p1.y]);
       }
+      // Borda dourada: só pinta onde ainda há névoa (source-atop), contornando as áreas reveladas.
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.shadowColor = "rgba(241,198,106,0.9)";
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = "rgba(241,198,106,0.55)";
+      ctx.lineWidth = 2;
+      for (const [x, y, w, h] of visible) ctx.strokeRect(x, y, w, h);
+      ctx.shadowBlur = 0;
       ctx.globalCompositeOperation = "source-over";
     };
     const schedule = () => {
@@ -172,6 +269,9 @@ export function AtlasPage() {
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
   const notify = (msg: string, tone: "success" | "error" = "success") => setToast({ msg, tone });
   const [filter, setFilter] = useState<"todos" | "favoritos" | string>("todos");
+  const [mapStyle, setMapStyle] = useState<MapStyle>("pergaminho");
+  const world = useLivingWorld();
+  const heroMarker = useMemo(() => heroIcon(normalizeLook(world.data?.avatar ?? {}, DEFAULT_AVATAR_LOOK)), [world.data?.avatar]);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<PlaceSearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -326,6 +426,10 @@ export function AtlasPage() {
 
   const pr = o.progress;
   const pct = pr.region?.pct ?? 0;
+  const lastPlace = o.recent[0] ? o.places.find((p) => p.id === o.recent[0]!.placeId) ?? null : null;
+  const tierIdx = TIERS.reduce((acc, t, i) => (pr.places >= t.min ? i : acc), 0);
+  const tier = TIERS[tierIdx]!;
+  const nextTier = TIERS[tierIdx + 1] ?? null;
 
   return (
     <div className="space-y-4 px-3 py-4 sm:px-4 md:px-6">
@@ -355,24 +459,19 @@ export function AtlasPage() {
                   {searching ? <Spinner /> : <Search size={15} aria-hidden />}
                 </RPGButton>
               </form>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtros">
-                {[
-                  ["todos", "Todos"],
-                  ["favoritos", "★ Favoritos"],
-                ].map(([k, l]) => (
-                  <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k!)} className={clsx("border-2 px-2.5 py-1 text-xs", filter === k ? "border-rpg-purple text-rpg-text" : "border-rpg-border text-rpg-muted")} style={R}>
-                    {l}
-                  </button>
-                ))}
-                <select aria-label="Filtrar por categoria" value={CATS.includes(filter) ? filter : ""} onChange={(e) => setFilter(e.target.value || "todos")} className={clsx(INPUT, "py-1 text-xs")} style={R}>
-                  <option value="">Categoria…</option>
-                  {CATS.map((c) => (
-                    <option key={c} value={c}>
-                      {CATEGORY[c]!.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <RPGTabs<MapStyle> label="Estilo do mapa" size="sm" value={mapStyle} onChange={setMapStyle} tabs={MAP_STYLES.map((m) => ({ value: m.key, label: m.label }))} />
+            </div>
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Filtros">
+              {[
+                { k: "todos", l: "Todos", n: o.places.length, color: "#A875F5", Icon: MapPin },
+                { k: "favoritos", l: "Favoritos", n: o.places.filter((p) => p.favorite).length, color: "#F1C66A", Icon: Star },
+                ...CATS.filter((c) => o.places.some((p) => p.category === c)).map((c) => ({ k: c, l: CATEGORY[c]!.label, n: o.places.filter((p) => p.category === c).length, color: CATEGORY[c]!.color, Icon: CATEGORY[c]!.icon })),
+              ].map(({ k, l, n, color, Icon }) => (
+                <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={clsx("flex shrink-0 items-center gap-1.5 border-2 px-2.5 py-1 text-xs transition", filter === k ? "text-rpg-text" : "border-rpg-border text-rpg-muted hover:text-rpg-text")} style={{ ...R, borderColor: filter === k ? color : undefined, background: filter === k ? `${color}22` : undefined }}>
+                  <Icon size={12} style={{ color }} aria-hidden /> {l}
+                  <span className="rounded bg-rpg-bg-2 px-1 text-[10px] tabular-nums">{n}</span>
+                </button>
+              ))}
             </div>
             {results && results.length > 0 && (
               <ul className="max-h-48 overflow-auto border border-rpg-border bg-rpg-bg-2" style={R}>
@@ -389,7 +488,8 @@ export function AtlasPage() {
                 ))}
               </ul>
             )}
-            <div className={clsx("relative isolate z-0 h-[420px] overflow-hidden border-2 border-rpg-purple/50 sm:h-[480px]", picking && "cursor-crosshair")} style={R}>
+            <style>{MAP_CSS}</style>
+            <div className={clsx("atlas-map relative isolate z-0 h-[440px] overflow-hidden border-2 border-rpg-gold/50 shadow-[0_0_30px_rgba(168,117,245,.25)] sm:h-[520px]", `atlas-${mapStyle}`, picking && "cursor-crosshair")} style={R}>
               <MapContainer center={center} zoom={13} className="h-full w-full" scrollWheelZoom attributionControl>
                 <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
                 <FogLayer cells={o.cells} cellDeg={o.cellDeg} />
@@ -399,8 +499,9 @@ export function AtlasPage() {
                   <Polyline key={r.id} positions={r.points} pathOptions={{ color: "#59D4F8", weight: 3, dashArray: "6 6" }} />
                 ))}
                 {routeRec && routeRec.points.length > 1 && <Polyline positions={routeRec.points} pathOptions={{ color: "#4FD49A", weight: 4 }} />}
+                {lastPlace && <Marker position={[lastPlace.lat, lastPlace.lng]} icon={heroMarker} zIndexOffset={1000} interactive={false} />}
                 {places.map((p) => (
-                  <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon(CATEGORY[p.category]?.color ?? "#cfd6e6", p.favorite)}>
+                  <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon(p.category, p.favorite)}>
                     <Popup>
                       <PlacePopup p={p} onFav={() => a.updatePlace.mutate({ id: p.id, favorite: !p.favorite })} onRevisit={() => setDraft({ ...draftFrom({ ...p, osmRef: null }, "manual") })} onDelete={() => a.deletePlace.mutate(p.id, { onSuccess: () => notify("Lugar removido e névoa recalculada.") })} />
                     </Popup>
@@ -446,30 +547,35 @@ export function AtlasPage() {
             </div>
           </section>
 
-          <Panel title={`Lugares descobertos (${pr.places})`} icon={<Landmark size={17} className="text-rpg-gold" aria-hidden />}>
+          <Panel title={`Lugares descobertos (${places.length}${filter !== "todos" ? ` de ${pr.places}` : ""})`} icon={<Landmark size={17} className="text-rpg-gold" aria-hidden />}>
             {o.places.length === 0 ? (
               <EmptyNote>Nenhum lugar ainda. Cada check-in vira uma descoberta com XP.</EmptyNote>
             ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {o.places.slice(0, 8).map((p) => {
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {places.slice(0, 12).map((p) => {
                   const C = CATEGORY[p.category] ?? CATEGORY.outro!;
                   return (
-                    <button key={p.id} type="button" onClick={() => setFly([p.lat, p.lng])} className="rpg-tile overflow-hidden p-0 text-left hover:brightness-110">
-                      <div className="flex h-16 items-center justify-center" style={{ background: `linear-gradient(135deg, ${C.color}55, #1d1a2490)` }}>
-                        <C.icon size={28} style={{ color: C.color }} aria-hidden />
-                        {p.favorite && <Star size={14} className="ml-1 text-rpg-gold" fill="currentColor" aria-label="favorito" />}
-                      </div>
-                      <div className="p-2">
-                        <p className="truncate text-sm font-semibold text-rpg-text">{p.name}</p>
-                        <p className="truncate text-[11px] text-rpg-muted">{[p.neighborhood, p.city].filter(Boolean).join(", ") || "Local sem endereço"}</p>
-                        <p className="mt-1 flex items-center justify-between text-[10px]">
-                          <span className="border border-rpg-border px-1.5" style={R}>
+                    <article key={p.id} className="rpg-tile group relative overflow-hidden p-0 transition hover:-translate-y-0.5">
+                      <button type="button" onClick={() => setFly([p.lat, p.lng])} className="block w-full text-left" aria-label={`Ver ${p.name} no mapa`}>
+                        <div className="relative flex h-24 items-center justify-center overflow-hidden" style={{ background: `radial-gradient(circle at 30% 20%, ${C.color}88, transparent 60%), linear-gradient(135deg, ${C.color}44, #1d1a24 85%)` }}>
+                          <C.icon size={40} style={{ color: C.color, filter: `drop-shadow(0 0 10px ${C.color})` }} className="transition group-hover:scale-110" aria-hidden />
+                          <span className="absolute bottom-1.5 left-2 border border-white/20 bg-black/40 px-1.5 text-[10px] text-white backdrop-blur-sm" style={R}>
                             {C.label}
                           </span>
-                          <span className="text-rpg-muted">{p.visits} visita(s)</span>
-                        </p>
-                      </div>
-                    </button>
+                          <span className="absolute bottom-1.5 right-2 border border-white/20 bg-black/40 px-1.5 text-[10px] text-white backdrop-blur-sm" style={R}>
+                            {p.visits} visita(s)
+                          </span>
+                        </div>
+                        <div className="p-2.5">
+                          <p className="truncate font-semibold text-rpg-text">{p.name}</p>
+                          <p className="truncate text-[11px] text-rpg-muted">{[p.neighborhood, p.city].filter(Boolean).join(", ") || "Local sem endereço"}</p>
+                          <p className="text-[10px] text-rpg-muted">Descoberto {ago(p.firstVisitAt)}</p>
+                        </div>
+                      </button>
+                      <button type="button" onClick={() => a.updatePlace.mutate({ id: p.id, favorite: !p.favorite })} aria-pressed={p.favorite} aria-label={p.favorite ? "Desfavoritar" : "Favoritar"} className={clsx("absolute right-2 top-2 rounded-full bg-black/40 p-1 backdrop-blur-sm", p.favorite ? "text-rpg-gold" : "text-white/70 hover:text-white")}>
+                        <Star size={15} fill={p.favorite ? "currentColor" : "none"} />
+                      </button>
+                    </article>
                   );
                 })}
               </div>
@@ -478,51 +584,101 @@ export function AtlasPage() {
         </div>
 
         <aside className="space-y-4">
-          <Panel title="Progresso de Exploração" icon={<Compass size={17} className="text-rpg-purple" aria-hidden />}>
-            <div className="flex items-center gap-4">
-              <div className="relative h-24 w-24 shrink-0" role="img" aria-label={pr.region ? `${pct}% de ${pr.region.city}` : "Sem região de referência"}>
+          <section className="rpg-panel overflow-hidden p-0" aria-label="Progresso de exploração">
+            <div className="bg-gradient-to-br from-violet-900/70 via-indigo-900/50 to-emerald-900/40 p-4">
+              <p className="text-[11px] uppercase tracking-wider text-rpg-gold-light">Título de explorador</p>
+              <p className="font-rpg text-2xl font-bold text-rpg-text">{tier.name}</p>
+              {nextTier ? (
+                <>
+                  <div className="mt-2 h-2 overflow-hidden bg-black/30" style={R}>
+                    <div className="h-full bg-gradient-to-r from-amber-300 to-yellow-200" style={{ width: `${((pr.places - tier.min) / (nextTier.min - tier.min)) * 100}%` }} />
+                  </div>
+                  <p className="mt-1 text-[11px] text-rpg-muted">
+                    {pr.places}/{nextTier.min} lugares para virar <strong className="text-rpg-text">{nextTier.name}</strong>
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] text-rpg-gold-light">Título máximo alcançado!</p>
+              )}
+            </div>
+            <div className="flex items-center gap-4 p-4">
+              <div className="relative h-28 w-28 shrink-0" role="img" aria-label={pr.region ? `${pct}% de ${pr.region.city}` : "Sem região de referência"}>
                 <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
-                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="#2a2740" strokeWidth="4" />
-                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="#4FD49A" strokeWidth="4" strokeDasharray={`${Math.min(100, pct) * 0.974} 100`} />
+                  <defs>
+                    <linearGradient id="atlasRing" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#4FD49A" />
+                      <stop offset="100%" stopColor="#59D4F8" />
+                    </linearGradient>
+                  </defs>
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="#2a2740" strokeWidth="3.5" />
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="url(#atlasRing)" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.max(pct > 0 ? 2 : 0, Math.min(100, pct)) * 0.974} 100`} style={{ filter: "drop-shadow(0 0 3px #4FD49A)" }} />
                 </svg>
-                <span className="absolute inset-0 flex items-center justify-center font-rpg text-xl font-bold text-rpg-text">{pr.region ? `${pct}%` : "—"}</span>
+                <span className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="font-rpg text-xl font-bold text-rpg-text">{pr.region ? `${pct}%` : "—"}</span>
+                  <span className="text-[9px] text-rpg-muted">{pr.region?.city ?? "região"}</span>
+                </span>
               </div>
-              <ul className="min-w-0 flex-1 space-y-1 text-xs">
-                <li className="flex justify-between"><span className="text-rpg-muted">Área revelada</span><span className="font-semibold text-rpg-text">{nf(pr.areaKm2)} km²</span></li>
-                <li className="flex justify-between"><span className="text-rpg-muted">Lugares descobertos</span><span className="font-semibold text-rpg-text">{pr.places}</span></li>
-                <li className="flex justify-between"><span className="text-rpg-muted">Cidades visitadas</span><span className="font-semibold text-rpg-text">{pr.cities}</span></li>
-                <li className="flex justify-between"><span className="text-rpg-muted">Bairros explorados</span><span className="font-semibold text-rpg-text">{pr.neighborhoods}</span></li>
-                <li className="flex justify-between"><span className="text-rpg-muted">Estados / países</span><span className="font-semibold text-rpg-text">{pr.states} / {pr.countries}</span></li>
-                <li className="flex justify-between"><span className="text-rpg-muted">Rotas registradas</span><span className="font-semibold text-rpg-text">{pr.routes}{pr.routeKm ? ` · ${nf(pr.routeKm)} km` : ""}</span></li>
-              </ul>
-            </div>
-            {pr.region ? (
-              <p className="mt-2 text-[11px] text-rpg-muted">
-                {pct}% = {nf(pr.region.revealedCells)} de {nf(pr.region.totalCells)} células de ~500 m dentro do retângulo de {pr.region.city}. Cada check-in revela ~1,4 km ao redor.
-              </p>
-            ) : (
-              <p className="mt-2 text-[11px] text-rpg-muted">A porcentagem aparece depois do primeiro lugar com cidade identificada.</p>
-            )}
-            {pr.regions.length > 1 && (
-              <select aria-label="Região de referência" value={pr.region?.key ?? ""} onChange={(e) => setRegion(e.target.value || null)} className={clsx(INPUT, "mt-2 w-full py-1 text-xs")} style={R}>
-                {pr.regions.map((r) => (
-                  <option key={r.key} value={r.key}>
-                    {r.label} ({r.places})
-                  </option>
+              <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
+                {[
+                  { l: "Área revelada", v: `${nf(pr.areaKm2)} km²`, c: "text-rpg-green" },
+                  { l: "Lugares", v: pr.places, c: "text-rpg-gold-light" },
+                  { l: "Bairros", v: pr.neighborhoods, c: "text-rpg-cyan" },
+                  { l: "Cidades", v: pr.cities, c: "text-rpg-purple" },
+                  { l: "Estados/países", v: `${pr.states}/${pr.countries}`, c: "text-rpg-pink" },
+                  { l: "Rotas", v: pr.routeKm ? `${pr.routes} · ${nf(pr.routeKm)} km` : pr.routes, c: "text-rpg-blue" },
+                ].map((x) => (
+                  <div key={x.l} className="rpg-tile px-2 py-1.5">
+                    <p className={clsx("font-rpg text-base font-bold leading-tight", x.c)}>{x.v}</p>
+                    <p className="text-[10px] text-rpg-muted">{x.l}</p>
+                  </div>
                 ))}
-              </select>
-            )}
-          </Panel>
-
-          <Panel title="Conquistas do Atlas" icon={<Trophy size={17} className="text-rpg-gold" aria-hidden />}>
-            <div className="grid grid-cols-4 gap-1.5">
-              {o.achievements.slice(0, 8).map((x) => (
-                <div key={x.code} className={clsx("flex flex-col items-center border-2 p-1.5 text-center", x.unlockedAt ? "border-rpg-gold/70 bg-rpg-gold/10" : "border-rpg-border/60 opacity-60")} style={R} title={x.description}>
-                  {x.unlockedAt ? <Shield size={20} className="text-rpg-gold" aria-hidden /> : <Lock size={18} className="text-rpg-muted" aria-hidden />}
-                  <span className="text-[10px] leading-tight text-rpg-text">{x.title}</span>
-                </div>
-              ))}
+              </div>
             </div>
+            <div className="px-4 pb-4">
+              {pr.region ? (
+                <p className="text-[11px] text-rpg-muted">
+                  {pct}% = {nf(pr.region.revealedCells)} de {nf(pr.region.totalCells)} células de ~500 m dentro do retângulo de {pr.region.city}. Cada check-in revela ~1,4 km ao redor.
+                </p>
+              ) : (
+                <p className="text-[11px] text-rpg-muted">A porcentagem aparece depois do primeiro lugar com cidade identificada.</p>
+              )}
+              {pr.regions.length > 1 && (
+                <select aria-label="Região de referência" value={pr.region?.key ?? ""} onChange={(e) => setRegion(e.target.value || null)} className={clsx(INPUT, "mt-2 w-full py-1 text-xs")} style={R}>
+                  {pr.regions.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.label} ({r.places})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </section>
+
+          <Panel title="Conquistas do Atlas" icon={<Trophy size={17} className="text-rpg-gold" aria-hidden />} action={<span className="text-[11px] text-rpg-muted">{o.achievements.filter((x) => x.unlockedAt).length}/{o.achievements.length}</span>}>
+            <ul className="space-y-1.5">
+              {o.achievements.map((x) => {
+                const metric = ACH_METRIC[x.code];
+                const value = metric ? Number(pr[metric] ?? 0) : 0;
+                const done = Boolean(x.unlockedAt) || value >= x.threshold;
+                return (
+                  <li key={x.code} className={clsx("rpg-tile flex items-center gap-2.5 p-2", done && "border-rpg-gold/60 bg-rpg-gold/5")} title={x.description}>
+                    <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center border-2", done ? "border-rpg-gold bg-rpg-gold/15 text-rpg-gold" : "border-rpg-border text-rpg-muted")} style={{ borderRadius: 8, transform: "rotate(45deg)" }}>
+                      <span style={{ transform: "rotate(-45deg)" }}>{done ? <Shield size={16} aria-hidden /> : <Lock size={14} aria-hidden />}</span>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-rpg-text">{x.title}</p>
+                      <p className="truncate text-[10px] text-rpg-muted">{x.description}</p>
+                      {!done && (
+                        <div className="mt-1 h-1 overflow-hidden bg-rpg-bg-2" style={R}>
+                          <div className="h-full bg-gradient-to-r from-violet-400 to-cyan-300" style={{ width: `${Math.min(100, (value / x.threshold) * 100)}%` }} />
+                        </div>
+                      )}
+                    </div>
+                    <span className={clsx("text-[11px] font-bold tabular-nums", done ? "text-rpg-gold" : "text-rpg-muted")}>{done ? "✓" : `${nf(Math.min(value, x.threshold))}/${nf(x.threshold)}`}</span>
+                  </li>
+                );
+              })}
+            </ul>
           </Panel>
 
           <Panel title="Últimas explorações" icon={<Navigation size={17} className="text-rpg-cyan" aria-hidden />}>
