@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, FileText, X } from "lucide-rea
 import { openDataUriInNewTab } from "@/utils/files";
 
 /**
- * Carrossel de mídias reutilizável (Diário, anexos de Tarefas e Documentos
+ * Carrossel de mídias reutilizável (anexos de Tarefas e Documentos
  * de Projeto). Suporta imagem, vídeo e PDF; navegação por setas, teclado
  * (← →), pontos e gesto de arrastar no celular. As animações respeitam
  * "reduzir movimento" do sistema (o motion desliga transições sozinho
@@ -170,7 +170,7 @@ export function MediaCarousel({
 
 /**
  * Visualizador em tela cheia com o carrossel + painel lateral opcional
- * (no Diário, é onde o usuário lê/edita a história de cada mídia).
+ * (onde o usuário lê/edita a história de cada mídia).
  */
 export function MediaLightbox({
   items,

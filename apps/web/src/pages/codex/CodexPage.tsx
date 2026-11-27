@@ -158,9 +158,6 @@ export function CodexPage() {
               <Link to="/habitos" className="rpg-btn rpg-btn-secondary">
                 Cumprir um hábito
               </Link>
-              <Link to="/diario" className="rpg-btn rpg-btn-secondary">
-                Escrever no Diário
-              </Link>
             </div>
           </div>
         </RPGPanel>

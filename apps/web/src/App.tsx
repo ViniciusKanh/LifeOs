@@ -99,7 +99,6 @@ const CompanheiroPage = lazy(() => import("@/pages/aventuras/CompanheiroPage").t
 const AtlasPage = lazy(() => import("@/pages/aventuras/AtlasPage").then((m) => ({ default: m.AtlasPage })));
 const TempoDeJogoPage = lazy(() => import("@/pages/aventuras/TempoDeJogoPage").then((m) => ({ default: m.TempoDeJogoPage })));
 const BibliotecaMestradoPage = lazy(() => import("@/pages/biblioteca-mestrado/BibliotecaMestradoPage").then((m) => ({ default: m.BibliotecaMestradoPage })));
-const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
 const AdministracaoPage = lazy(() => import("@/pages/administracao/AdministracaoPage").then((m) => ({ default: m.AdministracaoPage })));
 const RevisoesPage = lazy(() => import("@/pages/revisoes/RevisoesPage").then((m) => ({ default: m.RevisoesPage })));
 const CompartilharPage = lazy(() => import("@/pages/compartilhar/CompartilharPage").then((m) => ({ default: m.CompartilharPage })));
@@ -221,11 +220,12 @@ export default function App() {
           <Route path="/strava" element={<Navigate to="/saude" replace />} />
           <Route path="/trilha-sonora" element={<Navigate to="/meu-mundo" replace />} />
           <Route path="/tempo-de-jogo" element={<TempoDeJogoPage />} />
-          <Route path="/diario" element={<DiarioPage />} />
+          {/* O Diário foi removido: links antigos caem em Hoje. */}
+          <Route path="/diario" element={<Navigate to="/hoje" replace />} />
           <Route path="/administracao" element={<AdministracaoPage />} />
           <Route path="/direcao" element={<Navigate to="/metas" replace />} />
           <Route path="/revisoes" element={<RevisoesPage />} />
-          <Route path="/notas" element={<Navigate to="/diario" replace />} />
+          <Route path="/notas" element={<Navigate to="/hoje" replace />} />
           <Route path="/compartilhar" element={<CompartilharPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route

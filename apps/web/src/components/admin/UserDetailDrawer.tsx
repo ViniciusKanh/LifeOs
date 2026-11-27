@@ -91,7 +91,7 @@ const ACTION_COPY: Record<ActionKey, { title: string; confirm: string; danger?: 
   revoke: { title: "Encerrar todas as sessões", confirm: "A pessoa será desconectada de todos os dispositivos e precisará entrar de novo." },
   delete: {
     title: "Excluir conta",
-    confirm: "Todos os dados desta conta (tarefas, hábitos, saúde, diário, mídias…) serão apagados permanentemente. Não é possível desfazer.",
+    confirm: "Todos os dados desta conta (tarefas, hábitos, saúde, mídias…) serão apagados permanentemente. Não é possível desfazer.",
     danger: true,
   },
 };

@@ -283,7 +283,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
             <Link to="/privacidade" target="_blank" className="font-semibold text-[var(--auth-accent)] hover:underline">
               Política de Privacidade
             </Link>
-            , inclusive o tratamento de dados de saúde e do Diário para as funções do app.
+            , inclusive o tratamento de dados de saúde para as funções do app.
           </span>
         </label>
         {errors.acceptTerms && <p className="text-xs text-drop px-1">{errors.acceptTerms.message}</p>}

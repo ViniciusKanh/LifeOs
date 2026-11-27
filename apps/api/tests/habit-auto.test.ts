@@ -22,7 +22,6 @@ describe("Hábitos automáticos", () => {
     expect(meetsThreshold("water", 0, null)).toBe(false);
     expect(meetsThreshold("water", 1500, 2000)).toBe(false);
     expect(meetsThreshold("water", 2000, 2000)).toBe(true);
-    expect(meetsThreshold("journal", 1, 99)).toBe(true);
     expect(meetsThreshold("workout", 10, null)).toBe(true);
   });
 

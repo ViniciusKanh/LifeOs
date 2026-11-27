@@ -3,24 +3,21 @@ import { GAMIFICATION_RULES } from "../config/gamification.js";
 import { getCalendarItems } from "./calendarAggregationService.js";
 import { notifyFromAutomation } from "./automationService.js";
 import { award } from "./gamificationService.js";
-import { ensureJournalEntryId } from "./journalService.js";
 import { localDayOfStored, shiftDayKey, userDayContext } from "./localDayService.js";
 import { findConflicts } from "./planningHubService.js";
 import { getTavernSummary } from "./tavernService.js";
 import { getTodayHub } from "./todayHubService.js";
 import { predictionsFor } from "./forgeService.js";
 import { insertManualEvent } from "./eventWriteService.js";
-import { plainText } from "./chronicleLabService.js";
+import { queueSuggestions } from "./grimoireHubService.js";
 
 /**
  * Taverna 3.0 — ritual de fim do dia (camada derivada).
  *
  * Fontes oficiais: Hoje (XP, moedas, missões, hábitos, foco, Life Score),
- * life_scores (comparação), Diário (journal_entries: texto, reflexão,
- * aprendizado, gratidão, intenção), Saúde (humor via /health/mood), Agenda,
- * Missões e Forja (previsões de modelos ATIVOS). O ritual guarda só as notas
- * próprias da Taverna e as etapas; o que é do Diário vai para o Diário (sem
- * entrada duplicada). A recompensa de encerramento é idempotente por dia.
+ * life_scores (comparação), Saúde (humor via /health/mood), Agenda,
+ * Missões e Forja (previsões de modelos ATIVOS). O ritual guarda as notas
+ * próprias da Taverna e as etapas. A recompensa de encerramento é idempotente por dia.
  */
 
 export class Tavern3Error extends Error {
@@ -127,12 +124,11 @@ async function tavernInsights(db: Client, ownerId: string, today: string, tz: st
 export async function getTavern3(db: Client, ownerId: string) {
   const { tz, today } = await userDayContext(db, ownerId);
   const tomorrow = shiftDayKey(today, 1);
-  const [hub, legacy, ritualR, required, journalR, lifeR, achR, agenda, insights, forecasts, historyR] = await Promise.all([
+  const [hub, legacy, ritualR, required, lifeR, achR, agenda, insights, forecasts, historyR] = await Promise.all([
     getTodayHub(db, ownerId),
     getTavernSummary(db, ownerId),
     db.execute({ sql: "SELECT * FROM tavern_rituals WHERE owner_id = ? AND day_key = ?", args: [ownerId, today] }),
     settingsOf(db, ownerId),
-    db.execute({ sql: "SELECT thoughts, gratitude, night_takeaway, closing_reflection, closing_learning, closing_pending, self_care_other, updated_at FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, today] }),
     db.execute({ sql: "SELECT score_date, overall_score, productivity, health, habits, goals, reading, education, professional FROM life_scores WHERE owner_id = ? AND score_date >= ? AND score_date < ?", args: [ownerId, shiftDayKey(today, -7), today] }),
     db.execute({
       sql: `SELECT a.id, a.code, a.title, a.description, a.icon, a.tier, ua.unlocked_at FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id
@@ -145,7 +141,6 @@ export async function getTavern3(db: Client, ownerId: string) {
     db.execute({ sql: "SELECT * FROM tavern_rituals WHERE owner_id = ? AND day_key < ? ORDER BY day_key DESC LIMIT 60", args: [ownerId, today] }),
   ]);
   const ritual = parseRitual(ritualR.rows[0] as unknown as Row | undefined, today);
-  const j = journalR.rows[0] as unknown as Row | undefined;
   const avg = Object.fromEntries(
     DIMS.map((d) => {
       const vals = (lifeR.rows as unknown as Row[]).map((r) => r[d]).filter((v) => v != null).map(Number);
@@ -181,16 +176,6 @@ export async function getTavern3(db: Client, ownerId: string) {
       method: "Mesma metodologia oficial do Life Score (Hoje, Painel do Herói e Analytics). A média usa os snapshots dos 7 dias anteriores que existem.",
       details: legacy.balance,
       signals: hub.signals,
-    },
-    journal: {
-      thoughts: j?.thoughts ? String(j.thoughts) : "",
-      words: plainText(j?.thoughts).split(/\s+/).filter(Boolean).length,
-      gratitude: J<string[]>(j?.gratitude, []),
-      reflection: j?.closing_reflection ? String(j.closing_reflection) : "",
-      learning: j?.closing_learning ? String(j.closing_learning) : "",
-      pending: j?.closing_pending ? String(j.closing_pending) : "",
-      intention: j?.night_takeaway ? String(j.night_takeaway) : "",
-      updatedAt: j?.updated_at ? String(j.updated_at) : null,
     },
     mood: hub.signals.mood,
     achievements: (achR.rows as unknown as Row[])
@@ -229,31 +214,6 @@ export async function saveRitual(db: Client, ownerId: string, patch: Partial<Rec
   if (patch.priorities) (sets.push("priorities_json = ?"), args.push(JSON.stringify(patch.priorities.slice(0, 5))));
   if (sets.length) await db.execute({ sql: `UPDATE tavern_rituals SET ${sets.join(", ")}, updated_at = datetime('now') WHERE owner_id = ? AND day_key = ?`, args: [...args, ownerId, today] });
   return parseRitual((await db.execute({ sql: "SELECT * FROM tavern_rituals WHERE owner_id = ? AND day_key = ?", args: [ownerId, today] })).rows[0] as unknown as Row, today);
-}
-
-/**
- * Escreve só os campos indicados na entrada de hoje do Diário (cria a entrada
- * se não existir). Com `baseUpdatedAt`, recusa se o Diário mudou em outro lugar.
- */
-export async function saveJournalFields(db: Client, ownerId: string, f: { thoughts?: string; reflection?: string; learning?: string; pending?: string; intention?: string; gratitude?: string[]; baseUpdatedAt?: string | null }) {
-  const { today } = await userDayContext(db, ownerId);
-  const id = await ensureJournalEntryId(db, ownerId, today);
-  if (f.baseUpdatedAt) {
-    const cur = await db.execute({ sql: "SELECT updated_at FROM journal_entries WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
-    if (cur.rows[0] && String(cur.rows[0].updated_at) > f.baseUpdatedAt) throw new Tavern3Error(409, "A crônica de hoje foi alterada em outro lugar. Recarregue antes de salvar.");
-  }
-  const map: Array<[keyof typeof f, string]> = [["thoughts", "thoughts"], ["reflection", "closing_reflection"], ["learning", "closing_learning"], ["pending", "closing_pending"], ["intention", "night_takeaway"]];
-  const sets: string[] = [];
-  const args: Array<string | null> = [];
-  for (const [k, c] of map) {
-    const v = f[k];
-    if (typeof v === "string") (sets.push(`${c} = ?`), args.push(v.slice(0, k === "thoughts" ? 40000 : 4000)));
-  }
-  if (f.gratitude) (sets.push("gratitude = ?"), args.push(JSON.stringify(f.gratitude.map((g) => g.trim().slice(0, 300)).filter(Boolean).slice(0, 10))));
-  if (!sets.length) return null;
-  await db.execute({ sql: `UPDATE journal_entries SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`, args: [...args, id, ownerId] });
-  const r = await db.execute({ sql: "SELECT updated_at FROM journal_entries WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
-  return { updatedAt: String(r.rows[0]?.updated_at ?? "") };
 }
 
 export async function setRequiredSteps(db: Client, ownerId: string, steps: StepKey[]) {
@@ -329,5 +289,24 @@ export async function runTomorrowPrep(db: Client, ownerId: string, config: Recor
   if (!parts.length) return { status: "skipped", summary: "Nada a preparar para amanhã." };
   await notifyFromAutomation(db, ownerId, { eventType: "tavern_prep", title: "🗓️ Preparar amanhã", body: parts.join(" · "), url: "/taverna?aba=amanha", inApp: config.inApp !== false, push: config.push === true });
   return { status: "ok", summary: parts.join(" · ") };
+}
+
+/**
+ * Aprendizado do ritual → sugestão de cartão na fila de aprovação do Grimório
+ * (nada entra no baralho sem o usuário aprovar). Antes passava pelo Diário.
+ */
+export async function learningToGrimoire(db: Client, ownerId: string, text: string) {
+  const clean = text.trim().slice(0, 2000);
+  if (clean.length < 5) throw new Tavern3Error(400, "Escreva o aprendizado antes de enviar.");
+  const { today } = await userDayContext(db, ownerId);
+  const br = `${today.slice(8, 10)}/${today.slice(5, 7)}/${today.slice(0, 4)}`;
+  const added = await queueSuggestions(db, ownerId, {
+    deckId: null,
+    sourceKind: "text",
+    sourceRef: `taverna:${today}`,
+    sourceLabel: `Taverna ${br}`,
+    cards: [{ front: `Aprendizado de ${br}: ${clean.split(/\s+/).slice(0, 6).join(" ")}…`, back: clean }],
+  });
+  return { added };
 }
 

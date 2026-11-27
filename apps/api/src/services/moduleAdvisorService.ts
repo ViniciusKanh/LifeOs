@@ -4,7 +4,7 @@ import { generateText, getGeminiConfig } from "./geminiService.js";
 import { getBankHub } from "./bankHubService.js";
 import { getEducationHub } from "./educationHubService.js";
 import { getHealthHub } from "./healthHubService.js";
-import { getChronicleHub, getLabHub } from "./chronicleLabService.js";
+import { getLabHub } from "./chronicleLabService.js";
 import { getBuildOverview } from "./characterBuildService.js";
 import { listAchievements } from "./achievementsService.js";
 import { getTreasureHub } from "./heroHubService.js";
@@ -27,7 +27,7 @@ import { getAgendaHub, getCouncilHub, getGuildHub, getMissionsHub } from "./plan
  * investir, criar tarefas etc. continua exigindo um clique do usuário.
  */
 
-export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "diary" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin" | "today" | "contracts" | "tavern" | "forge";
+export type AdvisorModule = "bank" | "education" | "health" | "agenda" | "council" | "missions" | "quests" | "lab" | "hero" | "treasure" | "habits" | "library" | "admin" | "today" | "contracts" | "tavern" | "forge";
 export interface AdvisorItem {
   kind: "dado" | "inferencia" | "sugestao";
   text: string;
@@ -48,7 +48,6 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   council: "Plano proposto a partir dos seus registros; você decide o que selar.",
   missions: "Subtarefas e prioridades sugeridas só são salvas com a sua aprovação.",
   quests: "As recompensas seguem as regras do Quadro de Avisos — a IA não cria quests nem XP.",
-  diary: "Leitura só com números e etiquetas do Diário (o texto das crônicas não é enviado). Não é avaliação psicológica.",
   lab: "Estudo pessoal observacional: sem prova de causa e efeito. Nada é criado sem a sua confirmação.",
   hero: "Leitura dos seus registros — não é teste de personalidade. Metas e missões só são criadas com a sua aprovação.",
   treasure: "Moedas virtuais do LifeOS. A IA só sugere: nenhum resgate acontece sem a sua confirmação.",
@@ -57,7 +56,7 @@ const DISCLAIMER: Record<AdvisorModule, string> = {
   admin: "Valores em dinheiro real são só informativos e não se misturam às moedas do LifeOS. Nada é pago ou cancelado automaticamente.",
   today: "Sugestões para o seu dia — nenhum compromisso ou tarefa é criado ou alterado sem a sua aprovação.",
   contracts: "Conselhos da Guilda — nenhum contrato é criado, alterado, cancelado ou selado sem a sua aprovação.",
-  tavern: "O Taverneiro só sugere: Diário, Agenda e Missões não são alterados sem a sua aprovação.",
+  tavern: "O Taverneiro só sugere: Agenda e Missões não são alterados sem a sua aprovação.",
   forge: "O Mestre da Inteligência lê apenas resultados reais da Forja. Ele não treina nem ativa modelos — isso é sempre uma ação sua.",
 };
 
@@ -170,24 +169,6 @@ async function questsFacts(db: Client, ownerId: string): Promise<{ items: Adviso
   if (h.notices.deadlines.length) items.push({ kind: "dado", text: `Prazo próximo: ${h.notices.deadlines[0]!.title} (${h.notices.deadlines[0]!.date.slice(8, 10)}/${h.notices.deadlines[0]!.date.slice(5, 7)}).` });
   if (h.notices.reviewsDue) items.push({ kind: "sugestao", text: `${h.notices.reviewsDue} cartão(ões) do Grimório para revisar hoje — costuma valer quest de estudo.` });
   return { items, insufficient: h.progress.dailyTotal === 0 };
-}
-
-async function diaryFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
-  // Privacidade: só contagens e etiquetas — nenhum trecho das crônicas vai para a IA.
-  const h = await getChronicleHub(db, ownerId);
-  const i = h.indicators;
-  const items: AdvisorItem[] = [
-    { kind: "dado", text: `Sequência atual: ${i.streak} dia(s) (recorde ${i.bestStreak}). ${h.insights.last30} crônica(s) nos últimos 30 dias, ${h.insights.prev30} nos 30 anteriores.` },
-    { kind: "dado", text: `${i.reflectionsClosed} dia(s) com fechamento e ${i.gratitudes} gratidão(ões) registradas.` },
-  ];
-  const best = [...h.insights.writingByWeekday].sort((a, b) => b.count - a.count)[0];
-  if (best && best.count > 0) items.push({ kind: "inferencia", text: `Dia da semana com mais crônicas nos últimos 90 dias: ${best.label}.` });
-  if (h.insights.themes.length) items.push({ kind: "dado", text: `Temas mais frequentes: ${h.insights.themes.slice(0, 4).map((t) => t.label).join(", ")}.` });
-  const pending = h.ritual.filter((r) => !r.done).map((r) => r.title.toLowerCase());
-  if (pending.length) items.push({ kind: "sugestao", text: `Ritual de hoje: falta ${pending.slice(0, 2).join(" e ")}.` });
-  if (!h.retrospectives.some((r) => r.savedAt)) items.push({ kind: "sugestao", text: "Experimente salvar uma retrospectiva semanal na aba Insights — ela é gerada só com o que você escreveu." });
-  if (h.insights.last30 < h.insights.prev30) items.push({ kind: "sugestao", text: "A frequência caiu em relação ao mês anterior. Um registro curto já mantém o hábito." });
-  return { items, insufficient: i.entries < 3 };
 }
 
 async function labFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
@@ -363,7 +344,6 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     council: () => councilFacts(db, ownerId),
     missions: () => missionsFacts(db, ownerId),
     quests: () => questsFacts(db, ownerId),
-    diary: () => diaryFacts(db, ownerId),
     lab: () => labFacts(db, ownerId),
     hero: () => heroFacts(db, ownerId),
     treasure: () => treasureFacts(db, ownerId),
@@ -389,7 +369,6 @@ export async function askAdvisor(db: Client, ownerId: string, module: AdvisorMod
     council: "Justifique cada recomendação com os números dados. Não presuma disponibilidade que não esteja nos fatos.",
     missions: "Não invente prazos ou estimativas; baseie a prioridade nos fatos.",
     quests: "Não invente quests, recompensas, participantes ou rankings.",
-    diary: "Você não tem acesso ao texto das crônicas, só a estatísticas. Não interprete sentimentos nem faça diagnósticos; não invente acontecimentos.",
     lab: "Diferencie correlação de causalidade, aponte amostras pequenas e fatores de confusão. Nunca diga que algo foi comprovado.",
     hero: "Não faça avaliação de personalidade; baseie-se nos atributos e números dados. Não crie metas nem tarefas, apenas sugira.",
     treasure: "Não invente recompensas, preços ou saldos. Não incentive gastar todas as moedas. Nunca fale de dinheiro real.",

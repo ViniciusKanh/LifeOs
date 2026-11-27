@@ -4,8 +4,8 @@ import { getDb } from "../db/client.js";
 /**
  * Restauração do próprio backup (GET /api/export/me) — item 8 da análise
  * de 27/10. Escopo V1, decidido com o usuário: só os módulos centrais
- * (tarefas, projetos, metas, hábitos, saúde, diário, biblioteca e
- * educação). Fora do V1, de propósito: fotos (journal_entry_media,
+ * (tarefas, projetos, metas, hábitos, saúde, biblioteca e
+ * educação). Fora do V1, de propósito: fotos (
  * task_attachments — tamanho), Guilda/convites e Banco/gamificação
  * (dados de/entre outros usuários ou derivados, não "dados pessoais"
  * no sentido de um backup).
@@ -26,7 +26,7 @@ import { getDb } from "../db/client.js";
  *   linha filha é ignorada (nunca falha a restauração inteira por causa
  *   de uma linha órfã).
  * - INSERT OR IGNORE em tudo: colisão de UNIQUE (ex.: habit_entries por
- *   dia, journal_entries por data) descarta só aquela linha, nunca
+ *   dia) descarta só aquela linha, nunca
  *   aborta o lote. O id só entra no mapa de remapeamento se a linha
  *   realmente foi inserida (rowsAffected > 0) — senão os filhos dela
  *   seriam órfãos de um pai fantasma.
@@ -92,33 +92,19 @@ const RESTORE_TABLES: RestoreTableSpec[] = [
   { table: "academic_deadlines", hasOwnId: true, columns: ["id","owner_id","education_id","subject_id","title","due_date","done","created_at"], fks: [{ column: "education_id", refTable: "educations", required: true }, { column: "subject_id", refTable: "subjects", required: false }] },
   { table: "study_sessions", hasOwnId: true, columns: ["id","owner_id","education_id","subject_id","occurred_at","duration_minutes","created_at"], fks: [{ column: "education_id", refTable: "educations", required: true }, { column: "subject_id", refTable: "subjects", required: false }] },
   { table: "semester_checklist", hasOwnId: true, columns: ["id","owner_id","education_id","title","done","due_date","position","created_at"], fks: [{ column: "education_id", refTable: "educations", required: true }] },
-  { table: "journals", hasOwnId: true, columns: ["id","owner_id","name","icon","color","description","sort_order","archived_at","created_at","updated_at"] },
-  { table: "journal_entries", hasOwnId: true, columns: ["id","owner_id","entry_date","intention","thoughts","gratitude","self_care","self_care_other","challenges","lighter_plan","feel_good","night_mood","night_helped","night_takeaway","focus_task_ids","created_at","updated_at","is_favorite","location_label","location_lat","location_lng","tags","ai_title","ai_summary","ai_categories","ai_organized_at","ai_highlights","ai_gratitude"],
+  {
+    // Foco do dia (missão principal): focus_task_ids é um array JSON de ids de tasks — remapeia, descartando quem não restaurou.
+    table: "day_focus",
+    hasOwnId: false,
+    columns: ["owner_id", "day_key", "focus_task_ids", "updated_at"],
     postProcess: (row, idMaps) => {
-      // focus_task_ids é um array JSON de ids de tasks — remapeia, descartando quem não restaurou.
-      if (typeof row.focus_task_ids === "string" && row.focus_task_ids) {
-        try {
-          const ids = JSON.parse(row.focus_task_ids as string);
-          if (Array.isArray(ids)) {
-            const taskMap = idMaps.get("tasks");
-            const remapped = ids.map((id) => taskMap?.get(String(id))).filter((id): id is string => !!id);
-            row.focus_task_ids = JSON.stringify(remapped);
-          }
-        } catch {
-          row.focus_task_ids = "[]";
-        }
+      try {
+        const ids = JSON.parse(String(row.focus_task_ids ?? "[]")) as unknown;
+        const taskMap = idMaps.get("tasks");
+        row.focus_task_ids = JSON.stringify(Array.isArray(ids) ? ids.map((id) => taskMap?.get(String(id))).filter((id): id is string => !!id) : []);
+      } catch {
+        row.focus_task_ids = "[]";
       }
-      return true;
-    },
-  },
-  { table: "journal_entry_journals", hasOwnId: false, columns: ["entry_id","journal_id"], fks: [{ column: "entry_id", refTable: "journal_entries", required: true }, { column: "journal_id", refTable: "journals", required: true }] },
-  { table: "journal_entry_links", hasOwnId: true, columns: ["id","entry_id","owner_id","target_type","target_id","created_at"], fks: [{ column: "entry_id", refTable: "journal_entries", required: true }],
-    postProcess: (row, idMaps) => {
-      // target_id aponta pra projects OU goals, dependendo de target_type (sem FK de banco) — remap manual, descarta se não resolver.
-      const targetTable = row.target_type === "project" ? "projects" : row.target_type === "goal" ? "goals" : null;
-      const resolved = targetTable ? idMaps.get(targetTable)?.get(String(row.target_id)) : undefined;
-      if (!resolved) return false;
-      row.target_id = resolved;
       return true;
     },
   },

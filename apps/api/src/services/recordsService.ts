@@ -8,7 +8,7 @@ import { collectDailyMetrics, type DailyMetric } from "./dailyMetricsService.js"
  * fuso do usuário. Tudo é derivado das fontes originais (nada é copiado).
  */
 
-export type RecordMetric = Extract<DailyMetric, "missions" | "workouts" | "workoutMinutes" | "pages" | "habits" | "xp" | "journal">;
+export type RecordMetric = Extract<DailyMetric, "missions" | "workouts" | "workoutMinutes" | "pages" | "habits" | "xp">;
 
 export const RECORD_METRICS: Array<{ key: RecordMetric; label: string; unit: string | null }> = [
   { key: "missions", label: "Missões concluídas", unit: null },
@@ -17,7 +17,6 @@ export const RECORD_METRICS: Array<{ key: RecordMetric; label: string; unit: str
   { key: "pages", label: "Páginas lidas", unit: "pág." },
   { key: "habits", label: "Hábitos cumpridos", unit: null },
   { key: "xp", label: "XP ganho", unit: "XP" },
-  { key: "journal", label: "Dias com diário", unit: "dias" },
 ];
 
 /** Quantas semanas para trás entram na busca do recorde. */

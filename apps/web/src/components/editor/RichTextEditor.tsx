@@ -20,12 +20,10 @@ import {
 } from "lucide-react";
 
 /**
- * Editor de texto rico do Diário (Fase 3 do modelo Apple Journal) — troca o
- * <textarea> simples pelos mesmos recursos básicos de formatação do app
- * Diário da Apple: negrito, itálico, sublinhado, tachado, listas, checklist,
- * citação e link. Guarda o conteúdo como HTML na mesma coluna TEXT que já
- * existia (journalService.ts sabe extrair texto puro dele pra contar
- * palavras e montar o preview do feed — nunca mostra HTML cru ao usuário).
+ * Editor de texto rico (TipTap) usado na Taverna e nas Revisões: negrito,
+ * itálico, sublinhado, tachado, listas, checklist, citação e link. Guarda o
+ * conteúdo como HTML; o servidor extrai o texto puro quando precisa
+ * (textUtils.stripHtml) — nunca mostra HTML cru ao usuário.
  */
 
 function ToolbarButton({
@@ -140,7 +138,7 @@ export function RichTextEditor({
   onBlur: () => void;
   placeholder?: string;
   minHeightClass?: string;
-  /** Diário 3.0: títulos (H2/H3) e desfazer/refazer na barra. */
+  /** Títulos (H2/H3) e desfazer/refazer na barra. */
   rich?: boolean;
   /** Entrega a instância do editor (ex.: inserir inspiração no cursor). */
   onReady?: (editor: Editor) => void;
@@ -156,7 +154,7 @@ export function RichTextEditor({
     ],
     content: value || "",
     editorProps: {
-      attributes: { class: `journal-rich-content ${minHeightClass}` },
+      attributes: { class: `rich-content ${minHeightClass}` },
     },
     onUpdate: ({ editor: ed }) => onChange(ed.getHTML()),
     onBlur: () => onBlur(),

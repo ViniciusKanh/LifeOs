@@ -30,7 +30,7 @@ export function RPGPageHeader({
   leading?: ReactNode;
   /** Linha curta sob o subtítulo (data, classe). */
   footnote?: ReactNode;
-  /** "md" = banner mais baixo, para telas de registro (Diário, Notas…). */
+  /** "md" = banner mais baixo, para telas de registro (Saúde, Hábitos…). */
   size?: "lg" | "md";
   children?: ReactNode;
   className?: string;

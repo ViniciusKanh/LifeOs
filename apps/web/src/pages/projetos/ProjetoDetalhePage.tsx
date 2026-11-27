@@ -16,7 +16,6 @@ import {
   Image as ImageIcon,
   LayoutList,
   Link2,
-  NotebookPen,
   Paperclip,
   Pencil,
   Plus,
@@ -51,8 +50,7 @@ import { TaskCard } from "@/components/tasks/TaskCard";
 /**
  * Detalhe do projeto — tudo o que existe sobre um projeto num só lugar:
  * metadados do cadastro, indicadores (derivados das tarefas), lista de
- * tarefas, documentos (anexos das tarefas vinculadas), entradas do Diário
- * ligadas ao projeto e o cronograma (Gantt).
+ * tarefas, documentos (anexos das tarefas vinculadas) e o cronograma (Gantt).
  */
 
 type TabKey = "overview" | "tasks" | "documents" | "timeline" | "members";
@@ -228,24 +226,10 @@ function OverviewTab({ project, overview, onOpenTask }: { project: Project; over
         </Card>
 
         <Card className="p-5">
-          <p className="text-sm font-semibold mb-3 flex items-center gap-1.5"><NotebookPen size={14} className="text-cat-pink" /> No Diário</p>
-          {overview && overview.journalEntries.length > 0 ? (
-            <ul className="space-y-2">
-              {overview.journalEntries.map((j) => (
-                <li key={j.date}>
-                  <Link to={`/diario?date=${j.date}`} className="block rounded-lg px-2 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
-                    <p className="text-[11px] font-semibold text-cat-pink">{formatProjectDate(j.date)}</p>
-                    {j.preview && <p className="text-xs text-slate line-clamp-2">{j.preview}</p>}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-slate">Nenhuma entrada do Diário vinculada. No Diário, use “Vincular a projeto” para registrar o dia a dia deste projeto.</p>
-          )}
+          <p className="text-sm font-semibold mb-3 flex items-center gap-1.5"><CheckCircle2 size={14} className="text-growth" /> Concluídas recentemente</p>
+          {(!overview || overview.recentlyCompleted.length === 0) && <p className="text-sm text-slate">Nenhuma tarefa concluída ainda neste projeto.</p>}
           {overview && overview.recentlyCompleted.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-paper-border dark:border-ink-border">
-              <p className="text-[11px] text-slate mb-1.5">Concluídas recentemente</p>
+            <div>
               <ul className="space-y-1">
                 {overview.recentlyCompleted.map((r) => (
                   <li key={r.id} className="flex items-center gap-1.5 text-xs">

@@ -64,10 +64,6 @@ const METRIC_KEYS = [
   "weekly_plans_sealed",
   "quests_claimed_total",
   "subtasks_done_total",
-  "journal_days_total",
-  "journal_favorites_total",
-  "journal_takeaways_total",
-  "journal_retros_saved",
   "experiments_with_hypothesis",
   "experiments_started_total",
   "experiment_log_days_total",
@@ -86,9 +82,6 @@ const METRIC_KEYS = [
   "contracts_sealed_total",
   "contract_seal_kinds",
   "contract_stages_done_total",
-  "journal_full_closings",
-  "journal_voice_days",
-  "journal_media_days",
   "tavern_rituals_total",
   "forge_versions_total",
   "forge_beat_baseline",
@@ -211,10 +204,6 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("papers_read", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status IN ('lido', 'fichado')");
   addScalar("papers_reviewed", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status = 'fichado'");
   addScalar("bank_loans_repaid_on_time", "SELECT COUNT(*) FROM bank_loans WHERE owner_id = ? AND status = 'repaid' AND repaid_at <= datetime(due_at)");
-  addScalar("journal_days_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND thoughts IS NOT NULL AND thoughts <> ''");
-  addScalar("journal_favorites_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND is_favorite = 1");
-  addScalar("journal_takeaways_total", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND night_takeaway IS NOT NULL AND night_takeaway <> ''");
-  addScalar("journal_retros_saved", "SELECT COUNT(*) FROM journal_retrospectives WHERE owner_id = ? AND saved_at IS NOT NULL");
   addScalar("experiments_with_hypothesis", "SELECT COUNT(*) FROM personal_experiments WHERE owner_id = ? AND hypothesis IS NOT NULL AND hypothesis <> ''");
   addScalar("habit_checks_total", "SELECT COUNT(*) FROM habit_entries e JOIN habits h ON h.id = e.habit_id AND h.owner_id = e.owner_id WHERE e.owner_id = ? AND e.count >= h.target_count");
   // Dia perfeito: todos os hábitos diários ativos naquele dia foram cumpridos.
@@ -237,12 +226,10 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("life_admin_resolved_total", "SELECT COUNT(*) FROM life_admin_history WHERE owner_id = ? AND (due_date IS NULL OR done_at >= date(due_date, '-60 days'))");
   addScalar("life_admin_with_file_total", "SELECT COUNT(*) FROM life_admin_items WHERE owner_id = ? AND file_data_uri IS NOT NULL");
   addScalar("life_admin_active_months", "SELECT COUNT(DISTINCT substr(done_at, 1, 7)) FROM life_admin_history WHERE owner_id = ?");
-  // Contratos 3.0 e Diário 3.0: práticas concluídas (selar, etapas, fechamento completo, mídia), nunca edição de texto.
+  // Contratos 3.0: práticas concluídas (selar, etapas), nunca edição de texto.
   addScalar("contracts_sealed_total", "SELECT COUNT(*) FROM contracts WHERE owner_id = ? AND sealed_at IS NOT NULL");
   addScalar("contract_seal_kinds", "SELECT COUNT(DISTINCT seal_code) FROM contract_seals WHERE owner_id = ?");
   addScalar("contract_stages_done_total", "SELECT COUNT(*) FROM contract_stages WHERE owner_id = ? AND status = 'concluida'");
-  addScalar("journal_full_closings", "SELECT COUNT(*) FROM journal_entries WHERE owner_id = ? AND TRIM(COALESCE(closing_reflection, '')) <> '' AND TRIM(COALESCE(closing_learning, '')) <> ''");
-  addScalar("journal_voice_days", "SELECT COUNT(DISTINCT e.entry_date) FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id WHERE e.owner_id = ? AND m.kind = 'audio'");
   addScalar("journey_reviews_sealed", "SELECT COUNT(*) FROM journey_reviews WHERE owner_id = ? AND status = 'sealed'");
   addScalar("journey_monthly_sealed", "SELECT COUNT(*) FROM journey_reviews WHERE owner_id = ? AND status = 'sealed' AND kind = 'monthly'");
   addScalar("journey_quarterly_sealed", "SELECT COUNT(*) FROM journey_reviews WHERE owner_id = ? AND status = 'sealed' AND kind = 'quarterly'");
@@ -253,7 +240,6 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("forge_versions_total", "SELECT COUNT(*) FROM ml_model_versions WHERE owner_id = ?");
   addScalar("forge_beat_baseline", "SELECT COUNT(*) FROM ml_model_versions WHERE owner_id = ? AND metrics_json LIKE '%\"beatsBaseline\":true%'");
   addScalar("forge_models_total", "SELECT COUNT(*) FROM ml_models WHERE owner_id = ?");
-  addScalar("journal_media_days", "SELECT COUNT(DISTINCT e.entry_date) FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id WHERE e.owner_id = ? AND m.kind <> 'audio'");
   // Maior sequência de dias (locais) com sessão de leitura.
   if (requested.has("reading_best_streak")) {
     tzPromise ??= userTimezone(db, ownerId);

@@ -48,7 +48,7 @@ export const ROOMS: RoomDef[] = [
   { key: "escritorio", name: "Escritório", subtitle: "Projetos e agentes", x0: 21, y0: 1, x1: 28, y1: 8, walls: true, floor: ["#3c4a63", "#334058"], wall: "#2a3350", accent: "#59A9F8" },
   { key: "guilda", name: "Guilda", subtitle: "Missões", x0: 1, y0: 11, x1: 8, y1: 18, walls: true, floor: ["#5b3f2c", "#4f3626"], wall: "#4a2b2b", accent: "#F1C66A" },
   { key: "academia", name: "Academia", subtitle: "Saúde e treinos", x0: 21, y0: 11, x1: 28, y1: 18, walls: true, floor: ["#4a4f5c", "#40444f"], wall: "#33363f", accent: "#F16D75" },
-  { key: "casa", name: "Casa", subtitle: "Descanso e diário", x0: 1, y0: 21, x1: 8, y1: 28, walls: true, floor: ["#7a5a3e", "#6c4e35"], wall: "#4b3550", accent: "#E78FC0" },
+  { key: "casa", name: "Casa", subtitle: "Descanso e bem-estar", x0: 1, y0: 21, x1: 8, y1: 28, walls: true, floor: ["#7a5a3e", "#6c4e35"], wall: "#4b3550", accent: "#E78FC0" },
   { key: "jardim", name: "Jardim", subtitle: "Hábitos e evolução", x0: 21, y0: 21, x1: 28, y1: 28, walls: false, floor: ["#3f7a3c", "#377034"], wall: "#2c4a2a", accent: "#4FD49A" },
   { key: "praca", name: "Praça Central", subtitle: "Centro do mundo", x0: 11, y0: 11, x1: 18, y1: 18, walls: false, floor: ["#8a8478", "#7d776b"], wall: "#555", accent: "#A875F5" },
 ];

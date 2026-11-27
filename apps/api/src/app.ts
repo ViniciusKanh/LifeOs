@@ -44,8 +44,6 @@ import { capacityRouter } from "./routes/capacity.routes.js";
 import { deadlineRouter } from "./routes/deadline.routes.js";
 import { goalForecastRouter } from "./routes/goal-forecast.routes.js";
 import { dataHealthRouter } from "./routes/data-health.routes.js";
-import { journalRouter } from "./routes/journal.routes.js";
-import { journalsRouter } from "./routes/journals.routes.js";
 import { lifeAdminRouter } from "./routes/lifeAdmin.routes.js";
 import { directionRouter } from "./routes/direction.routes.js";
 import { notesRouter } from "./routes/notes.routes.js";
@@ -71,11 +69,10 @@ import { automationsRouter } from "./routes/automations.routes.js";
 import { goalsHubRouter } from "./routes/goalsHub.routes.js";
 import { moduleHubRouter } from "./routes/moduleHub.routes.js";
 import { planningHubRouter } from "./routes/planningHub.routes.js";
-import { chronicleRouter, labRouter } from "./routes/chronicleLab.routes.js";
+import { labRouter } from "./routes/chronicleLab.routes.js";
 import { heroRouter } from "./routes/hero.routes.js";
 import { heroDashboardRouter, todayHubRouter } from "./routes/dayHero.routes.js";
 import { contractGuildRouter } from "./routes/contractGuild.routes.js";
-import { chronicleEntryRouter } from "./routes/chronicleEntry.routes.js";
 import { forgeRouter, tavern3Router } from "./routes/tavernForge3.routes.js";
 import { adminHubRouter, habitsHubRouter, libraryHubRouter } from "./routes/routineHubs.routes.js";
 import { readingYearRouter } from "./routes/readingYear.routes.js";
@@ -142,7 +139,7 @@ app.use(
 // requisição como processada (req._body), então o app.use(express.json)
 // de baixo não entra em conflito, só é pulado para esta rota.
 app.use("/api/import/restore", express.json({ limit: "25mb" }));
-app.use(express.json({ limit: "5mb" })); // fotos do Diário (Fase 4) chegam como data URI — teto um pouco acima do limite de 3MB por foto pra sobrar espaço pro JSON ao redor
+app.use(express.json({ limit: "5mb" })); // fotos (avatar, anexos de tarefa, Atlas) chegam como data URI — teto um pouco acima do limite de 3MB por foto
 app.use(cookieParser());
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
@@ -229,8 +226,6 @@ app.use("/api/capacity", capacityRouter);
 app.use("/api/deadline-radar", deadlineRouter);
 app.use("/api/goal-forecast", goalForecastRouter);
 app.use("/api/data-health", dataHealthRouter);
-app.use("/api/journal", journalRouter);
-app.use("/api/journals", journalsRouter);
 app.use("/api/gamification", gamificationRouter);
 app.use("/api/contracts", contractsRouter);
 app.use("/api/campaigns", campaignsRouter);
@@ -251,13 +246,11 @@ app.use("/api/automations", automationsRouter);
 app.use("/api/goals-hub", goalsHubRouter);
 app.use("/api/hub", moduleHubRouter);
 app.use("/api/planning", planningHubRouter);
-app.use("/api/chronicle", chronicleRouter);
 app.use("/api/lab", labRouter);
 app.use("/api/hero", heroRouter);
 app.use("/api/today-hub", todayHubRouter);
 app.use("/api/hero-dashboard", heroDashboardRouter);
 app.use("/api/contract-guild", contractGuildRouter);
-app.use("/api/chronicle-entry", chronicleEntryRouter);
 app.use("/api/tavern3", tavern3Router);
 app.use("/api/forge", forgeRouter);
 app.use("/api/habits-hub", habitsHubRouter);

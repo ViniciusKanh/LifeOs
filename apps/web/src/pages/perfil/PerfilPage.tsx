@@ -325,7 +325,7 @@ export function PerfilPage() {
                   <div className="flex gap-2 rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-xs">
                     <AlertTriangle size={16} className="text-amber-600 dark:text-amber-300 shrink-0" />
                     <span>
-                      Restaura tarefas, projetos, metas, hábitos, saúde, biblioteca, educação e diário do arquivo
+                      Restaura tarefas, projetos, metas, hábitos, saúde, biblioteca e educação do arquivo
                       (.json) selecionado — sempre como novos registros nesta conta. Anexos/mídia, contratos e
                       compartilhamentos não fazem parte desta versão. Rodar o mesmo arquivo de novo não duplica nada.
                     </span>

@@ -13,7 +13,7 @@ function buildApp(limiter: express.RequestHandler) {
   });
   const router = express.Router();
   router.post("/:date/ai/organize", limiter, (_req, res) => res.json({ ok: true }));
-  app.use("/api/journal", router);
+  app.use("/api/exemplo", router);
   return app;
 }
 
@@ -22,22 +22,22 @@ describe("Rate limiting", () => {
     const app = buildApp(rateLimit({ windowMs: 60_000, max: 3 }));
     const statuses: number[] = [];
     for (let i = 1; i <= 4; i++) {
-      statuses.push((await request(app).post(`/api/journal/2026-10-0${i}/ai/organize`).set("x-user", "u1")).status);
+      statuses.push((await request(app).post(`/api/exemplo/2026-10-0${i}/ai/organize`).set("x-user", "u1")).status);
     }
     expect(statuses).toEqual([200, 200, 200, 429]);
   });
 
   it("limita por usuário autenticado: um usuário no limite não bloqueia outro", async () => {
     const app = buildApp(rateLimit({ windowMs: 60_000, max: 1 }));
-    expect((await request(app).post("/api/journal/2026-10-01/ai/organize").set("x-user", "a")).status).toBe(200);
-    expect((await request(app).post("/api/journal/2026-10-01/ai/organize").set("x-user", "a")).status).toBe(429);
-    expect((await request(app).post("/api/journal/2026-10-01/ai/organize").set("x-user", "b")).status).toBe(200);
+    expect((await request(app).post("/api/exemplo/2026-10-01/ai/organize").set("x-user", "a")).status).toBe(200);
+    expect((await request(app).post("/api/exemplo/2026-10-01/ai/organize").set("x-user", "a")).status).toBe(429);
+    expect((await request(app).post("/api/exemplo/2026-10-01/ai/organize").set("x-user", "b")).status).toBe(200);
   });
 
   it("sem usuário, limita por IP; 429 traz mensagem em PT-BR e Retry-After", async () => {
     const app = buildApp(aiRateLimit(1));
-    expect((await request(app).post("/api/journal/2026-10-01/ai/organize")).status).toBe(200);
-    const res = await request(app).post("/api/journal/2026-10-01/ai/organize");
+    expect((await request(app).post("/api/exemplo/2026-10-01/ai/organize")).status).toBe(200);
+    const res = await request(app).post("/api/exemplo/2026-10-01/ai/organize");
     expect(res.status).toBe(429);
     expect(res.body.error).toMatch(/IA/);
     expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);

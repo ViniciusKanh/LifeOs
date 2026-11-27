@@ -20,7 +20,7 @@ export const TYPE_MODULE: Record<string, string> = {
   grimoire: "Grimório",
   work_note: "Profissional",
   experiment: "Laboratório",
-  journal: "Diário",
+  journal: "Diário (antigo)",
   life_admin: "Administração",
   review: "Revisões",
   war_council: "Conselho",

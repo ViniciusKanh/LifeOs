@@ -103,7 +103,6 @@ const METRIC_SOURCES: Array<{ prefix: string; events: string; module: string; li
   { prefix: "bank_", events: "Movimentos concluídos no Banco", module: "Banco", link: "/banco" },
   { prefix: "flashcard", events: "Revisões de cartas do Grimório", module: "Grimório", link: "/grimorio" },
   { prefix: "grimoire_", events: "Dias de estudo no Grimório", module: "Grimório", link: "/grimorio" },
-  { prefix: "journal_", events: "Registros do Diário (só contagens, nunca o texto)", module: "Diário", link: "/diario" },
   { prefix: "quests_", events: "Quests resgatadas no Quadro de Avisos", module: "Quadro de Avisos", link: "/quests" },
   { prefix: "reading_", events: "Sessões e trilhas de leitura", module: "Biblioteca", link: "/biblioteca" },
   { prefix: "life_admin_", events: "Compromissos resolvidos e documentos guardados", module: "Administração", link: "/administracao" },
@@ -594,7 +593,7 @@ export async function getJourneyHub(db: Client, ownerId: string, fromQ?: string,
   const from = fromQ && fromQ <= to ? fromQ : shiftDayKey(to, -29);
   const yearStart = `${today.slice(0, 4)}-01-01`;
   const minDay = [from, yearStart, shiftDayKey(mondayKey(today), -56)].sort()[0]!;
-  const [xpRows, coins, achievementsN, levelUps, marks, moments, profile] = await Promise.all([
+  const [xpRows, coins, achievementsN, levelUps, marks, profile] = await Promise.all([
     db.execute({ sql: "SELECT source_type, day_key, xp FROM xp_events WHERE owner_id = ? AND day_key >= ? AND day_key <= ?", args: [ownerId, minDay, today] }),
     db.execute({
       sql: `SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS earned, COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) AS spent
@@ -604,13 +603,6 @@ export async function getJourneyHub(db: Client, ownerId: string, fromQ?: string,
     db.execute({ sql: "SELECT COUNT(*) AS n FROM user_achievements WHERE owner_id = ? AND date(unlocked_at) >= ? AND date(unlocked_at) <= ?", args: [ownerId, from, to] }),
     getLevelHistory(db, ownerId),
     db.execute({ sql: "SELECT event_key, label, event_at, created_at FROM chronicle_marks WHERE owner_id = ? ORDER BY event_at DESC LIMIT 100", args: [ownerId] }),
-    db.execute({
-      sql: `SELECT m.id, m.data_uri, m.caption, e.entry_date FROM chronicle_moments cm
-            JOIN journal_entry_media m ON m.id = cm.media_id AND m.owner_id = cm.owner_id
-            JOIN journal_entries e ON e.id = m.entry_id
-            WHERE cm.owner_id = ? AND m.kind = 'photo' ORDER BY e.entry_date DESC LIMIT 24`,
-      args: [ownerId],
-    }),
     getPlayerProfile(db, ownerId),
   ]);
   const rows = xpRows.rows.map((r) => ({ source_type: String(r.source_type), day_key: String(r.day_key), xp: Number(r.xp) }));
@@ -656,7 +648,6 @@ export async function getJourneyHub(db: Client, ownerId: string, fromQ?: string,
     },
     levels: levelUps.slice(-12).reverse(),
     marks: marks.rows.map((m) => ({ eventKey: String(m.event_key), label: String(m.label), at: String(m.event_at), createdAt: String(m.created_at) })),
-    moments: moments.rows.map((m) => ({ id: String(m.id), dataUri: String(m.data_uri), caption: m.caption == null ? null : String(m.caption), date: String(m.entry_date) })),
   };
 }
 
@@ -676,31 +667,10 @@ export async function toggleMark(db: Client, ownerId: string, input: { eventKey:
   return { favorite: true };
 }
 
-/** Fotos do Diário que PODEM ser autorizadas (só miniaturas das próprias entradas, últimos 180 dias). */
-export async function momentCandidates(db: Client, ownerId: string) {
-  const r = await db.execute({
-    sql: `SELECT m.id, m.data_uri, m.caption, e.entry_date,
-                 EXISTS (SELECT 1 FROM chronicle_moments cm WHERE cm.owner_id = m.owner_id AND cm.media_id = m.id) AS authorized
-          FROM journal_entry_media m JOIN journal_entries e ON e.id = m.entry_id
-          WHERE m.owner_id = ? AND m.kind = 'photo' AND e.entry_date >= date('now', '-180 days')
-          ORDER BY e.entry_date DESC LIMIT 30`,
-    args: [ownerId],
-  });
-  return r.rows.map((m) => ({ id: String(m.id), dataUri: String(m.data_uri), caption: m.caption == null ? null : String(m.caption), date: String(m.entry_date), authorized: Number(m.authorized) === 1 }));
-}
-
-export async function setMoment(db: Client, ownerId: string, mediaId: string, authorized: boolean) {
-  const own = await db.execute({ sql: "SELECT 1 FROM journal_entry_media WHERE id = ? AND owner_id = ? AND kind = 'photo'", args: [mediaId, ownerId] });
-  if (!own.rows.length) throw new HeroError("Foto não encontrada.", 404);
-  if (authorized) await db.execute({ sql: "INSERT OR IGNORE INTO chronicle_moments (owner_id, media_id) VALUES (?, ?)", args: [ownerId, mediaId] });
-  else await db.execute({ sql: "DELETE FROM chronicle_moments WHERE owner_id = ? AND media_id = ?", args: [ownerId, mediaId] });
-}
-
 export type NarratorMode = "rpg" | "objetivo" | "analitico";
 
 /**
- * Fatos do Narrador: só números do ledger e rótulos de eventos que NÃO vêm do
- * Diário (o texto das crônicas nunca entra; entradas do Diário só são contadas).
+ * Fatos do Narrador: só números do ledger e rótulos de eventos registrados.
  */
 export async function narratorFacts(db: Client, ownerId: string, from: string, to: string) {
   const hub = await getJourneyHub(db, ownerId, from, to);
@@ -732,7 +702,7 @@ export function deterministicNarration(mode: NarratorMode, facts: string[], insu
 
 export async function narrateJourney(db: Client, ownerId: string, opts: { from?: string; to?: string; mode: NarratorMode; useAi: boolean }) {
   const { hub, facts, insufficient } = await narratorFacts(db, ownerId, opts.from ?? "", opts.to ?? "");
-  const base = { mode: opts.mode, facts, insufficient, from: hub.from, to: hub.to, disclaimer: "Gerado a partir dos eventos registrados. O texto do Diário não é usado." };
+  const base = { mode: opts.mode, facts, insufficient, from: hub.from, to: hub.to, disclaimer: "Gerado a partir dos eventos registrados." };
   const fallback = { ...base, ai: false, paragraphs: deterministicNarration(opts.mode, facts, insufficient) };
   if (!opts.useAi || insufficient) return fallback;
   const config = await getGeminiConfig();

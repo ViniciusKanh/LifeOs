@@ -68,9 +68,9 @@ const REGION_META: Record<RegionKey, { name: string; description: string; href: 
   },
   mente: {
     name: "Bosque da Mente",
-    description: "Diário, revisões, experimentos e bem-estar.",
-    href: "/diario",
-    unlockHint: "Escreva a crônica de hoje no Diário ou feche uma revisão.",
+    description: "Revisões, experimentos e bem-estar.",
+    href: "/revisoes",
+    unlockHint: "Feche uma revisão ou registre a observação de um experimento.",
   },
   encruzilhada: {
     name: "Encruzilhada",
@@ -171,7 +171,7 @@ export function classifyRegion(sourceType: string, ctx: RegionContext = {}): Reg
     case "habit_entry":
     case "habit_streak":
       return regionForHabit(ctx.habitText) ?? "encruzilhada";
-    case "journal":
+    case "journal": // XP histórico do Diário (removido) continua contando para a Mente.
     case "review":
     case "experiment":
       return "mente";
@@ -228,7 +228,7 @@ export interface RegionActivity {
 }
 
 export interface NextStep {
-  kind: "goal" | "task" | "life_admin" | "journal" | "contract";
+  kind: "goal" | "task" | "life_admin" | "mood" | "contract";
   label: string;
   detail: string;
   href: string;
@@ -332,13 +332,12 @@ async function loadLookups(db: Client, ownerId: string) {
 async function loadActivity(db: Client, ownerId: string, from: string): Promise<Partial<Record<RegionKey, RegionActivity>>> {
   // Datas gravadas em UTC: a janela de 30 dias é aproximada pelo prefixo YYYY-MM-DD.
   const q = (sql: string) => db.execute({ sql, args: [ownerId, from] });
-  const [workouts, water, sleep, study, reading, journal, mood] = await Promise.all([
+  const [workouts, water, sleep, study, reading, mood] = await Promise.all([
     q("SELECT substr(performed_at, 1, 10) AS d, COUNT(*) AS c FROM workouts WHERE owner_id = ? AND substr(performed_at, 1, 10) >= ? GROUP BY d"),
     q("SELECT substr(recorded_at, 1, 10) AS d, COUNT(*) AS c FROM water_entries WHERE owner_id = ? AND substr(recorded_at, 1, 10) >= ? GROUP BY d"),
     q("SELECT substr(woke_up_at, 1, 10) AS d, COUNT(*) AS c FROM sleep_entries WHERE owner_id = ? AND substr(woke_up_at, 1, 10) >= ? GROUP BY d"),
     q("SELECT substr(occurred_at, 1, 10) AS d, COUNT(*) AS c FROM study_sessions WHERE owner_id = ? AND substr(occurred_at, 1, 10) >= ? GROUP BY d"),
     q("SELECT substr(started_at, 1, 10) AS d, COUNT(*) AS c FROM reading_sessions WHERE owner_id = ? AND substr(started_at, 1, 10) >= ? GROUP BY d"),
-    q("SELECT entry_date AS d, COUNT(*) AS c FROM journal_entries WHERE owner_id = ? AND entry_date >= ? GROUP BY d"),
     q("SELECT substr(recorded_at, 1, 10) AS d, COUNT(*) AS c FROM mood_entries WHERE owner_id = ? AND substr(recorded_at, 1, 10) >= ? GROUP BY d"),
   ]);
   const build = (parts: Array<{ label: string; rows: Row[] }>): RegionActivity | undefined => {
@@ -364,7 +363,6 @@ async function loadActivity(db: Client, ownerId: string, from: string): Promise<
       { label: "Sessões de leitura", rows: rows(reading) },
     ]),
     mente: build([
-      { label: "Crônicas no Diário", rows: rows(journal) },
       { label: "Registros de humor", rows: rows(mood) },
     ]),
   };
@@ -386,7 +384,7 @@ const pct = (cur: unknown, target: unknown) => (n(target) > 0 ? Math.round((n(cu
 
 /** Próximo passo por região, sempre a partir de registros reais (nunca inventado). */
 async function loadNextSteps(db: Client, ownerId: string, today: string): Promise<Partial<Record<RegionKey, NextStep>>> {
-  const [goals, academicTask, proTask, lifeAdmin, journalToday, contract, looseTask] = await Promise.all([
+  const [goals, academicTask, proTask, lifeAdmin, moodToday, contract, looseTask] = await Promise.all([
     db.execute({
       sql: `SELECT id, title, life_area, current_value, target_value, due_date FROM goals
             WHERE owner_id = ? AND status = 'active' AND life_area IS NOT NULL`,
@@ -410,7 +408,8 @@ async function loadNextSteps(db: Client, ownerId: string, today: string): Promis
       args: [ownerId],
     }),
     db.execute({
-      sql: "SELECT 1 FROM journal_entries WHERE owner_id = ? AND entry_date = ? LIMIT 1",
+      // Janela aproximada pelo prefixo da data (mesmo critério de loadActivity).
+      sql: "SELECT 1 FROM mood_entries WHERE owner_id = ? AND substr(recorded_at, 1, 10) = ? LIMIT 1",
       args: [ownerId, today],
     }),
     db.execute({
@@ -468,12 +467,12 @@ async function loadNextSteps(db: Client, ownerId: string, today: string): Promis
       detail: `Vence em ${br(la.due_date)}`,
       href: "/administracao",
     };
-  if (!journalToday.rows.length)
+  if (!moodToday.rows.length)
     out.mente = {
-      kind: "journal",
-      label: "Escrever a crônica de hoje",
-      detail: "Ainda não há entrada no Diário hoje.",
-      href: "/diario",
+      kind: "mood",
+      label: "Registrar humor e energia de hoje",
+      detail: "Ainda não há check-in de bem-estar hoje.",
+      href: "/saude",
     };
   const c = contract.rows[0] as Row | undefined;
   out.encruzilhada = c

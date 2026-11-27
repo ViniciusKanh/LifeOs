@@ -65,7 +65,7 @@ export function TermsGate() {
               <div className="rounded-2xl bg-[#1e88ff]/[0.06] border border-[#1e88ff]/20 p-4 mb-5 text-sm space-y-1.5">
                 <p className="font-semibold">Resumo rápido</p>
                 <p>• Seus dados não são vendidos nem usados para anúncios.</p>
-                <p>• Dados de saúde e do Diário são usados só para mostrar seus registros e métricas.</p>
+                <p>• Dados de saúde são usados só para mostrar seus registros e métricas.</p>
                 <p>• A IA (Gemini) só recebe o necessário quando você usa um recurso de IA — nunca suas fotos ou arquivos.</p>
                 <p>• O administrador vê apenas contagens de uso, nunca o conteúdo.</p>
                 <p>• Você pode exportar ou excluir tudo pelo Perfil, quando quiser.</p>
@@ -81,7 +81,7 @@ export function TermsGate() {
                   <Link to="/termos" target="_blank" className="font-semibold text-[#1e88ff] hover:underline inline-flex items-center gap-0.5">
                     Termo de Uso <FileText size={12} />
                   </Link>
-                  , inclusive o tratamento dos meus dados de saúde e do Diário para as funções do app.
+                  , inclusive o tratamento dos meus dados de saúde para as funções do app.
                 </span>
               </label>
               {error && <p className="text-xs text-drop">{error}</p>}

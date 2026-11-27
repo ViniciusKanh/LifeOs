@@ -120,22 +120,17 @@ describe("Taverna (fim do dia)", () => {
     const p1 = await agent.post("/api/tavern/pin-tomorrow").send({ taskId: t1 });
     expect(p1.status).toBe(200);
     expect(p1.body.date).toBe(tomorrow);
-    let row = await db.execute({ sql: "SELECT focus_task_ids FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [userId, tomorrow] });
+    let row = await db.execute({ sql: "SELECT focus_task_ids FROM day_focus WHERE owner_id = ? AND day_key = ?", args: [userId, tomorrow] });
     expect(JSON.parse(String(row.rows[0].focus_task_ids))).toEqual([t1]);
 
     // Segunda fixação vira a principal (topo) e mantém a anterior; prazo só muda com o pedido explícito.
     const p2 = await agent.post("/api/tavern/pin-tomorrow").send({ taskId: t2, setDueTomorrow: true });
     expect(p2.status).toBe(200);
-    row = await db.execute({ sql: "SELECT focus_task_ids FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [userId, tomorrow] });
+    row = await db.execute({ sql: "SELECT focus_task_ids FROM day_focus WHERE owner_id = ? AND day_key = ?", args: [userId, tomorrow] });
     expect(JSON.parse(String(row.rows[0].focus_task_ids))).toEqual([t2, t1]);
     const due = await db.execute({ sql: "SELECT id, due_date FROM tasks WHERE id IN (?, ?)", args: [t1, t2] });
     expect(due.rows.find((r) => r.id === t2)?.due_date).toBe(tomorrow);
     expect(due.rows.find((r) => r.id === t1)?.due_date).toBeNull();
-
-    // Escrever no diário de amanhã (sem focusTaskIds) não apaga a missão fixada.
-    const put = await agent.put(`/api/journal/${tomorrow}`).send({ thoughts: "<p>Plano</p>" });
-    expect(put.status).toBe(200);
-    expect(put.body.focusTaskIds).toEqual([t2, t1]);
 
     const summary = await agent.get("/api/tavern/summary");
     expect(summary.body.mission.pinned.map((p: { id: string }) => p.id)).toEqual([t2, t1]);
@@ -143,7 +138,7 @@ describe("Taverna (fim do dia)", () => {
     // Tarefa de outro usuário: 404, nada gravado.
     const bad = await agent.post("/api/tavern/pin-tomorrow").send({ taskId: foreign });
     expect(bad.status).toBe(404);
-    const otherRow = await db.execute({ sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ?", args: [other.userId] });
+    const otherRow = await db.execute({ sql: "SELECT COUNT(*) AS n FROM day_focus WHERE owner_id = ?", args: [other.userId] });
     expect(Number(otherRow.rows[0].n)).toBe(0);
     expect((await agent.post("/api/tavern/pin-tomorrow").send({ taskId: "x y" })).status).toBe(400);
   });
@@ -178,5 +173,21 @@ describe("Taverna (fim do dia)", () => {
 
     const after = await db.execute({ sql: "SELECT COUNT(*) AS n FROM ml_predictions WHERE owner_id = ?", args: [userId] });
     expect(Number(after.rows[0].n)).toBe(Number(before.rows[0].n));
+  });
+});
+
+describe("Taverna — aprendizado para o Grimório (sem o Diário)", () => {
+  it("vira sugestão na fila de aprovação, sem duplicar e isolada por usuário", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    expect((await agent.post("/api/tavern3/learning-grimoire").send({ text: "abc" })).status).toBe(400);
+    const r1 = await agent.post("/api/tavern3/learning-grimoire").send({ text: "Revisar o capítulo cedo rende mais do que à noite." });
+    expect(r1.status).toBe(200);
+    expect(r1.body.added).toBe(1);
+    const r2 = await agent.post("/api/tavern3/learning-grimoire").send({ text: "Revisar o capítulo cedo rende mais do que à noite." });
+    expect(r2.body.added).toBe(0);
+    const rows = await db.execute({ sql: "SELECT source_kind, status FROM grimoire_suggestions WHERE owner_id = ?", args: [userId] });
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]).toMatchObject({ source_kind: "text", status: "pending" });
   });
 });

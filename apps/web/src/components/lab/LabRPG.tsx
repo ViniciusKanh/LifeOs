@@ -5,7 +5,7 @@ import { BookMarked, CheckCircle2, ClipboardList, Download, Eye, FlaskConical, H
 import type { CycleStage, DiscoveryVerdict, LabExperiment, LabHub } from "@/services/chronicleLabService";
 import type { ExperimentAISuggestion } from "@/types";
 import { API_URL } from "@/services/api";
-import { useChronicleActions } from "@/hooks/useChronicleLab";
+import { useLabActions } from "@/hooks/useChronicleLab";
 import { RPGProgressBar } from "@/components/rpg";
 import { IndicatorCard, KitSection, RankPanel } from "@/components/rpg-modules/ModuleKit";
 
@@ -266,7 +266,7 @@ export function DiscoveriesLibrary({ hub }: { hub: LabHub }) {
 
 /** Resultados: análise do servidor (detalhe), exportação dos dados brutos e explicação da IA com os mesmos números. */
 export function ResultsList({ hub, goals, onToast }: { hub: LabHub; goals: Array<{ id: string; title: string }>; onToast: (m: string, tone?: "success" | "error") => void }) {
-  const { explain, setGoal } = useChronicleActions();
+  const { explain, setGoal } = useLabActions();
   const [explained, setExplained] = useState<Record<string, { ai: boolean; text: string }>>({});
   const list = hub.experiments.filter((e) => e.status !== "draft");
   return (

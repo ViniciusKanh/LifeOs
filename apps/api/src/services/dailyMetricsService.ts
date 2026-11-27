@@ -19,7 +19,6 @@ export type DailyMetric =
   | "xp"
   /** XP sem o que veio das próprias quests (evita quest de XP se alimentar de si mesma). */
   | "xpOrganic"
-  | "journal"
   | "waterMl"
   | "focusMinutes"
   | "experimentLogs"
@@ -38,7 +37,6 @@ export const ALL_DAILY_METRICS: readonly DailyMetric[] = [
   "habits",
   "xp",
   "xpOrganic",
-  "journal",
   "waterMl",
   "focusMinutes",
   "experimentLogs",
@@ -81,7 +79,7 @@ export async function collectDailyMetrics(
   const fromUtc = addDays(from, -1);
   const none = Promise.resolve(null);
 
-  const [tasks, workouts, reading, habits, xp, journal, water, focus, labLogs, adminDone] = await Promise.all([
+  const [tasks, workouts, reading, habits, xp, water, focus, labLogs, adminDone] = await Promise.all([
     has("missions", "projectMissions", "highPriorityMissions")
       ? db.execute({
           sql: "SELECT completed_at AS t, project_id, priority FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at >= ?",
@@ -107,9 +105,6 @@ export async function collectDailyMetrics(
                 FROM xp_events WHERE owner_id = ? AND day_key >= ? GROUP BY day_key`,
           args: [ownerId, from],
         })
-      : none,
-    has("journal")
-      ? db.execute({ sql: "SELECT entry_date AS d FROM journal_entries WHERE owner_id = ? AND entry_date >= ? AND (thoughts IS NOT NULL AND thoughts != '')", args: [ownerId, from] })
       : none,
     has("waterMl")
       ? db.execute({ sql: "SELECT recorded_at AS t, COALESCE(amount_ml, 0) AS v FROM water_entries WHERE owner_id = ? AND recorded_at >= ?", args: [ownerId, fromUtc] })
@@ -157,7 +152,6 @@ export async function collectDailyMetrics(
     add("xp", String(r.d), Number(r.v));
     add("xpOrganic", String(r.d), Number(r.o));
   }
-  for (const r of journal?.rows ?? []) add("journal", String(r.d), 1);
   for (const r of water?.rows ?? []) if (r.t) add("waterMl", localDay(r.t), Number(r.v));
   for (const r of focus?.rows ?? []) if (r.t) add("focusMinutes", localDay(r.t), Number(r.v));
   for (const r of labLogs?.rows ?? []) add("experimentLogs", String(r.d), Number(r.v));

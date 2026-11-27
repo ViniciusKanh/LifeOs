@@ -2,20 +2,18 @@ import type { Client } from "@libsql/client";
 import { z } from "zod";
 import { extractJson } from "./aiJson.js";
 import { generateText, getGeminiConfig } from "./geminiService.js";
-import { stripHtml } from "./journalService.js";
 
 /**
  * Gerador de cartões do Grimório. O Gemini apenas PROPÕE pares
  * pergunta/resposta a partir de um material escolhido pelo usuário (texto
- * colado, notas de um livro ou uma entrada do diário). Nada é gravado aqui:
+ * colado ou notas de um livro). Nada é gravado aqui:
  * a interface mostra as sugestões, o usuário seleciona/edita e só então
  * salva pelo endpoint normal de cartões (source = 'ai').
  */
 
 export type CardGenSource =
   | { kind: "text"; text: string }
-  | { kind: "book_notes"; bookId: string; noteIds?: string[] }
-  | { kind: "journal"; entryDate: string };
+  | { kind: "book_notes"; bookId: string; noteIds?: string[] };
 
 export interface CardSuggestion {
   front: string;
@@ -73,24 +71,7 @@ async function loadMaterial(db: Client, ownerId: string, source: CardGenSource):
       .join("\n");
     return { text: `Livro: ${b.title}${b.author ? ` — ${b.author}` : ""}\n${text}`, basedOn: `${notes.rows.length} nota(s) de "${b.title}"` };
   }
-  const r = await db.execute({
-    sql: "SELECT intention, thoughts, challenges, feel_good, night_takeaway FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
-    args: [ownerId, source.entryDate],
-  });
-  const e = r.rows[0] as unknown as Record<string, string | null> | undefined;
-  if (!e) return { ok: false, status: 404, message: "Entrada do diário não encontrada." };
-  const parts = (
-    [
-      ["Intenção", e.intention],
-      ["Pensamentos", e.thoughts],
-      ["Desafios", e.challenges],
-      ["O que me fez bem", e.feel_good],
-      ["O que levo para amanhã", e.night_takeaway],
-    ] as const
-  ).filter(([, v]) => v && v.trim());
-  if (parts.length === 0) return { ok: false, status: 422, message: "Essa entrada do diário não tem texto suficiente para gerar cartões." };
-  // O diário é texto rico (HTML do editor): a IA recebe só o texto.
-  return { text: parts.map(([k, v]) => `${k}: ${stripHtml(v)}`).join("\n"), basedOn: `Diário de ${source.entryDate.split("-").reverse().join("/")}` };
+  return { ok: false, status: 422, message: "Origem de cartões desconhecida." };
 }
 
 /** Dedup + limites: frente/verso não vazios, sem cartões repetidos. Função pura (testada). */

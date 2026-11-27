@@ -8,7 +8,7 @@ type Db = ReturnType<typeof getDb>;
 /**
  * Visão Profissional — cruza o trabalho (tarefas de projetos kind='professional',
  * cronômetro/foco) com os outros módulos do LifeOS: Saúde (sono, humor/energia,
- * exercícios), Hábitos, Reuniões/anotações, Diário e Metas de carreira.
+ * exercícios), Hábitos, Reuniões/anotações e Metas de carreira.
  *
  * Regras de honestidade:
  *  - todo número vem de uma consulta real;
@@ -67,7 +67,6 @@ export interface ProfessionalOverview {
   workload: WorkloadSummary;
   upcoming: Array<{ id: string; title: string; projectName: string; projectColor: string | null; dueDate: string; priorityScore: number | null; status: string }>;
   careerGoals: Array<{ id: string; title: string; pct: number; dueDate: string | null }>;
-  journal: { linkedEntries30: number; recent: Array<{ date: string; projectName: string; preview: string | null }> };
 }
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -107,7 +106,7 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
   const coarseFrom = shiftDays(from, -1);
   const proTask = `t.project_id IN (SELECT id FROM projects WHERE owner_id = ? AND kind = 'professional')`;
 
-  const [doneRes, timeRes, focusRes, sleepRes, moodRes, workoutRes, habitsRes, notesRes, firstRes, upcomingRes, goalsRes, journalCountRes, journalRecentRes, workload] =
+  const [doneRes, timeRes, focusRes, sleepRes, moodRes, workoutRes, habitsRes, notesRes, firstRes, upcomingRes, goalsRes, workload] =
     await Promise.all([
       db.execute({
         sql: `SELECT COALESCE(t.completed_at, t.updated_at) AS at FROM tasks t
@@ -165,21 +164,6 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       db.execute({
         sql: `SELECT id, title, kind, target_value, current_value, due_date FROM goals
               WHERE owner_id = ? AND status = 'active' AND category = 'Carreira' ORDER BY due_date IS NULL, due_date ASC LIMIT 6`,
-        args: [ownerId],
-      }),
-      db.execute({
-        sql: `SELECT COUNT(DISTINCT l.entry_id) AS n FROM journal_entry_links l
-              JOIN journal_entries e ON e.id = l.entry_id AND e.owner_id = l.owner_id
-              JOIN projects p ON p.id = l.target_id AND p.owner_id = l.owner_id
-              WHERE l.owner_id = ? AND l.target_type = 'project' AND p.kind = 'professional' AND e.entry_date > ?`,
-        args: [ownerId, shiftDays(today, -30)],
-      }),
-      db.execute({
-        sql: `SELECT e.entry_date, e.thoughts, e.intention, p.name AS project_name FROM journal_entry_links l
-              JOIN journal_entries e ON e.id = l.entry_id AND e.owner_id = l.owner_id
-              JOIN projects p ON p.id = l.target_id AND p.owner_id = l.owner_id
-              WHERE l.owner_id = ? AND l.target_type = 'project' AND p.kind = 'professional'
-              ORDER BY e.entry_date DESC LIMIT 3`,
         args: [ownerId],
       }),
       getProjectWorkload(db, ownerId, { today, days: 30, kind: "professional" }),
@@ -287,13 +271,5 @@ export async function getProfessionalOverview(db: Db, ownerId: string, today: st
       priorityScore: r.priority_score == null ? null : Number(r.priority_score),
     })),
     careerGoals: goals,
-    journal: {
-      linkedEntries30: num((journalCountRes.rows[0] as unknown as { n: number })?.n),
-      recent: (journalRecentRes.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
-        date: String(r.entry_date),
-        projectName: String(r.project_name),
-        preview: ((r.thoughts as string | null) ?? (r.intention as string | null) ?? null)?.replace(/<[^>]+>/g, "").slice(0, 160) ?? null,
-      })),
-    },
   };
 }

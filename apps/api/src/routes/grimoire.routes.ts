@@ -68,7 +68,6 @@ const generateSchema = z.object({
   source: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("text"), text: z.string().trim().min(1, "Cole um texto.").max(12_000, "Texto muito longo (máx. 12.000 caracteres).") }),
     z.object({ kind: z.literal("book_notes"), bookId: id, noteIds: z.array(id).max(60).optional() }),
-    z.object({ kind: z.literal("journal"), entryDate: dayKey }),
   ]),
 });
 
@@ -320,19 +319,3 @@ grimoireRouter.post("/suggestions/decide", async (req, res) => {
   }
 });
 
-/** POST /api/grimoire/suggestions/from-journal — a IA lê uma entrada do Diário e propõe cartões (vão para aprovação). */
-grimoireRouter.post("/suggestions/from-journal", aiRateLimit(), async (req, res) => {
-  const parsed = z.object({ entryDate: dayKey, deckId: optionalId }).safeParse(req.body ?? {});
-  if (!parsed.success) return bad(res, parsed.error);
-  const db = getDb();
-  const r = await proposeCards(db, req.user!.id, { kind: "journal", entryDate: parsed.data.entryDate }, { count: 6 });
-  if (!r.ok) return res.status(r.status).json({ error: r.message });
-  const added = await queueSuggestions(db, req.user!.id, {
-    deckId: parsed.data.deckId ?? null,
-    sourceKind: "journal",
-    sourceRef: parsed.data.entryDate,
-    sourceLabel: r.data.basedOn,
-    cards: r.data.suggestions,
-  });
-  return res.json({ added });
-});

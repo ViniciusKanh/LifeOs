@@ -124,7 +124,7 @@ livingWorldRouter.put("/agents/:key/look", async (req, res) => {
 
 livingWorldRouter.get("/events", async (req, res) => {
   const p = z
-    .object({ category: z.enum(["missoes", "habitos", "saude", "diario", "recompensas", "revisoes", "agentes", "mundo", "outros"]).optional(), before: z.string().datetime().optional(), limit: z.coerce.number().int().min(1).max(50).optional() })
+    .object({ category: z.enum(["missoes", "habitos", "saude", "recompensas", "revisoes", "agentes", "mundo", "outros"]).optional(), before: z.string().datetime().optional(), limit: z.coerce.number().int().min(1).max(50).optional() })
     .safeParse(req.query);
   if (!p.success) return res.status(400).json({ error: "Filtro inválido." });
   try {

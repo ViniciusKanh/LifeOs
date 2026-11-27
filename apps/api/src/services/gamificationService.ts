@@ -4,6 +4,7 @@ import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
 import { logContractEvent, syncContractStages } from "./contractStages.js";
+import { getFocusTaskIds } from "./dayFocusService.js";
 
 /**
  * Motor de gamificação do LifeOS ("RPG da vida real").
@@ -147,16 +148,6 @@ async function safely(label: string, fn: () => Promise<void>): Promise<void> {
     await fn();
   } catch (err) {
     console.warn(`[gamificação] falha ao conceder XP (${label}):`, err instanceof Error ? err.message : "erro desconhecido");
-  }
-}
-
-function parseJsonArray(value: unknown): string[] {
-  if (typeof value !== "string" || !value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
   }
 }
 
@@ -349,15 +340,12 @@ async function awardTaskCompletionInner(db: Client, ownerId: string, taskId: str
     if (task.habit_id) return;
 
     const dayKey = await todayKeyFor(db, ownerId);
-    const journal = await db.execute({
-      sql: "SELECT focus_task_ids FROM journal_entries WHERE owner_id = ? AND entry_date = ?",
-      args: [ownerId, dayKey],
-    });
+    const focusIds = await getFocusTaskIds(db, ownerId, dayKey);
     // Missão principal é só a PRIMEIRA posição (a mais recentemente fixada —
     // ver tavernService.pinTomorrowMission, que sempre prepende o novo id).
     // `.includes()` daria o bônus de missão principal para QUALQUER tarefa já
     // fixada algum dia, inclusive uma substituída por um fixar posterior.
-    const isMainMission = parseJsonArray(journal.rows[0]?.focus_task_ids)[0] === taskId;
+    const isMainMission = focusIds[0] === taskId;
 
     const R = GAMIFICATION_RULES.task;
     // Dificuldade da própria tarefa ou, na falta, a do contrato a que pertence.
@@ -690,28 +678,6 @@ export async function awardProjectCompleted(db: Client, ownerId: string, project
   });
 }
 
-/** Primeira entrada do Diário no dia (com texto) → XP pequeno, só no próprio dia. */
-export async function awardJournalEntry(db: Client, ownerId: string, entryDate: string, hasText: boolean): Promise<void> {
-  if (!hasText) return;
-  await safely("diário", async () => {
-    const dayKey = await todayKeyFor(db, ownerId);
-    if (entryDate !== dayKey) return;
-    await award(
-      db,
-      ownerId,
-      {
-        sourceType: "journal",
-        sourceId: entryDate,
-        eventType: "first_entry",
-        xp: GAMIFICATION_RULES.journal.xp,
-        coins: GAMIFICATION_RULES.journal.coins,
-        label: "Crônica do dia registrada",
-      },
-      dayKey,
-    );
-  });
-}
-
 /** Investimento do Banco resgatado (venceu e foi sacado) → XP fixo; moedas já foram creditadas no extrato do Banco (evita conceder moeda em duplicidade). */
 export async function awardBankDepositClaimed(db: Client, ownerId: string, depositId: string, planLabel: string): Promise<void> {
   await safely("banco", async () => {
@@ -1021,7 +987,6 @@ export function publicRules() {
     habit: { xp: GAMIFICATION_RULES.habit.xp, coins: GAMIFICATION_RULES.habit.coins },
     focus: GAMIFICATION_RULES.focus,
     project: GAMIFICATION_RULES.project,
-    journal: GAMIFICATION_RULES.journal,
     review: GAMIFICATION_RULES.review,
     habitStreakMilestones: GAMIFICATION_RULES.habitStreakMilestones,
     lifeAdmin: GAMIFICATION_RULES.lifeAdmin.byKind,

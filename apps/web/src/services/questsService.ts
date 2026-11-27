@@ -3,7 +3,7 @@ import { api } from "./api";
 /** Espelho de /api/quests — sorteio, progresso e temporada são calculados no servidor. */
 
 export type QuestPeriod = "daily" | "weekly";
-export type QuestModule = "missions" | "projects" | "health" | "library" | "habits" | "journal" | "focus" | "xp";
+export type QuestModule = "missions" | "projects" | "health" | "library" | "habits" | "focus" | "xp";
 
 export interface Quest {
   id: string;

@@ -4,7 +4,6 @@ import { Modal, FormRow, inputClass } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/primitives";
 import { useBooks } from "@/hooks/useBooks";
 import { useGrimoireMutations } from "@/hooks/useGrimoire";
-import { todayKey } from "@/utils/localDate";
 import type { CardGenResult, CardGenSource, GrimoireDeck } from "@/services/grimoireService";
 import { Chip, errorMessage, selectClass, textareaClass } from "./grimoireUi";
 
@@ -36,7 +35,6 @@ export function AIGeneratorModal({
   const [kind, setKind] = useState<SourceKind>("text");
   const [text, setText] = useState("");
   const [bookId, setBookId] = useState("");
-  const [entryDate, setEntryDate] = useState(todayKey());
   const [count, setCount] = useState(10);
   const [result, setResult] = useState<CardGenResult | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -66,12 +64,9 @@ export function AIGeneratorModal({
     if (kind === "text") {
       if (text.trim().length < 40) return setError("Cole um texto com pelo menos 40 caracteres.");
       source = { kind: "text", text: text.trim() };
-    } else if (kind === "book_notes") {
+    } else {
       if (!bookId) return setError("Escolha um livro.");
       source = { kind: "book_notes", bookId };
-    } else {
-      if (!entryDate) return setError("Escolha a data da entrada do diário.");
-      source = { kind: "journal", entryDate };
     }
     try {
       const r = await generate.mutateAsync({ source, count });
@@ -148,7 +143,6 @@ export function AIGeneratorModal({
                 [
                   ["text", "Texto colado"],
                   ["book_notes", "Notas de um livro"],
-                  ["journal", "Entrada do diário"],
                 ] as const
               ).map(([k, label]) => (
                 <button
@@ -185,11 +179,7 @@ export function AIGeneratorModal({
               </select>
             </FormRow>
           )}
-          {kind === "journal" && (
-            <FormRow label="Data da entrada" htmlFor="ai-date" hint="Usa os textos que você escreveu no Diário nesse dia.">
-              <input id="ai-date" type="date" className={inputClass} value={entryDate} max={todayKey()} onChange={(e) => setEntryDate(e.target.value)} />
-            </FormRow>
-          )}
+
           <FormRow label="Quantidade máxima" htmlFor="ai-count">
             <select id="ai-count" className={selectClass} value={count} onChange={(e) => setCount(Number(e.target.value))}>
               {[5, 10, 15, 20].map((n) => (

@@ -15,7 +15,7 @@ export interface QuestTemplate {
   /** Genérica = sempre alcançável (missões/XP/diário); as demais exigem uso recente do módulo. */
   generic: boolean;
   /** Módulo exibido na interface e usado como link. */
-  module: "missions" | "projects" | "health" | "library" | "habits" | "journal" | "focus" | "xp" | "lab" | "admin";
+  module: "missions" | "projects" | "health" | "library" | "habits" | "focus" | "xp" | "lab" | "admin";
   title: (target: number) => string;
   unit: string | null;
   /** Meta mínima e teto (ex.: diário 1x/dia → no máximo 7 na semana). */
@@ -32,20 +32,21 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 export const QUEST_TEMPLATES: QuestTemplate[] = [
   // ---------------- Diárias ----------------
+  // (Com a remoção do Diário, "prioridade alta" virou genérica para o quadro seguir com 3 quests.)
   { key: "d_missions", period: "daily", metric: "missions", generic: true, module: "missions", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")}`, unit: null, min: 1, max: 15, step: 1, xp: 20, fallback: 1 },
   { key: "d_xp", period: "daily", metric: "xpOrganic", generic: true, module: "xp", title: (n) => `Ganhe ${n} XP`, unit: "XP", min: 10, max: 400, step: 5, xp: 15, fallback: 15 },
   { key: "d_project_mission", period: "daily", metric: "projectMissions", generic: false, module: "projects", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")} de projeto`, unit: null, min: 1, max: 10, step: 1, xp: 25, fallback: 1 },
-  { key: "d_high_priority", period: "daily", metric: "highPriorityMissions", generic: false, module: "missions", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")} de prioridade alta`, unit: null, min: 1, max: 5, step: 1, xp: 25, fallback: 1 },
+  { key: "d_high_priority", period: "daily", metric: "highPriorityMissions", generic: true, module: "missions", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")} de prioridade alta`, unit: null, min: 1, max: 5, step: 1, xp: 25, fallback: 1 },
   { key: "d_workout", period: "daily", metric: "workouts", generic: false, module: "health", title: (n) => `Registre ${n} ${plural(n, "treino", "treinos")}`, unit: null, min: 1, max: 2, step: 1, xp: 25, fallback: 1 },
   { key: "d_pages", period: "daily", metric: "pages", generic: false, module: "library", title: (n) => `Leia ${n} ${plural(n, "página", "páginas")}`, unit: "pág.", min: 1, max: 150, step: 1, xp: 20, fallback: 5 },
   { key: "d_habits", period: "daily", metric: "habits", generic: false, module: "habits", title: (n) => `Cumpra ${n} ${plural(n, "hábito", "hábitos")}`, unit: null, min: 1, max: 15, step: 1, xp: 20, fallback: 1 },
   { key: "d_lab_log", period: "daily", metric: "experimentLogs", generic: false, module: "lab", title: () => "Registre a observação de um experimento", unit: null, min: 1, max: 1, step: 1, xp: 15, fallback: 1 },
-  { key: "d_journal", period: "daily", metric: "journal", generic: true, module: "journal", title: () => "Escreva no diário", unit: null, min: 1, max: 1, step: 1, xp: 15, fallback: 1 },
   { key: "d_water", period: "daily", metric: "waterMl", generic: false, module: "health", title: (n) => `Beba ${n.toLocaleString("pt-BR")} ml de água`, unit: "ml", min: 250, max: 5000, step: 250, xp: 15, fallback: 1000 },
   { key: "d_focus", period: "daily", metric: "focusMinutes", generic: false, module: "focus", title: (n) => `Foque por ${n} minutos`, unit: "min", min: 15, max: 480, step: 5, xp: 20, fallback: 25 },
   // ---------------- Semanais ----------------
   { key: "w_missions", period: "weekly", metric: "missions", generic: true, module: "missions", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")} na semana`, unit: null, min: 3, max: 80, step: 1, xp: 70, fallback: 3 },
   { key: "w_xp", period: "weekly", metric: "xpOrganic", generic: true, module: "xp", title: (n) => `Ganhe ${n} XP na semana`, unit: "XP", min: 50, max: 2500, step: 10, xp: 60, fallback: 80 },
+  { key: "w_high_priority", period: "weekly", metric: "highPriorityMissions", generic: true, module: "missions", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")} de prioridade alta na semana`, unit: null, min: 1, max: 30, step: 1, xp: 70, fallback: 2 },
   { key: "w_project_missions", period: "weekly", metric: "projectMissions", generic: false, module: "projects", title: (n) => `Conclua ${n} ${plural(n, "missão", "missões")} de projeto na semana`, unit: null, min: 2, max: 50, step: 1, xp: 80, fallback: 2 },
   { key: "w_workouts", period: "weekly", metric: "workouts", generic: false, module: "health", title: (n) => `Registre ${n} ${plural(n, "treino", "treinos")} na semana`, unit: null, min: 1, max: 10, step: 1, xp: 80, fallback: 2 },
   { key: "w_workout_minutes", period: "weekly", metric: "workoutMinutes", generic: false, module: "health", title: (n) => `Acumule ${n} minutos de treino`, unit: "min", min: 30, max: 900, step: 10, xp: 75, fallback: 60 },
@@ -54,7 +55,6 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
   { key: "w_reading_days", period: "weekly", metric: "readingDays", generic: false, module: "library", title: (n) => `Leia em ${n} ${plural(n, "dia", "dias")} na semana`, unit: "dias", min: 2, max: 7, step: 1, xp: 70, fallback: 3 },
   { key: "w_admin_resolved", period: "weekly", metric: "adminResolved", generic: false, module: "admin", title: (n) => `Resolva ${n} ${plural(n, "compromisso", "compromissos")} da Administração`, unit: null, min: 1, max: 10, step: 1, xp: 60, fallback: 2 },
   { key: "w_lab_logs", period: "weekly", metric: "experimentLogs", generic: false, module: "lab", title: (n) => `Registre observações de experimento em ${n} ${plural(n, "dia", "dias")}`, unit: "dias", min: 2, max: 7, step: 1, xp: 60, fallback: 3 },
-  { key: "w_journal", period: "weekly", metric: "journal", generic: true, module: "journal", title: (n) => `Escreva no diário em ${n} ${plural(n, "dia", "dias")}`, unit: "dias", min: 2, max: 7, step: 1, xp: 70, fallback: 3 },
   { key: "w_focus", period: "weekly", metric: "focusMinutes", generic: false, module: "focus", title: (n) => `Foque por ${n} minutos na semana`, unit: "min", min: 60, max: 2400, step: 15, xp: 80, fallback: 120 },
 ];
 

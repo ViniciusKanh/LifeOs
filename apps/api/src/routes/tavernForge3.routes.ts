@@ -4,7 +4,7 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { evaluateAchievements } from "../services/achievementsService.js";
-import { STEPS, Tavern3Error, closeRitual, getTavern3, rememberTomorrowTask, reserveFocusBlock, saveJournalFields, saveRitual, setRequiredSteps } from "../services/tavern3Service.js";
+import { STEPS, Tavern3Error, closeRitual, getTavern3, learningToGrimoire, rememberTomorrowTask, reserveFocusBlock, saveRitual, setRequiredSteps } from "../services/tavern3Service.js";
 import {
   ForgeError,
   activateVersion,
@@ -78,10 +78,6 @@ tavern3Router.put("/ritual", async (req, res) => {
   }
 });
 
-// A Taverna não escreve mais no Diário (o fechamento do dia foi removido).
-// Clientes antigos recebem 410 em vez de sobrescrever a crônica.
-tavern3Router.put("/journal", (_req, res) => res.status(410).json({ error: "A Taverna não grava mais no Diário. Escreva pelo próprio Diário." }));
-
 tavern3Router.put("/settings", async (req, res) => {
   const d = parse(z.object({ required: z.array(stepEnum).min(1).max(5) }), req.body, res);
   if (!d) return;
@@ -109,6 +105,17 @@ tavern3Router.post("/tomorrow-task", async (req, res) => {
   try {
     await rememberTomorrowTask(getDb(), req.user!.id, d.taskId);
     return res.json({ ok: true });
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+/** POST /api/tavern3/learning-grimoire — aprendizado vira sugestão de cartão (aprovação no Grimório). */
+tavern3Router.post("/learning-grimoire", async (req, res) => {
+  const d = parse(z.object({ text: z.string().trim().min(5, "Escreva o aprendizado antes de enviar.").max(2000) }), req.body, res);
+  if (!d) return;
+  try {
+    return res.json(await learningToGrimoire(getDb(), req.user!.id, d.text));
   } catch (e) {
     return fail(res, e);
   }

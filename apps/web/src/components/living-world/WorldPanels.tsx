@@ -231,7 +231,6 @@ export const EVENT_CATEGORIES: Array<[string | null, string]> = [
   ["saude", "Saúde"],
   ["agentes", "Agentes"],
   ["recompensas", "Recompensas"],
-  ["diario", "Diário"],
   ["mundo", "Mundo"],
 ];
 
@@ -241,7 +240,6 @@ const CAT_ICON: Record<string, ReactNode> = {
   saude: <Dumbbell size={15} />,
   agentes: <Bot size={15} />,
   recompensas: <Gift size={15} />,
-  diario: <NotebookPen size={15} />,
   revisoes: <ScrollText size={15} />,
   mundo: <Wand2 size={15} />,
   outros: <Sparkles size={15} />,

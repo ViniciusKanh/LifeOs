@@ -35,15 +35,14 @@ import { RPGBadge, RPGButton, RPGProgressBar, RPGToast } from "@/components/rpg"
 import { AdvisorPanel, KitSection } from "@/components/rpg-modules/ModuleKit";
 import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
 import { Modal } from "@/components/ui/Modal";
-import { RichTextEditor } from "@/components/journal/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { useUrlTab } from "@/components/hero/HeroShared";
 import { useTavern3, useTavern3Actions } from "@/hooks/useTavern3";
-import { STEP_LABEL, type StepKey, type Tavern3 } from "@/services/tavern3Service";
+import { STEP_LABEL, tavern3Service, type StepKey, type Tavern3 } from "@/services/tavern3Service";
 import { healthService } from "@/services/healthService";
 import { tavernService } from "@/services/tavernService";
-import { chronicleEntryService, type ScribeResult } from "@/services/chronicleEntryService";
 import { ApiError } from "@/services/api";
-import { MOOD_EMOJI } from "@/utils/journalMood";
+import { MOOD_EMOJI } from "@/utils/moodScale";
 
 const ART = "/assets/rpg/modules/tavern3";
 const R = { borderRadius: 4 };
@@ -197,7 +196,7 @@ function MoodPanel({ t, notify }: { t: Tavern3; notify: Toast }) {
       <RPGButton variant="pink" className="mt-2 w-full" disabled={!mood || !energy || busy} onClick={() => void save()}>
         {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Heart size={14} aria-hidden />} Registrar em Saúde
       </RPGButton>
-      <p className="mt-1 text-[10px] text-rpg-muted">Saúde é a fonte única de humor e energia: o registro aparece lá e no Diário, sem duplicar.</p>
+      <p className="mt-1 text-[10px] text-rpg-muted">Saúde é a fonte única de humor e energia: o registro aparece lá, sem duplicar.</p>
     </KitSection>
   );
 }
@@ -260,7 +259,6 @@ function TomorrowPreview({ t, go }: { t: Tavern3; go: () => void }) {
     { done: m.pinned.length > 0, text: m.pinned[0] ? `Missão principal: ${m.pinned[0].title}` : "Definir missão principal (opcional)" },
     { done: t.ritual.priorities.length > 0, text: t.ritual.priorities.length ? `${t.ritual.priorities.length} prioridade(s) escolhida(s)` : "Escolher prioridades" },
     { done: t.tomorrowPlan.conflicts.length === 0, text: t.tomorrowPlan.conflicts.length ? `${t.tomorrowPlan.conflicts.length} conflito(s) na agenda` : "Agenda sem conflitos" },
-    { done: !!t.journal.intention.replace(/<[^>]+>/g, "").trim(), text: "Intenção para amanhã" },
   ];
   return (
     <KitSection title="Preparando o amanhã" icon={<CalendarClock size={16} />}>
@@ -364,8 +362,8 @@ function LearningsTab({ t, notify }: { t: Tavern3; notify: Toast }) {
           disabled={busy || t.ritual.learned.trim().length < 5}
           onClick={() => {
             setBusy(true);
-            void chronicleEntryService
-              .learningToGrimoire(t.today, t.ritual.learned)
+            void tavern3Service
+              .learningToGrimoire(t.ritual.learned)
               .then((r) => notify(r.added ? "Cartão sugerido na fila de aprovação do Grimório." : "Esse aprendizado já está no Grimório."))
               .catch((e: unknown) => notify(e instanceof Error ? e.message : "Erro", "error"))
               .finally(() => setBusy(false));
@@ -609,8 +607,8 @@ function HistoryTab({ t }: { t: Tavern3 }) {
 
 /**
  * Taverna 3.0 — ritual guiado de fim do dia. Só dados reais: XP, moedas,
- * missões, hábitos e Life Score vêm dos serviços oficiais; reflexão,
- * aprendizado, gratidão e intenção vão para o Diário; humor vai para Saúde.
+ * missões, hábitos e Life Score vêm dos serviços oficiais; as notas do
+ * ritual ficam na própria Taverna; humor vai para Saúde.
  */
 export function TavernScreen() {
   const { data: t, isLoading, isError, refetch } = useTavern3();
@@ -671,7 +669,7 @@ export function TavernScreen() {
           )}
           {tab === "historico" && <HistoryTab t={t} />}
           {tab === "conselho" && <AdvisorPanel module="tavern" title="Conselheiro da Taverna" avatar={`${ART}/banner-scene.webp`} />}
-          {tab === "automacoes" && <AutomationsPanel module="tavern" title="Automações da Taverna" intro="Lembretes e sugestões avisam; nada é escrito no Diário, na Agenda ou nas Missões sem você." />}
+          {tab === "automacoes" && <AutomationsPanel module="tavern" title="Automações da Taverna" intro="Lembretes e sugestões avisam; nada é escrito na Agenda ou nas Missões sem você." />}
         </>
       )}
       <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />

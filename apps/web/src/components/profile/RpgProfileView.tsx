@@ -502,7 +502,6 @@ function FixedRules() {
     ["Hábito cumprido no dia", r.habit],
     [`Cronômetro de missão (${r.focus.blockMinutes} min)`, { xp: r.focus.xpPerBlock, coins: r.focus.coinsPerBlock }],
     ["Projeto concluído", r.project],
-    ["Primeira crônica do dia", r.journal],
     ["Revisão semanal", r.review.weekly],
     ["Experimento iniciado", r.experiment.started],
     ["Registro no laboratório", r.experiment.checkin],

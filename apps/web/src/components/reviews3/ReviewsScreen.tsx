@@ -288,7 +288,6 @@ export function ReviewsScreen() {
     onSuggestBlocks: () => void suggestBlocks(),
     onApplyPlan: () => void applyPlan(),
     applying: act.applyPlan.isPending,
-    onOpenDiary: () => navigate("/diario"),
     flush: () => void save(),
     // Fechar o último passo do ritual não sela nada sozinho (selar é uma confirmação à parte,
     // de propósito) — mas precisa deixar claro pra onde ir: rola até o Selar e avisa o que falta.

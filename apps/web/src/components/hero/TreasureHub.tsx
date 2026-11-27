@@ -149,7 +149,7 @@ const SOURCE_LABEL: Record<string, string> = {
   campaign: "Campanhas",
   contract: "Contratos",
   codex_knowledge: "Códex",
-  journal: "Diário",
+  journal: "Diário (antigo)",
   review: "Revisões",
   focus: "Foco",
   day: "Bônus do dia",

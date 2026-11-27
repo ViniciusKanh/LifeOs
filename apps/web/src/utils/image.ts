@@ -1,5 +1,5 @@
 /**
- * Compressão de imagem 100% client-side — usada pelas fotos do Diário
+ * Compressão de imagem 100% client-side — usada pelas fotos enviadas no app
  * (Fase 4). Redimensiona pro maior lado não passar de `maxDimension` e
  * exporta como JPEG comprimido, então o upload nunca fica gigante
  * independente do tamanho da foto original (mesma ideia do recorte de

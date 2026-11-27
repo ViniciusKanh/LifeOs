@@ -2,7 +2,7 @@ import { api } from "./api";
 
 /** Espelho de /api/today-hub e /api/hero-dashboard (dados derivados das fontes oficiais). */
 
-export type RitualKind = "manual" | "planning" | "task" | "habit" | "focus" | "health" | "study" | "journal";
+export type RitualKind = "manual" | "planning" | "task" | "habit" | "focus" | "health" | "study";
 export type TimerMode = "pomodoro" | "free" | "block";
 export type TimerLink = "task" | "subject" | "deck" | "project" | null;
 
@@ -95,7 +95,5 @@ export const dayHeroService = {
   startTimer: (input: { mode: TimerMode; plannedMinutes?: number | null; linkType?: TimerLink; linkId?: string | null }) => api.post<TimerState>("/today-hub/timer/start", input),
   pauseTimer: (pause: boolean) => api.post<TimerState>("/today-hub/timer/pause", { pause }),
   stopTimer: () => api.post<{ minutes: number; entryId: string }>("/today-hub/timer/stop", {}),
-  closeDraft: () => api.get<{ text: string }>("/today-hub/close"),
-  closeSave: (text: string) => api.post<{ ok: true }>("/today-hub/close", { text }),
   hero: (period: string, range?: { from: string; to: string }) => api.get<HeroDashboard>(`/hero-dashboard?period=${period}${range ? `&from=${range.from}&to=${range.to}` : ""}`),
 };

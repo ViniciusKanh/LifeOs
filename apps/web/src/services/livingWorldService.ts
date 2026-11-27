@@ -150,7 +150,6 @@ export interface WorldPendencies {
   loanOverdue: number;
   ordersPending: number;
   habitsPending: number;
-  journalToday: boolean;
   workoutToday: boolean;
   studyToday: boolean;
 }
@@ -177,7 +176,7 @@ export interface WorldState {
   rooms: {
     library: { studyMinutesToday: number; readingPagesToday: number; readingMinutesToday: number; currentBook: { title: string; author: string | null } | null };
     gym: { today: Array<{ name: string; minutes: number | null }>; week: { count: number; minutes: number } };
-    home: { journalWordsToday: number; waterMl: number; sleepMinutes: number | null; mood: { mood: number; energy: number } | null };
+    home: { waterMl: number; sleepMinutes: number | null; mood: { mood: number; energy: number } | null };
   };
   agents: WorldAgent[];
   decor: { slots: Array<{ key: string; room: WorldRoomKey; x: number; y: number }>; objects: WorldDecorObject[] };

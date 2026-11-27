@@ -83,7 +83,6 @@ export interface WindowMetrics {
   sleepAvgMinutes: number | null;
   moodAvg: number | null;
   energyAvg: number | null;
-  journalDays: number;
   goalsCompleted: number;
   contractsFulfilled: number;
   projectsCompleted: number;
@@ -109,7 +108,7 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     return db.execute({ sql: `${head} AND ${f.sql}`, args: [ownerId, ...f.args] });
   };
   const a = [ownerId, from, to];
-  const [xp, coins, tasks, habits, habitDays, workouts, pages, readDays, study, focus, sleep, mood, journal, goals, contracts, projects, life, proofs] = await Promise.all([
+  const [xp, coins, tasks, habits, habitDays, workouts, pages, readDays, study, focus, sleep, mood, goals, contracts, projects, life, proofs] = await Promise.all([
     db.execute({ sql: "SELECT COALESCE(SUM(xp), 0) AS n FROM xp_events WHERE owner_id = ? AND day_key BETWEEN ? AND ?", args: a }),
     q("SELECT COALESCE(SUM(amount), 0) AS n FROM coin_ledger WHERE owner_id = ? AND amount > 0", "created_at"),
     q("SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído'", "COALESCE(completed_at, updated_at)"),
@@ -122,7 +121,6 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     q("SELECT COALESCE(SUM(duration_minutes), 0) AS n FROM time_entries WHERE owner_id = ?", "started_at"),
     q("SELECT AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ?", "went_to_bed_at"),
     q("SELECT AVG(mood) AS v, AVG(energy) AS e FROM mood_entries WHERE owner_id = ?", "recorded_at"),
-    db.execute({ sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ? AND entry_date BETWEEN ? AND ? AND (COALESCE(thoughts, '') != '' OR COALESCE(closing_reflection, '') != '')", args: a }),
     q("SELECT COUNT(*) AS n FROM goals WHERE owner_id = ? AND status = 'done'", "completed_at"),
     q("SELECT COUNT(*) AS n FROM contracts WHERE owner_id = ? AND status = 'concluido'", "completed_at"),
     q("SELECT COUNT(*) AS n FROM projects WHERE owner_id = ? AND status = 'completed'", "completed_at"),
@@ -151,7 +149,6 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     sleepAvgMinutes: avg(sleep.rows) == null ? null : Math.round(avg(sleep.rows)!),
     moodAvg: avg(mood.rows),
     energyAvg: avg(mood.rows, "e"),
-    journalDays: one(journal.rows),
     goalsCompleted: one(goals.rows),
     contractsFulfilled: one(contracts.rows),
     projectsCompleted: one(projects.rows),
@@ -188,7 +185,6 @@ const INDICATORS: Array<{ key: keyof WindowMetrics; label: string; unit: string;
   { key: "focusMinutes", label: "Tempo de foco", unit: "min", kind: "sum" },
   { key: "sleepAvgMinutes", label: "Sono médio", unit: "min/noite", kind: "avg" },
   { key: "energyAvg", label: "Energia média", unit: "/5", kind: "avg" },
-  { key: "journalDays", label: "Dias com Diário", unit: "dias", kind: "sum" },
   { key: "goalsCompleted", label: "Metas concluídas", unit: "metas", kind: "sum" },
   { key: "contractsFulfilled", label: "Contratos cumpridos", unit: "contratos", kind: "sum" },
   { key: "projectsCompleted", label: "Projetos concluídos", unit: "projetos", kind: "sum" },
@@ -879,13 +875,13 @@ export async function reviewAdvisor(db: Client, ownerId: string, kind: ReviewKin
   const gate: Partial<Record<ReviewAdvisorMode, { enabled: boolean }>> = { reflection: draftCfg, missions: missionsCfg, bottlenecks: bottleCfg, plan: planCfg };
   if (gate[mode] && !gate[mode]!.enabled) throw new ReviewError("Esta função está desativada nas Automações das Revisões.");
 
-  // Evidência real do período (tarefas, diário, anotações) — a IA deixa de falar só por números.
+  // Evidência real do período (tarefas, anotações) — a IA deixa de falar só por números.
   const evidence = await collectReviewEvidence(db, ownerId, view.range.from, addDays(view.range.until, 1), evidenceOptionsFor(view.range.totalDays));
 
   const withData = view.indicators.filter((i) => i.value != null && (i.value !== 0 || (i.previous ?? 0) !== 0));
   const facts: AdvisorItem[] = withData.slice(0, 12).map((i) => ({ kind: "dado", text: `${i.label}: ${i.value} ${i.unit}${i.deltaPct != null ? ` (${i.deltaPct > 0 ? "+" : ""}${i.deltaPct}% vs ${view.previous.label})` : i.note ? ` — ${i.note.replace(/\.$/, "")}` : ""}.` }));
   for (const g of view.goals.slice(0, 4)) facts.push({ kind: "dado", text: `Meta “${g.title}”: ${g.progressPct ?? 0}% · ${g.openTasks} missões abertas.` });
-  const insufficient = withData.length < 2 && evidence.counts.tasksDone === 0 && evidence.counts.journalDays === 0 && evidence.counts.notes === 0 && evidence.counts.contractsSealed === 0;
+  const insufficient = withData.length < 2 && evidence.counts.tasksDone === 0 && evidence.counts.notes === 0 && evidence.counts.contractsSealed === 0;
   const rules: AdvisorItem[] = view.insights.map((i) => ({ kind: i.kind === "alta" ? "inferencia" : "inferencia", text: `${i.title}: ${i.text}` }));
   const seeds: Array<{ request: string; why: string }> = [];
   if (missionsCfg.enabled) {
@@ -908,7 +904,7 @@ export async function reviewAdvisor(db: Client, ownerId: string, kind: ReviewKin
   const own = mode === "reflection" ? `\nRESPOSTAS JÁ ESCRITAS PELO USUÁRIO (texto dele, use só para continuar no mesmo tom; não invente fatos): ${JSON.stringify(view.review.answers).slice(0, 3000)}` : "";
   const modeText: Record<ReviewAdvisorMode, string> = {
     analyze: "Analise o período: pontos fortes, dificuldades e tendências.",
-    reflection: `Escreva respostas em primeira pessoa para as perguntas (${view.questions.map((q) => `${q.key}: ${q.label}`).join("; ")}), contando a história real do período: o que aconteceu, em quais tarefas/missões, contratos (Guilda dos Pactos) e projetos, o que o Diário e as anotações mostram. Não escreva "[Rascunho]" nem nenhum outro marcador — escreva como se fosse a própria reflexão do usuário, para ele revisar e ajustar.`,
+    reflection: `Escreva respostas em primeira pessoa para as perguntas (${view.questions.map((q) => `${q.key}: ${q.label}`).join("; ")}), contando a história real do período: o que aconteceu, em quais tarefas/missões, contratos (Guilda dos Pactos) e projetos, o que as anotações mostram. Não escreva "[Rascunho]" nem nenhum outro marcador — escreva como se fosse a própria reflexão do usuário, para ele revisar e ajustar.`,
     bottlenecks: "Identifique gargalos: quedas relevantes e metas sem avanço, com a evidência numérica.",
     plan: "Proponha até 3 prioridades concretas para o próximo ciclo, ligadas às evidências.",
     missions: "Proponha até 3 missões (como pedidos curtos em linguagem natural) que atacam os pontos fracos do período.",
@@ -917,12 +913,12 @@ export async function reviewAdvisor(db: Client, ownerId: string, kind: ReviewKin
   const prompt = `Você é o Conselheiro de Revisão do LifeOS (RPG de produtividade, português do Brasil).
 ${modeText[mode]}
 Período: ${view.label} (${view.range.from} a ${view.range.until}${view.range.inProgress ? ", em andamento" : ""}).
-Regras: use SOMENTE os dados abaixo (números, tarefas/missões, contratos, diário e anotações reais); não invente métricas, causas médicas, eventos, tarefas, contratos ou falas que não estejam nos dados. Classifique cada item como "dado" (número real), "inferencia" (interpretação) ou "sugestao" (ação). Seja breve (até 8 itens, exceto no modo reflection). Variação parcial deve ser dita como parcial.
+Regras: use SOMENTE os dados abaixo (números, tarefas/missões, contratos e anotações reais); não invente métricas, causas médicas, eventos, tarefas, contratos ou falas que não estejam nos dados. Classifique cada item como "dado" (número real), "inferencia" (interpretação) ou "sugestao" (ação). Seja breve (até 8 itens, exceto no modo reflection). Variação parcial deve ser dita como parcial.
 NÚMEROS:
 ${facts.map((f) => `- ${f.text}`).join("\n")}
 SINAIS JÁ DETECTADOS:
 ${rules.map((r) => `- ${r.text}`).join("\n") || "- nenhum"}
-O QUE DE FATO ACONTECEU NO PERÍODO (tarefas/missões concluídas, pendências, hábitos, contratos da Guilda dos Pactos, diário e anotações do usuário):
+O QUE DE FATO ACONTECEU NO PERÍODO (tarefas/missões concluídas, pendências, hábitos, contratos da Guilda dos Pactos e anotações do usuário):
 ${evidence.block}${own}
 ${question ? `PERGUNTA DO USUÁRIO: ${question.slice(0, 500)}` : ""}`;
   const out = await generateText(prompt, config, { responseSchema: ADVISOR_SCHEMA, timeoutMs: 30_000, retries: 1, maxOutputTokens: 2500 });

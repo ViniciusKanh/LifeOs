@@ -25,7 +25,6 @@ import {
   Pause,
   Play,
   Plus,
-  ScrollText,
   Settings2,
   Smile,
   Sparkles,
@@ -207,7 +206,7 @@ export function TodayIndicators({ hub }: { hub: TodayHub }) {
 
 /* ═══════════════════════════════ Ritual ═══════════════════════════════ */
 
-const KIND_LABEL: Record<RitualKind, string> = { manual: "Manual", planning: "Planejamento (missão principal ou intenção)", task: "Missão concluída", habit: "Hábito", focus: "Sessão de foco (15+ min)", health: "Saúde (água, treino ou humor)", study: "Estudo/leitura (15+ min)", journal: "Diário escrito" };
+const KIND_LABEL: Record<RitualKind, string> = { manual: "Manual", planning: "Planejamento (missão principal)", task: "Missão concluída", habit: "Hábito", focus: "Sessão de foco (15+ min)", health: "Saúde (água, treino ou humor)", study: "Estudo/leitura (15+ min)" };
 
 export function RitualPanel({ hub, notify, compact }: { hub: TodayHub; notify: Notify; compact?: boolean }) {
   const { toggleRitual } = useTodayActions();
@@ -249,11 +248,6 @@ export function RitualPanel({ hub, notify, compact }: { hub: TodayHub; notify: N
               )}
               <span className={clsx("min-w-0 flex-1 text-sm", s.done ? "text-rpg-muted line-through" : "text-rpg-text")}>{s.label}</span>
               {!compact && s.auto && <span className="hidden text-[10px] text-rpg-muted sm:inline">automático</span>}
-              {!s.done && s.kind === "journal" && (
-                <Link to="/diario" className="text-[11px] text-rpg-blue hover:underline">
-                  Diário
-                </Link>
-              )}
               {!s.done && s.kind === "habit" && (
                 <Link to="/hoje?aba=dia" className="text-[11px] text-rpg-blue hover:underline">
                   Hábitos
@@ -770,35 +764,6 @@ export function DayCouncil({ hub, compact }: { hub: TodayHub; compact?: boolean 
   );
 }
 
-export function DayClosePanel({ notify }: { notify: Notify }) {
-  const { closeDraft, closeSave } = useTodayActions();
-  const [text, setText] = useState<string | null>(null);
-  return (
-    <KitSection title="Encerramento do dia" icon={<ScrollText size={16} />}>
-      {text == null ? (
-        <>
-          <p className="text-sm text-rpg-muted">Monta a síntese do dia com os seus registros. Você revisa antes de salvar no Diário.</p>
-          <RPGButton variant="secondary" className="mt-2" onClick={() => closeDraft.mutate(undefined, { onSuccess: (r) => setText(r.text) })} disabled={closeDraft.isPending}>
-            <Moon size={14} aria-hidden /> Encerrar o dia
-          </RPGButton>
-        </>
-      ) : (
-        <div className="space-y-2">
-          <textarea aria-label="Síntese do dia" className={clsx(FIELD, "min-h-[150px]")} style={R} value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} />
-          <div className="flex justify-end gap-2">
-            <RPGButton variant="ghost" onClick={() => setText(null)}>
-              Descartar
-            </RPGButton>
-            <RPGButton variant="gold" disabled={closeSave.isPending || text.trim().length < 5} onClick={() => closeSave.mutate(text, { onSuccess: () => (notify("Síntese salva no Diário de hoje."), setText(null)), onError: () => notify("Não foi possível salvar.", "error") })}>
-              Salvar no Diário
-            </RPGButton>
-          </div>
-        </div>
-      )}
-    </KitSection>
-  );
-}
-
 /* ═══════════════════════════════ Tela ═══════════════════════════════ */
 
 const TABS = ["visao", "dia", "missoes", "rituais", "automacoes", "ia"] as const;
@@ -877,14 +842,12 @@ export function TodayCentral() {
       {tab === "rituais" && (
         <div className="grid items-start gap-3 lg:grid-cols-2">
           <RitualPanel hub={hub} notify={notify} />
-          <DayClosePanel notify={notify} />
         </div>
       )}
-      {tab === "automacoes" && <AutomationsPanel module="today" title="Automações do Hoje" intro="Planejamento, próxima ação, blocos de foco, progresso, alertas e encerramento. Nada é criado ou movido sem a sua aprovação." />}
+      {tab === "automacoes" && <AutomationsPanel module="today" title="Automações do Hoje" intro="Planejamento, próxima ação, blocos de foco, progresso e alertas. Nada é criado ou movido sem a sua aprovação." />}
       {tab === "ia" && (
         <div className="grid items-start gap-3 lg:grid-cols-2">
           <DayCouncil hub={hub} />
-          <DayClosePanel notify={notify} />
         </div>
       )}
       <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />

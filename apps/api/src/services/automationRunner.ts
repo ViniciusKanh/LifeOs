@@ -12,13 +12,13 @@ import {
   type AutomationModule,
   type RunStatus,
 } from "./automationService.js";
-import { runDiaryCards, studyReminderPayload } from "./grimoireHubService.js";
+import { studyReminderPayload } from "./grimoireHubService.js";
 import { runDeadlineAlerts, runProgressSync, runSmartReplan, runWeeklyPlan } from "./goalsHubService.js";
 import { syncDeckGoalAfterStudy } from "./grimoireService.js";
 import { runGuildReport, runLoanAlerts, runVaultGoals } from "./bankHubService.js";
 import { runAutoProgress, runGrimoireLink, runSmartDeadlines, runWeeklyStudyPlan } from "./educationHubService.js";
 import { runAgendaDigest, runAutoPlan, runConflictAlerts, runDueAlerts, runQuestReminder, runReplan } from "./planningHubService.js";
-import { runLabCheckin, runLabCycleEnd, runLabMissingData, runMemories, runWeeklyRetro, runWriteReminder } from "./chronicleLabService.js";
+import { runLabCheckin, runLabCycleEnd, runLabMissingData } from "./chronicleLabService.js";
 import { runBuildSnapshot, runJourneyBigMoments, runJourneyWeeklyRetro, runNearAchievements, runRewardGoalReady, runUnlockPipeline, runWeeklyRewardSuggestion } from "./heroHubService.js";
 import { runHabitReminders, runHabitWeeklyReview, runStreakAnalysis } from "./habitsHubService.js";
 import { runReadingReminder, runReadingSummary } from "./libraryHubService.js";
@@ -43,8 +43,6 @@ type Outcome = { status: RunStatus; summary: string };
 async function execute(db: Db, ownerId: string, module: AutomationModule, key: string, config: Record<string, unknown>): Promise<Outcome> {
   const id = `${module}:${key}`;
   switch (id) {
-    case "grimoire:diary_cards":
-      return runDiaryCards(db, ownerId, config);
     case "grimoire:study_reminder": {
       const p = await studyReminderPayload(db, ownerId, Number(config.minDue ?? 1));
       if (!p) return { status: "skipped", summary: "Nada para revisar hoje (ou o ritual já foi concluído)." };
@@ -104,12 +102,6 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runDailySummary(db, ownerId, config);
     case "health:consistency_history":
       return runConsistencyHistory(db, ownerId);
-    case "diary:write_reminder":
-      return runWriteReminder(db, ownerId, config);
-    case "diary:weekly_retro":
-      return runWeeklyRetro(db, ownerId, config);
-    case "diary:memories":
-      return runMemories(db, ownerId, config);
     case "lab:checkin_reminder":
       return runLabCheckin(db, ownerId, config);
     case "lab:missing_data":
@@ -186,7 +178,6 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
       return runForgeAlerts(db, ownerId, config);
     case "tavern:balance":
     case "tavern:ai_summary":
-    case "tavern:diary_link":
     case "tavern:grimoire":
     case "tavern:forge_predictions":
     case "tavern:chronicle":
@@ -208,9 +199,6 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "contracts:achievements":
     case "contracts:agenda":
     case "contracts:goals":
-    case "diary:autosave":
-    case "diary:entry_summary":
-    case "diary:extract_tasks":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "today:morning_plan":
       return runMorningPlan(db, ownerId, config);
@@ -223,19 +211,13 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "today:next_action":
     case "today:focus_blocks":
     case "today:progress_sync":
-    case "today:day_close":
     case "hero:attributes_refresh":
     case "hero:progression":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
-    case "diary:day_context":
-    case "diary:learnings_grimoire":
-    case "diary:goal_links":
-    case "diary:lab_notes":
     case "lab:integrated_collection":
     case "lab:auto_progress":
     case "lab:pre_analysis":
     case "lab:goal_sync":
-    case "lab:diary_integration":
       return { status: "ok", summary: "Ativa: roda junto da ação correspondente na tela." };
     case "agenda:auto_plan":
       return runAutoPlan(db, ownerId, config);

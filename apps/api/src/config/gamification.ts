@@ -12,7 +12,7 @@ export const GAMIFICATION_RULES = {
     coinsByPriority: { Baixa: 2, Média: 4, Alta: 7 } as Record<string, number>,
     /** Missão diária: tarefa com prazo para o dia em que foi concluída. */
     dailyMissionXp: 5,
-    /** Missão principal: tarefa escolhida como foco do dia no Diário. */
+    /** Missão principal: tarefa escolhida como foco do dia (Taverna/Hoje). */
     mainMissionXp: 15,
     mainMissionCoins: 3,
     /** Concluída antes do prazo (estritamente antes do dia do prazo). */
@@ -147,11 +147,6 @@ export const GAMIFICATION_RULES = {
     quarterly: { xp: 80, coins: 15 },
     annual: { xp: 150, coins: 30 },
   } as Record<"weekly" | "monthly" | "quarterly" | "annual", { xp: number; coins: number }>,
-  journal: {
-    /** Primeira entrada do Diário no dia (com texto), só no próprio dia. */
-    xp: 10,
-    coins: 2,
-  },
   /**
    * Banco: XP de integração com o Códex/Timeline. As moedas do Banco já
    * se movem de forma atômica dentro de bankService.ts (depósito, resgate,

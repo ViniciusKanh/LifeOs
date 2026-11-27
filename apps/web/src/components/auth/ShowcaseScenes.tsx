@@ -66,7 +66,7 @@ function ExecuteScene() {
   );
 }
 
-/** Registrar — fotos do Diário caem e a "história" é escrita embaixo. */
+/** Registrar — cartões de registro caem e a "história" é escrita embaixo. */
 function RecordScene() {
   return (
     <div className="w-full flex flex-col items-center gap-3">

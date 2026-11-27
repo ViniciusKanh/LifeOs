@@ -4,7 +4,6 @@ import { createAuthenticatedAgent } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { localDayOfStored, localDayRangeUtc, shiftDayKey } from "../src/services/localDayService.js";
 import { createCustomAchievement } from "../src/services/achievementsService.js";
-import { getJournalAutoData } from "../src/services/journalService.js";
 import { computePeriodMetrics } from "../src/services/periodicReviewService.js";
 import { computeRangeMetrics } from "../src/services/metricsService.js";
 
@@ -123,13 +122,9 @@ describe("Fuso do usuário às 22h30 em São Paulo (dia UTC já virou)", () => {
     expect(trophy.progress).toBe(100);
   });
 
-  it("dados automáticos do Diário e revisão mensal usam o dia local", async () => {
+  it("revisão mensal usa o dia local", async () => {
     const { userId } = await spUser();
-    await insertWater(userId, 600, "2026-10-23T01:10:00.000Z");
     await insertWorkout(userId, "2026-10-23T01:20:00.000Z", 20);
-    const auto = await getJournalAutoData(getDb(), userId, LOCAL_TODAY);
-    expect(auto.waterMl).toBe(600);
-    expect(auto.exerciseMinutes).toBe(20);
 
     // 31/10 às 22h em São Paulo = 01/11 01h UTC: pertence à revisão de outubro.
     await insertWorkout(userId, "2026-11-01T01:00:00.000Z", 30);

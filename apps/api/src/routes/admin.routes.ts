@@ -332,8 +332,6 @@ const USAGE_MODULES: Array<{ key: string; label: string; table: string }> = [
   { key: "habits", label: "Hábitos", table: "habits" },
   { key: "habit_entries", label: "Check-ins de hábitos", table: "habit_entries" },
   { key: "goals", label: "Metas", table: "goals" },
-  { key: "journal_entries", label: "Entradas do Diário", table: "journal_entries" },
-  { key: "journal_entry_media", label: "Mídias do Diário", table: "journal_entry_media" },
   { key: "books", label: "Livros", table: "books" },
   { key: "reading_sessions", label: "Sessões de leitura", table: "reading_sessions" },
   { key: "educations", label: "Formações", table: "educations" },
@@ -380,13 +378,12 @@ adminRouter.get("/users/:id/overview", async (req, res) => {
 
   const storage = await db.execute({
     sql: `SELECT
-            COALESCE((SELECT SUM(LENGTH(data_uri)) FROM journal_entry_media WHERE owner_id = ?), 0) AS journal_bytes,
             COALESCE((SELECT SUM(LENGTH(data_uri)) FROM task_attachments WHERE owner_id = ?), 0) AS task_bytes`,
-    args: [req.params.id, req.params.id],
+    args: [req.params.id],
   });
-  const st = storage.rows[0] as unknown as { journal_bytes: number; task_bytes: number };
+  const st = storage.rows[0] as unknown as { task_bytes: number };
   // data URI em base64 ocupa ~4/3 do arquivo; converte para o tamanho aproximado real.
-  const mediaBytes = Math.round(((Number(st.journal_bytes) || 0) + (Number(st.task_bytes) || 0)) * 0.75);
+  const mediaBytes = Math.round((Number(st.task_bytes) || 0) * 0.75);
 
   const recoveryLeft = await db.execute({ sql: "SELECT COUNT(*) AS c FROM mfa_recovery_codes WHERE user_id = ? AND used_at IS NULL", args: [req.params.id] });
   const audit = await db.execute({

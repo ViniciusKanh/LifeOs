@@ -16,7 +16,6 @@ export interface WorldFacts {
   loanOverdue: number;
   ordersPending: number;
   habitsPending: number;
-  journalToday: boolean;
   workoutToday: boolean;
   studyToday: boolean;
   /** Título da missão em andamento (real), se houver. */
@@ -46,7 +45,6 @@ export function buildMarkers(f: WorldFacts | null): Partial<Record<PlaceKey, Pla
   if (f.loanOverdue > 0) m.banco = { count: f.loanOverdue, tone: "danger", text: pl(f.loanOverdue, "empréstimo vencido", "empréstimos vencidos") };
   else if (f.claimable > 0) m.banco = { count: f.claimable, tone: "warn", text: pl(f.claimable, "resgate disponível", "resgates disponíveis") };
   if (f.ordersPending > 0) m.loja = { count: f.ordersPending, tone: "warn", text: pl(f.ordersPending, "pedido aguardando", "pedidos aguardando") };
-  if (!f.journalToday) m.casa = { count: 0, tone: "info", text: "Diário de hoje em branco" };
   if (!f.workoutToday) m.academia = { count: 0, tone: "info", text: "Sem treino registrado hoje" };
   if (!f.studyToday) m.biblioteca = { count: 0, tone: "info", text: "Sem estudo registrado hoje" };
   return m;
@@ -76,7 +74,6 @@ const TOPICS: Topic[] = [
   { id: "claim", owners: ["analista"], when: (f) => f.claimable > 0, say: (f) => [`${pl(f.claimable, "investimento pronto", "investimentos prontos")} para resgate.`, "Vale passar no Banco."] },
   { id: "loan", owners: ["analista"], when: (f) => f.loanOverdue > 0, say: () => ["Tem empréstimo vencido no Banco.", "Melhor regularizar logo."] },
   { id: "orders", owners: ["analista", "habitos"], when: (f) => f.ordersPending > 0, say: (f) => [`${pl(f.ordersPending, "pedido da Loja aguarda", "pedidos da Loja aguardam")} entrega.`, "A recompensa já foi conquistada."] },
-  { id: "journal", owners: ["mentor", "habitos"], when: (f) => !f.journalToday, say: () => ["O diário de hoje está em branco.", "Ainda dá para escrever na Casa."] },
   { id: "workout", owners: ["habitos"], when: (f) => f.workoutToday, say: () => ["Treino de hoje registrado!", "A energia agradece."] },
 ];
 

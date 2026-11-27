@@ -73,7 +73,6 @@ export interface PeriodMetrics {
   tasksCompleted: number;
   goalsCompleted: number;
   habitCheckins: number;
-  journalEntries: number;
   pagesRead: number;
   workouts: number;
   workoutMinutes: number;
@@ -100,16 +99,12 @@ export async function computePeriodMetrics(db: Db, ownerId: string, kind: Period
     const f = w(column);
     return db.execute({ sql: `${sqlHead} AND ${f.sql}`, args: [ownerId, ...f.args] });
   };
-  const [tasks, goalsDone, habits, journal, pages, workouts, mood, sleep, admin, wheel, goals] = await Promise.all([
+  const [tasks, goalsDone, habits, pages, workouts, mood, sleep, admin, wheel, goals] = await Promise.all([
     q(`SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = '${DONE_STATUS}'`, "COALESCE(completed_at, updated_at)"),
     q("SELECT COUNT(*) AS n FROM goals WHERE owner_id = ? AND status = 'done'", "completed_at"),
     db.execute({
       sql: `SELECT COUNT(*) AS n FROM habit_entries he JOIN habits h ON h.id = he.habit_id
             WHERE he.owner_id = ? AND he.entry_date BETWEEN ? AND ? AND he.count >= h.target_count`,
-      args: a,
-    }),
-    db.execute({
-      sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ? AND entry_date BETWEEN ? AND ? AND COALESCE(thoughts, '') != ''",
       args: a,
     }),
     q("SELECT COALESCE(SUM(pages_read), 0) AS n FROM reading_sessions WHERE owner_id = ?", "started_at"),
@@ -133,7 +128,6 @@ export async function computePeriodMetrics(db: Db, ownerId: string, kind: Period
     tasksCompleted: n(tasks.rows),
     goalsCompleted: n(goalsDone.rows),
     habitCheckins: n(habits.rows),
-    journalEntries: n(journal.rows),
     pagesRead: n(pages.rows),
     workouts: n(workouts.rows),
     workoutMinutes: n(workouts.rows, "m"),

@@ -237,9 +237,7 @@ export function BuildingContent({ building, world, marker }: { building: Buildin
           ? [["Pedidos aguardando", p.ordersPending]]
           : building === "torre"
             ? [["Cartas para revisar", p.cardsDue]]
-            : building === "taverna"
-              ? [["Diário de hoje", p.journalToday ? "Escrito" : "Em branco"]]
-              : [];
+            : [];
   return (
     <div className="space-y-2.5">
       <p className="text-sm text-rpg-muted">{b.subtitle}</p>
@@ -309,13 +307,12 @@ export function RoomContent({ room, world, children }: { room: string; world: Wo
     return (
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-1.5">
-          <Stat label="Diário hoje" value={`${r.home.journalWordsToday} palavras`} />
           <Stat label="Água" value={`${(r.home.waterMl / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} L`} />
           <Stat label="Sono" value={r.home.sleepMinutes ? hm(r.home.sleepMinutes) : "—"} />
           <Stat label="Humor" value={r.home.mood ? `${r.home.mood.mood}/5 · energia ${r.home.mood.energy}/5` : "—"} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/diario" className="rpg-btn rpg-btn-pink text-xs">Abrir o Diário</Link>
+          <Link to="/saude" className="rpg-btn rpg-btn-pink text-xs">Registrar bem-estar</Link>
           <Link to="/taverna" className="rpg-btn rpg-btn-secondary text-xs">Taverna</Link>
         </div>
       </div>

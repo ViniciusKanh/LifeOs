@@ -1,17 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { chroniclerPoints, cycleStage, discoveryVerdict, entryDayState, plainText, researcherPoints } from "../src/services/chronicleLabService.js";
+import { cycleStage, discoveryVerdict, researcherPoints } from "../src/services/chronicleLabService.js";
+import { plainText } from "../src/services/textUtils.js";
 
-describe("Diário 2.0 — regras puras", () => {
-  it("estado do dia: vazio, iniciado e concluído", () => {
-    expect(entryDayState(null)).toBe("none");
-    expect(entryDayState({ thoughts: "", nightTakeaway: null, nightMood: null, gratitude: [] })).toBe("none");
-    expect(entryDayState({ thoughts: "Hoje estudei", nightTakeaway: null, nightMood: null, gratitude: [] })).toBe("started");
-    expect(entryDayState({ thoughts: "Hoje estudei", nightTakeaway: "Revisar cedo", nightMood: null, gratitude: [] })).toBe("done");
-  });
-  it("pontos do cronista não dependem de quantidade de palavras", () => {
-    expect(chroniclerPoints({ days: 3, closedDays: 1, gratitudes: 2, retros: 1 })).toBe(30 + 5 + 4 + 15);
-  });
-  it("texto puro remove HTML do editor", () => {
+describe("Texto puro", () => {
+  it("remove HTML do editor", () => {
     expect(plainText("<p>Olá&nbsp;<strong>mundo</strong></p><p>!</p>")).toBe("Olá mundo !");
   });
 });

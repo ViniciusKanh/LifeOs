@@ -119,7 +119,7 @@ export function RpgMainQuest({
           { icon: <CalendarClock size={15} />, label: "Prazo", value: shortDate(task?.dueDate ?? null) },
           { icon: <Zap size={15} />, label: "Prioridade", value: task?.priority ?? "—" },
         ]}
-        emptyText="Nenhuma tarefa em aberto. Aproveite para planejar a semana ou registrar seu dia no Diário."
+        emptyText="Nenhuma tarefa em aberto. Aproveite para planejar a semana no Conselho de Guerra."
         actions={
           <>
             <RPGButton variant="success" onClick={onComplete} disabled={isCompleting} className="flex-1">

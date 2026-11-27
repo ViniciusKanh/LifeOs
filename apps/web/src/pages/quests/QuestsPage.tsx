@@ -80,7 +80,7 @@ function QuestsClassico() {
         storageKey="lifeos-quests-como-funciona"
         steps={[
           { icon: ScrollText, title: "Sorteio no seu ritmo", text: "As quests usam só os módulos que você usou nos últimos 30 dias, com meta pela sua média recente.", tone: "blue" },
-          { icon: Gift, title: "Cumpra e resgate", text: "O progresso vem das missões, treinos, leituras, hábitos e diário reais. Concluiu? Resgate o XP.", tone: "gold" },
+          { icon: Gift, title: "Cumpra e resgate", text: "O progresso vem das missões, treinos, leituras e hábitos reais. Concluiu? Resgate o XP.", tone: "gold" },
           { icon: Shuffle, title: "Reset e troca", text: "Diárias renovam à meia-noite do seu fuso; semanais na segunda. Você pode trocar 1 diária por dia.", tone: "purple" },
         ]}
       />

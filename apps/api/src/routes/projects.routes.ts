@@ -132,7 +132,7 @@ projectsRouter.get("/:id", async (req, res) => {
   return res.json(project);
 });
 
-/** GET /api/projects/:id/overview — indicadores derivados das tarefas, anexos e Diário. */
+/** GET /api/projects/:id/overview — indicadores derivados das tarefas e anexos. */
 projectsRouter.get("/:id/overview", async (req, res) => {
   const db = getDb();
   const project = await getAccessibleProjectDetail(db, req.user!.id, req.params.id);

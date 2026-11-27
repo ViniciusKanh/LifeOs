@@ -2,11 +2,10 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Activity, BarChart3, BookOpen, CalendarDays, ChevronDown, Coins, Crown, Flame, Image as ImageIcon, Scroll, Search, Sparkles, Star, Target, Trophy, Wand2 } from "lucide-react";
-import { Modal } from "@/components/ui/Modal";
+import { Activity, BarChart3, BookOpen, CalendarDays, ChevronDown, Coins, Crown, Flame, Scroll, Search, Sparkles, Star, Target, Trophy, Wand2 } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
 import { IndicatorCard, KitSection } from "@/components/rpg-modules/ModuleKit";
-import { useHeroActions, useMomentCandidates } from "@/hooks/useHero";
+import { useHeroActions } from "@/hooks/useHero";
 import type { JourneyHub, JourneySummary, Narration, NarratorMode } from "@/services/heroService";
 import type { TimelineEvent } from "@/types";
 import { groupTimelineByDay, timelineDayLabel, timelineEventRoute } from "@/utils/timelineEvents";
@@ -233,62 +232,6 @@ export function MarksPanel({ hub, events, onFav }: { hub: JourneyHub; events: Ti
         )}
       </KitSection>
     </div>
-  );
-}
-
-/** Momentos memoráveis: só fotos do Diário que o usuário autorizou explicitamente. */
-export function MomentsPanel({ hub, onToast }: { hub: JourneyHub; onToast: (m: string, tone?: "success" | "error") => void }) {
-  const [manage, setManage] = useState(false);
-  const candidates = useMomentCandidates(manage);
-  const { setMoment } = useHeroActions();
-  const toggle = (id: string, authorized: boolean) =>
-    setMoment.mutate({ id, authorized }, { onSuccess: () => void candidates.refetch(), onError: () => onToast("Não foi possível atualizar a foto.", "error") });
-  return (
-    <KitSection
-      title="Momentos memoráveis"
-      icon={<ImageIcon size={16} />}
-      tone="gold"
-      action={
-        <RPGButton variant="secondary" className="min-h-[36px] px-2 text-xs" onClick={() => setManage(true)}>
-          Escolher fotos
-        </RPGButton>
-      }
-    >
-      {hub.moments.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Nenhuma foto autorizada. As fotos do Diário são privadas: só aparecem aqui as que você escolher.</p>
-      ) : (
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-          {hub.moments.map((m) => (
-            <li key={m.id} className="overflow-hidden border-2 border-rpg-gold/60" style={R}>
-              <img src={m.dataUri} alt={m.caption ?? `Momento de ${fmtDate(m.date)}`} loading="lazy" className="aspect-square w-full object-cover" />
-              <p className="truncate px-1.5 py-1 text-[10px] text-rpg-muted">{m.caption ?? fmtDate(m.date)}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Modal open={manage} onClose={() => setManage(false)} title="Fotos do Diário na Crônica">
-        <p className="mb-2 text-xs text-rpg-muted">Marque as fotos que podem aparecer nos Momentos memoráveis. Nada é publicado — a Crônica é só sua.</p>
-        {candidates.isLoading ? (
-          <div className="h-32 animate-pulse rpg-bar" />
-        ) : (candidates.data ?? []).length === 0 ? (
-          <p className="text-sm text-rpg-muted">Nenhuma foto no Diário nos últimos 180 dias.</p>
-        ) : (
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {(candidates.data ?? []).map((c) => (
-              <li key={c.id}>
-                <label className={clsx("block cursor-pointer overflow-hidden border-2", c.authorized ? "border-rpg-gold" : "border-rpg-border")} style={R}>
-                  <img src={c.dataUri} alt={c.caption ?? fmtDate(c.date)} loading="lazy" className="aspect-square w-full object-cover" />
-                  <span className="flex items-center gap-1 px-1.5 py-1 text-[10px] text-rpg-text">
-                    <input type="checkbox" checked={c.authorized} onChange={(e) => toggle(c.id, e.target.checked)} disabled={setMoment.isPending} />
-                    {fmtDate(c.date)}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Modal>
-    </KitSection>
   );
 }
 

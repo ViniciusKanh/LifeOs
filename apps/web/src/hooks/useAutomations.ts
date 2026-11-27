@@ -17,7 +17,6 @@ export function useAutomations(module: AutomationModule) {
       agenda: ["events"],
       missions: ["tasks", "missions3"],
       quests: ["gamification", "quests"],
-      diary: ["journal"],
       lab: ["experiments"],
       hero: ["achievements"],
       journey: ["analytics"],

@@ -19,7 +19,7 @@ exportRouter.use(requireAuth);
  * Fora de propósito (segredo ou dado só técnico): users.password_hash e
  * segredos MFA, password_reset_tokens, email_verification_tokens,
  * mfa_recovery_codes, desktop_auth_codes, push_subscriptions (endpoint e
- * chaves do navegador), user_settings.journal_pin_hash, search_embeddings
+ * chaves do navegador), search_embeddings
  * (vetores derivados) e ml_artifacts (modelos serializados derivados).
  * Tabelas novas são acrescentadas aqui quando entram no projeto.
  */
@@ -80,15 +80,9 @@ export const EXPORTABLE_TABLES: readonly ExportTable[] = [
   { table: "data_health_snapshots" },
   { table: "notification_dismissals" },
   { table: "in_app_notifications" },
-  { table: "journal_entries" },
-  { table: "journals" },
-  { table: "journal_entry_journals", where: "journal_id IN (SELECT id FROM journals WHERE owner_id = ?)" },
-  { table: "journal_entry_media" },
-  { table: "journal_entry_links" },
+  { table: "day_focus" },
   { table: "task_attachments" },
   { table: "experiment_ai_reports" },
-  { table: "journal_entries_guided_backup" },
-  { table: "journal_word_exclusions" },
   { table: "life_admin_items" },
   { table: "life_admin_history" },
   { table: "life_admin_reminder_log" },

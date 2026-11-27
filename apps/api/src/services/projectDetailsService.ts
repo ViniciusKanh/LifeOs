@@ -121,13 +121,11 @@ export interface ProjectOverview {
     estimateMinutes: number;
     timeSpentMinutes: number;
     attachments: number;
-    journalEntries: number;
   };
   byStatus: Array<{ status: string; count: number }>;
   byPriority: Array<{ priority: string; count: number }>;
   upcoming: Array<{ id: string; title: string; dueDate: string; status: string; priority: string }>;
   recentlyCompleted: Array<{ id: string; title: string; completedAt: string }>;
-  journalEntries: Array<{ date: string; preview: string | null }>;
   /** Dias até o prazo do projeto (negativo = atrasado); null sem prazo definido. */
   daysToDeadline: number | null;
 }
@@ -136,12 +134,12 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Visão agregada do projeto — tudo derivado de tasks/task_attachments/journal_entry_links. */
+/** Visão agregada do projeto — tudo derivado de tasks/task_attachments. */
 export async function getProjectOverview(db: Db, ownerId: string, projectId: string, projectDueDate: string | null): Promise<ProjectOverview> {
   const today = todayIso();
   const weekAhead = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 
-  const [totalsRes, statusRes, priorityRes, upcomingRes, doneRes, attachRes, journalRes] = await Promise.all([
+  const [totalsRes, statusRes, priorityRes, upcomingRes, doneRes, attachRes] = await Promise.all([
     db.execute({
       sql: `SELECT COUNT(*) AS total,
               SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS done,
@@ -178,13 +176,6 @@ export async function getProjectOverview(db: Db, ownerId: string, projectId: str
             WHERE a.owner_id = ? AND t.owner_id = ? AND t.project_id = ?`,
       args: [ownerId, ownerId, projectId],
     }),
-    db.execute({
-      sql: `SELECT e.entry_date, e.thoughts, e.intention FROM journal_entry_links l
-            JOIN journal_entries e ON e.id = l.entry_id
-            WHERE l.owner_id = ? AND e.owner_id = ? AND l.target_type = 'project' AND l.target_id = ?
-            ORDER BY e.entry_date DESC LIMIT 10`,
-      args: [ownerId, ownerId, projectId],
-    }),
   ]);
 
   const t = totalsRes.rows[0] as unknown as Record<string, number | null>;
@@ -198,9 +189,6 @@ export async function getProjectOverview(db: Db, ownerId: string, projectId: str
     daysToDeadline = Math.round((due - now) / 86_400_000);
   }
 
-  const plain = (html: unknown) =>
-    typeof html === "string" ? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140) || null : null;
-
   return {
     totals: {
       tasks: total,
@@ -212,7 +200,6 @@ export async function getProjectOverview(db: Db, ownerId: string, projectId: str
       estimateMinutes: Number(t.estimate ?? 0),
       timeSpentMinutes: Number(t.spent ?? 0),
       attachments: Number((attachRes.rows[0] as unknown as { c: number }).c ?? 0),
-      journalEntries: journalRes.rows.length,
     },
     byStatus: (statusRes.rows as unknown as Array<{ status: string; c: number }>).map((r) => ({ status: r.status, count: Number(r.c) })),
     byPriority: (priorityRes.rows as unknown as Array<{ priority: string; c: number }>).map((r) => ({ priority: r.priority, count: Number(r.c) })),
@@ -227,10 +214,6 @@ export async function getProjectOverview(db: Db, ownerId: string, projectId: str
       id: r.id,
       title: r.title,
       completedAt: r.done_at,
-    })),
-    journalEntries: (journalRes.rows as unknown as Array<{ entry_date: string; thoughts: string | null; intention: string | null }>).map((r) => ({
-      date: r.entry_date,
-      preview: plain(r.thoughts) ?? plain(r.intention),
     })),
     daysToDeadline,
   };

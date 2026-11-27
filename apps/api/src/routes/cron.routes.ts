@@ -56,8 +56,3 @@ cronRouter.get("/notification-triggers", async (req, res) => {
   return res.json({ automations, steamSnapshots, waka, clickup, radar });
 });
 
-// Lembrete do Diário removido junto com as notificações.
-cronRouter.get("/journal-reminder", (req, res) => {
-  if (!isAuthorized(req)) return res.status(401).json({ error: "Não autorizado." });
-  return res.json({ disabled: true });
-});

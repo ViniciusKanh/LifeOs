@@ -14,7 +14,7 @@ import { SHOWCASE_SCENES } from "./ShowcaseScenes";
 const CYCLE = [
   { label: "Planejar", insight: "O LifeOS sugere o próximo melhor passo do dia a partir de prazo, prioridade e esforço.", icon: Target },
   { label: "Executar", insight: "Kanban, Gantt e documentos no mesmo projeto — anexos das tarefas viram os documentos dele.", icon: FolderKanban },
-  { label: "Registrar", insight: "Cada foto do Diário guarda a sua história, e o Gemini organiza o dia por temas.", icon: NotebookPen },
+  { label: "Registrar", insight: "Água, treinos, refeições e hábitos registrados viram XP, Timeline e Analytics.", icon: NotebookPen },
   { label: "Medir", insight: "O Life Score usa só dados reais: um módulo que você não usa nunca derruba a sua nota.", icon: BarChart3 },
   { label: "Melhorar", insight: "Weekly Review e Experimentos mostram, com dados, o que realmente funciona para você.", icon: Sparkles },
 ];
@@ -26,7 +26,7 @@ const PAUSE_AFTER_CLICK_MS = 12000;
 const MODULES = [
   { icon: CalendarCheck2, label: "Hoje e Agenda" },
   { icon: FolderKanban, label: "Projetos e documentos" },
-  { icon: NotebookPen, label: "Diário com IA" },
+  { icon: NotebookPen, label: "Taverna e revisões" },
   { icon: HeartPulse, label: "Saúde e hábitos" },
 ];
 

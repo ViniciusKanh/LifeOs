@@ -95,7 +95,7 @@ describe("Mapa do Mundo (API)", () => {
     expect(body.hasData).toBe(false);
     expect(body.totalXp).toBe(0);
     expect(body.regions.every((r) => r.xp === 0 && r.fogged && r.lastFeat === null)).toBe(true);
-    // Única sugestão sem dados é o Diário de hoje (fato real: não há entrada hoje).
+    // Única sugestão sem dados é o check-in de bem-estar de hoje (fato real: não há registro hoje).
     expect(body.regions.filter((r) => r.nextStep).map((r) => r.key)).toEqual(["mente"]);
   });
 

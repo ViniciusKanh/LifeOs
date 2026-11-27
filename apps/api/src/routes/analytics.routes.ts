@@ -229,7 +229,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   const qFrom = shiftDayKey(from, -1);
   const qTo = shiftDayKey(to, 1);
 
-  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded, journalEntries, lifeAdminDone, periodicReviews] = await Promise.all([
+  const [tasks, habitEntries, workouts, readingSessions, subjects, sleepEntries, moodEntries, waterEntries, workNotes, experimentsStarted, experimentsEnded, lifeAdminDone, periodicReviews] = await Promise.all([
     // LEFT JOIN com projects: deixa claro a que projeto (profissional,
     // acadêmico...) a tarefa concluída pertence, quando houver um.
     db.execute({
@@ -282,12 +282,6 @@ analyticsRouter.get("/timeline", async (req, res) => {
     db.execute({
       sql: `SELECT id, title AS label, updated_at AS at, status FROM personal_experiments
             WHERE owner_id = ? AND status IN ('completed', 'cancelled') AND updated_at >= date(?) AND updated_at < date(?, '+1 day')`,
-      args: [ownerId, qFrom, qTo],
-    }),
-    db.execute({
-      sql: `SELECT id, entry_date AS at FROM journal_entries
-            WHERE owner_id = ? AND entry_date >= date(?) AND entry_date < date(?, '+1 day')
-            AND (COALESCE(thoughts, '') != '' OR COALESCE(intention, '') != '')`,
       args: [ownerId, qFrom, qTo],
     }),
     db.execute({
@@ -454,7 +448,6 @@ analyticsRouter.get("/timeline", async (req, res) => {
       label: r.status === "completed" ? `Experimento concluído: ${r.label}` : `Experimento cancelado: ${r.label}`,
       ...r,
     })),
-    ...asRows(journalEntries.rows).map((r) => ({ type: "journal", icon: "📔", label: "Entrada do diário", ...r })),
     ...asRows(lifeAdminDone.rows).map((r) => ({
       type: "life_admin",
       icon: r.kind === "conta" ? "🧾" : r.kind === "manutencao" ? "🔧" : "📄",
@@ -547,7 +540,6 @@ analyticsRouter.get("/timeline", async (req, res) => {
       : e.type === "habit" ? `habit_entry:${e.habit_id}:${e.entry_date}`
       : e.type === "focus" ? `focus:${e.id}`
       : e.type === "project" ? `project:${e.id}`
-      : e.type === "journal" ? `journal:${String(e.at).slice(0, 10)}`
       : e.type === "review" ? `review:${e.kind}:${e.period_key}`
       : e.type === "life_admin" ? `life_admin:${e.item_id}:${e.due_date}`
       : e.type === "achievement" && e.achievement_id ? `achievement:${e.achievement_id}`

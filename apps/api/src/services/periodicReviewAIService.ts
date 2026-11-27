@@ -29,7 +29,6 @@ function metricsBlock(m: PeriodMetrics): string {
     `Tarefas concluídas: ${m.tasksCompleted}`,
     `Metas concluídas: ${m.goalsCompleted}`,
     `Check-ins de hábito cumpridos: ${m.habitCheckins}`,
-    `Dias com Diário: ${m.journalEntries}`,
     `Páginas lidas: ${m.pagesRead}`,
     `Treinos: ${m.workouts} (${m.workoutMinutes} min)`,
     `Humor médio (1-5): ${m.avgMood ?? "sem registro"}`,
@@ -55,13 +54,13 @@ export async function analyzePeriodicReview(
     computePeriodMetrics(db, ownerId, kind, key),
     computePeriodMetrics(db, ownerId, kind, shiftPeriodKey(kind, key, -1)),
   ]);
-  const total = current.tasksCompleted + current.habitCheckins + current.journalEntries + current.pagesRead + current.workouts + current.goalsCompleted;
+  const total = current.tasksCompleted + current.habitCheckins + current.pagesRead + current.workouts + current.goalsCompleted;
   if (total === 0) return { ok: false, message: "Ainda não há registros suficientes neste período para uma análise." };
   const evidence = await collectReviewEvidence(db, ownerId, current.from, dayAfter(current.to), evidenceOptionsFor(daysBetween(current.from, current.to)));
 
   const prompt = `Você é o LifeOS Copilot ajudando a fechar um ciclo (${current.label}).
-Use EXCLUSIVAMENTE os números, as tarefas e o diário abaixo. Não invente métricas, datas ou fatos. Não afirme causalidade — use "coincidiu com", "junto com".
-Cite tarefas, projetos e situações do diário pelo nome quando isso tornar a frase mais concreta.
+Use EXCLUSIVAMENTE os números e as tarefas abaixo. Não invente métricas, datas ou fatos. Não afirme causalidade — use "coincidiu com", "junto com".
+Cite tarefas e projetos pelo nome quando isso tornar a frase mais concreta.
 Responda em português do Brasil, em JSON puro:
 {"achievements": [até 4 frases curtas citando números reais do período],
  "patterns": [até 3 padrões observados comparando com o período anterior],
@@ -105,7 +104,7 @@ export interface PeriodicReviewDraft {
   wins: string;
   lessons: string;
   focusNext: string;
-  basedOn: { label: string; tasksDone: number; journalDays: number; projects: number };
+  basedOn: { label: string; tasksDone: number; projects: number };
 }
 
 const KIND_WORD: Record<PeriodicKind, { cycle: string; next: string }> = {
@@ -116,7 +115,7 @@ const KIND_WORD: Record<PeriodicKind, { cycle: string; next: string }> = {
 
 /**
  * Escreve, na voz do usuário, as três reflexões do fechamento do ciclo a
- * partir das tarefas concluídas, pendências, hábitos, metas e do Diário.
+ * partir das tarefas concluídas, pendências, hábitos e metas.
  */
 export async function draftPeriodicReview(
   db: Db,
@@ -132,25 +131,24 @@ export async function draftPeriodicReview(
     computePeriodMetrics(db, ownerId, kind, shiftPeriodKey(kind, key, -1)),
   ]);
   const evidence = await collectReviewEvidence(db, ownerId, current.from, dayAfter(current.to), evidenceOptionsFor(daysBetween(current.from, current.to)));
-  if (evidence.counts.tasksDone + evidence.counts.journalDays + current.habitCheckins + current.workouts + current.pagesRead === 0) {
-    return { ok: false, message: "Ainda não há tarefas, diário ou hábitos registrados neste período para escrever a revisão." };
+  if (evidence.counts.tasksDone + current.habitCheckins + current.workouts + current.pagesRead === 0) {
+    return { ok: false, message: "Ainda não há tarefas ou hábitos registrados neste período para escrever a revisão." };
   }
   const w = KIND_WORD[kind];
 
   const prompt = [
     `Você é o LifeOS Copilot escrevendo, NA VOZ DO USUÁRIO (primeira pessoa), o rascunho da revisão do ${w.cycle} ${current.label}.`,
-    "Fontes reais: números do período (e do anterior, para comparar), a lista de tarefas concluídas por projeto, pendências atrasadas, hábitos e o que ele escreveu no Diário.",
+    "Fontes reais: números do período (e do anterior, para comparar), a lista de tarefas concluídas por projeto, pendências atrasadas, hábitos, notas e contratos.",
     "",
     "COMO ESCREVER:",
-    `- Primeiro entenda a HISTÓRIA do ${w.cycle}: em quais projetos ele avançou, o que entregou, o que travou, o que o diário mostra sobre o período (fases, mudanças, dificuldades, alegrias).`,
+    `- Primeiro entenda a HISTÓRIA do ${w.cycle}: em quais projetos ele avançou, o que entregou, o que travou.`,
     "- Escreva como alguém relembrando o próprio período: concreto, cita entregas e situações pelo nome, agrupa tarefas parecidas em uma frase.",
     "- Números entram como apoio (comparando com o período anterior quando houver diferença relevante), nunca como lista de métricas.",
-    "- O diário traz contexto e sentimentos: use com fidelidade, sem dramatizar nem inventar.",
     "",
     "CAMPOS:",
-    `- wins (O que deu certo): 1 a 2 parágrafos curtos. Principais conquistas e avanços do ${w.cycle}, por projeto/área, e bons momentos do diário.`,
-    "- lessons (O que não funcionou e por quê): 1 parágrafo. Lacunas reais — pendências atrasadas (cite as principais), hábitos que caíram, quedas em relação ao período anterior, dificuldades relatadas no diário — e o padrão por trás delas, só se os dados mostrarem. Sem culpa, sem autoajuda.",
-    `- focusNext (Foco do ${w.next}): 3 a 5 prioridades concretas, uma por linha começando com "- ", derivadas das pendências, projetos em andamento e intenções escritas no diário.`,
+    `- wins (O que deu certo): 1 a 2 parágrafos curtos. Principais conquistas e avanços do ${w.cycle}, por projeto/área.`,
+    "- lessons (O que não funcionou e por quê): 1 parágrafo. Lacunas reais — pendências atrasadas (cite as principais), hábitos que caíram, quedas em relação ao período anterior — e o padrão por trás delas, só se os dados mostrarem. Sem culpa, sem autoajuda.",
+    `- focusNext (Foco do ${w.next}): 3 a 5 prioridades concretas, uma por linha começando com "- ", derivadas das pendências e dos projetos em andamento.`,
     "",
     "REGRAS:",
     "- Use SOMENTE os dados abaixo. Nunca invente tarefas, projetos, pessoas, números ou sentimentos. Não afirme causalidade.",
@@ -189,7 +187,7 @@ export async function draftPeriodicReview(
       wins,
       lessons,
       focusNext,
-      basedOn: { label: current.label, tasksDone: evidence.counts.tasksDone, journalDays: evidence.counts.journalDays, projects: evidence.counts.projects },
+      basedOn: { label: current.label, tasksDone: evidence.counts.tasksDone, projects: evidence.counts.projects },
     },
   };
 }

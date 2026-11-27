@@ -61,7 +61,7 @@ function useActiveJourney() {
 
 function companionMessage(codex: Codex, entries: CodexEntry[]): string {
   const fresh = entries.filter((e) => e.state === "new").length;
-  if (!codex.hasData) return "E aí, herói! Conclua uma missão ou escreva no Diário para abrir a primeira página do Códex.";
+  if (!codex.hasData) return "E aí, herói! Conclua uma missão ou cumpra um hábito para abrir a primeira página do Códex.";
   if (fresh > 0) return `E aí, herói! Há ${fresh} ${fresh === 1 ? "nova entrada" : "novas entradas"} no Códex te esperando!`;
   return "E aí, herói! Vamos registrar mais um capítulo da sua jornada?";
 }
@@ -490,9 +490,6 @@ export function CodexChronicleCard() {
         <div className="mt-auto flex flex-wrap gap-2 pt-4">
           <Link to="/timeline" className="rpg-btn rpg-btn-secondary inline-flex items-center gap-1 text-xs">
             Abrir crônica <ChevronRight size={13} aria-hidden />
-          </Link>
-          <Link to="/diario" className="rpg-btn rpg-btn-secondary inline-flex items-center gap-1 text-xs">
-            Diário <ChevronRight size={13} aria-hidden />
           </Link>
         </div>
       </div>

@@ -21,7 +21,6 @@ import {
   LayoutGrid,
   ListChecks,
   TreeDeciduous,
-  NotebookPen,
   FolderLock,
   Radar,
   Repeat,
@@ -152,7 +151,6 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "registrar",
     label: "Registrar",
     items: [
-      { to: "/diario", label: "Diário", icon: NotebookPen, quote: "Escrever é enxergar o próprio caminho." },
       { to: "/taverna", label: "Taverna (fim do dia)", icon: Sunset, quote: "Todo herói descansa para lutar amanhã." },
       { to: "/habitos", label: "Hábitos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },

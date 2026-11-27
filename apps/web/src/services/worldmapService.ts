@@ -4,7 +4,7 @@ import { api } from "./api";
 export type RegionKey = "estudos" | "trabalho" | "saude" | "financas" | "mente" | "encruzilhada";
 
 export interface RegionNextStep {
-  kind: "goal" | "task" | "life_admin" | "journal" | "contract";
+  kind: "goal" | "task" | "life_admin" | "mood" | "contract";
   label: string;
   detail: string;
   href: string;

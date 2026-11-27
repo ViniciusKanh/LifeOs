@@ -73,17 +73,16 @@ describe("Mapa do Meu Mundo", () => {
   });
 });
 
-const FACTS: WorldFacts = { overdue: 0, dueToday: 0, cardsDue: 0, claimable: 0, loanOverdue: 0, ordersPending: 0, habitsPending: 0, journalToday: true, workoutToday: true, studyToday: true, activityTitle: null };
+const FACTS: WorldFacts = { overdue: 0, dueToday: 0, cardsDue: 0, claimable: 0, loanOverdue: 0, ordersPending: 0, habitsPending: 0, workoutToday: true, studyToday: true, activityTitle: null };
 
 describe("Vila: marcadores e conversas", () => {
   it("marcadores só aparecem com dado real e atrasado tem prioridade", () => {
     expect(buildMarkers(null)).toEqual({});
     expect(buildMarkers(FACTS)).toEqual({});
-    const m = buildMarkers({ ...FACTS, overdue: 2, dueToday: 5, cardsDue: 1, loanOverdue: 1, claimable: 3, journalToday: false });
+    const m = buildMarkers({ ...FACTS, overdue: 2, dueToday: 5, cardsDue: 1, loanOverdue: 1, claimable: 3 });
     expect(m.guilda).toMatchObject({ count: 2, tone: "danger", text: "2 missões atrasadas" });
     expect(m.torre).toMatchObject({ count: 1, text: "1 carta para revisar" });
     expect(m.banco?.tone).toBe("danger");
-    expect(m.casa?.tone).toBe("info");
     expect(m.jardim).toBeUndefined();
   });
 

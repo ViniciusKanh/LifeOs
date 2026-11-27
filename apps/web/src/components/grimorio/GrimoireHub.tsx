@@ -199,7 +199,6 @@ export function OraclePanel({ hub, onAction }: { hub: GrimoireHub; onAction: (a:
     best_hour: <Zap size={18} />,
     reinforce: <Repeat size={18} />,
     neglected: <Clock size={18} />,
-    diary: <BookOpen size={18} />,
     start: <Layers size={18} />,
   };
   return (
@@ -277,7 +276,7 @@ export function AutoQueuePanel({ hub, onReview, onRitual }: { hub: GrimoireHub; 
           <span className="text-[11px] text-rpg-muted">{items.length} ação(ões)</span>
         </div>
         {items.length === 0 ? (
-          <p className="text-xs text-rpg-muted">Nada pendente. As automações ligadas adicionam itens aqui (cartões do Diário, importações).</p>
+          <p className="text-xs text-rpg-muted">Nada pendente. As automações ligadas adicionam itens aqui (importações, aprendizados da Taverna).</p>
         ) : (
           <ul className="divide-y divide-rpg-border/60">
             {items.map((it, i) => (
@@ -303,7 +302,7 @@ export function AutoQueuePanel({ hub, onReview, onRitual }: { hub: GrimoireHub; 
 /** Explicação do fluxo automático (ilustrativa — não é dado do usuário). */
 export function FlowExplainer() {
   const steps = [
-    { icon: <FileText size={18} />, label: "Diário / PDF / Notas" },
+    { icon: <FileText size={18} />, label: "PDF / Notas / Taverna" },
     { icon: <Sparkles size={18} />, label: "Extração IA" },
     { icon: <Layers size={18} />, label: "Cartões" },
     { icon: <Check size={18} />, label: "Sua aprovação" },
@@ -739,7 +738,7 @@ export function SuggestionsModal({ open, decks, onClose, onDone }: { open: boole
                       }
                     />
                     <span className="truncate">
-                      {s.sourceKind === "journal" ? "Diário" : "Importação"} · {s.sourceLabel ?? s.sourceRef}
+                      {s.sourceKind === "journal" ? "Diário (antigo)" : s.sourceKind === "text" ? "Texto" : "Importação"} · {s.sourceLabel ?? s.sourceRef}
                       {s.deckName ? ` → ${s.deckName}` : ""}
                     </span>
                     <span className="ml-auto border border-rpg-gold/50 px-1 font-pixel text-[9px] uppercase text-rpg-gold-light" style={{ borderRadius: 2 }}>

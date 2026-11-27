@@ -21,7 +21,7 @@ export const LEDGER_CATEGORIES: LedgerCategory[] = [
   { key: "missoes", label: "Missões", icon: ScrollText, tone: "purple", sourceTypes: ["task", "quest", "contract", "project", "milestone", "set", "life_admin", "day"] },
   { key: "habitos", label: "Hábitos", icon: Flame, tone: "green", sourceTypes: ["habit", "habit_entry", "habit_streak"] },
   { key: "foco", label: "Foco", icon: Timer, tone: "cyan", sourceTypes: ["focus", "focus_count"] },
-  { key: "educacao", label: "Educação & Diário", icon: BookOpen, tone: "pink", sourceTypes: ["journal", "journal_count", "review"] },
+  { key: "educacao", label: "Educação & Revisões", icon: BookOpen, tone: "pink", sourceTypes: ["journal", "journal_count", "review"] },
   { key: "experimentos", label: "Experimentos", icon: FlaskConical, tone: "cyan", sourceTypes: ["experiment"] },
   { key: "conquistas", label: "Conquistas & Nível", icon: Trophy, tone: "gold", sourceTypes: ["achievement", "level"] },
   { key: "campanhas", label: "Campanhas & Códex", icon: Sparkles, tone: "purple", sourceTypes: ["campaign", "grimoire", "codex"] },

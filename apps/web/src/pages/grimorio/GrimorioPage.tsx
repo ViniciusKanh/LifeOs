@@ -67,7 +67,6 @@ export function GrimorioPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"fila" | "dominio" | "nome" | "recentes">("fila");
   const [hardLoading, setHardLoading] = useState(false);
-  const [diaryLoading, setDiaryLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
 
@@ -157,19 +156,6 @@ export function GrimorioPage() {
       if (d) startRitual(d);
     } else if (a.type === "open_deck" && a.deckId) openDeck(a.deckId);
     else if (a.type === "new_deck") setForm({ open: true, deck: null });
-    else if (a.type === "generate_diary" && a.entryDate) {
-      setDiaryLoading(true);
-      try {
-        const r = await grimoireService.suggestFromJournal(a.entryDate, activeDecks[0]?.id ?? null);
-        notify(`${r.added} cartão(ões) do Diário na fila de aprovação.`);
-        void hubQ.refetch();
-        if (r.added > 0) setSuggestionsOpen(true);
-      } catch (err) {
-        notify(errorMessage(err, "Não foi possível gerar cartões do Diário."), "error");
-      } finally {
-        setDiaryLoading(false);
-      }
-    }
   };
 
   const saveDeck = async (input: DeckInput) => {
@@ -432,11 +418,6 @@ export function GrimorioPage() {
 
         <aside className="min-w-0 space-y-4" aria-label="Oráculo e fila automática">
           {hub && <OraclePanel hub={hub} onAction={(a) => void onOracle(a)} />}
-          {diaryLoading && (
-            <p className="flex items-center gap-1.5 text-xs text-rpg-muted">
-              <Loader2 size={12} className="animate-spin" aria-hidden /> Lendo o Diário…
-            </p>
-          )}
           {hub && <AutoQueuePanel hub={hub} onReview={() => setSuggestionsOpen(true)} onRitual={() => startRitual()} />}
           <FlowExplainer />
         </aside>

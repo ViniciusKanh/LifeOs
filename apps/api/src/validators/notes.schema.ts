@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const NOTE_KINDS = ["nota", "ideia", "referencia"] as const;
-export const NOTE_LINK_TYPES = ["note", "task", "project", "goal", "book", "journal", "education"] as const;
+export const NOTE_LINK_TYPES = ["note", "task", "project", "goal", "book", "education"] as const;
 export type NoteLinkType = (typeof NOTE_LINK_TYPES)[number];
 
 export const createNoteSchema = z.object({

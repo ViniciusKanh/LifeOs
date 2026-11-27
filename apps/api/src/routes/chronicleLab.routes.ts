@@ -5,27 +5,18 @@ import { aiRateLimit } from "../middleware/rateLimit.js";
 import { getDb } from "../db/client.js";
 import {
   ChronicleError,
-  deleteRetrospective,
   explainLabResult,
   exportExperimentCsv,
-  generateRetrospective,
-  getChronicleHub,
-  getDayContext,
   getLabHub,
-  saveRetrospective,
-  sendNoteToExperiment,
   setExperimentGoal,
 } from "../services/chronicleLabService.js";
 import { getExperimentAnalysis } from "../services/experimentAnalysisService.js";
 
 /**
- * /api/chronicle e /api/lab — Diário da Jornada 2.0 e Laboratório 2.0.
- * Tudo por usuário autenticado. Nenhuma rota concede XP; o texto do Diário só
- * vai para a IA quando o corpo traz `useAi: true` (pedido explícito do usuário).
+ * /api/lab — Laboratório da Jornada 2.0 (o Diário foi removido do LifeOS).
+ * Tudo por usuário autenticado. Nenhuma rota concede XP.
  */
-export const chronicleRouter = Router();
 export const labRouter = Router();
-chronicleRouter.use(requireAuth);
 labRouter.use(requireAuth);
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
@@ -35,49 +26,6 @@ function fail(res: Response, err: unknown) {
   if (err instanceof ChronicleError) return res.status(err.status).json({ error: err.message });
   throw err;
 }
-
-chronicleRouter.get("/hub", async (req, res) => res.json(await getChronicleHub(getDb(), req.user!.id)));
-
-chronicleRouter.get("/context/:date", async (req, res) => {
-  const d = day.safeParse(req.params.date);
-  if (!d.success) return res.status(400).json({ error: "Data inválida." });
-  return res.json(await getDayContext(getDb(), req.user!.id, d.data));
-});
-
-const retroGen = z.object({ weekStart: day, useAi: z.boolean().default(false) });
-chronicleRouter.post("/retro/generate", aiRateLimit(), async (req, res) => {
-  const b = retroGen.safeParse(req.body ?? {});
-  if (!b.success) return res.status(400).json({ error: "Semana inválida." });
-  try {
-    return res.json(await generateRetrospective(getDb(), req.user!.id, b.data.weekStart, b.data.useAi));
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-chronicleRouter.put("/retro/:weekStart", async (req, res) => {
-  const w = day.safeParse(req.params.weekStart);
-  const b = z.object({ content: z.string().trim().min(1).max(8000) }).safeParse(req.body ?? {});
-  if (!w.success || !b.success) return res.status(400).json({ error: "Retrospectiva inválida." });
-  await saveRetrospective(getDb(), req.user!.id, w.data, b.data.content);
-  return res.json({ ok: true });
-});
-chronicleRouter.delete("/retro/:weekStart", async (req, res) => {
-  const w = day.safeParse(req.params.weekStart);
-  if (!w.success) return res.status(400).json({ error: "Semana inválida." });
-  return (await deleteRetrospective(getDb(), req.user!.id, w.data)) ? res.status(204).end() : res.status(404).json({ error: "Retrospectiva não encontrada." });
-});
-
-const noteSchema = z.object({ experimentId: id, text: z.string().trim().min(1).max(1500) });
-chronicleRouter.post("/:date/experiment-note", async (req, res) => {
-  const d = day.safeParse(req.params.date);
-  const b = noteSchema.safeParse(req.body ?? {});
-  if (!d.success || !b.success) return res.status(400).json({ error: "Observação inválida." });
-  try {
-    return res.json(await sendNoteToExperiment(getDb(), req.user!.id, d.data, b.data.experimentId, b.data.text));
-  } catch (e) {
-    return fail(res, e);
-  }
-});
 
 // ---------------- Laboratório ----------------
 labRouter.get("/hub", async (req, res) => res.json(await getLabHub(getDb(), req.user!.id)));

@@ -2,7 +2,7 @@ import { api } from "./api";
 import type { Habit, HabitStats, HabitSummary, HabitTaskGenerationInput, HabitTaskGenerationResult } from "@/types";
 
 /** Fontes de marcação automática (registro real de outro módulo). */
-export type HabitAutoSource = "workout" | "reading" | "water" | "journal" | "tasks" | "flashcards";
+export type HabitAutoSource = "workout" | "reading" | "water" | "tasks" | "flashcards";
 
 export interface HabitAutoSourceInfo {
   key: HabitAutoSource;

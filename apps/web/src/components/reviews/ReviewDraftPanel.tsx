@@ -5,7 +5,7 @@ import type { PeriodicReviewDraft } from "@/types";
 
 /**
  * Rascunho da revisão do ciclo escrito pela IA a partir das tarefas
- * concluídas, pendências, hábitos e do Diário do período.
+ * concluídas, pendências e hábitos do período.
  *
  * Regra de IA do LifeOS: nada entra nos campos sem o usuário escolher.
  * Para cada campo ele decide "Substituir" ou "Acrescentar" ao que já
@@ -72,7 +72,7 @@ export function ReviewDraftPanel({
       {!draft && (
         <div className={`${shell} flex flex-wrap items-center gap-3`}>
           <p className={`flex-1 min-w-[200px] text-xs ${muted}`}>
-            A IA lê suas <strong className={accent}>tarefas concluídas</strong>, pendências, hábitos e o que você escreveu no <strong className={accent}>Diário</strong> neste período e escreve um rascunho — você escolhe o que usar.
+            A IA lê suas <strong className={accent}>tarefas concluídas</strong>, pendências, hábitos e notas deste período e escreve um rascunho — você escolhe o que usar.
           </p>
           <button
             type="button"
@@ -85,7 +85,7 @@ export function ReviewDraftPanel({
             }
           >
             {loading ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Wand2 size={14} aria-hidden />}
-            {loading ? "Lendo tarefas e diário…" : "Escrever rascunho com IA"}
+            {loading ? "Lendo tarefas e hábitos…" : "Escrever rascunho com IA"}
           </button>
         </div>
       )}
@@ -98,7 +98,7 @@ export function ReviewDraftPanel({
                 <Wand2 size={13} aria-hidden /> Rascunho da IA — {draft.basedOn.label}
               </p>
               <span className={`text-[11px] ${muted}`}>
-                baseado em {draft.basedOn.tasksDone} tarefa(s), {draft.basedOn.projects} projeto(s) e {draft.basedOn.journalDays} dia(s) de diário
+                baseado em {draft.basedOn.tasksDone} tarefa(s) e {draft.basedOn.projects} projeto(s)
               </span>
               <button type="button" onClick={() => setDraft(null)} className={`ml-auto ${muted}`} aria-label="Descartar rascunho">
                 <X size={15} />

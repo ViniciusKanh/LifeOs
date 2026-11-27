@@ -1,7 +1,7 @@
 import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { ClickUpBoard } from "@/components/professional/ClickUpBoard";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { AlertTriangle, BarChart3, Briefcase, CalendarClock, CheckCircle2, Clock, Flame, FolderKanban, Grid3x3, Hourglass, NotebookPen, Plus, Sparkles, Target, Trash2, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, Briefcase, CalendarClock, CheckCircle2, Clock, Flame, FolderKanban, Grid3x3, Hourglass, Plus, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useProfessionalTasks, useTasks } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
@@ -50,7 +50,7 @@ function deltaCaption(current: number, previous: number, unit: (v: number) => st
  * KPIs da semana, matriz dia a dia (tarefas, horas, reuniões, sono e
  * energia), "o que influencia seu trabalho" (comparações com Saúde e
  * Hábitos), carga por projeto profissional, prazos, Priority Score, melhor
- * dia da semana, metas de carreira, Diário e reuniões 1:1.
+ * dia da semana, metas de carreira e reuniões 1:1.
  * Todos os números vêm de GET /api/professional/overview (dados reais).
  */
 export function ProfissionalPage() {
@@ -99,14 +99,14 @@ export function ProfissionalPage() {
           size="md"
           eyebrow="Guilda · Carreira"
           title="Profissional"
-          subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões, Diário e metas de carreira."
+          subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões e metas de carreira."
           className="mb-5"
         />
       ) : (
       <PageHeader
         icon={<Briefcase size={20} />}
         title="Profissional"
-        subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões, Diário e metas de carreira."
+        subtitle="Seu trabalho cruzado com sono, energia, exercícios, hábitos, reuniões e metas de carreira."
       />
       )}
 
@@ -359,31 +359,6 @@ export function ProfissionalPage() {
               ))}
             </div>
           )}
-          <div className="mt-5 pt-4 border-t border-paper-border dark:border-ink-border">
-            <p className="flex items-center gap-1.5 text-sm font-semibold mb-2">
-              <NotebookPen size={14} className="text-cat-pink" /> No Diário
-            </p>
-            {!overview || overview.journal.recent.length === 0 ? (
-              <p className="text-xs text-slate">
-                Nenhuma entrada do Diário ligada a projetos profissionais. No{" "}
-                <Link to="/diario" className="text-brand-600 dark:text-brand-500 font-medium">Diário</Link>, use “Vincular a projeto”.
-              </p>
-            ) : (
-              <>
-                <p className="text-[11px] text-slate mb-2">{overview.journal.linkedEntries30} entrada(s) sobre trabalho nos últimos 30 dias.</p>
-                <ul className="space-y-2">
-                  {overview.journal.recent.map((j) => (
-                    <li key={`${j.date}-${j.projectName}`}>
-                      <Link to={`/diario?date=${j.date}`} className="block rounded-lg px-2 py-1.5 -mx-2 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
-                        <p className="text-[11px] font-semibold text-cat-pink">{formatDate(j.date)} · {j.projectName}</p>
-                        {j.preview && <p className="text-xs text-slate line-clamp-2">{j.preview}</p>}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
         </Card>
       </div>
 

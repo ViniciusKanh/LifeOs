@@ -14,7 +14,7 @@ import { normalizeStoredUtc } from "./healthService.js";
  * duas vezes. Check-ins manuais nunca são alterados pela sincronização.
  */
 
-export const AUTO_SOURCES = ["workout", "reading", "water", "journal", "tasks", "flashcards"] as const;
+export const AUTO_SOURCES = ["workout", "reading", "water", "tasks", "flashcards"] as const;
 export type AutoSource = (typeof AUTO_SOURCES)[number];
 
 export interface AutoSourceInfo {
@@ -30,7 +30,6 @@ const SOURCE_META: Record<AutoSource, Omit<AutoSourceInfo, "key" | "available">>
   workout: { label: "Registrar um treino", unit: "min", thresholdLabel: "Minutos mínimos de treino no dia" },
   reading: { label: "Registrar uma sessão de leitura", unit: "pág.", thresholdLabel: "Páginas mínimas lidas no dia" },
   water: { label: "Registrar água", unit: "ml", thresholdLabel: "Total mínimo de água no dia (ml)" },
-  journal: { label: "Escrever no diário", unit: null, thresholdLabel: null },
   tasks: { label: "Concluir tarefas", unit: "tarefas", thresholdLabel: "Nº mínimo de tarefas concluídas no dia" },
   flashcards: { label: "Revisar flashcards", unit: "cartões", thresholdLabel: "Nº mínimo de cartões revisados no dia" },
 };
@@ -90,14 +89,6 @@ export async function measureSource(db: Client, ownerId: string, source: AutoSou
       return sumLocalDay(db, "SELECT recorded_at AS t, COALESCE(amount_ml, 0) AS v FROM water_entries WHERE owner_id = ? AND recorded_at >= ? AND recorded_at < ?", ownerId, dayKey, tz);
     case "tasks":
       return sumLocalDay(db, "SELECT completed_at AS t, 1 AS v FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at >= ? AND completed_at < ?", ownerId, dayKey, tz);
-    case "journal": {
-      // entry_date já é o dia local; só conta entrada com texto de verdade.
-      const r = await db.execute({
-        sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ? AND entry_date = ? AND COALESCE(thoughts, '') != ''",
-        args: [ownerId, dayKey],
-      });
-      return Number(r.rows[0]?.n ?? 0);
-    }
     case "flashcards": {
       if (!(await hasTable(db, "flashcard_reviews"))) return 0;
       const r = await db.execute({ sql: "SELECT COUNT(*) AS n FROM flashcard_reviews WHERE owner_id = ? AND day_key = ?", args: [ownerId, dayKey] });
@@ -109,7 +100,7 @@ export async function measureSource(db: Client, ownerId: string, source: AutoSou
 /** Regra única de cumprimento: sem limite basta um registro; com limite, o valor do dia precisa alcançá-lo. */
 export function meetsThreshold(source: AutoSource, value: number, threshold: number | null): boolean {
   if (value <= 0) return false;
-  if (source === "journal" || threshold == null) return true;
+  if (threshold == null) return true;
   return value >= threshold;
 }
 
@@ -171,7 +162,7 @@ export async function syncAutoHabits(db: Client, ownerId: string, dayKey: string
 }
 
 /**
- * Gancho pós-registro (treino, leitura, água, diário, tarefa): sincroniza
+ * Gancho pós-registro (treino, leitura, água, tarefa): sincroniza
  * hoje e, quando informado, o dia do registro. Nunca derruba a ação
  * principal — falha vira só um aviso no log.
  */

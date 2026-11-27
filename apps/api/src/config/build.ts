@@ -164,15 +164,15 @@ export const ATTRIBUTE_GUIDES: Record<AttributeKey, AttributeGuide> = {
     ],
   },
   creativity: {
-    sources: "Diário, experimentos e hábitos criativos",
-    recommendation: "Reservar 30 minutos semanais para criação livre e registrar ideias no Diário.",
+    sources: "Experimentos e hábitos criativos",
+    recommendation: "Reservar 30 minutos semanais para criação livre e guardar as ideias em Notas.",
     actions: [
       { id: "creativity-habit", label: "Contrato: criar livremente 1x por semana", item: { kind: "habit", name: "Criar livremente (30 min)", category: "criatividade", frequency: "weekly", targetCount: 1 } },
-      { id: "creativity-open", label: "Abrir o Diário para registrar ideias", item: { kind: "open", path: "/diario" } },
+      { id: "creativity-open", label: "Abrir o Laboratório para testar uma ideia", item: { kind: "open", path: "/experimentos" } },
     ],
   },
   wellbeing: {
-    sources: "Diário, revisões e hábitos de bem-estar",
+    sources: "Revisões, humor e hábitos de bem-estar",
     recommendation: "Fazer um check-in curto de humor e energia todos os dias.",
     actions: [{ id: "wellbeing-habit", label: "Contrato: check-in diário de humor e energia", item: { kind: "habit", name: "Check-in de humor e energia", category: "bem-estar", frequency: "daily", targetCount: 1 } }],
   },

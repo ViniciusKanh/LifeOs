@@ -13,7 +13,6 @@ import {
 } from "../config/livingWorld.js";
 import { getDifficultyRewards, getPlayerProfile, habitStreakEndingAt } from "./gamificationService.js";
 import { getInventory } from "./inventoryService.js";
-import { getJournalAutoData } from "./journalService.js";
 import { localDaysWhere, shiftDayKey, userDayContext } from "./localDayService.js";
 import { askAdvisor, type AdvisorAnswer } from "./moduleAdvisorService.js";
 
@@ -211,30 +210,39 @@ async function roomFacts(db: Client, ownerId: string, tz: string, today: string)
   const study = localDaysWhere("created_at", today, today, tz);
   const workoutsToday = localDaysWhere("performed_at", today, today, tz);
   const workouts7 = localDaysWhere("performed_at", shiftDayKey(today, -6), today, tz);
-  const [auto, studyR, wToday, w7, journalR] = await Promise.all([
-    getJournalAutoData(db, ownerId, today).catch(() => null),
+  const readingF = localDaysWhere("started_at", today, today, tz);
+  const waterF = localDaysWhere("recorded_at", today, today, tz);
+  const sleepF = localDaysWhere("woke_up_at", today, today, tz);
+  const moodF = localDaysWhere("recorded_at", today, today, tz);
+  // Fatos do dia lidos direto das fontes (antes vinham do resumo automático do Diário, removido).
+  const [readingR, bookR, waterR, sleepR, moodR, studyR, wToday, w7] = await Promise.all([
+    db.execute({ sql: `SELECT COALESCE(SUM(pages_read), 0) AS pages, COALESCE(SUM(duration_minutes), 0) AS minutes FROM reading_sessions WHERE owner_id = ? AND ${readingF.sql}`, args: [ownerId, ...readingF.args] }),
+    db.execute({ sql: "SELECT title, author FROM books WHERE owner_id = ? AND status = 'Lendo' ORDER BY updated_at DESC LIMIT 1", args: [ownerId] }),
+    db.execute({ sql: `SELECT COALESCE(SUM(amount_ml), 0) AS total FROM water_entries WHERE owner_id = ? AND ${waterF.sql}`, args: [ownerId, ...waterF.args] }),
+    db.execute({ sql: `SELECT duration_minutes FROM sleep_entries WHERE owner_id = ? AND ${sleepF.sql} ORDER BY datetime(woke_up_at) DESC LIMIT 1`, args: [ownerId, ...sleepF.args] }),
+    db.execute({ sql: `SELECT mood, energy FROM mood_entries WHERE owner_id = ? AND ${moodF.sql} ORDER BY datetime(recorded_at) DESC LIMIT 1`, args: [ownerId, ...moodF.args] }),
     db.execute({ sql: `SELECT COALESCE(SUM(duration_minutes), 0) AS m FROM study_sessions WHERE owner_id = ? AND (occurred_at = ? OR (${study.sql}))`, args: [ownerId, today, ...study.args] }).catch(() => ({ rows: [{ m: 0 }] })),
     db.execute({ sql: `SELECT kind, modality, duration_minutes FROM workouts WHERE owner_id = ? AND ${workoutsToday.sql} ORDER BY performed_at`, args: [ownerId, ...workoutsToday.args] }),
     db.execute({ sql: `SELECT COUNT(*) AS n, COALESCE(SUM(duration_minutes), 0) AS m FROM workouts WHERE owner_id = ? AND ${workouts7.sql}`, args: [ownerId, ...workouts7.args] }),
-    db.execute({ sql: "SELECT thoughts FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, today] }),
   ]);
-  const thoughts = String(journalR.rows[0]?.thoughts ?? "").replace(/<[^>]+>/g, " ");
+  const book = bookR.rows[0] as unknown as Row | undefined;
+  const sleep = sleepR.rows[0] as unknown as Row | undefined;
+  const mood = moodR.rows[0] as unknown as Row | undefined;
   return {
     library: {
       studyMinutesToday: Number((studyR.rows[0] as unknown as Row)?.m ?? 0),
-      readingPagesToday: auto?.reading.pages ?? 0,
-      readingMinutesToday: auto?.reading.minutes ?? 0,
-      currentBook: auto?.currentBook ? { title: auto.currentBook.title, author: auto.currentBook.author } : null,
+      readingPagesToday: Number(readingR.rows[0]?.pages ?? 0),
+      readingMinutesToday: Number(readingR.rows[0]?.minutes ?? 0),
+      currentBook: book ? { title: String(book.title), author: book.author == null ? null : String(book.author) } : null,
     },
     gym: {
       today: (wToday.rows as unknown as Row[]).map((w) => ({ name: [w.modality, w.kind].filter(Boolean).map(String).filter((v, i, a) => a.indexOf(v) === i).join(" · "), minutes: w.duration_minutes == null ? null : Number(w.duration_minutes) })),
       week: { count: Number(w7.rows[0]?.n ?? 0), minutes: Number(w7.rows[0]?.m ?? 0) },
     },
     home: {
-      journalWordsToday: thoughts.split(/\s+/).filter(Boolean).length,
-      waterMl: auto?.waterMl ?? 0,
-      sleepMinutes: auto?.sleep?.durationMinutes ?? null,
-      mood: auto?.mood ? { mood: auto.mood.mood, energy: auto.mood.energy } : null,
+      waterMl: Number(waterR.rows[0]?.total ?? 0),
+      sleepMinutes: sleep?.duration_minutes == null ? null : Number(sleep.duration_minutes),
+      mood: mood ? { mood: Number(mood.mood), energy: mood.energy == null ? null : Number(mood.energy) } : null,
     },
   };
 }
@@ -426,7 +434,6 @@ const XP_CATEGORY: Record<string, { cat: string; link: (id: string) => string | 
   project: { cat: "missoes", link: (id) => `/projetos/${id}` },
   habit_entry: { cat: "habitos", link: () => "/habitos" },
   habit_streak: { cat: "habitos", link: () => "/habitos" },
-  journal: { cat: "diario", link: () => "/diario" },
   achievement: { cat: "recompensas", link: () => "/conquistas" },
   review: { cat: "revisoes", link: () => "/revisoes" },
   bank: { cat: "recompensas", link: () => "/banco" },
@@ -514,7 +521,6 @@ export async function getWorld(db: Client, ownerId: string) {
     pendencies: {
       ...pend,
       habitsPending: habits.filter((h) => h.pendingToday).length,
-      journalToday: facts.home.journalWordsToday > 0,
       workoutToday: facts.gym.today.length > 0,
       studyToday: facts.library.studyMinutesToday > 0 || facts.library.readingMinutesToday > 0,
     },

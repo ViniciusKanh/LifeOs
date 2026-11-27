@@ -201,7 +201,7 @@ export function ProtocolsTab() {
           </KitSection>
           <KitSection title="Juramento de privacidade" icon={<ShieldCheck size={15} />}>
             <ul className="space-y-1.5 text-sm text-rpg-text/90">
-              {["Treino e profecias rodam no servidor do LifeOS, sem serviços externos.", "O texto do Diário nunca vira variável.", "O Mestre só usa IA externa quando você pede, e recebe apenas números agregados."].map((t) => (
+              {["Treino e profecias rodam no servidor do LifeOS, sem serviços externos.", "O Mestre só usa IA externa quando você pede, e recebe apenas números agregados."].map((t) => (
                 <li key={t} className="flex gap-2">
                   <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-rpg-green" aria-hidden /> {t}
                 </li>

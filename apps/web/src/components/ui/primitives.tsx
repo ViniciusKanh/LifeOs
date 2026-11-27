@@ -255,7 +255,7 @@ export function PageHeader({
   actions?: React.ReactNode;
   /** No tema RPG, com banner, vira o RPGPageHeader (mesmo conteúdo). */
   banner?: RpgBanner;
-  /** Cor semântica do ícone no RPG (ex.: rosa no Diário). */
+  /** Cor semântica do ícone no RPG (ex.: rosa na Leitura). */
   tone?: RpgTone;
 }) {
   const { isRpg } = useTheme();

@@ -10,11 +10,9 @@ import {
   getJourneyHub,
   getTreasureHub,
   listBuildSnapshots,
-  momentCandidates,
   narrateJourney,
   recordBuildSnapshot,
   removeRewardGoal,
-  setMoment,
   toggleMark,
 } from "../services/heroHubService.js";
 
@@ -80,21 +78,6 @@ heroRouter.post("/journey/marks/toggle", async (req, res) => {
   if (!body.success) return res.status(400).json({ error: "Marco inválido." });
   try {
     return res.json(await toggleMark(getDb(), req.user!.id, body.data));
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-
-heroRouter.get("/journey/moments/candidates", async (req, res) => res.json(await momentCandidates(getDb(), req.user!.id)));
-
-/** PUT /api/hero/journey/moments/:mediaId { authorized } — o usuário decide quais fotos aparecem. */
-heroRouter.put("/journey/moments/:mediaId", async (req, res) => {
-  const p = id.safeParse(req.params.mediaId);
-  const body = z.object({ authorized: z.boolean() }).safeParse(req.body);
-  if (!p.success || !body.success) return res.status(400).json({ error: "Pedido inválido." });
-  try {
-    await setMoment(getDb(), req.user!.id, p.data, body.data.authorized);
-    return res.json({ ok: true });
   } catch (e) {
     return fail(res, e);
   }

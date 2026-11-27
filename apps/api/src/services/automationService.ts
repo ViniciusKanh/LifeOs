@@ -19,7 +19,7 @@ type Db = ReturnType<typeof getDb>;
  * tabela de execuções tem UNIQUE (automation_id, run_key).
  */
 
-export const AUTOMATION_MODULES = ["grimoire", "goals", "bank", "education", "health", "agenda", "missions", "quests", "diary", "lab", "hero", "journey", "habits", "library", "admin", "today", "contracts", "tavern", "forge", "reviews", "skills"] as const;
+export const AUTOMATION_MODULES = ["grimoire", "goals", "bank", "education", "health", "agenda", "missions", "quests", "lab", "hero", "journey", "habits", "library", "admin", "today", "contracts", "tavern", "forge", "reviews", "skills"] as const;
 export type AutomationModule = (typeof AUTOMATION_MODULES)[number];
 export type AutomationTrigger = "daily" | "weekly" | "event" | "manual";
 export type RunStatus = "ok" | "skipped" | "error";
@@ -48,17 +48,6 @@ const daily = "Uma vez por dia (e em “Executar agora”)";
 const weekly = "Toda segunda-feira (e em “Executar agora”)";
 
 export const AUTOMATION_DEFS: AutomationDef[] = [
-  {
-    module: "grimoire",
-    key: "diary_cards",
-    label: "Gerar cartões do Diário",
-    description: "Lê as entradas recentes do Diário com texto suficiente e propõe perguntas e respostas. Os cartões ficam na fila para você aprovar.",
-    trigger: "daily",
-    triggerLabel: "Uma vez por dia (e em “Executar agora”)",
-    usesAi: true,
-    defaultEnabled: false,
-    defaultConfig: { deckId: null, minWords: 80, lookbackDays: 3, maxEntries: 2, cardsPerEntry: 5 },
-  },
   {
     module: "grimoire",
     key: "smart_import",
@@ -768,85 +757,6 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     defaultEnabled: false,
     defaultConfig: { inApp: true, push: false },
   },
-  // ───────────────────────── Diário da Jornada ─────────────────────────
-  {
-    module: "diary",
-    key: "write_reminder",
-    label: "A · Lembrete de escrita",
-    description: "Lembrete diário para escrever no seu horário preferido. O agendador roda uma vez por dia, então o aviso chega pela manhã indicando o horário escolhido.",
-    trigger: "daily",
-    triggerLabel: "Uma vez por dia (e em “Executar agora”)",
-    usesAi: false,
-    defaultEnabled: false,
-    defaultConfig: { preferredHour: 21, inApp: true, push: true },
-    bounds: { preferredHour: [0, 23] },
-  },
-  {
-    module: "diary",
-    key: "weekly_retro",
-    label: "B · Resumo semanal",
-    description: "Prepara o rascunho da retrospectiva da semana passada só com o que você escreveu (por regras, sem IA). Fica como rascunho até você editar e salvar.",
-    trigger: "weekly",
-    triggerLabel: "Toda segunda-feira (e em “Executar agora”)",
-    usesAi: false,
-    defaultEnabled: false,
-    defaultConfig: { inApp: true },
-  },
-  {
-    module: "diary",
-    key: "day_context",
-    label: "C · Contexto automático",
-    description: "Mostra no Estado do Dia o que já foi registrado em Saúde, Hábitos, Missões e Leitura — direto da origem, sem copiar dados para o Diário.",
-    trigger: "event",
-    triggerLabel: "Ao abrir o Diário",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
-  {
-    module: "diary",
-    key: "learnings_grimoire",
-    label: "D · Aprendizados → Grimório",
-    description: "Usa a automação “Gerar cartões do Diário” do Grimório: sugere flashcards dos seus aprendizados e só cria após sua aprovação.",
-    trigger: "event",
-    triggerLabel: "Configurada no Grimório",
-    usesAi: true,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
-  {
-    module: "diary",
-    key: "goal_links",
-    label: "E · Vinculação com metas",
-    description: "Cada crônica pode ser vinculada a metas e projetos (vínculos do editor). Os vínculos aparecem na retrospectiva semanal.",
-    trigger: "event",
-    triggerLabel: "No editor da crônica",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
-  {
-    module: "diary",
-    key: "memories",
-    label: "F · Memórias da Jornada",
-    description: "Se você escreveu neste mesmo dia em anos anteriores, sugere revisitar a crônica.",
-    trigger: "daily",
-    triggerLabel: "Uma vez por dia (e em “Executar agora”)",
-    usesAi: false,
-    defaultEnabled: false,
-    defaultConfig: { inApp: true, push: false },
-  },
-  {
-    module: "diary",
-    key: "lab_notes",
-    label: "G · Observações para o Laboratório",
-    description: "Envia um trecho que VOCÊ escolher como observação de um experimento ativo (com a origem marcada). Nada do Diário é lido automaticamente.",
-    trigger: "event",
-    triggerLabel: "Pelo botão “Enviar ao Laboratório”",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
   // ───────────────────────── Laboratório da Jornada ─────────────────────────
   {
     module: "lab",
@@ -922,17 +832,6 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     description: "Experimentos podem ser vinculados a uma meta existente; o vínculo aparece na meta e no experimento.",
     trigger: "event",
     triggerLabel: "Ao vincular",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
-  {
-    module: "lab",
-    key: "diary_integration",
-    label: "H · Integração com o Diário",
-    description: "Observações escolhidas no Diário entram como notas do experimento, com a origem marcada. Sem leitura automática das crônicas.",
-    trigger: "event",
-    triggerLabel: "Pelo Diário",
     usesAi: false,
     defaultEnabled: true,
     defaultConfig: {},
@@ -1077,7 +976,7 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     module: "habits",
     key: "module_sync",
     label: "B · Sincronização entre módulos",
-    description: "Hábitos com fonte automática (treino, leitura, água, diário, missões, Grimório) são marcados pelo registro do módulo de origem — só quando o vínculo está configurado no hábito.",
+    description: "Hábitos com fonte automática (treino, leitura, água, missões, Grimório) são marcados pelo registro do módulo de origem — só quando o vínculo está configurado no hábito.",
     trigger: "event",
     triggerLabel: "A cada registro no módulo vinculado",
     usesAi: false,
@@ -1344,7 +1243,7 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     module: "today",
     key: "progress_sync",
     label: "D · Atualização de progresso",
-    description: "Missões, hábitos, foco, saúde e Diário atualizam o ritual e os indicadores a partir dos registros originais.",
+    description: "Missões, hábitos, foco e saúde atualizam o ritual e os indicadores a partir dos registros originais.",
     trigger: "event",
     triggerLabel: "A cada registro",
     usesAi: false,
@@ -1361,17 +1260,6 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     usesAi: false,
     defaultEnabled: false,
     defaultConfig: { inApp: true, push: false },
-  },
-  {
-    module: "today",
-    key: "day_close",
-    label: "F · Encerramento do dia",
-    description: "Monta a síntese do dia (missões, hábitos, foco, XP, conquistas e pendências); vai ao Diário só com a sua aprovação.",
-    trigger: "manual",
-    triggerLabel: "Pelo botão “Encerrar o dia”",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
   },
   // ─────────────── Painel do Herói (dashboard) ───────────────
   {
@@ -1509,40 +1397,6 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     defaultEnabled: true,
     defaultConfig: {},
   },
-  // ───────────── Diário 3.0 (entrada) ─────────────
-  {
-    module: "diary",
-    key: "autosave",
-    label: "H · Salvamento automático",
-    description: "O texto é salvo sozinho ~1 s depois de parar de digitar, com rascunho local para recuperar em caso de falha.",
-    trigger: "event",
-    triggerLabel: "Enquanto você escreve",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
-  {
-    module: "diary",
-    key: "entry_summary",
-    label: "I · Resumo da entrada",
-    description: "O Escriba Arcano resume, revisa ou dá título à crônica sob pedido — sempre em prévia; o original só muda se você aprovar.",
-    trigger: "manual",
-    triggerLabel: "Pelo botão do Escriba",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
-  {
-    module: "diary",
-    key: "extract_tasks",
-    label: "J · Tarefas da crônica",
-    description: "Pendências do fechamento e tarefas sugeridas pelo Escriba só viram missões depois da sua aprovação.",
-    trigger: "manual",
-    triggerLabel: "Pelo botão “Extrair tarefas”",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
-  },
   // ───────────── Taverna 3.0 ─────────────
   {
     module: "tavern",
@@ -1588,17 +1442,6 @@ export const AUTOMATION_DEFS: AutomationDef[] = [
     usesAi: false,
     defaultEnabled: false,
     defaultConfig: { inApp: true, push: false },
-  },
-  {
-    module: "tavern",
-    key: "diary_link",
-    label: "E · Vinculação com o Diário",
-    description: "Reflexão, aprendizado, gratidão e intenção vão para a crônica do dia (sem entrada duplicada).",
-    trigger: "event",
-    triggerLabel: "Ao salvar no ritual",
-    usesAi: false,
-    defaultEnabled: true,
-    defaultConfig: {},
   },
   {
     module: "tavern",
@@ -1888,7 +1731,7 @@ export async function updateAutomation(
   return getAutomation(db, ownerId, module, key);
 }
 
-/** Estado interno da automação (ex.: entradas do Diário já processadas) — não é editável pelo usuário. */
+/** Estado interno da automação (ex.: itens já processados) — não é editável pelo usuário. */
 export async function readAutomationState(db: Db, ownerId: string, module: AutomationModule, key: string): Promise<Record<string, unknown>> {
   const r = await db.execute({ sql: "SELECT config_json FROM automations WHERE owner_id = ? AND module = ? AND key = ?", args: [ownerId, module, key] });
   const cfg = parseConfig(r.rows[0]?.config_json);

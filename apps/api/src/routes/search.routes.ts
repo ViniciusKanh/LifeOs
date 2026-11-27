@@ -3,7 +3,6 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getGeminiConfig } from "../services/geminiService.js";
 import { rankSemanticCandidates, type SearchEntityType } from "../services/embeddingsService.js";
-import { stripHtml } from "../services/journalService.js";
 
 export const searchRouter = Router();
 searchRouter.use(requireAuth);
@@ -54,7 +53,7 @@ searchRouter.get("/", async (req, res) => {
   const like = `%${q}%`;
   const limitEach = 6;
 
-  const [tasks, goals, habits, books, academicProjects, projects, journalEntries, lifeAdmin, workouts, achievementsFound, bankDeposits, contracts, campaigns] = await Promise.all([
+  const [tasks, goals, habits, books, academicProjects, projects, lifeAdmin, workouts, achievementsFound, bankDeposits, contracts, campaigns] = await Promise.all([
     db.execute({
       sql: `SELECT id, title, status FROM tasks WHERE owner_id = ? AND title LIKE ? ORDER BY updated_at DESC LIMIT ?`,
       args: [ownerId, like, limitEach],
@@ -79,23 +78,7 @@ searchRouter.get("/", async (req, res) => {
       sql: `SELECT id, name, kind FROM projects WHERE owner_id = ? AND name LIKE ? AND archived_at IS NULL LIMIT ?`,
       args: [ownerId, like, limitEach],
     }),
-    // Diário (Fase 6): busca só textual — conteúdo do diário é sensível
-    // demais pra mandar pro Gemini gerar embeddings, diferente de
-    // título de tarefa/meta. As colunas têm HTML do editor rico
-    // (Fase 3), então o LIKE roda direto no HTML (funciona porque as
-    // tags não separam as palavras que o usuário buscaria) e o texto
-    // é limpo só na hora de montar o preview do resultado.
-    db.execute({
-      sql: `SELECT id, entry_date, intention, thoughts, challenges, lighter_plan, feel_good, night_helped, night_takeaway
-            FROM journal_entries
-            WHERE owner_id = ? AND (
-              intention LIKE ? OR thoughts LIKE ? OR challenges LIKE ? OR
-              lighter_plan LIKE ? OR feel_good LIKE ? OR night_helped LIKE ? OR night_takeaway LIKE ?
-            )
-            ORDER BY entry_date DESC LIMIT ?`,
-      args: [ownerId, like, like, like, like, like, like, like, limitEach],
-    }),
-    // Administração da vida — só busca textual, como o Diário. (A tela de Notas
+    // Administração da vida — só busca textual. (A tela de Notas
     // foi removida: as notas continuam no banco, mas não entram mais na busca.)
     db.execute({
       sql: `SELECT id, title, due_date FROM life_admin_items WHERE owner_id = ? AND status = 'active' AND (title LIKE ? OR reference LIKE ? OR notes LIKE ?) LIMIT ?`,
@@ -153,16 +136,6 @@ searchRouter.get("/", async (req, res) => {
       )
     ),
     ...projects.rows.map((r) => toResult("project", { id: String(r.id), title: String(r.name), subtitle: "Projeto", link: `/projetos/${String(r.id)}` }, "text")),
-    ...journalEntries.rows.map((r) => {
-      const fields = ["intention", "thoughts", "challenges", "lighter_plan", "feel_good", "night_helped", "night_takeaway"] as const;
-      const preview = fields.map((f) => stripHtml(r[f] as string | null)).find((p) => p.length > 0) ?? "";
-      const date = String(r.entry_date);
-      return toResult(
-        "journal_entry",
-        { id: date, title: `Diário · ${date}`, subtitle: preview.length > 0 ? preview.slice(0, 80) : null, link: `/diario?date=${date}` },
-        "text"
-      );
-    }),
     ...lifeAdmin.rows.map((r) =>
       toResult(
         "life_admin",

@@ -32,7 +32,7 @@ export function roomStatus(w: WorldState, pendingAgent: string | null): Partial<
     escritorio: w.activity?.room === "escritorio" ? "Trabalhando" : busy("planejador") || busy("analista") ? "Agente ativo" : `${inProgress} em andamento`,
     guilda: `${w.missions.open.length} missão(ões) aberta(s)`,
     academia: w.rooms.gym.today.length ? "Treino feito hoje" : "Disponível",
-    casa: w.rooms.home.journalWordsToday ? "Diário escrito hoje" : "Descanso e diário",
+    casa: w.rooms.home.mood ? "Check-in de bem-estar feito" : "Descanso e bem-estar",
     jardim: w.habits.length ? `${done}/${w.habits.length} hábitos hoje` : "Sem hábitos",
     praca: "Centro do mundo",
   };

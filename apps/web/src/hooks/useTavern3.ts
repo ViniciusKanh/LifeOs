@@ -5,11 +5,11 @@ import { notifyGamification } from "@/services/gamificationService";
 export const TAVERN3_KEY = ["tavern3"] as const;
 export const useTavern3 = () => useQuery({ queryKey: TAVERN3_KEY, queryFn: tavern3Service.get, staleTime: 15_000 });
 
-/** Ações da Taverna: tudo atualiza o ritual, o Diário, Hoje e a gamificação. */
+/** Ações da Taverna: tudo atualiza o ritual, Hoje e a gamificação. */
 export function useTavern3Actions() {
   const qc = useQueryClient();
   const sync = () => {
-    for (const k of [TAVERN3_KEY, ["journal"], ["chronicle-entry"], ["today-hub"], ["gamification"], ["events"], ["tasks"]]) void qc.invalidateQueries({ queryKey: k });
+    for (const k of [TAVERN3_KEY, ["today-hub"], ["gamification"], ["events"], ["tasks"]]) void qc.invalidateQueries({ queryKey: k });
   };
   return {
     sync,

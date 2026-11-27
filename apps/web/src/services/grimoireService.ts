@@ -90,8 +90,7 @@ export interface DeckInput {
 
 export type CardGenSource =
   | { kind: "text"; text: string }
-  | { kind: "book_notes"; bookId: string; noteIds?: string[] }
-  | { kind: "journal"; entryDate: string };
+  | { kind: "book_notes"; bookId: string; noteIds?: string[] };
 
 export interface CardGenResult {
   label: "sugestão";
@@ -134,7 +133,6 @@ export const grimoireService = {
   importContent: (input: { title: string; kind: "text" | "pdf"; text?: string; pdfBase64?: string; deckId?: string | null }) =>
     api.post<{ ok: true; importId: string; summary: ImportSummary | null; suggested: number }>("/grimoire/import", input),
   imports: () => api.get<GrimoireImport[]>("/grimoire/imports"),
-  suggestFromJournal: (entryDate: string, deckId: string | null) => api.post<{ added: number }>("/grimoire/suggestions/from-journal", { entryDate, deckId }),
   suggestions: () => api.get<GrimoireSuggestion[]>("/grimoire/suggestions"),
   decideSuggestions: (input: { approve: Array<{ id: string; front?: string; back?: string }>; reject: string[]; deckId?: string | null }) =>
     api.post<{ created: number; rejected: number }>("/grimoire/suggestions/decide", input),
@@ -143,11 +141,11 @@ export const grimoireService = {
 };
 
 export interface OracleRec {
-  kind: "focus" | "best_hour" | "reinforce" | "neglected" | "diary" | "start";
+  kind: "focus" | "best_hour" | "reinforce" | "neglected" | "start";
   title: string;
   detail: string;
   provenance: "dado" | "inferência" | "sugestão";
-  action: { type: "study_deck" | "open_deck" | "generate_diary" | "new_deck"; deckId?: string; entryDate?: string } | null;
+  action: { type: "study_deck" | "open_deck" | "new_deck"; deckId?: string } | null;
 }
 
 /** Painel central do Grimório 2.0 — tudo calculado no servidor a partir das revisões reais. */

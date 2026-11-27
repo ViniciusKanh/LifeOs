@@ -18,7 +18,6 @@ async function seedSourceData(ownerId: string) {
     health1: id(), water1: id(), workout1: id(), workoutSet1: id(),
     book1: id(), bookNote1: id(), readingSession1: id(),
     education1: id(), course1: id(), subject1: id(), academicProject1: id(), academicDeadline1: id(), studySession1: id(), semesterItem1: id(),
-    journal1: id(), journalEntry1: id(),
   };
 
   await db.batch(
@@ -58,13 +57,10 @@ async function seedSourceData(ownerId: string) {
       { sql: "INSERT INTO study_sessions (id, owner_id, education_id, subject_id, occurred_at, duration_minutes) VALUES (?, ?, ?, ?, '2026-10-01T10:00:00Z', 90)", args: [ids.studySession1, ownerId, ids.education1, ids.subject1] },
       { sql: "INSERT INTO semester_checklist (id, owner_id, education_id, title, done) VALUES (?, ?, ?, 'Matricular disciplinas', 1)", args: [ids.semesterItem1, ownerId, ids.education1] },
 
-      { sql: "INSERT INTO journals (id, owner_id, name) VALUES (?, ?, 'Diário principal')", args: [ids.journal1, ownerId] },
       {
-        sql: "INSERT INTO journal_entries (id, owner_id, entry_date, thoughts, focus_task_ids) VALUES (?, ?, '2026-10-01', 'Dia produtivo', ?)",
-        args: [ids.journalEntry1, ownerId, JSON.stringify([ids.task1, ids.task2, "id-que-nao-existe"])],
+        sql: "INSERT INTO day_focus (owner_id, day_key, focus_task_ids) VALUES (?, '2026-10-01', ?)",
+        args: [ownerId, JSON.stringify([ids.task1, ids.task2, "id-que-nao-existe"])],
       },
-      { sql: "INSERT INTO journal_entry_journals (entry_id, journal_id) VALUES (?, ?)", args: [ids.journalEntry1, ids.journal1] },
-      { sql: "INSERT INTO journal_entry_links (id, entry_id, owner_id, target_type, target_id) VALUES (?, ?, ?, 'project', ?)", args: [id(), ids.journalEntry1, ownerId, ids.project1] },
     ],
     "write"
   );
@@ -91,7 +87,7 @@ describe("Restauração de backup (escopo V1)", () => {
       tags: 1, task_tags: 1, task_dependencies: 1, health_entries: 1, water_entries: 1, workouts: 1,
       workout_sets: 1, books: 1, book_notes: 1, reading_sessions: 1, educations: 1, courses: 1,
       subjects: 1, academic_projects: 1, academic_deadlines: 1, study_sessions: 1, semester_checklist: 1,
-      journals: 1, journal_entries: 1, journal_entry_journals: 1, journal_entry_links: 1,
+      day_focus: 1,
     });
 
     const db = getDb();
@@ -145,13 +141,10 @@ describe("Restauração de backup (escopo V1)", () => {
     );
     expect(academicProjectNew.project_id).toBe(project1New.id);
 
-    const journalEntryNew = await one<{ focus_task_ids: string }>("SELECT focus_task_ids FROM journal_entries WHERE owner_id = ?", [ownerB]);
-    const remappedFocusIds = JSON.parse(journalEntryNew.focus_task_ids) as string[];
+    const focusNew = await one<{ focus_task_ids: string }>("SELECT focus_task_ids FROM day_focus WHERE owner_id = ?", [ownerB]);
+    const remappedFocusIds = JSON.parse(focusNew.focus_task_ids) as string[];
     // Remapeia os 2 ids válidos e descarta silenciosamente o id inexistente do arquivo original.
     expect(remappedFocusIds.sort()).toEqual([task1New.id, task2New.id].sort());
-
-    const linkNew = await one<{ target_id: string }>("SELECT target_id FROM journal_entry_links WHERE owner_id = ?", [ownerB]);
-    expect(linkNew.target_id).toBe(project1New.id);
 
     // Dado original de A continua intacto e com o dono de sempre — a restauração em B nunca deve tocar os dados de A.
     const originalGoal = await one<{ owner_id: string }>("SELECT owner_id FROM goals WHERE id = ?", [sourceIds.goal1]);

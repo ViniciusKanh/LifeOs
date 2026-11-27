@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { Bot, CalendarRange, Crown, GitCommitHorizontal, Image as ImageIcon, LayoutList, ScrollText, Star, Trophy, Wand2, Zap } from "lucide-react";
+import { Bot, CalendarRange, Crown, GitCommitHorizontal, LayoutList, ScrollText, Star, Trophy, Wand2, Zap } from "lucide-react";
 import { RPGButton, RPGProgressBar, RPGToast } from "@/components/rpg";
 import { AdvisorPanel, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
 import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
 import { useAchievementsHub, useHeroActions, useJourney, localDayKey, shiftLocalDay } from "@/hooks/useHero";
 import type { TimelineEvent } from "@/types";
 import { ChainsPanel, MasteryPanel, TitlesSeasonPanel, TrophyHall } from "./AchievementsHub";
-import { EMPTY_FILTERS, JourneyFilterBar, JourneyIndicators, JourneyTimeline, MarksPanel, MomentsPanel, NarratorPanel, SummariesPanel, eventKey, filterEvents } from "./JourneyHub";
+import { EMPTY_FILTERS, JourneyFilterBar, JourneyIndicators, JourneyTimeline, MarksPanel, NarratorPanel, SummariesPanel, eventKey, filterEvents } from "./JourneyHub";
 import { HERO_ART, nf } from "./HeroShared";
 
 export const ACH_TABS = ["salao", "cadeias", "titulos", "trofeus", "automacoes", "ia"] as const;
@@ -85,7 +85,7 @@ export function AchievementsShell({ tab, onTab }: { tab: AchTab; onTab: (t: AchT
   );
 }
 
-const JOURNEY_TABS = ["cronica", "marcos", "momentos", "resumos", "narrador", "automacoes"] as const;
+const JOURNEY_TABS = ["cronica", "marcos", "resumos", "narrador", "automacoes"] as const;
 export type JourneyTab = (typeof JOURNEY_TABS)[number];
 export { JOURNEY_TABS };
 
@@ -147,7 +147,6 @@ export function JourneyShell({ tab, onTab }: { tab: JourneyTab; onTab: (t: Journ
         tabs={[
           { value: "cronica", label: "Crônica", icon: <LayoutList size={15} /> },
           { value: "marcos", label: "Marcos", icon: <Star size={15} />, badge: hub?.marks.length || undefined },
-          { value: "momentos", label: "Momentos", icon: <ImageIcon size={15} /> },
           { value: "resumos", label: "Resumos", icon: <CalendarRange size={15} /> },
           { value: "narrador", label: "Narrador", icon: <ScrollText size={15} /> },
           { value: "automacoes", label: "Automações", icon: <Zap size={15} /> },
@@ -176,7 +175,6 @@ export function JourneyShell({ tab, onTab }: { tab: JourneyTab; onTab: (t: Journ
         </>
       )}
       {hub && tab === "marcos" && <MarksPanel hub={hub} events={events} onFav={onFav} />}
-      {hub && tab === "momentos" && <MomentsPanel hub={hub} onToast={notify} />}
       {hub && tab === "resumos" && <SummariesPanel hub={hub} />}
       {tab === "narrador" && <NarratorPanel from={from} to={to} onToast={notify} />}
       {tab === "automacoes" && <AutomationsPanel module="journey" title="Automações da Crônica" intro="A Crônica lê o histórico oficial: nenhum evento é duplicado, inventado ou gravado em uma segunda fonte." />}

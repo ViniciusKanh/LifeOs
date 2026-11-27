@@ -46,7 +46,7 @@ export const ORIGIN_LABEL: Record<string, string> = {
   codex: "Códex",
   treasure: "Tesouro",
   focus_count: "Cronômetro",
-  journal_count: "Diário",
+  journal_count: "Diário (antigo)",
   set: "Conjunto",
   profile: "Perfil",
 };

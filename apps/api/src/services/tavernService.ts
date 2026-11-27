@@ -2,13 +2,13 @@ import type { Client } from "@libsql/client";
 import { dayKeyIn, todayKeyFor, userTimezone } from "./gamificationService.js";
 import { tomorrowProphecies } from "./intelligenceService.js";
 import { getFocusTasks } from "./priorityService.js";
-import { ensureJournalEntryId } from "./journalService.js";
+import { getFocusTaskIds, setFocusTaskIds } from "./dayFocusService.js";
 
 /**
  * Taverna — ritual de fim de dia. Só LÊ as fontes originais (XP, moedas,
  * tarefas, hábitos, Saúde, conquistas, Forja) para montar o balanço, a
  * profecia de amanhã e a sugestão da primeira missão. A única escrita é
- * fixar a missão principal de amanhã (journal_entries.focus_task_ids),
+ * fixar a missão principal de amanhã (day_focus.focus_task_ids),
  * sempre por ação confirmada do usuário.
  */
 
@@ -27,16 +27,6 @@ const addDays = (iso: string, n: number) => {
 /** Timestamps do SQLite (UTC, "YYYY-MM-DD HH:MM:SS") → dia local do usuário. */
 const localDay = (sqlTs: string, tz: string) => dayKeyIn(new Date(sqlTs.includes("T") ? sqlTs : `${sqlTs.replace(" ", "T")}Z`), tz);
 
-function parseIds(value: unknown): string[] {
-  if (typeof value !== "string" || !value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 /** Média diária dos 7 dias anteriores a hoje (dias sem registro contam como 0); null se a janela inteira estiver vazia. */
 function avg7(byDay: Map<string, number>, today: string): number | null {
   const keys = Array.from({ length: 7 }, (_, i) => addDays(today, -(i + 1)));
@@ -50,7 +40,7 @@ async function dayBalance(db: Client, ownerId: string, today: string, tz: string
   const from = addDays(today, -7);
   // Janela UTC folgada (fusos de até ±14h) para converter depois para o dia local.
   const utcFrom = addDays(from, -1);
-  const [xp, coins, tasks, habitsDone, habitsTotal, water, workouts, sleep, ach, custom, todayJournal] = await Promise.all([
+  const [xp, coins, tasks, habitsDone, habitsTotal, water, workouts, sleep, ach, custom, todayFocus] = await Promise.all([
     db.execute({ sql: "SELECT day_key AS d, SUM(xp) AS v FROM xp_events WHERE owner_id = ? AND day_key BETWEEN ? AND ? GROUP BY day_key", args: [ownerId, from, today] }),
     db.execute({ sql: "SELECT amount, created_at FROM coin_ledger WHERE owner_id = ? AND amount > 0 AND created_at >= ?", args: [ownerId, utcFrom] }),
     db.execute({
@@ -78,7 +68,7 @@ async function dayBalance(db: Client, ownerId: string, today: string, tz: string
       args: [ownerId, addDays(today, -1)],
     }),
     db.execute({ sql: "SELECT id, title, icon, unlocked_at FROM custom_achievements WHERE owner_id = ? AND unlocked_at >= ?", args: [ownerId, addDays(today, -1)] }),
-    db.execute({ sql: "SELECT focus_task_ids FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, today] }),
+    getFocusTaskIds(db, ownerId, today),
   ]);
 
   const xpByDay = sumMap(xp.rows as unknown as Array<Record<string, unknown>>);
@@ -111,8 +101,8 @@ async function dayBalance(db: Client, ownerId: string, today: string, tz: string
     ...custom.rows.map((r) => ({ id: String(r.id), title: String(r.title), icon: r.icon ? String(r.icon) : null, unlockedAt: String(r.unlocked_at), custom: true })),
   ].filter((a) => localDay(a.unlockedAt, tz) === today);
 
-  // Missão principal de hoje (fixada no diário de hoje), se houver.
-  const mainIds = parseIds(todayJournal.rows[0]?.focus_task_ids);
+  // Missão principal de hoje (fixada na véspera), se houver.
+  const mainIds = todayFocus;
   let mainMission: { id: string; title: string; done: boolean } | null = null;
   if (mainIds[0]) {
     const m = await db.execute({ sql: "SELECT id, title, status FROM tasks WHERE id = ? AND owner_id = ?", args: [mainIds[0], ownerId] });
@@ -151,7 +141,7 @@ interface MissionCandidate {
 async function tomorrowMission(db: Client, ownerId: string, tomorrow: string) {
   const [focus, pinnedRes, dueTomorrowRes] = await Promise.all([
     getFocusTasks(db, ownerId, 20),
-    db.execute({ sql: "SELECT focus_task_ids FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, tomorrow] }),
+    getFocusTaskIds(db, ownerId, tomorrow),
     db.execute({
       sql: `SELECT id, title, priority FROM tasks WHERE owner_id = ? AND status != 'Concluído' AND habit_id IS NULL
             AND due_date >= date(?) AND due_date < date(?, '+1 day') ORDER BY CASE priority WHEN 'Alta' THEN 0 WHEN 'Média' THEN 1 ELSE 2 END LIMIT 10`,
@@ -188,7 +178,7 @@ async function tomorrowMission(db: Client, ownerId: string, tomorrow: string) {
     if (candidates.length >= 3) break;
   }
 
-  const pinnedIds = parseIds(pinnedRes.rows[0]?.focus_task_ids);
+  const pinnedIds = pinnedRes;
   const pinned = pinnedIds.length
     ? (
         await db.execute({
@@ -222,7 +212,7 @@ export async function getTavernSummary(db: Client, ownerId: string) {
 
 /**
  * Fixa a missão principal de amanhã: coloca a tarefa no topo de
- * focus_task_ids da entrada de diário de amanhã (criando-a se preciso).
+ * foco do dia de amanhã (day_focus).
  * Opcionalmente move o prazo para amanhã — só quando o usuário confirmou.
  */
 export async function pinTomorrowMission(db: Client, ownerId: string, taskId: string, opts: { setDueTomorrow?: boolean } = {}) {
@@ -234,18 +224,10 @@ export async function pinTomorrowMission(db: Client, ownerId: string, taskId: st
   if (task.habit_id) throw new TavernError(422, "Check-ins de hábito não podem ser a missão principal.");
 
   const tomorrow = addDays(await todayKeyFor(db, ownerId), 1);
-  const entryId = await ensureJournalEntryId(db, ownerId, tomorrow);
-  const cur = await db.execute({ sql: "SELECT focus_task_ids FROM journal_entries WHERE id = ? AND owner_id = ?", args: [entryId, ownerId] });
-  const next = [taskId, ...parseIds(cur.rows[0]?.focus_task_ids).filter((id) => id !== taskId)].slice(0, 10);
-  const statements = [
-    {
-      sql: "UPDATE journal_entries SET focus_task_ids = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
-      args: [JSON.stringify(next), entryId, ownerId],
-    },
-  ];
+  const next = [taskId, ...(await getFocusTaskIds(db, ownerId, tomorrow)).filter((id) => id !== taskId)].slice(0, 10);
+  await setFocusTaskIds(db, ownerId, tomorrow, next);
   if (opts.setDueTomorrow) {
-    statements.push({ sql: "UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [tomorrow, taskId, ownerId] });
+    await db.execute({ sql: "UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [tomorrow, taskId, ownerId] });
   }
-  await db.batch(statements, "write");
   return { date: tomorrow, focusTaskIds: next, task: { id: String(task.id), title: String(task.title) }, dueDateChanged: !!opts.setDueTomorrow };
 }

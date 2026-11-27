@@ -108,16 +108,15 @@ describe("Quadro de Quests — serviço e rotas", () => {
     const db = getDb();
     const board = await getQuestBoard(db, userId);
     const byKey = Object.fromEntries(board.daily.quests.map((q) => [q.templateKey, q]));
-    expect(Object.keys(byKey).sort()).toEqual(["d_journal", "d_missions", "d_xp"]);
+    expect(Object.keys(byKey).sort()).toEqual(["d_high_priority", "d_missions", "d_xp"]);
     expect(byKey.d_missions.progress).toBe(0);
     await expect(claimQuest(db, userId, byKey.d_missions.id)).rejects.toMatchObject({ status: 409 });
 
-    // Dados reais: missões concluídas e uma entrada no diário hoje.
+    // Dados reais: missões concluídas hoje.
     for (let i = 0; i < 3; i++) {
       const t = await agent.post("/api/tasks").send({ title: `Missão ${i}`, priority: "Alta" });
       await agent.patch(`/api/tasks/${t.body.id}`).send({ status: "Concluído" });
     }
-    await db.execute({ sql: "INSERT INTO journal_entries (id, owner_id, entry_date, thoughts) VALUES (?, ?, ?, 'Dia produtivo')", args: [nanoid(), userId, utcToday()] });
     // XP orgânico garantido (independe das regras de XP de tarefa).
     await db.execute({
       sql: "INSERT INTO xp_events (id, owner_id, source_type, source_id, event_type, xp, label, day_key) VALUES (?, ?, 'review', ?, 'seed', 400, 'seed', ?)",
@@ -128,13 +127,14 @@ describe("Quadro de Quests — serviço e rotas", () => {
     const q = Object.fromEntries(live.daily.quests.map((x) => [x.templateKey, x]));
     expect(q.d_missions.progress).toBe(3);
     expect(q.d_missions.completed).toBe(true);
-    expect(q.d_journal.progress).toBe(1);
 
     const first = await claimQuest(db, userId, q.d_missions.id);
     expect(first).toMatchObject({ xp: q.d_missions.xpReward, replayed: false, bonusXp: 0 });
     const again = await claimQuest(db, userId, q.d_missions.id);
     expect(again).toMatchObject({ xp: 0, replayed: true });
-    await claimQuest(db, userId, q.d_journal.id);
+    // As 3 missões eram de prioridade alta: a quest genérica de prioridade alta também fecha.
+    expect(q.d_high_priority.completed).toBe(true);
+    await claimQuest(db, userId, q.d_high_priority.id);
     const last = await claimQuest(db, userId, q.d_xp.id);
     expect(last.bonusXp).toBe(30);
 

@@ -5,14 +5,12 @@ import { getDb } from "../db/client.js";
 import {
   RITUAL_KINDS,
   TodayError,
-  dayCloseSummary,
   focusBlocks,
   getTimer,
   getTodayHub,
   listRitualSteps,
   nextBestAction,
   pauseTimer,
-  saveDayCloseToJournal,
   saveRitual,
   setMainMission,
   startTimer,
@@ -109,18 +107,6 @@ todayHubRouter.post(
   "/timer/stop",
   wrap(async (req, res) => res.json(await stopTimer(getDb(), req.user!.id))),
 );
-
-todayHubRouter.get("/close", async (req, res) => {
-  const hub = await getTodayHub(getDb(), req.user!.id);
-  return res.json({ text: dayCloseSummary(hub) });
-});
-/** POST /api/today-hub/close — grava no Diário SÓ o texto que o usuário revisou e aprovou. */
-todayHubRouter.post("/close", async (req, res) => {
-  const body = z.object({ text: z.string().trim().min(5).max(2000) }).safeParse(req.body ?? {});
-  if (!body.success) return res.status(400).json({ error: "Texto inválido." });
-  await saveDayCloseToJournal(getDb(), req.user!.id, body.data.text);
-  return res.json({ ok: true });
-});
 
 heroDashboardRouter.get("/", async (req, res) => {
   const p = z.enum(Object.keys(PERIODS) as [Period, ...Period[]]).catch("30d").parse(req.query.period);

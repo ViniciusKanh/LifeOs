@@ -83,7 +83,7 @@ export const ACTION_LABEL: Record<ActionType, string> = {
 export const LEGACY_ACTION_TYPES: readonly ActionType[] = ["START_FOCUS"];
 
 /** Telas que um protocolo pode abrir (lista fechada — nada de URL arbitrária). */
-export const OPEN_SCREEN_PATHS = ["/hoje", "/inbox", "/tarefas", "/contratos", "/saude", "/diario", "/capacity-planner", "/calendario", "/revisoes", "/weekly-review", "/notas", "/metas", "/educacao", "/biblioteca", "/signals", "/build", "/protocolos"] as const;
+export const OPEN_SCREEN_PATHS = ["/hoje", "/inbox", "/tarefas", "/contratos", "/saude", "/capacity-planner", "/calendario", "/revisoes", "/weekly-review", "/notas", "/metas", "/educacao", "/biblioteca", "/signals", "/build", "/protocolos"] as const;
 
 export interface StepDef {
   title: string;
@@ -267,7 +267,6 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
       { title: "Lembrete para sair a tempo", actionType: "ADD_REMINDER", config: { time: "18:30", title: "Sair para o evento" }, minutes: 1 },
       { title: "Separar o que levar", actionType: "CHECKLIST", config: { items: ["Documento", "Carregador", "Presente ou contribuição"] }, minutes: 5 },
       { title: "Estar presente: celular no bolso", actionType: "SHOW_INSTRUCTION", config: { text: "Aproveite o momento — notificações podem esperar." }, minutes: 1 },
-      { title: "Registrar como foi no Diário", actionType: "OPEN_SCREEN", config: { path: "/diario" }, optional: true, minutes: 5 },
     ],
   },
   {
@@ -284,7 +283,6 @@ export const PROTOCOL_TEMPLATES: TemplateDef[] = [
       { title: "Separar o que depende de você", actionType: "CHECKLIST", config: { items: ["Depende de mim", "Não depende de mim"] }, minutes: 5 },
       { title: "Reduzir a carga do dia em 20%", actionType: "ADJUST_CAPACITY", config: { reducePct: 20 }, optional: true, minutes: 2 },
       { title: "Caminhada curta ao ar livre", actionType: "CUSTOM", minutes: 10 },
-      { title: "Registrar no Diário", actionType: "OPEN_SCREEN", config: { path: "/diario" }, optional: true, minutes: 5 },
       { title: "Se persistir, procure apoio de alguém de confiança ou de um profissional", actionType: "SHOW_INSTRUCTION", config: { text: "Você não precisa resolver tudo sozinho." }, minutes: 1 },
     ],
   },

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateSeals, guildPoints, pactPhase, pactRisk, sanitizePactProposal, spreadDates } from "../src/services/contractGuildService.js";
 import { resolveStageStatuses } from "../src/services/contractStages.js";
-import { chapterOf } from "../src/services/chronicleEntryService.js";
 
 const base = { isDraft: false, status: "ativo", pausedAt: null, cancelledAt: null, sealedAt: null, doneTasks: 0 };
 
@@ -98,17 +97,5 @@ describe("Utilidades da Guilda", () => {
     expect(r.data.stages[0]!.tasks[0]!.dueInDays).toBe(30);
     expect(r.data.stages[0]!.tasks[0]!.dependsOn).toBeNull();
     expect(r.data.stages[0]!.tasks[1]!.dependsOn).toBe("Fazer A");
-  });
-});
-
-describe("Diário 3.0 — capítulos", () => {
-  it("capítulos por dias escritos, nunca por palavras", () => {
-    expect(chapterOf(0).title).toBe("Primeiras Páginas");
-    expect(chapterOf(7).title).toBe("O Início da Disciplina");
-    const c = chapterOf(40);
-    expect(c.title).toBe("Guardião das Memórias");
-    expect(c.roman).toBe("III");
-    expect(c.pct).toBe(33);
-    expect(chapterOf(500).next).toBeNull();
   });
 });

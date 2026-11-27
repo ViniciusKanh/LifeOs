@@ -217,7 +217,7 @@ export interface Project {
   role?: "owner" | "member";
 }
 
-/** Indicadores do projeto — sempre derivados das tarefas, anexos e Diário. */
+/** Indicadores do projeto — sempre derivados das tarefas e anexos. */
 export interface ProjectOverview {
   totals: {
     tasks: number;
@@ -229,13 +229,11 @@ export interface ProjectOverview {
     estimateMinutes: number;
     timeSpentMinutes: number;
     attachments: number;
-    journalEntries: number;
   };
   byStatus: Array<{ status: string; count: number }>;
   byPriority: Array<{ priority: string; count: number }>;
   upcoming: Array<{ id: string; title: string; dueDate: string; status: string; priority: string }>;
   recentlyCompleted: Array<{ id: string; title: string; completedAt: string }>;
-  journalEntries: Array<{ date: string; preview: string | null }>;
   daysToDeadline: number | null;
 }
 
@@ -793,165 +791,9 @@ export interface LifeInsights {
   weekdayBreakdown: Array<{ weekday: number; label: string; avgCompleted: number }>;
 }
 
-export interface DailyWisdom {
-  text: string;
-  source: string;
-  kind: "versiculo" | "proverbio";
-}
-
-export interface JournalAutoData {
-  mood: { mood: number; energy: number; stress: number | null } | null;
-  sleep: { qualityScore: number | null; durationMinutes: number | null } | null;
-  insightText: string | null;
-  suggestedFocusTasks: Array<{ id: string; title: string; priority: string }>;
-  currentBook: { id: string; title: string; author: string | null; coverUrl: string | null } | null;
-  autoSelfCare: string[];
-  tasksToday: { done: number; total: number };
-  habitsToday: { done: number; total: number; streak: { habitName: string; streak: number } | null };
-  waterMl: number;
-  exerciseMinutes: number;
-  reading: { pages: number; minutes: number };
-  summary: string;
-  dailyQuote: DailyWisdom;
-}
-
-/** Assistente de escrita do Diário — só sugestão; nada é salvo sem o usuário inserir. */
-export interface JournalWritingAssist {
-  questions: string[];
-  draft: string | null;
-  takeaways: string[];
-  /** Fatos reais (montados no backend) que a IA recebeu. */
-  dataUsed: string[];
-}
-
-export interface JournalEntry {
-  date: string;
-  /** "Como foi meu dia" — texto corrido (HTML do editor rico). */
-  thoughts: string | null;
-  gratitude: string[];
-  selfCare: string[];
-  selfCareOther: string | null;
-  /** Humor anotado no próprio diário antes de vir de Saúde — só leitura, registros antigos. */
-  nightMood: number | null;
-  /** "O que levo para amanhã". */
-  nightTakeaway: string | null;
-  /** Fechamento do dia 3.0: reflexão, aprendizado e pendência. */
-  closingReflection?: string | null;
-  closingLearning?: string | null;
-  closingPending?: string | null;
-  focusTaskIds: string[];
-  /** Ids dos diários (coleções) a que a entrada deste dia pertence — ver JournalCollection. */
-  journalIds: string[];
-  /** Fotos anexadas à entrada do dia (Fase 4 do Diário — Apple Journal). */
-  media: JournalMedia[];
-  /** Dia marcado como favorito (Fase 6 do Diário — Apple Journal). */
-  isFavorite: boolean;
-  /** Localização real do dia (busca via /api/context/geocode) — null quando não informada. */
-  locationLabel: string | null;
-  locationLat: number | null;
-  locationLng: number | null;
-  /** Etiquetas reais do dia (Fase 17 — protótipo Apple Journal). */
-  tags: string[];
-  /** Projetos/metas reais vinculados a este dia (Fase 17). */
-  links: JournalEntryLink[];
-  /** Organização por IA confirmada (null quando nunca foi salva). */
-  ai: JournalAiOrganization | null;
-  auto: JournalAutoData;
-  /** updated_at do servidor — usado para detectar conflito entre dispositivos. */
-  updatedAt?: string | null;
-}
-
-/** Vínculo real de uma entrada do Diário a um projeto ou meta do usuário (Fase 17). */
-export interface JournalEntryLink {
-  id: string;
-  targetType: "project" | "goal";
-  targetId: string;
-}
-
-/** Uma foto ou nota de voz anexada à entrada do dia do Diário. */
-export type JournalMediaKind = "photo" | "audio" | "video" | "document";
-
-/** Mídia do Diário (foto, vídeo, PDF ou nota de voz) com a história contada pelo usuário. */
-export interface JournalMedia {
-  id: string;
-  kind: JournalMediaKind;
-  dataUri: string;
-  caption: string | null;
-  story: string | null;
-  fileName: string | null;
-  mimeType: string | null;
-  /** Categoria sugerida pela IA e confirmada pelo usuário. */
-  aiCategory: string | null;
-  durationSeconds: number | null;
-  sortOrder: number;
-}
-
-/** Organização por temas feita pelo Gemini (salva só após confirmação do usuário). */
-export interface JournalAiCategory {
-  name: string;
-  points: string[];
-}
-
-export interface JournalAiOrganization {
-  title: string | null;
-  summary: string | null;
-  categories: JournalAiCategory[];
-  /** Momentos marcantes confirmados pelo usuário. */
-  highlights: string[];
-  /** Reflexão sobre a gratidão do dia (inferência confirmada). */
-  gratitude: string | null;
-  organizedAt: string;
-}
-
-/** Sugestão devolvida pela IA — ainda NÃO salva. */
-export interface JournalAiSuggestion {
-  title: string | null;
-  summary: string | null;
-  highlights: string[];
-  gratitude: string | null;
-  categories: JournalAiCategory[];
-  mediaCategories: Array<{ id: string; category: string }>;
-  /** Descrição visual (inferência) e legenda sugerida — só para fotos enviadas com consentimento. */
-  photoNotes: Array<{ id: string; description: string; suggestedCaption: string | null }>;
-  suggestedTags: string[];
-  photosAnalyzed: number;
-  /** Reescrita do rascunho "Como foi meu dia" — só substitui o texto se o usuário escolher. */
-  improvedText: string | null;
-  /** Fatos reais dos outros módulos usados como contexto pela IA. */
-  dataUsed: string[];
-}
-
-/** O que o usuário confirma ao salvar a organização. */
-export interface JournalAiApplyInput {
-  title: string | null;
-  summary: string | null;
-  highlights: string[];
-  gratitude: string | null;
-  categories: JournalAiCategory[];
-  mediaCategories: Array<{ id: string; category: string }>;
-  mediaCaptions: Array<{ id: string; caption: string }>;
-  tagsToAdd: string[];
-}
-
-/** Um "diário" — coleção nomeada (Pessoal, Viagens, Estudos...) pra organizar entradas do Diário. */
-export interface JournalCollection {
-  id: string;
-  owner_id: string;
-  name: string;
-  icon: string | null;
-  color: "pink" | "blue" | "purple" | "green" | "teal" | null;
-  description: string | null;
-  sort_order: number;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-  /** Total real de entradas neste diário — vem só da listagem (GET /api/journals). */
-  entry_count?: number;
-}
-
 export interface TimelineEvent {
   type:
-    | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment" | "journal"
+    | "task" | "habit" | "workout" | "reading" | "education" | "sleep" | "mood" | "water" | "work_note" | "experiment"
     | "life_admin" | "review" | "focus" | "project" | "contract" | "campaign" | "codex" | "achievement" | "reward" | "level_up"
     | "inventory" | "protocol" | "recovery" | "season" | "grimoire" | "guild" | "war_council" | "bank" | "archetype" | "skill";
   icon: string;
@@ -1077,7 +919,7 @@ export interface CustomAchievementMetricOption {
 
 /* -------------------------- Notificações / Gatilhos -------------------------- */
 
-export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight" | "journal_reminder" | "bank_deposit_matured" | "bank_loan_overdue";
+export type NotificationTriggerEvent = "task_overdue" | "task_due_today" | "achievement_unlocked" | "weekly_summary" | "daily_insight" | "bank_deposit_matured" | "bank_loan_overdue";
 
 export type NotificationAlertLevel = "soft" | "medium" | "critical";
 
@@ -2004,7 +1846,6 @@ export interface ProfessionalOverview {
   workload: WorkloadSummary;
   upcoming: Array<{ id: string; title: string; projectName: string; projectColor: string | null; dueDate: string; priorityScore: number | null; status: string }>;
   careerGoals: Array<{ id: string; title: string; pct: number; dueDate: string | null }>;
-  journal: { linkedEntries30: number; recent: Array<{ date: string; projectName: string; preview: string | null }> };
 }
 
 /** Parâmetros do gerador de tarefas a partir de hábitos (POST /habits/generate-tasks). */
@@ -2282,7 +2123,6 @@ export interface PeriodMetrics {
   tasksCompleted: number;
   goalsCompleted: number;
   habitCheckins: number;
-  journalEntries: number;
   pagesRead: number;
   workouts: number;
   workoutMinutes: number;
@@ -2310,12 +2150,12 @@ export interface PeriodicReview {
 }
 
 /** Resposta do Copilot da revisão (rotulada por proveniência na UI). */
-/** Rascunho da reflexão do ciclo escrito pela IA (tarefas + diário + métricas) — nunca salvo sozinho. */
+/** Rascunho da reflexão do ciclo escrito pela IA (tarefas + hábitos + métricas) — nunca salvo sozinho. */
 export interface PeriodicReviewDraft {
   wins: string;
   lessons: string;
   focusNext: string;
-  basedOn: { label: string; tasksDone: number; journalDays: number; projects: number };
+  basedOn: { label: string; tasksDone: number; projects: number };
 }
 
 export interface PeriodicReviewAnalysis {
@@ -2329,7 +2169,7 @@ export interface PeriodicReviewAnalysis {
 /* -------------------------- Notas e conhecimento -------------------------- */
 
 export type NoteKind = "nota" | "ideia" | "referencia";
-export type NoteLinkType = "note" | "task" | "project" | "goal" | "book" | "journal" | "education";
+export type NoteLinkType = "note" | "task" | "project" | "goal" | "book" | "education";
 
 export interface NoteSummary {
   id: string;

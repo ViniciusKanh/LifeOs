@@ -1,7 +1,7 @@
 import { compressImageToDataUri } from "./image";
 
 /**
- * Utilitários de upload compartilhados (Diário e anexos de Tarefas).
+ * Utilitários de upload compartilhados (anexos de Tarefas e fotos).
  *
  * Limite de ~3 MB por arquivo: os uploads viajam como data URI (base64)
  * até a função serverless, cujo corpo máximo é 4,5 MB — o base64 ocupa

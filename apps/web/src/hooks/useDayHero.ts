@@ -27,13 +27,11 @@ export function useJourneySync() {
 export function useTodayActions() {
   const sync = useJourneySync();
   return {
-    setMain: useMutation({ mutationFn: dayHeroService.setMain, onSuccess: () => sync(["tasks"], ["journal"]) }),
+    setMain: useMutation({ mutationFn: dayHeroService.setMain, onSuccess: () => sync(["tasks"]) }),
     saveRitual: useMutation({ mutationFn: (steps: Array<{ id?: string; label: string; kind: RitualKind; refId?: string | null }>) => dayHeroService.saveRitual(steps), onSuccess: () => sync() }),
     toggleRitual: useMutation({ mutationFn: ({ id, done }: { id: string; done: boolean }) => dayHeroService.toggleRitual(id, done), onSuccess: () => sync() }),
     startTimer: useMutation({ mutationFn: (input: { mode: TimerMode; plannedMinutes?: number | null; linkType?: TimerLink; linkId?: string | null }) => dayHeroService.startTimer(input), onSuccess: () => sync(["tasks"]) }),
     pauseTimer: useMutation({ mutationFn: dayHeroService.pauseTimer, onSuccess: () => sync() }),
     stopTimer: useMutation({ mutationFn: dayHeroService.stopTimer, onSuccess: () => sync(["tasks"], ["analytics"]) }),
-    closeDraft: useMutation({ mutationFn: dayHeroService.closeDraft }),
-    closeSave: useMutation({ mutationFn: dayHeroService.closeSave, onSuccess: () => sync(["journal"]) }),
   };
 }

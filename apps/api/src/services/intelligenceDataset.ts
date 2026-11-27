@@ -303,7 +303,6 @@ const SOURCE_COUNTS: Array<{ key: string; label: string; sql: string }> = [
   { key: "exercicios", label: "Exercícios", sql: "SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? AND performed_at >= date(?)" },
   { key: "educacao", label: "Educação", sql: "SELECT COUNT(*) AS n FROM study_sessions WHERE owner_id = ? AND occurred_at >= date(?)" },
   { key: "leitura", label: "Leitura", sql: "SELECT COUNT(*) AS n FROM reading_sessions WHERE owner_id = ? AND started_at >= date(?)" },
-  { key: "journal", label: "Journal", sql: "SELECT COUNT(*) AS n FROM journal_entries WHERE owner_id = ? AND entry_date >= ?" },
   { key: "metas", label: "Metas", sql: "SELECT COUNT(*) AS n FROM goal_progress WHERE owner_id = ? AND recorded_at >= date(?)" },
 ];
 

@@ -110,7 +110,7 @@ describe("XP de hábitos", () => {
   });
 });
 
-describe("Projetos e Diário", () => {
+describe("Projetos", () => {
   it("projeto concluído rende a recompensa uma única vez", async () => {
     const { agent } = await createAuthenticatedAgent();
     const p = await agent.post("/api/projects").send({ name: "Campanha" });
@@ -120,15 +120,6 @@ describe("Projetos e Diário", () => {
     const prof = await profile(agent);
     expect(prof.totalXp).toBe(R.project.xp);
     expect(prof.coins).toBe(R.project.coins);
-  });
-
-  it("primeira entrada do Diário do dia rende XP uma vez, e só com texto", async () => {
-    const { agent } = await createAuthenticatedAgent();
-    await agent.put(`/api/journal/${today()}`).send({ thoughts: "" });
-    expect((await profile(agent)).totalXp).toBe(0);
-    await agent.put(`/api/journal/${today()}`).send({ thoughts: "<p>Dia produtivo.</p>" });
-    await agent.put(`/api/journal/${today()}`).send({ thoughts: "<p>Dia produtivo, editado.</p>" });
-    expect((await profile(agent)).totalXp).toBe(R.journal.xp);
   });
 });
 
@@ -267,8 +258,8 @@ describe("Anti dupla recompensa e marcos", () => {
     const taskB = await agent.post("/api/tasks").send({ title: "Fixada por cima", priority: "Baixa" });
     // Simula o estado após fixar A e depois B (pinTomorrowMission sempre prepende): [B, A].
     await db.execute({
-      sql: "INSERT INTO journal_entries (id, owner_id, entry_date, focus_task_ids) VALUES (?, ?, ?, ?)",
-      args: [`je-${userId}`, userId, today(), JSON.stringify([taskB.body.id, taskA.body.id])],
+      sql: "INSERT INTO day_focus (owner_id, day_key, focus_task_ids) VALUES (?, ?, ?)",
+      args: [userId, today(), JSON.stringify([taskB.body.id, taskA.body.id])],
     });
 
     await agent.patch(`/api/tasks/${taskA.body.id}`).send({ status: "Concluído" });

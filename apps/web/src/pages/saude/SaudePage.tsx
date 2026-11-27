@@ -98,7 +98,7 @@ export function SaudePage() {
   // Controle por dia — sem isso, a tela sempre olhava só pra "hoje" e "esta
   // semana" (Date.now()), então dava pra ver um dia passado só cavando o
   // histórico de cada card, nunca a tela toda daquele dia de uma vez. Segue o
-  // mesmo padrão de dia selecionável do Diário e do Capacity Planner.
+  // mesmo padrão de dia selecionável do Capacity Planner.
   const todayStr = useTodayKey();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   // Virou o dia com a tela aberta: quem estava olhando "hoje" passa a ver o
@@ -230,7 +230,7 @@ export function SaudePage() {
         />
       )}
 
-      {/* Controle por dia — mesma navegação usada no Diário e no Capacity Planner:
+      {/* Controle por dia — mesma navegação usada no Capacity Planner:
           todos os cards abaixo (hoje, semana, cards de água/sono/exercício/humor)
           passam a olhar pro dia selecionado, não sempre pra "agora". */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-paper-border bg-paper-raised px-3.5 py-2.5 dark:border-ink-border dark:bg-ink-raised rpg:rpg-panel rpg:px-3.5 rpg:py-2.5">

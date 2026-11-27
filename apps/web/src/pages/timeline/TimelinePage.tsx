@@ -97,7 +97,7 @@ function ClassicTimelinePage() {
       {!isLoading && !isError && events.length === 0 && (
         <EmptyState
           title="Ainda não há nada por aqui"
-          description="Conclua uma tarefa, registre um hábito ou escreva no diário — cada registro real vira um marco na sua timeline."
+          description="Conclua uma tarefa, registre um hábito ou um treino — cada registro real vira um marco na sua timeline."
           ctaLabel="Ir para Hoje"
           onCta={() => (window.location.href = "/hoje")}
         />

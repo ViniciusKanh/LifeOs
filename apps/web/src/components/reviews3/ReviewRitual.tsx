@@ -3,7 +3,6 @@ import clsx from "clsx";
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   CalendarPlus,
   Check,
   CheckCircle2,
@@ -23,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { RPGButton } from "@/components/rpg";
-import { RichTextEditor } from "@/components/journal/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { Tag } from "@/components/forge3/ForgeShared";
 import { useProjects } from "@/hooks/useProjects";
 import { useGoals } from "@/hooks/useGoals";
@@ -64,7 +63,6 @@ export function WeeklyRitual({
   onSuggestBlocks,
   onApplyPlan,
   applying,
-  onOpenDiary,
   flush,
   onFinish,
 }: RitualProps) {
@@ -122,7 +120,7 @@ export function WeeklyRitual({
       {cur === "proxima" && (
         <div className="space-y-3">
           <PlanEditor d={d} draft={draft} set={set} readOnly={readOnly} onSuggestBlocks={onSuggestBlocks} onApplyPlan={onApplyPlan} applying={applying} />
-          <Reflection d={d} draft={draft} set={set} readOnly={readOnly} onAiDraft={onAiDraft} aiBusy={aiBusy} onOpenDiary={onOpenDiary} flush={flush} />
+          <Reflection d={d} draft={draft} set={set} readOnly={readOnly} onAiDraft={onAiDraft} aiBusy={aiBusy} flush={flush} />
         </div>
       )}
 
@@ -152,7 +150,7 @@ export function WeeklyRitual({
 }
 
 function WeekSnapshot({ d }: { d: JourneyReview }) {
-  const keys = ["tasksDone", "habitsDone", "focusMinutes", "workouts", "pagesRead", "sleepAvgMinutes", "journalDays", "xp"];
+  const keys = ["tasksDone", "habitsDone", "focusMinutes", "workouts", "pagesRead", "sleepAvgMinutes", "xp"];
   return (
     <div className="space-y-3">
       <p className="text-sm text-rpg-text">Olhe a semana com os números reais antes de responder. Nada aqui é estimado.</p>
@@ -224,7 +222,7 @@ function Answer({ q, value, onChange, readOnly, flush, tall }: { q: { key: strin
 
 /* ═════════════ Reflexão ═════════════ */
 
-export function Reflection({ d, draft, set, readOnly, onAiDraft, aiBusy, onOpenDiary, flush }: Pick<RitualProps, "d" | "draft" | "set" | "readOnly" | "onAiDraft" | "aiBusy" | "onOpenDiary" | "flush">) {
+export function Reflection({ d, draft, set, readOnly, onAiDraft, aiBusy, flush }: Pick<RitualProps, "d" | "draft" | "set" | "readOnly" | "onAiDraft" | "aiBusy" | "flush">) {
   const len = plain(draft.reflection).length;
   return (
     <Panel title={`Sua reflexão ${KIND_UNIT[d.kind].this}`} icon={<ScrollText size={15} />}>
@@ -248,9 +246,6 @@ export function Reflection({ d, draft, set, readOnly, onAiDraft, aiBusy, onOpenD
             {aiBusy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Sparkles size={14} aria-hidden />} Escrever com IA
           </RPGButton>
         )}
-        <RPGButton variant="secondary" onClick={onOpenDiary}>
-          <BookOpen size={14} aria-hidden /> Abrir no Diário
-        </RPGButton>
         <span className="ml-auto text-[11px] tabular-nums text-rpg-muted">{len}/6000</span>
       </div>
     </Panel>
@@ -468,7 +463,6 @@ export interface RitualProps {
   onSuggestBlocks: () => void;
   onApplyPlan: () => void;
   applying: boolean;
-  onOpenDiary: () => void;
   flush: () => void;
   /** Chamado ao concluir o último passo do ritual semanal (rola/avisa até o Selar — o ritual em si não sela nada). */
   onFinish?: () => void;

@@ -22,7 +22,6 @@ export type SearchEntityType =
   | "book"
   | "academic_project"
   | "project"
-  | "journal_entry"
   | "note"
   | "life_admin"
   | "workout"

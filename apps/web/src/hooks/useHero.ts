@@ -19,7 +19,6 @@ export function useJourney(from: string, to: string) {
   return { hub, timeline };
 }
 
-export const useMomentCandidates = (enabled: boolean) => useQuery({ queryKey: ["analytics", "journey", "moments"], queryFn: heroService.momentCandidates, enabled, staleTime: 30_000 });
 
 export function useHeroActions() {
   const qc = useQueryClient();
@@ -30,7 +29,6 @@ export function useHeroActions() {
     removeGoal: useMutation({ mutationFn: heroService.removeGoal, onSuccess: refreshTreasure }),
     recordSnapshot: useMutation({ mutationFn: heroService.recordSnapshot, onSuccess: () => void qc.invalidateQueries({ queryKey: SNAPSHOTS_KEY }) }),
     toggleMark: useMutation({ mutationFn: heroService.toggleMark, onSuccess: refreshJourney }),
-    setMoment: useMutation({ mutationFn: ({ id, authorized }: { id: string; authorized: boolean }) => heroService.setMoment(id, authorized), onSuccess: refreshJourney }),
     narrate: useMutation({ mutationFn: (input: { from: string; to: string; mode: NarratorMode; useAi: boolean }) => heroService.narrate(input) }),
   };
 }

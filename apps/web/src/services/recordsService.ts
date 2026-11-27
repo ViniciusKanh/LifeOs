@@ -1,6 +1,6 @@
 import { api } from "./api";
 
-export type RecordMetric = "missions" | "workouts" | "workoutMinutes" | "pages" | "habits" | "xp" | "journal";
+export type RecordMetric = "missions" | "workouts" | "workoutMinutes" | "pages" | "habits" | "xp";
 
 export interface RecordRow {
   key: RecordMetric;

@@ -47,7 +47,6 @@ export interface Tavern3 {
     };
     signals: { sleep: { minutes: number; quality: number | null } | null; mood: { mood: number | null; energy: number | null } | null; workoutMinutes: number; waterMl: number; readingPages: number };
   };
-  journal: { thoughts: string; words: number; gratitude: string[]; reflection: string; learning: string; pending: string; intention: string; updatedAt: string | null };
   mood: { mood: number | null; energy: number | null } | null;
   achievements: Array<{ id: string; code: string; title: string; description: string | null; icon: string | null; tier: string; unlockedAt: string; reward: { xp: number; coins: number } }>;
   tomorrowPlan: {
@@ -75,12 +74,13 @@ export const tavern3Service = {
   settings: (required: StepKey[]) => api.put<{ ok: true }>("/tavern3/settings", { required }),
   focusBlock: (input: { start: string; end: string; title: string; taskId?: string | null }) => api.post<{ id: string; date: string }>("/tavern3/focus-block", input),
   tomorrowTask: (taskId: string) => api.post<{ ok: true }>("/tavern3/tomorrow-task", { taskId }),
+  learningToGrimoire: (text: string) => api.post<{ added: number }>("/tavern3/learning-grimoire", { text }),
   close: () => api.post<{ alreadyClosed: boolean; granted: boolean; reward: { xp: number; coins: number } }>("/tavern3/close", {}),
 };
 
 export const STEP_LABEL: Record<StepKey, { title: string; hint: string }> = {
   balance: { title: "Balanço da jornada", hint: "O que fiz, o que avancei e o que faltou." },
-  reflection: { title: "Diário e reflexão", hint: "Acontecimentos, desafios e decisões do dia." },
+  reflection: { title: "Reflexão do dia", hint: "Acontecimentos, desafios e decisões do dia." },
   learnings: { title: "Registrar aprendizados", hint: "O que aprendi, o que funcionou e o que evitar." },
   gratitude: { title: "Gratidão e cuidado", hint: "Gratidão, humor, energia e cuidado pessoal." },
   tomorrow: { title: "Preparar o amanhã", hint: "Missão principal, prioridades e blocos de foco." },

@@ -37,7 +37,7 @@ export const XP_SOURCES: Array<{ id: string; label: string; tone: "purple" | "gr
   { id: "habit_entry", label: "Hábitos", tone: "green" },
   { id: "focus", label: "Cronômetro", tone: "cyan" },
   { id: "project", label: "Projetos", tone: "gold" },
-  { id: "journal", label: "Diário", tone: "pink" },
+  { id: "journal", label: "Diário (antigo)", tone: "pink" },
   { id: "contract", label: "Contratos", tone: "gold" },
   { id: "campaign", label: "Campanhas", tone: "purple" },
   { id: "experiment", label: "Laboratório", tone: "cyan" },

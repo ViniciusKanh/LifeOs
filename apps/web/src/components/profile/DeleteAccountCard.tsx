@@ -57,7 +57,7 @@ export function DeleteAccountCard({ user }: { user: CurrentUser }) {
         <div className="space-y-3">
           <div className="flex gap-2 rounded-xl bg-drop/10 border border-drop/25 p-3 text-xs">
             <AlertTriangle size={16} className="text-drop shrink-0" />
-            <span>Isto não pode ser desfeito: tarefas, projetos, Diário (com fotos e vídeos), saúde, hábitos, metas e todo o resto serão apagados.</span>
+            <span>Isto não pode ser desfeito: tarefas, projetos (com anexos), saúde, hábitos, metas e todo o resto serão apagados.</span>
           </div>
           <Field label={`Digite seu e-mail (${user.email}) para confirmar`} value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} autoComplete="off" />
           {user.has_password && <Field label="Sua senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />}

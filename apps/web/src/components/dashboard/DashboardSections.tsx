@@ -177,7 +177,7 @@ export function NextBestStep({
       {!task ? (
         <div className="rounded-2xl bg-growth/5 border border-growth/20 p-5 flex items-center gap-3">
           <CheckCircle2 size={22} className="text-growth shrink-0" />
-          <p className="text-sm">Nenhuma tarefa em aberto. Aproveite para planejar a semana ou registrar seu dia no Diário.</p>
+          <p className="text-sm">Nenhuma tarefa em aberto. Aproveite para planejar a semana no Conselho de Guerra.</p>
         </div>
       ) : (
         <motion.div layout className="rounded-2xl bg-gradient-to-br from-brand-50 to-transparent dark:from-brand-700/15 border border-brand-500/15 p-4 sm:p-5">

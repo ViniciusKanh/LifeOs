@@ -1,4 +1,4 @@
-import { BookOpen, CheckSquare, Droplets, FolderKanban, NotebookPen, Repeat, Sparkles, Timer, type LucideIcon } from "lucide-react";
+import { BookOpen, CheckSquare, Droplets, FolderKanban, Repeat, Sparkles, Timer, type LucideIcon } from "lucide-react";
 import type { Quest, QuestModule } from "@/services/questsService";
 import type { RpgTone } from "@/components/rpg";
 
@@ -9,7 +9,6 @@ export const QUEST_MODULE: Record<QuestModule, { icon: LucideIcon; tone: RpgTone
   health: { icon: Droplets, tone: "green", to: "/saude", label: "Saúde" },
   library: { icon: BookOpen, tone: "pink", to: "/biblioteca", label: "Biblioteca" },
   habits: { icon: Repeat, tone: "green", to: "/habitos", label: "Hábitos" },
-  journal: { icon: NotebookPen, tone: "pink", to: "/diario", label: "Diário" },
   focus: { icon: Timer, tone: "purple", to: "/hoje", label: "Foco" },
   xp: { icon: Sparkles, tone: "purple", to: "/perfil", label: "XP" },
 };

@@ -4,7 +4,6 @@ import type { Client } from "@libsql/client";
 import { extractJson, str } from "./aiJson.js";
 import { generateText, getGeminiConfig } from "./geminiService.js";
 import { computeStreak, dayKeyIn, todayKeyFor, userTimezone } from "./gamificationService.js";
-import { stripHtml } from "./journalService.js";
 import { addDaysToKey } from "./srsEngine.js";
 import { GrimoireError, createCards, getDailyQueue, isReinforceCard, listDecks, type Deck } from "./grimoireService.js";
 import { proposeCards } from "./grimoireAIService.js";
@@ -13,7 +12,7 @@ import { getAutomation, readAutomationState, writeAutomationState } from "./auto
 /**
  * Grimório 2.0 — painel central (indicadores, ritual, oráculo, mapa do
  * domínio, conquistas), fila de sugestões com aprovação, importação de
- * conteúdo e a automação "Diário → cartões".
+ * conteúdo.
  *
  * Metodologia (sempre dado real, nunca inventado):
  *  - Sequência: dias seguidos com pelo menos uma revisão.
@@ -29,12 +28,12 @@ type Row = Record<string, unknown>;
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
 
 export interface OracleRec {
-  kind: "focus" | "best_hour" | "reinforce" | "neglected" | "diary" | "start";
+  kind: "focus" | "best_hour" | "reinforce" | "neglected" | "start";
   title: string;
   detail: string;
   /** Rótulo de procedência exigido pela regra de IA do LifeOS. */
   provenance: "dado" | "inferência" | "sugestão";
-  action: { type: "study_deck" | "open_deck" | "generate_diary" | "new_deck"; deckId?: string; entryDate?: string } | null;
+  action: { type: "study_deck" | "open_deck" | "new_deck"; deckId?: string } | null;
 }
 
 export interface GrimoireHub {
@@ -85,7 +84,7 @@ export async function getGrimoireHub(db: Client, ownerId: string, now = new Date
   const from30 = addDaysToKey(today, -29);
   const from120 = addDaysToKey(today, -119);
 
-  const [decks, queue, days, retention, time, xp, recent, byDeck30, calendar, hours, achRows, pending, diaryRows, config] = await Promise.all([
+  const [decks, queue, days, retention, time, xp, recent, byDeck30, calendar, hours, achRows, pending, config] = await Promise.all([
     listDecks(db, ownerId, {}, now),
     getDailyQueue(db, ownerId, {}, now),
     db.execute({ sql: "SELECT DISTINCT day_key AS d FROM flashcard_reviews WHERE owner_id = ? ORDER BY day_key DESC LIMIT 400", args: [ownerId] }),
@@ -128,10 +127,6 @@ export async function getGrimoireHub(db: Client, ownerId: string, now = new Date
       args: [ownerId, ...ACH_METRICS],
     }),
     db.execute({ sql: "SELECT COUNT(*) AS n FROM grimoire_suggestions WHERE owner_id = ? AND status = 'pending'", args: [ownerId] }),
-    db.execute({
-      sql: "SELECT entry_date, thoughts FROM journal_entries WHERE owner_id = ? AND entry_date >= ? ORDER BY entry_date DESC LIMIT 3",
-      args: [ownerId, addDaysToKey(today, -2)],
-    }),
     getGeminiConfig(),
   ]);
 
@@ -162,7 +157,6 @@ export async function getGrimoireHub(db: Client, ownerId: string, now = new Date
     hours: (hours.rows as unknown as Row[]).map((r) => ({ at: String(r.reviewed_at), ok: Number(r.grade) >= 3 })),
     tz,
     today,
-    diary: (diaryRows.rows as unknown as Row[]).map((r) => ({ date: String(r.entry_date), words: stripHtml(r.thoughts as string | null).split(/\s+/).filter(Boolean).length })),
     hasAi: !!config,
   });
 
@@ -233,7 +227,6 @@ function buildOracle(input: {
   hours: Array<{ at: string; ok: boolean }>;
   tz: string;
   today: string;
-  diary: Array<{ date: string; words: number }>;
   hasAi: boolean;
 }): OracleRec[] {
   const recs: OracleRec[] = [];
@@ -310,17 +303,6 @@ function buildOracle(input: {
     });
   }
 
-  // 5. Diário recente com texto suficiente → oportunidade de cartões.
-  const entry = input.diary.find((e) => e.words >= 80);
-  if (entry && input.hasAi) {
-    recs.push({
-      kind: "diary",
-      title: "Gerar cartões do Diário",
-      detail: `Sua entrada de ${entry.date.split("-").reverse().join("/")} tem ${entry.words} palavras — dá para transformar aprendizados em cartões.`,
-      provenance: "sugestão",
-      action: { type: "generate_diary", entryDate: entry.date },
-    });
-  }
   return recs.slice(0, 5);
 }
 
@@ -365,7 +347,7 @@ const dedupKey = (front: string) => createHash("sha1").update(normalizeFront(fro
 export async function queueSuggestions(
   db: Client,
   ownerId: string,
-  input: { deckId: string | null; sourceKind: "journal" | "import" | "text"; sourceRef: string; sourceLabel: string; cards: Array<{ front: string; back: string }> },
+  input: { deckId: string | null; sourceKind: "import" | "text"; sourceRef: string; sourceLabel: string; cards: Array<{ front: string; back: string }> },
 ): Promise<number> {
   if (input.cards.length === 0) return 0;
   const existing = await db.execute({ sql: "SELECT front FROM flashcards WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5000", args: [ownerId] });
@@ -445,52 +427,6 @@ export async function decideSuggestions(
     rejected = r.rowsAffected;
   }
   return { created, rejected };
-}
-
-// ------------------------------------------------------------
-// Automação A — Diário → cartões
-// ------------------------------------------------------------
-
-export async function runDiaryCards(db: Client, ownerId: string, config: Record<string, unknown>): Promise<{ status: "ok" | "skipped" | "error"; summary: string }> {
-  if (!(await getGeminiConfig())) return { status: "skipped", summary: "IA não configurada — nada foi enviado." };
-  const decks = await listDecks(db, ownerId);
-  const deckId = typeof config.deckId === "string" && decks.some((d) => d.id === config.deckId) ? config.deckId : decks[0]?.id ?? null;
-  if (!deckId) return { status: "skipped", summary: "Crie um baralho para receber os cartões do Diário." };
-
-  const today = await todayKeyFor(db, ownerId);
-  const lookback = Math.max(1, Math.min(14, Number(config.lookbackDays ?? 3)));
-  const minWords = Math.max(20, Number(config.minWords ?? 80));
-  const maxEntries = Math.max(1, Math.min(5, Number(config.maxEntries ?? 2)));
-  const perEntry = Math.max(3, Math.min(10, Number(config.cardsPerEntry ?? 5)));
-  const state = await readAutomationState(db, ownerId, "grimoire", "diary_cards");
-  const processed = new Set(Array.isArray(state.processed) ? (state.processed as string[]) : []);
-
-  const r = await db.execute({
-    sql: "SELECT entry_date, thoughts FROM journal_entries WHERE owner_id = ? AND entry_date >= ? AND entry_date <= ? ORDER BY entry_date DESC",
-    args: [ownerId, addDaysToKey(today, -lookback), today],
-  });
-  // O dia de hoje ainda está sendo escrito: só entra depois de virar o dia.
-  const eligible = (r.rows as unknown as Row[])
-    .map((x) => ({ date: String(x.entry_date), words: stripHtml(x.thoughts as string | null).split(/\s+/).filter(Boolean).length }))
-    .filter((e) => e.date < today && e.words >= minWords && !processed.has(e.date))
-    .slice(0, maxEntries);
-  if (eligible.length === 0) return { status: "skipped", summary: "Nenhuma entrada nova do Diário com texto suficiente." };
-
-  let added = 0;
-  const failures: string[] = [];
-  for (const e of eligible) {
-    const res = await proposeCards(db, ownerId, { kind: "journal", entryDate: e.date }, { count: perEntry });
-    if (!res.ok) {
-      failures.push(e.date);
-      if (res.status !== 422) continue;
-    } else {
-      added += await queueSuggestions(db, ownerId, { deckId, sourceKind: "journal", sourceRef: e.date, sourceLabel: res.data.basedOn, cards: res.data.suggestions });
-    }
-    processed.add(e.date);
-  }
-  await writeAutomationState(db, ownerId, "grimoire", "diary_cards", { processed: [...processed].sort().slice(-60) });
-  if (added === 0 && failures.length > 0) return { status: "error", summary: `A IA não respondeu para ${failures.length} entrada(s). Tente de novo mais tarde.` };
-  return { status: "ok", summary: `${added} cartão(ões) sugerido(s) de ${eligible.length} entrada(s) do Diário — aguardando sua aprovação.` };
 }
 
 // ------------------------------------------------------------

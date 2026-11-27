@@ -135,14 +135,6 @@ export interface JourneyHub {
   summaries: Record<"day" | "week" | "month" | "year" | "period", JourneySummary>;
   levels: Array<{ level: number; reachedAt: string; dayKey: string; totalXp: number }>;
   marks: Array<{ eventKey: string; label: string; at: string; createdAt: string }>;
-  moments: Array<{ id: string; dataUri: string; caption: string | null; date: string }>;
-}
-export interface MomentCandidate {
-  id: string;
-  dataUri: string;
-  caption: string | null;
-  date: string;
-  authorized: boolean;
 }
 export type NarratorMode = "rpg" | "objetivo" | "analitico";
 export interface Narration {
@@ -165,7 +157,5 @@ export const heroService = {
   recordSnapshot: () => api.post<{ created: boolean; periodKey: string; archetype: string }>("/hero/build/snapshots", {}),
   journey: (from: string, to: string) => api.get<JourneyHub>(`/hero/journey?from=${from}&to=${to}`),
   toggleMark: (input: { eventKey: string; label: string; at: string }) => api.post<{ favorite: boolean }>("/hero/journey/marks/toggle", input),
-  momentCandidates: () => api.get<MomentCandidate[]>("/hero/journey/moments/candidates"),
-  setMoment: (mediaId: string, authorized: boolean) => api.put<{ ok: true }>(`/hero/journey/moments/${mediaId}`, { authorized }),
   narrate: (input: { from: string; to: string; mode: NarratorMode; useAi: boolean }) => api.post<Narration>("/hero/journey/narrate", input),
 };

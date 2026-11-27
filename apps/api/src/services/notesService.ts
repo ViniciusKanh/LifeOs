@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import type { getDb } from "../db/client.js";
-import { stripHtml } from "./journalService.js";
+import { stripHtml } from "./textUtils.js";
 import type { NoteLinkType } from "../validators/notes.schema.js";
 
 /**
@@ -19,7 +19,6 @@ const TARGETS: Record<NoteLinkType, { table: string; label: string; path: (id: s
   project: { table: "projects", label: "name", path: (id) => `/projetos/${id}` },
   goal: { table: "goals", label: "title", path: () => "/metas" },
   book: { table: "books", label: "title", path: (id) => `/biblioteca/${id}` },
-  journal: { table: "journal_entries", label: "entry_date", path: (_id, label) => `/diario?date=${label}` },
   education: { table: "educations", label: "course_name", path: (id) => `/educacao/${id}` },
 };
 

@@ -11,6 +11,7 @@ import { computeLifeScore } from "./metricsService.js";
 import { findConflicts, nextFreeSlot, type TimedBlock } from "./planningHubService.js";
 import { notifyFromAutomation } from "./automationService.js";
 import { utcRangeFilter } from "./healthService.js";
+import { getFocusTaskIds, setFocusTaskIds } from "./dayFocusService.js";
 
 /**
  * Hoje 3.0 — Central da Jornada Diária (camada de execução).
@@ -19,7 +20,7 @@ import { utcRangeFilter } from "./healthService.js";
  * events + agregador de calendário (agenda), time_entries (foco), módulos de
  * saúde/biblioteca (sinais) e xp_events/coin_ledger (economia). As únicas
  * tabelas próprias são o ritual configurável e o estado do cronômetro.
- * A missão principal é o foco do dia do Diário (focus_task_ids) — a mesma
+ * A missão principal é o foco do dia (day_focus.focus_task_ids) — a mesma
  * regra que já paga o bônus de missão principal.
  */
 
@@ -37,7 +38,7 @@ export class TodayError extends Error {
 
 /* ─────────────────────────────── Ritual ─────────────────────────────── */
 
-export type RitualKind = "manual" | "planning" | "task" | "habit" | "focus" | "health" | "study" | "journal";
+export type RitualKind = "manual" | "planning" | "task" | "habit" | "focus" | "health" | "study";
 export interface RitualStep {
   id: string;
   label: string;
@@ -52,10 +53,9 @@ export const DEFAULT_RITUAL: RitualStep[] = [
   { id: "d-task", label: "Executar a missão principal", kind: "task", refId: null, position: 1 },
   { id: "d-health", label: "Cuidar da saúde (água, treino ou humor)", kind: "health", refId: null, position: 2 },
   { id: "d-study", label: "Sessão de foco ou estudo", kind: "focus", refId: null, position: 3 },
-  { id: "d-journal", label: "Registrar aprendizados no Diário", kind: "journal", refId: null, position: 4 },
-  { id: "d-close", label: "Encerrar a jornada", kind: "manual", refId: null, position: 5 },
+  { id: "d-close", label: "Encerrar a jornada", kind: "manual", refId: null, position: 4 },
 ];
-export const RITUAL_KINDS: RitualKind[] = ["manual", "planning", "task", "habit", "focus", "health", "study", "journal"];
+export const RITUAL_KINDS: RitualKind[] = ["manual", "planning", "task", "habit", "focus", "health", "study"];
 
 export async function listRitualSteps(db: Client, ownerId: string): Promise<{ steps: RitualStep[]; custom: boolean }> {
   const r = await db.execute({ sql: "SELECT id, label, kind, ref_id, position FROM daily_ritual_steps WHERE owner_id = ? AND active = 1 ORDER BY position", args: [ownerId] });
@@ -204,18 +204,14 @@ export async function stopTimer(db: Client, ownerId: string) {
   return { minutes, entryId: t.entryId };
 }
 
-/** Missão principal = foco do dia do Diário (mesma fonte do bônus oficial de missão principal). */
+/** Missão principal = foco do dia (day_focus; mesma fonte do bônus oficial de missão principal). */
 export async function setMainMission(db: Client, ownerId: string, taskId: string | null) {
   if (taskId) {
     const r = await db.execute({ sql: "SELECT 1 FROM tasks WHERE id = ? AND owner_id = ?", args: [taskId, ownerId] });
     if (!r.rows.length) throw new TodayError("Missão não encontrada.", 404);
   }
   const { today } = await userDayContext(db, ownerId);
-  await db.execute({
-    sql: `INSERT INTO journal_entries (id, owner_id, entry_date, focus_task_ids) VALUES (?, ?, ?, ?)
-          ON CONFLICT (owner_id, entry_date) DO UPDATE SET focus_task_ids = excluded.focus_task_ids, updated_at = datetime('now')`,
-    args: [nanoid(), ownerId, today, JSON.stringify(taskId ? [taskId] : [])],
-  });
+  await setFocusTaskIds(db, ownerId, today, taskId ? [taskId] : []);
 }
 
 /* ─────────────────────────────── Hub ─────────────────────────────── */
@@ -226,7 +222,7 @@ export async function getTodayHub(db: Client, ownerId: string) {
   const { tz, today } = await userDayContext(db, ownerId);
   const { start, end } = localDayRangeUtc(today, tz);
   const f = (col: string) => utcRangeFilter(col, start, end);
-  const [profile, life, lifeWeek, tasks, journal, calendar, habits, focus, done, water, workouts, mood, sleep, pages, timer, ritual, quests, achToday, prio, diff] = await Promise.all([
+  const [profile, life, lifeWeek, tasks, focusIds, calendar, habits, focus, done, water, workouts, mood, sleep, pages, timer, ritual, quests, achToday, prio, diff] = await Promise.all([
     getPlayerProfile(db, ownerId),
     computeLifeScore(ownerId, today),
     db.execute({ sql: "SELECT overall_score FROM life_scores WHERE owner_id = ? AND score_date = ?", args: [ownerId, shiftDayKey(today, -7)] }),
@@ -240,7 +236,7 @@ export async function getTodayHub(db: Client, ownerId: string) {
             ORDER BY CASE WHEN date(t.due_date) < ? THEN 0 ELSE 1 END, t.priority = 'Alta' DESC, t.due_date LIMIT 30`,
       args: [ownerId, today, today, today],
     }),
-    db.execute({ sql: "SELECT focus_task_ids, intention, thoughts FROM journal_entries WHERE owner_id = ? AND entry_date = ?", args: [ownerId, today] }),
+    getFocusTaskIds(db, ownerId, today),
     getCalendarItems(db, ownerId, today, today),
     getHabitsHub(db, ownerId),
     db.execute({ sql: `SELECT COALESCE(SUM(duration_minutes), 0) AS m, COUNT(*) AS n FROM time_entries WHERE owner_id = ? AND ended_at IS NOT NULL AND ${f("ended_at").sql}`, args: [ownerId, ...f("ended_at").args] }),
@@ -259,12 +255,6 @@ export async function getTodayHub(db: Client, ownerId: string) {
     getDifficultyRewards(db, ownerId),
   ]);
 
-  let focusIds: string[] = [];
-  try {
-    focusIds = JSON.parse(String(journal.rows[0]?.focus_task_ids ?? "[]")) as string[];
-  } catch {
-    focusIds = [];
-  }
   const ranked = await getFocusTasks(db, ownerId, 5);
   const R = GAMIFICATION_RULES.task;
   const missions = tasks.rows.map((t) => {
@@ -318,11 +308,10 @@ export async function getTodayHub(db: Client, ownerId: string) {
 
   // Ritual: etapas automáticas são detectadas por eventos reais e registradas (idempotente) no histórico.
   const focusMin = Number(focus.rows[0]?.m ?? 0);
-  const journalText = String(journal.rows[0]?.thoughts ?? "").trim();
   const detect = (s: RitualStep): boolean | null => {
     switch (s.kind) {
       case "planning":
-        return focusIds.length > 0 || !!String(journal.rows[0]?.intention ?? "").trim() || null;
+        return focusIds.length > 0 || null;
       case "task":
         return s.refId ? done.rows.some((d) => String(d.id) === s.refId) : mainId ? done.rows.some((d) => String(d.id) === mainId) : done.rows.length > 0;
       case "habit":
@@ -332,8 +321,6 @@ export async function getTodayHub(db: Client, ownerId: string) {
         return focusMin >= 15 || Number(pages.rows[0]?.m ?? 0) >= 15;
       case "health":
         return Number(water.rows[0]?.v ?? 0) > 0 || Number(workouts.rows[0]?.n ?? 0) > 0 || !!mood.rows[0];
-      case "journal":
-        return journalText.length > 0;
       default:
         return null;
     }
@@ -409,7 +396,7 @@ export function nextBestAction(h: Pick<TodayHub, "conflicts" | "missions" | "mai
   const habit = h.habits.items.find((i) => !i.done);
   if (habit) return { kind: "habit", text: `Cumpra o hábito “${habit.name}”.`, targetId: habit.id };
   if (h.indicators.focusMinutes < 25) return { kind: "focus", text: "Faça um Pomodoro de 25 minutos em algo importante.", targetId: null };
-  return { kind: "rest", text: "Dia em ordem: registre o encerramento no Diário.", targetId: null };
+  return { kind: "rest", text: "Dia em ordem: revise o que fez e prepare amanhã na Taverna.", targetId: null };
 }
 
 /** Blocos de foco sugeridos nas janelas livres de hoje (nada é agendado sem você). */
@@ -426,29 +413,6 @@ export function focusBlocks(h: Pick<TodayHub, "agenda">, nowMinutes: number, cou
     from = slot + duration + 10;
   }
   return out;
-}
-
-/** Encerramento do dia: síntese só com dados reais; vai ao Diário apenas com aprovação. */
-export function dayCloseSummary(h: TodayHub) {
-  const lines = [
-    `Missões concluídas: ${h.indicators.missionsDone}.`,
-    `Hábitos: ${h.habits.done}/${h.habits.total}.`,
-    `Foco: ${h.indicators.focusMinutes} min em ${h.indicators.focusSessions} sessão(ões).`,
-    `XP recebido: ${h.profile.xpToday}.`,
-    h.rewards.achievementsToday.length ? `Conquistas: ${h.rewards.achievementsToday.map((a) => a.title).join(", ")}.` : "",
-    h.missions.length ? `Pendências: ${h.missions.slice(0, 5).map((m) => m.title).join("; ")}.` : "Sem pendências para hoje.",
-  ].filter(Boolean);
-  return lines.join("\n");
-}
-
-export async function saveDayCloseToJournal(db: Client, ownerId: string, text: string) {
-  const { today } = await userDayContext(db, ownerId);
-  const block = `— Encerramento do dia —\n${text.slice(0, 2000)}`;
-  await db.execute({
-    sql: `INSERT INTO journal_entries (id, owner_id, entry_date, thoughts) VALUES (?, ?, ?, ?)
-          ON CONFLICT (owner_id, entry_date) DO UPDATE SET thoughts = CASE WHEN COALESCE(thoughts, '') = '' THEN excluded.thoughts ELSE thoughts || char(10) || char(10) || excluded.thoughts END, updated_at = datetime('now')`,
-    args: [nanoid(), ownerId, today, block],
-  });
 }
 
 /* ─────────────────────────────── Automações ─────────────────────────────── */
