@@ -291,3 +291,37 @@ describe("Termômetro do Reino (Banco Central)", () => {
     expect(o.plans[0].cdiSamePeriodPct).toBeGreaterThan(0);
   });
 });
+
+/* ───────────── WakaTime (correção da conexão) ───────────── */
+describe("WakaTime: conexão mais tolerante", () => {
+  it("limpa a chave colada, envia User-Agent e cai para ?api_key= quando o Basic é recusado", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const seen: string[] = [];
+    setIntegrationFetchForTests(async (url, init) => {
+      const h = new Headers(init?.headers);
+      expect(h.get("User-Agent")).toContain("LifeOS");
+      if (url.includes("/users/current/summaries")) return json({ data: [] });
+      if (h.get("Authorization")) {
+        seen.push("basic");
+        expect(h.get("Authorization")).toBe(`Basic ${Buffer.from("waka_abc-123-def-456-ghi").toString("base64")}`);
+        return json({ error: "Unauthorized" }, 401);
+      }
+      seen.push("query");
+      expect(url).toContain("api_key=waka_abc-123-def-456-ghi");
+      return json({ data: { username: "vini", display_name: "Vini" } });
+    });
+    const r = await agent.post("/api/wakatime/connect").send({ key: ' "waka_abc-123-def-456-ghi"\n' });
+    expect(r.status).toBe(201);
+    expect(r.body.username).toBe("vini");
+    expect(seen.slice(0, 2)).toEqual(["basic", "query"]);
+  });
+
+  it("explica o motivo quando o WakaTime nega (403)", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    setIntegrationFetchForTests(async () => json({ error: "Please verify your email." }, 403));
+    const r = await agent.post("/api/wakatime/connect").send({ key: "waka_abc-123-def-456-ghi" });
+    expect(r.status).toBe(422);
+    expect(r.body.error).toMatch(/403/);
+    expect(r.body.error).not.toContain("waka_abc");
+  });
+});

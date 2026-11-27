@@ -28,14 +28,38 @@ export class WakaError extends Error {
   }
 }
 
-const auth = (key: string) => ({ Authorization: `Basic ${Buffer.from(key).toString("base64")}`, Accept: "application/json" });
+// User-Agent explícito: requisições sem UA (padrão do fetch do Node) podem ser barradas pelo proxy do WakaTime.
+const UA = "LifeOS/1.0 (+https://github.com/ViniciusKanh/LifeOs)";
+const auth = (key: string) => ({ Authorization: `Basic ${Buffer.from(key).toString("base64")}`, Accept: "application/json", "User-Agent": UA });
+
+/** Remove espaços, quebras de linha e aspas que costumam vir junto ao copiar a chave. */
+export const cleanWakaKey = (raw: string) => raw.trim().replace(/^["'`]+|["'`]+$/g, "").replace(/\s+/g, "");
+
+/**
+ * GET na API do WakaTime. Tenta o Basic auth documentado e, se a chave for
+ * recusada (401/403), repete uma vez com ?api_key= (também aceito pela API).
+ * A chave nunca entra em mensagens de erro nem em logs.
+ */
+async function wakaGet<T>(path: string, key: string, opts: { timeoutMs?: number; retries?: number } = {}): Promise<T> {
+  const url = `https://wakatime.com/api/v1${path}`;
+  try {
+    return await fetchJson<T>(url, { headers: auth(key) }, { label: "WakaTime", ...opts });
+  } catch (err) {
+    if (!(err instanceof IntegrationError) || (err.status !== 401 && err.status !== 403)) throw err;
+    const sep = url.includes("?") ? "&" : "?";
+    return fetchJson<T>(`${url}${sep}api_key=${encodeURIComponent(key)}`, { headers: { Accept: "application/json", "User-Agent": UA } }, { label: "WakaTime", ...opts, retries: 0 });
+  }
+}
 
 type WakaItem = { name: string; total_seconds: number };
 type WakaSummary = { grand_total: { total_seconds: number }; languages?: WakaItem[]; projects?: WakaItem[]; editors?: WakaItem[]; range: { date: string } };
 
 function friendly(err: unknown): never {
   if (err instanceof IntegrationError) {
-    if (err.status === 401 || err.status === 403) throw new WakaError("O WakaTime recusou a chave. Confira a API Key em wakatime.com/settings/api-key.", 422);
+    // Repassa o motivo dado pelo WakaTime (sem a chave) para o erro não ficar genérico.
+    const detail = /\((.+)\)\s*$/.exec(err.message)?.[1];
+    if (err.status === 401) throw new WakaError(`O WakaTime recusou a chave (401${detail ? `: ${detail}` : ""}). Copie de novo a Secret API Key inteira, começando em waka_.`, 422);
+    if (err.status === 403) throw new WakaError(`O WakaTime negou o acesso (403${detail ? `: ${detail}` : ""}). Se a conta é nova, confirme o e-mail de boas-vindas do WakaTime e tente de novo.`, 422);
     if (err.status === 429) throw new WakaError("O WakaTime limitou as consultas. Tente em alguns minutos.", 429);
     throw new WakaError(err.message, 502);
   }
@@ -50,8 +74,8 @@ const top = (items: WakaItem[] | undefined, n = 8) =>
     .map((i) => ({ name: i.name.slice(0, 60), seconds: Math.round(i.total_seconds) }));
 
 export async function connectWakatime(db: Client, ownerId: string, apiKey: string) {
-  const key = apiKey.trim();
-  const me = await fetchJson<{ data: { username: string | null; display_name: string | null } }>("https://wakatime.com/api/v1/users/current", { headers: auth(key) }, { label: "WakaTime", retries: 1 }).catch(friendly);
+  const key = cleanWakaKey(apiKey);
+  const me = await wakaGet<{ data: { username: string | null; display_name: string | null } }>("/users/current", key, { retries: 1 }).catch(friendly);
   const username = me?.data?.username || me?.data?.display_name || null;
   await db.execute({
     sql: `INSERT INTO wakatime_connections (owner_id, username, api_key_enc) VALUES (?, ?, ?)
@@ -108,11 +132,7 @@ export async function syncWakatime(db: Client, ownerId: string, opts: { force?: 
   const start = shiftDayKey(today, -(WINDOW_DAYS - 1));
   try {
     const key = decryptSecret(String(c.api_key_enc));
-    const res = await fetchJson<{ data: WakaSummary[] }>(
-      `https://wakatime.com/api/v1/users/current/summaries?start=${start}&end=${today}&timezone=${encodeURIComponent(tz)}`,
-      { headers: auth(key) },
-      { label: "WakaTime", timeoutMs: 12_000 },
-    ).catch(friendly);
+    const res = await wakaGet<{ data: WakaSummary[] }>(`/users/current/summaries?start=${start}&end=${today}&timezone=${encodeURIComponent(tz)}`, key, { timeoutMs: 12_000 }).catch(friendly);
     const out = await importWakaSummaries(db, ownerId, res?.data ?? [], today);
     await db.execute({
       sql: "UPDATE wakatime_connections SET last_sync_at = ?, last_sync_status = 'ok', last_sync_error = NULL, coverage_from = COALESCE(coverage_from, ?), updated_at = datetime('now') WHERE owner_id = ?",
