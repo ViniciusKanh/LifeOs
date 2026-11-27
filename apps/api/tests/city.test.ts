@@ -172,6 +172,9 @@ describe("/api/city — credencial e status", () => {
     const censo = (await agent.get("/api/city/status")).body.apis.find((a: { api: string }) => a.api === "censo");
     expect(censo.state).toBe("desatualizada"); // havia cópia salva do teste anterior
     expect(censo.message).toContain("Authorization Error");
+    const { faultDetail } = await import("../src/services/apilibClient.js");
+    const xml = await faultDetail(new Response('<am:fault xmlns:am="http://wso2.org/apimanager"><am:code>303001</am:code><am:message>Runtime Error</am:message><am:description>Currently , Address endpoint : [ State : SUSPENDED ]</am:description></am:fault>', { status: 500 }));
+    expect(xml).toEqual({ origin: "gateway", text: "303001 · Runtime Error · Currently , Address endpoint : [ State : SUSPENDED ]" });
   });
 
   it("client_credentials: pede token uma vez (Basic) e reaproveita", async () => {

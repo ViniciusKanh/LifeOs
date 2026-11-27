@@ -380,6 +380,12 @@ function breakerResult(api: CityApi, ok: boolean) {
 export async function faultDetail(res: Response): Promise<{ origin: "gateway" | "fonte"; text: string } | null> {
   try {
     const raw = (await res.text()).slice(0, 2000);
+    // O WSO2 também responde em XML (<am:fault><am:code>…), ex.: 303001 endpoint SUSPENDED.
+    if (/<\w*:?fault[\s>]/i.test(raw)) {
+      const tag = (name: string) => raw.match(new RegExp(`<(?:\\w+:)?${name}>([\\s\\S]*?)</(?:\\w+:)?${name}>`, "i"))?.[1]?.replace(/\s+/g, " ").trim();
+      const t = [tag("code"), tag("message"), tag("description")].filter(Boolean).join(" · ").replace(/Bearer\s+\S+/gi, "Bearer •••").slice(0, 220);
+      return t ? { origin: "gateway", text: t } : null;
+    }
     type Fault = { code?: unknown; message?: unknown; description?: unknown; __type?: unknown };
     const body = JSON.parse(raw) as Fault & { fault?: Fault; error?: Fault | string; success?: unknown };
     const clean = (parts: unknown[]) =>
@@ -441,6 +447,9 @@ async function gatewayGet(api: CityApi, url: string, cred: ResolvedCred, ownerId
       const detail = await faultDetail(res);
       // 403 vindo da fonte (ex.: conjunto restrito no Portal de Dados Abertos): a inscrição está certa,
       // quem bloqueia é a Prefeitura — o usuário não tem o que fazer no Store.
+      // 303001 = o APILIB suspendeu o endereço do sistema da Prefeitura (fora do ar do lado deles).
+      if (detail?.origin === "gateway" && /SUSPENDED|^303001/i.test(detail.text))
+        throw new CityError(503, `O APILIB suspendeu o sistema da Prefeitura por trás desta API (fora do ar do lado deles). APILIB: ${detail.text}`, "indisponivel");
       if (res.status === 403 && detail?.origin === "fonte")
         throw new CityError(503, `A fonte da Prefeitura recusou o acesso a este conjunto de dados (não é problema da sua inscrição). Fonte: ${detail.text}`, "indisponivel");
       throw new CityError(m.http, detail ? `${m.message} (${detail.origin === "gateway" ? "APILIB" : "Fonte"}: ${detail.text})` : m.message, m.state);
