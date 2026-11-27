@@ -78,9 +78,9 @@ export function WakaTimeAnvil({ notify }: { notify: (msg: string, tone?: "succes
         <div className="grid [&>*]:min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <KeyConnectForm
             service="WakaTime"
-            placeholder="waka_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            placeholder="token pessoal (waka_tok_…)"
             minLength={20}
-            link={{ href: "https://wakatime.com/settings/api-key", text: "Abrir minha API Key do WakaTime" }}
+            link={{ href: "https://wakatime.com/oauth", text: "Gerar meu token pessoal do WakaTime" }}
             busy={a.connect.isPending}
             onSubmit={(key) =>
               a.connect.mutate(key, {
@@ -90,7 +90,7 @@ export function WakaTimeAnvil({ notify }: { notify: (msg: string, tone?: "succes
             }
             steps={[
               <>No VS Code, instale a extensão <b>WakaTime</b> e entre com sua conta (o plano gratuito basta).</>,
-              <>Copie a <b>Secret API Key</b> em wakatime.com → Settings → API Key.</>,
+              <>Gere o <b>token pessoal (OAuth)</b> em wakatime.com/oauth. A Secret API Key não serve: o WakaTime só aceita ela no plugin.</>,
               <>Cole aqui. O WakaTime grátis guarda 14 dias; o LifeOS guarda todo o histórico a partir de agora.</>,
             ]}
           />

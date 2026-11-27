@@ -138,7 +138,7 @@ describe("Tempo na Bigorna (WakaTime)", () => {
   it("chave recusada vira mensagem clara e nada é salvo", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
     setIntegrationFetchForTests(async () => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }));
-    const r = await agent.post("/api/wakatime/connect").send({ key: "waka_00000000-0000-0000-0000-000000000000" });
+    const r = await agent.post("/api/wakatime/connect").send({ key: "waka_tok_00000000000000000000" });
     expect(r.status).toBe(422);
     expect(r.body.error).toMatch(/WakaTime recusou/);
     const row = await getDb().execute({ sql: "SELECT 1 FROM wakatime_connections WHERE owner_id = ?", args: [userId] });
@@ -150,7 +150,7 @@ describe("Tempo na Bigorna (WakaTime)", () => {
     setIntegrationFetchForTests(async (url) =>
       url.includes("/summaries") ? new Response(JSON.stringify({ data: [] }), { status: 200 }) : new Response(JSON.stringify({ data: { username: "vini" } }), { status: 200 }),
     );
-    const key = "waka_11111111-2222-3333-4444-555555555555";
+    const key = "waka_tok_1111222233334444555566";
     const r = await agent.post("/api/wakatime/connect").send({ key });
     expect(r.status).toBe(201);
     const stored = await getDb().execute({ sql: "SELECT api_key_enc FROM wakatime_connections WHERE owner_id = ?", args: [userId] });

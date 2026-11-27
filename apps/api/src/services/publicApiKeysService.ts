@@ -37,8 +37,11 @@ export async function resolvePublicKey(db: Client, ownerId: string, provider: Pu
   return env ? { key: env, status: { source: "servidor", masked: null } } : { key: null, status: { source: null, masked: null } };
 }
 
+/** Tira espaços e aspas que vêm junto ao copiar (o portal da SPTrans mostra o token entre aspas). */
+export const cleanPublicKey = (key: string) => key.trim().replace(/^["'`]+|["'`]+$/g, "").trim();
+
 export async function savePublicKey(db: Client, ownerId: string, provider: PublicApiProvider, key: string) {
-  const k = key.trim();
+  const k = cleanPublicKey(key);
   await db.execute({
     sql: `INSERT INTO public_api_keys (owner_id, provider, key_enc, masked) VALUES (?, ?, ?, ?)
           ON CONFLICT (owner_id, provider) DO UPDATE SET key_enc = excluded.key_enc, masked = excluded.masked, updated_at = datetime('now')`,
@@ -56,20 +59,22 @@ export async function deletePublicKey(db: Client, ownerId: string, provider: Pub
  */
 export async function validatePublicKey(provider: PublicApiProvider, key: string): Promise<string | null> {
   const { fetchJson, IntegrationError } = await import("./integrationsCore.js");
-  const k = encodeURIComponent(key.trim());
+  const k = encodeURIComponent(cleanPublicKey(key));
   try {
     if (provider === "youtube") await fetchJson(`https://www.googleapis.com/youtube/v3/videos?part=id&id=jNQXAC9IVRw&key=${k}`, {}, { label: "YouTube", retries: 0 });
     else if (provider === "nasa") await fetchJson(`https://api.nasa.gov/planetary/apod?api_key=${k}&date=2024-01-01`, {}, { label: "NASA", retries: 0 });
     else if (provider === "tmdb") {
-      const bearer = key.trim().startsWith("eyJ");
-      await fetchJson(`https://api.themoviedb.org/3/configuration${bearer ? "" : `?api_key=${k}`}`, { headers: bearer ? { Authorization: `Bearer ${key.trim()}` } : {} }, { label: "TMDB", retries: 0 });
+      const bearer = cleanPublicKey(key).startsWith("eyJ");
+      await fetchJson(`https://api.themoviedb.org/3/configuration${bearer ? "" : `?api_key=${k}`}`, { headers: bearer ? { Authorization: `Bearer ${cleanPublicKey(key)}` } : {} }, { label: "TMDB", retries: 0 });
     } else {
-      const body = await fetchJson<string>(`https://api.olhovivo.sptrans.com.br/v2.1/Login/Autenticar?token=${k}`, { method: "POST" }, { label: "SPTrans", retries: 0, responseType: "text" }).catch(async (e: unknown) => {
-        // O Olho Vivo historicamente só responde em http.
-        if (e instanceof IntegrationError && e.code === "indisponivel") return fetchJson<string>(`http://api.olhovivo.sptrans.com.br/v2.1/Login/Autenticar?token=${k}`, { method: "POST" }, { label: "SPTrans", retries: 0, responseType: "text" });
+      // Mesmo login usado nas consultas (https e http, resposta tolerante).
+      const { sptransLogin, TransitError } = await import("./transitService.js");
+      try {
+        await sptransLogin(cleanPublicKey(key));
+      } catch (e) {
+        if (e instanceof TransitError) return e.message;
         throw e;
-      });
-      if (String(body).trim() !== "true") return "A SPTrans recusou o token.";
+      }
     }
     return null;
   } catch (e) {

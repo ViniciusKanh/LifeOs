@@ -7,8 +7,8 @@ import { recordWorldEvent } from "./livingWorldService.js";
 
 /**
  * Tempo na Bigorna (Forja do Código) — tempo real programando, medido pelo
- * plugin do WakaTime no editor. Chave pessoal (Settings → API Key), guardada
- * criptografada e nunca devolvida ao frontend.
+ * plugin do WakaTime no editor. Token OAuth pessoal (wakatime.com/oauth), guardado
+ * criptografado e nunca devolvido ao frontend.
  *
  * O plano gratuito do WakaTime só devolve os últimos 14 dias: cada sincronização
  * relê essa janela e grava por dia (upsert). O histórico mais antigo fica no
@@ -30,20 +30,25 @@ export class WakaError extends Error {
 
 // User-Agent explícito: requisições sem UA (padrão do fetch do Node) podem ser barradas pelo proxy do WakaTime.
 const UA = "LifeOS/1.0 (+https://github.com/ViniciusKanh/LifeOs)";
-const auth = (key: string) => ({ Authorization: `Basic ${Buffer.from(key).toString("base64")}`, Accept: "application/json", "User-Agent": UA });
 
 /** Remove espaços, quebras de linha e aspas que costumam vir junto ao copiar a chave. */
 export const cleanWakaKey = (raw: string) => raw.trim().replace(/^["'`]+|["'`]+$/g, "").replace(/\s+/g, "");
 
 /**
- * GET na API do WakaTime. Tenta o Basic auth documentado e, se a chave for
- * recusada (401/403), repete uma vez com ?api_key= (também aceito pela API).
- * A chave nunca entra em mensagens de erro nem em logs.
+ * A "Secret API Key" (waka_ + UUID) hoje só serve para os plugins enviarem
+ * atividade: a API de leitura exige o token OAuth pessoal (wakatime.com/oauth).
+ */
+export const isPluginApiKey = (key: string) => /^waka_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
+
+/**
+ * GET na API do WakaTime com o token OAuth pessoal (Bearer). Se o Bearer for
+ * recusado, repete uma vez com ?api_key=, que a documentação também aceita
+ * para o token pessoal. O token nunca entra em mensagens de erro nem em logs.
  */
 async function wakaGet<T>(path: string, key: string, opts: { timeoutMs?: number; retries?: number } = {}): Promise<T> {
   const url = `https://wakatime.com/api/v1${path}`;
   try {
-    return await fetchJson<T>(url, { headers: auth(key) }, { label: "WakaTime", ...opts });
+    return await fetchJson<T>(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json", "User-Agent": UA } }, { label: "WakaTime", ...opts });
   } catch (err) {
     if (!(err instanceof IntegrationError) || (err.status !== 401 && err.status !== 403)) throw err;
     const sep = url.includes("?") ? "&" : "?";
@@ -58,8 +63,8 @@ function friendly(err: unknown): never {
   if (err instanceof IntegrationError) {
     // Repassa o motivo dado pelo WakaTime (sem a chave) para o erro não ficar genérico.
     const detail = /\((.+)\)\s*$/.exec(err.message)?.[1];
-    if (err.status === 401) throw new WakaError(`O WakaTime recusou a chave (401${detail ? `: ${detail}` : ""}). Copie de novo a Secret API Key inteira, começando em waka_.`, 422);
-    if (err.status === 403) throw new WakaError(`O WakaTime negou o acesso (403${detail ? `: ${detail}` : ""}). Se a conta é nova, confirme o e-mail de boas-vindas do WakaTime e tente de novo.`, 422);
+    if (err.status === 401) throw new WakaError(`O WakaTime recusou a chave (401${detail ? `: ${detail}` : ""}). Gere de novo o token pessoal em wakatime.com/oauth e cole o valor inteiro.`, 422);
+    if (err.status === 403) throw new WakaError(`O WakaTime negou o acesso (403${detail ? `: ${detail}` : ""}). Use o token pessoal de wakatime.com/oauth (a Secret API Key só funciona no plugin).`, 422);
     if (err.status === 429) throw new WakaError("O WakaTime limitou as consultas. Tente em alguns minutos.", 429);
     throw new WakaError(err.message, 502);
   }
@@ -75,6 +80,7 @@ const top = (items: WakaItem[] | undefined, n = 8) =>
 
 export async function connectWakatime(db: Client, ownerId: string, apiKey: string) {
   const key = cleanWakaKey(apiKey);
+  if (isPluginApiKey(key)) throw new WakaError("Essa é a Secret API Key do plugin, que o WakaTime só aceita para enviar atividade. Gere o token pessoal em wakatime.com/oauth e cole aqui.", 422);
   const me = await wakaGet<{ data: { username: string | null; display_name: string | null } }>("/users/current", key, { retries: 1 }).catch(friendly);
   const username = me?.data?.username || me?.data?.display_name || null;
   await db.execute({

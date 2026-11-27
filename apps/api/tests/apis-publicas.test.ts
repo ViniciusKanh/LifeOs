@@ -189,6 +189,31 @@ describe("Hora de Sair (SPTrans)", () => {
   });
 });
 
+describe("Hora de Sair: login tolerante", () => {
+  it("aceita o token entre aspas e tenta o http quando o https não devolve true", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    const bases: string[] = [];
+    setIntegrationFetchForTests(async (url, init) => {
+      expect(new Headers(init?.headers).get("User-Agent")).toContain("LifeOS");
+      expect(url).toContain("token=abc123token456");
+      bases.push(url.startsWith("https:") ? "https" : "http");
+      return url.startsWith("https:") ? new Response("<html>redirect</html>", { status: 200 }) : new Response('"true"', { status: 200 });
+    });
+    const r = await agent.put("/api/public-keys/sptrans").send({ key: '"abc123token456"' });
+    expect(r.status).toBe(200);
+    expect(r.body.source).toBe("pessoal");
+    expect(bases).toEqual(["https", "http"]);
+  });
+
+  it("só diz que recusou quando nenhum endereço aceitou", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    setIntegrationFetchForTests(async () => new Response("false", { status: 200 }));
+    const r = await agent.put("/api/public-keys/sptrans").send({ key: "abc123token456" });
+    expect(r.status).toBe(422);
+    expect(r.body.error).toMatch(/recusou/);
+  });
+});
+
 /* ───────────── Pergaminho do Dia ───────────── */
 describe("Pergaminho do Dia (Wikipédia)", () => {
   it("lê o feed, guarda o pergaminho uma vez por dia e usa cache", async () => {
@@ -292,9 +317,9 @@ describe("Termômetro do Reino (Banco Central)", () => {
   });
 });
 
-/* ───────────── WakaTime (correção da conexão) ───────────── */
-describe("WakaTime: conexão mais tolerante", () => {
-  it("limpa a chave colada, envia User-Agent e cai para ?api_key= quando o Basic é recusado", async () => {
+/* ───────────── WakaTime (token OAuth pessoal) ───────────── */
+describe("WakaTime: token OAuth pessoal", () => {
+  it("limpa o token colado, usa Bearer com User-Agent e cai para ?api_key= se o Bearer for recusado", async () => {
     const { agent } = await createAuthenticatedAgent();
     const seen: string[] = [];
     setIntegrationFetchForTests(async (url, init) => {
@@ -302,26 +327,38 @@ describe("WakaTime: conexão mais tolerante", () => {
       expect(h.get("User-Agent")).toContain("LifeOS");
       if (url.includes("/users/current/summaries")) return json({ data: [] });
       if (h.get("Authorization")) {
-        seen.push("basic");
-        expect(h.get("Authorization")).toBe(`Basic ${Buffer.from("waka_abc-123-def-456-ghi").toString("base64")}`);
+        seen.push("bearer");
+        expect(h.get("Authorization")).toBe("Bearer waka_tok_abc123def456ghi789");
         return json({ error: "Unauthorized" }, 401);
       }
       seen.push("query");
-      expect(url).toContain("api_key=waka_abc-123-def-456-ghi");
+      expect(url).toContain("api_key=waka_tok_abc123def456ghi789");
       return json({ data: { username: "vini", display_name: "Vini" } });
     });
-    const r = await agent.post("/api/wakatime/connect").send({ key: ' "waka_abc-123-def-456-ghi"\n' });
+    const r = await agent.post("/api/wakatime/connect").send({ key: ' "waka_tok_abc123def456ghi789"\n' });
     expect(r.status).toBe(201);
     expect(r.body.username).toBe("vini");
-    expect(seen.slice(0, 2)).toEqual(["basic", "query"]);
+    expect(seen.slice(0, 2)).toEqual(["bearer", "query"]);
   });
 
-  it("explica o motivo quando o WakaTime nega (403)", async () => {
+  it("recusa a Secret API Key do plugin sem nem chamar o WakaTime", async () => {
     const { agent } = await createAuthenticatedAgent();
-    setIntegrationFetchForTests(async () => json({ error: "Please verify your email." }, 403));
-    const r = await agent.post("/api/wakatime/connect").send({ key: "waka_abc-123-def-456-ghi" });
+    let calls = 0;
+    setIntegrationFetchForTests(async () => (calls++, json({})));
+    // Montada em tempo de execução: o literal no formato de chave seria barrado pelo secret scanning do GitHub.
+    const pluginKey = ["waka", ["00000000", "1111", "4222", "8333", "444444444444"].join("-")].join("_");
+    const r = await agent.post("/api/wakatime/connect").send({ key: pluginKey });
+    expect(r.status).toBe(422);
+    expect(r.body.error).toMatch(/wakatime.com\/oauth/);
+    expect(calls).toBe(0);
+  });
+
+  it("explica o motivo quando o WakaTime nega (403), sem vazar o token", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    setIntegrationFetchForTests(async () => json({ error: "Forbidden." }, 403));
+    const r = await agent.post("/api/wakatime/connect").send({ key: "waka_tok_abc123def456ghi789" });
     expect(r.status).toBe(422);
     expect(r.body.error).toMatch(/403/);
-    expect(r.body.error).not.toContain("waka_abc");
+    expect(r.body.error).not.toContain("waka_tok_abc");
   });
 });

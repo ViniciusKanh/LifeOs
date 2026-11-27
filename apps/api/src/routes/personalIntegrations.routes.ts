@@ -145,7 +145,7 @@ wakatimeRouter.get("/", async (req, res) => {
 });
 wakatimeRouter.post("/connect", syncLimit, async (req, res) => {
   try {
-    const { key } = keySchema(20, "Cole a API Key do WakaTime.").parse(req.body);
+    const { key } = keySchema(20, "Cole o token pessoal do WakaTime (wakatime.com/oauth).").parse(req.body);
     const r = await connectWakatime(getDb(), req.user!.id, key);
     const sync = await syncWakatime(getDb(), req.user!.id, { force: true }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : "Falha ao sincronizar." }));
     return res.status(201).json({ ...r, sync });

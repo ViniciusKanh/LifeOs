@@ -37,14 +37,24 @@ export function resetTransitSessionsForTests() {
   sessions.clear();
 }
 
-async function login(token: string): Promise<{ cookie: string; base: string }> {
+const UA = "LifeOS/1.0 (+https://github.com/ViniciusKanh/LifeOs)";
+/** O Olho Vivo responde true/false (texto ou JSON, às vezes com aspas ou espaços). */
+export const isLoginOk = (body: unknown) => /^\s*"?true"?\s*$/i.test(String(body ?? ""));
+
+/**
+ * Login no Olho Vivo. Tenta https e depois o endereço http oficial — os dois,
+ * sempre: o https pode responder com algo diferente de "true" (página, redirect)
+ * mesmo com o token válido. Só declara "recusado" quando nenhum endereço aceitou.
+ */
+export async function sptransLogin(token: string): Promise<{ cookie: string; base: string }> {
   const hit = sessions.get(token);
   if (hit && Date.now() - hit.at < SESSION_MS) return hit;
   let lastErr: unknown = null;
+  let refused = false;
   for (const base of [...new Set(BASES)]) {
     let cookie = "";
     try {
-      const body = await fetchJson<string>(`${base}/Login/Autenticar?token=${encodeURIComponent(token)}`, { method: "POST" }, {
+      const body = await fetchJson<string>(`${base}/Login/Autenticar?token=${encodeURIComponent(token.trim())}`, { method: "POST", body: "", headers: { Accept: "application/json", "User-Agent": UA } }, {
         label: "SPTrans",
         responseType: "text",
         retries: 1,
@@ -53,17 +63,18 @@ async function login(token: string): Promise<{ cookie: string; base: string }> {
           cookie = list.map((c) => c.split(";")[0]).filter(Boolean).join("; ");
         },
       });
-      if (String(body).trim() !== "true") throw new TransitError("A SPTrans recusou o token. Confira o token do Olho Vivo no portal do desenvolvedor.", 422);
+      if (!isLoginOk(body)) {
+        refused = true;
+        continue;
+      }
       const s = { cookie, base, at: Date.now() };
       sessions.set(token, s);
       return s;
     } catch (e) {
-      if (e instanceof TransitError) throw e;
       lastErr = e;
-      // https indisponível: tenta o endereço http oficial do Olho Vivo.
-      if (!(e instanceof IntegrationError) || e.code !== "indisponivel") break;
     }
   }
+  if (refused) throw new TransitError("A SPTrans recusou o token. Confira se copiou o token inteiro (sem aspas). Token recém-criado pode levar alguns minutos para valer.", 422);
   if (lastErr instanceof IntegrationError) throw new TransitError(`SPTrans: ${lastErr.message}`, 502);
   throw new TransitError("A SPTrans não respondeu agora.", 502);
 }
@@ -71,14 +82,14 @@ async function login(token: string): Promise<{ cookie: string; base: string }> {
 async function call<T>(db: Client, ownerId: string, path: string): Promise<T> {
   const { key } = await resolvePublicKey(db, ownerId, "sptrans");
   if (!key) throw new TransitError("Configure o token do Olho Vivo (SPTrans) para ver os ônibus.", 422);
-  const s = await login(key);
+  const s = await sptransLogin(key);
   try {
-    return await fetchJson<T>(`${s.base}${path}`, { headers: s.cookie ? { Cookie: s.cookie } : {} }, { label: "SPTrans", timeoutMs: 10_000, retries: 1 });
+    return await fetchJson<T>(`${s.base}${path}`, { headers: { "User-Agent": UA, ...(s.cookie ? { Cookie: s.cookie } : {}) } }, { label: "SPTrans", timeoutMs: 10_000, retries: 1 });
   } catch (e) {
     if (e instanceof IntegrationError && (e.status === 401 || e.status === 403)) {
       sessions.delete(key);
-      const again = await login(key);
-      return fetchJson<T>(`${again.base}${path}`, { headers: again.cookie ? { Cookie: again.cookie } : {} }, { label: "SPTrans", timeoutMs: 10_000, retries: 0 });
+      const again = await sptransLogin(key);
+      return fetchJson<T>(`${again.base}${path}`, { headers: { "User-Agent": UA, ...(again.cookie ? { Cookie: again.cookie } : {}) } }, { label: "SPTrans", timeoutMs: 10_000, retries: 0 });
     }
     if (e instanceof IntegrationError) throw new TransitError(e.message, 502);
     throw e;
