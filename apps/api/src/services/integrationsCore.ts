@@ -50,8 +50,8 @@ export interface FetchJsonOptions {
   forbiddenMessage?: string;
   /** Lê cabeçalhos da resposta de sucesso (ex.: versão da biblioteca no Zotero). */
   onHeaders?: (headers: Headers) => void;
-  /** "text" devolve o corpo cru (ex.: Atom/XML do arXiv). Padrão: JSON. */
-  responseType?: "json" | "text";
+  /** "text" devolve o corpo cru (ex.: Atom/XML do arXiv); "buffer" devolve os bytes (ex.: GTFS .zip). Padrão: JSON. */
+  responseType?: "json" | "text" | "buffer";
 }
 
 async function apiErrorDetail(res: Response): Promise<string> {
@@ -76,6 +76,7 @@ export async function fetchJson<T>(url: string, init: RequestInit, opts: FetchJs
       if (res.ok) {
         opts.onHeaders?.(res.headers);
         if (res.status === 204) return null as T;
+        if (opts.responseType === "buffer") return Buffer.from(await res.arrayBuffer()) as T;
         const text = await res.text();
         if (opts.responseType === "text") return text as T;
         return (text ? JSON.parse(text) : null) as T;

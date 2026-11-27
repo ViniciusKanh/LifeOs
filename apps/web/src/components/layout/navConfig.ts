@@ -1,4 +1,5 @@
 import {
+  BusFront,
   Clapperboard,
   Castle,
   Boxes,
@@ -148,6 +149,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/projetos", label: "Projetos", icon: GanttChartSquare, quote: "Projetos claros avançam mais rápido." },
       { to: "/profissional", label: "Profissional", icon: Briefcase, quote: "Foco no que move os ponteiros." },
       { to: "/forja-codigo", label: "Forja do Código", icon: Github, quote: "Cada commit real tempera a lâmina." },
+      { to: "/estacao", label: "Transporte", rpgLabel: "Estação das Carruagens", icon: BusFront, quote: "Quem sabe a hora de partir nunca chega atrasado." },
     ],
   },
   {

@@ -219,7 +219,7 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("clickup_tasks_done", "SELECT COUNT(*) FROM clickup_task_links l JOIN tasks t ON t.id = l.task_id AND t.owner_id = l.owner_id WHERE l.owner_id = ? AND t.status = 'Concluído'");
   addScalar("meals_logged", "SELECT COUNT(*) FROM meals WHERE owner_id = ?");
   addScalar("protein_goal_days", "SELECT COUNT(*) FROM xp_events WHERE owner_id = ? AND source_type = 'nutrition' AND event_type = 'protein_goal'");
-  // APIs públicas por tela (Cursos em Vídeo, Ar do Treino, Papers em Alta, Hora de Sair,
+  // APIs públicas por tela (Cursos em Vídeo, Ar do Treino, Papers em Alta, Estação das Carruagens,
   // Pergaminho, Vitral do Céu, Sala de Cinema): sempre contadas dos registros reais.
   addScalar("video_lessons_done", "SELECT COUNT(*) FROM video_lessons WHERE owner_id = ? AND done_at IS NOT NULL");
   addScalar("video_courses_done", "SELECT COUNT(*) FROM video_courses WHERE owner_id = ? AND status = 'concluido'");

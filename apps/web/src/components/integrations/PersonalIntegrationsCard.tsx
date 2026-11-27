@@ -57,7 +57,7 @@ export function PersonalIntegrationsCard() {
       <Row icon={<PlayCircle size={18} />} name="YouTube Data API" screen="Educação · Cursos em Vídeo" to="/educacao" state={keyState(keys.data?.youtube)} detail={keyDetail(keys.data?.youtube, "chave de API (grátis)")} />
       <Row icon={<Wind size={18} />} name="Open-Meteo (qualidade do ar)" screen="Saúde · Ar do Treino" to="/saude" state="ok" detail="sem chave · usa a cidade do Clima" />
       <Row icon={<Flame size={18} />} name="Hugging Face (Daily Papers)" screen="Biblioteca do Mestrado" to="/biblioteca-mestrado" state="ok" detail="sem chave" />
-      <Row icon={<Bus size={18} />} name="SPTrans Olho Vivo" screen="Hoje · Hora de Sair" to="/hoje" state={keyState(keys.data?.sptrans)} detail={keyDetail(keys.data?.sptrans, "token de cadastro (grátis)")} />
+      <Row icon={<Bus size={18} />} name="SPTrans Olho Vivo" screen="Estação das Carruagens" to="/estacao" state={keyState(keys.data?.sptrans)} detail={keyDetail(keys.data?.sptrans, "token de cadastro (grátis)")} />
       <Row icon={<ScrollText size={18} />} name="Wikipédia (Neste dia)" screen="Taverna · Pergaminho do Dia" to="/taverna?aba=pergaminho" state="ok" detail="sem chave" />
       <Row icon={<Sparkles size={18} />} name="NASA APOD" screen="Meu Mundo · Vitral do Céu" to="/meu-mundo" state={keys.isLoading ? "load" : "ok"} detail={keyDetail(keys.data?.nasa, "DEMO_KEY (limite baixo)")} />
       <Row icon={<Clapperboard size={18} />} name="TMDB" screen="Sala de Cinema" to="/sala-de-cinema" state={keyState(keys.data?.tmdb)} detail={keyDetail(keys.data?.tmdb, "chave de API (grátis)")} />

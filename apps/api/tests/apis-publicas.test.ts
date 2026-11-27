@@ -149,7 +149,7 @@ describe("Papers em Alta (Hugging Face)", () => {
 });
 
 /* ───────────── Hora de Sair ───────────── */
-describe("Hora de Sair (SPTrans)", () => {
+describe("Estação das Carruagens: Olho Vivo (SPTrans)", () => {
   const pred = { hr: "13:50", p: { cp: 1, np: "Ponto", l: [{ c: "875A-10", sl: 1, lt0: "Centro", lt1: "Perdizes", vs: [{ t: "13:53" }, { t: "14:04", a: true }] }, { c: "669A-10", sl: 2, lt0: "Princesa Isabel", lt1: "X", vs: [{ t: "13:59" }] }] } };
 
   it("converte a previsão e recomenda o ônibus certo", () => {
@@ -178,7 +178,9 @@ describe("Hora de Sair (SPTrans)", () => {
     const st = await agent.post("/api/transit/stops").send({ code: 340015329, name: "PAULISTA B/C", walkMinutes: 2 });
     expect(st.status).toBe(201);
     const o = (await agent.get("/api/transit")).body;
-    expect(o.stops[0].recommendation).toMatchObject({ line: "875A-10", leaveInMinutes: 1 });
+    // Sem GTFS importado, as passagens vêm só do Olho Vivo (ao vivo).
+    expect(o.stops[0].passes[0]).toMatchObject({ line: "875A-10", inMinutes: 3, source: "ao vivo" });
+    expect(o.live).toMatchObject({ enabled: true, ok: true });
     const dep = await agent.post("/api/transit/depart").send({ stopId: st.body.id });
     expect(dep.status).toBe(201);
     expect(dep.body).toMatchObject({ onTime: true, xp: 15 });

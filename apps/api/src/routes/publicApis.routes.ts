@@ -8,7 +8,9 @@ import { deletePublicKey, resolvePublicKey, savePublicKey, validatePublicKey, ty
 import { VideoCourseError, deleteCourse, enrollPlaylist, getVideoCoursesOverview, resyncCourse, setLessonDone, updateCourse } from "../services/videoCourseService.js";
 import { getAirOverview } from "../services/airQualityService.js";
 import { HfError, decideHfPaper, getHfOverview } from "../services/hfTrendsService.js";
-import { TransitError, addStop, deleteStop, getTransitOverview, recordDeparture, searchStops, updateStop } from "../services/transitService.js";
+import { TransitError, addStop, createJourney, deleteJourney, deleteStop, geocode, getStationOverview, planRoute, recordDeparture, searchStops, setPrimaryJourney, stopsNear, updateStop } from "../services/transitService.js";
+import { GtfsError, importGtfsStep } from "../services/gtfsService.js";
+import { requireAdmin } from "../middleware/requireAdmin.js";
 import { LoreError, getLoreOverview, readScroll } from "../services/loreScrollService.js";
 import { SkyError, collectSky, getSkyOverview } from "../services/skyWindowService.js";
 import { CinemaError, addTitle, deleteTitle, getCinemaOverview, saveCinemaGoal, searchTitles, trendingTitles, updateTitle } from "../services/cinemaService.js";
@@ -20,7 +22,7 @@ import { getThermometer } from "../services/marketThermometerService.js";
  *   /api/video-courses   → Educação · Cursos em Vídeo (YouTube)
  *   /api/air             → Saúde · Ar do Treino (Open-Meteo)
  *   /api/hf              → Biblioteca do Mestrado · Papers em Alta (Hugging Face)
- *   /api/transit         → Hoje · Hora de Sair (SPTrans)
+ *   /api/transit         → Estação das Carruagens (GTFS SPTrans + Olho Vivo + OSRM)
  *   /api/lore            → Taverna · Pergaminho do Dia (Wikipédia)
  *   /api/sky             → Meu Mundo · Vitral do Céu (NASA APOD)
  *   /api/cinema          → Sala de Cinema (TMDB)
@@ -28,7 +30,7 @@ import { getThermometer } from "../services/marketThermometerService.js";
  * Todas exigem login; toda consulta e escrita é filtrada pelo usuário autenticado.
  */
 
-const KNOWN = [VideoCourseError, HfError, TransitError, LoreError, SkyError, CinemaError, IntegrationError];
+const KNOWN = [VideoCourseError, HfError, TransitError, GtfsError, LoreError, SkyError, CinemaError, IntegrationError];
 const isKnown = (e: unknown): e is Error & { status: number } => KNOWN.some((K) => e instanceof K);
 
 function handler(tag: string, fallback: string) {
@@ -167,15 +169,17 @@ hfRouter.post("/decide", writeLimit, async (req, res) => {
   }
 });
 
-/* ───────────── Hora de Sair ───────────── */
+/* ───────────── Estação das Carruagens ───────────── */
 export const transitRouter = Router();
 transitRouter.use(requireAuth);
-const tFail = handler("sptrans", "Não foi possível consultar a SPTrans.");
-const lines = z.array(z.string().trim().regex(/^[0-9A-Za-z-]{2,12}$/, "Linha inválida (ex.: 875A-10).")).max(10);
+const tFail = handler("estacao", "Não foi possível consultar a Estação das Carruagens.");
+const lines = z.array(z.string().trim().regex(/^[0-9A-Za-zÀ-ú -]{2,16}$/, "Linha inválida (ex.: 875A-10).")).max(10);
+const COORD = { lat: z.coerce.number().min(-90).max(90), lon: z.coerce.number().min(-180).max(180) };
+const place = z.object({ label: z.string().trim().min(1).max(80), ...COORD }).strict();
 
 transitRouter.get("/", async (req, res) => {
   try {
-    return res.json(await getTransitOverview(getDb(), req.user!.id));
+    return res.json(await getStationOverview(getDb(), req.user!.id));
   } catch (e) {
     return tFail(res, e);
   }
@@ -188,10 +192,26 @@ transitRouter.get("/stops/search", searchLimit, async (req, res) => {
     return tFail(res, e);
   }
 });
+transitRouter.get("/stops/near", searchLimit, async (req, res) => {
+  try {
+    const p = z.object(COORD).parse(req.query);
+    return res.json(await stopsNear(getDb(), p.lat, p.lon));
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
+transitRouter.get("/geocode", searchLimit, async (req, res) => {
+  try {
+    const q = z.string().trim().min(3, "Digite pelo menos 3 letras.").max(120).parse(req.query.q);
+    return res.json(await geocode(q));
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
 transitRouter.post("/stops", writeLimit, async (req, res) => {
   try {
     const p = z
-      .object({ code: z.number().int().positive(), name: z.string().trim().min(1).max(120), address: z.string().trim().max(160).nullable().optional(), walkMinutes: z.number().int().min(0).max(60), rideMinutes: z.number().int().min(1).max(240).nullable().optional(), lines: lines.optional() })
+      .object({ code: z.number().int().positive(), name: z.string().trim().min(1).max(120).optional(), address: z.string().trim().max(160).nullable().optional(), walkMinutes: z.number().int().min(0).max(60).optional(), rideMinutes: z.number().int().min(1).max(240).nullable().optional(), lines: lines.optional(), from: z.object(COORD).strict().nullable().optional() })
       .strict()
       .parse(req.body);
     return res.status(201).json(await addStop(getDb(), req.user!.id, p));
@@ -216,10 +236,51 @@ transitRouter.delete("/stops/:id", async (req, res) => {
     return tFail(res, e);
   }
 });
+transitRouter.post("/plan", searchLimit, async (req, res) => {
+  try {
+    const p = z.object({ from: place, to: place }).strict().parse(req.body);
+    return res.json(await planRoute(getDb(), req.user!.id, p.from, p.to));
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
+transitRouter.post("/journeys", writeLimit, async (req, res) => {
+  try {
+    const p = z.object({ name: z.string().trim().min(1).max(60), origin: place, dest: place, tripId: z.string().trim().min(1).max(40), boardSeq: z.number().int().min(0), alightSeq: z.number().int().min(1) }).strict().parse(req.body);
+    return res.status(201).json(await createJourney(getDb(), req.user!.id, p));
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
+transitRouter.post("/journeys/:id/primary", writeLimit, async (req, res) => {
+  try {
+    await setPrimaryJourney(getDb(), req.user!.id, ID.parse(req.params.id));
+    return res.json({ ok: true });
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
+transitRouter.delete("/journeys/:id", async (req, res) => {
+  try {
+    await deleteJourney(getDb(), req.user!.id, ID.parse(req.params.id));
+    return res.status(204).send();
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
 transitRouter.post("/depart", writeLimit, async (req, res) => {
   try {
-    const { stopId } = z.object({ stopId: ID }).strict().parse(req.body);
-    return res.status(201).json(await recordDeparture(getDb(), req.user!.id, stopId));
+    const p = z.object({ stopId: ID.optional(), journeyId: ID.optional() }).strict().refine((x) => !!x.stopId !== !!x.journeyId, "Informe a jornada ou o ponto.").parse(req.body);
+    return res.status(201).json(await recordDeparture(getDb(), req.user!.id, p));
+  } catch (e) {
+    return tFail(res, e);
+  }
+});
+// GTFS: dados globais de referência — só o administrador importa (em passos de até 60 s).
+transitRouter.post("/gtfs/import", requireAdmin, async (req, res) => {
+  try {
+    const { step } = z.object({ step: z.number().int().min(0).max(60) }).strict().parse(req.body);
+    return res.json(await importGtfsStep(getDb(), step));
   } catch (e) {
     return tFail(res, e);
   }

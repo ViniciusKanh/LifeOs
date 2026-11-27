@@ -93,6 +93,7 @@ const TesouroPage = lazy(() => import("@/pages/tesouro/TesouroPage").then((m) =>
 const BancoPage = lazy(() => import("@/pages/banco/BancoPage").then((m) => ({ default: m.BancoPage })));
 const MeuMundoPage = lazy(() => import("@/pages/meu-mundo/MeuMundoPage").then((m) => ({ default: m.MeuMundoPage })));
 const ClimaPage = lazy(() => import("@/pages/meu-mundo/ClimaPage").then((m) => ({ default: m.ClimaPage })));
+const EstacaoPage = lazy(() => import("@/pages/estacao/EstacaoPage").then((m) => ({ default: m.EstacaoPage })));
 const SalaCinemaPage = lazy(() => import("@/pages/sala-de-cinema/SalaCinemaPage").then((m) => ({ default: m.SalaCinemaPage })));
 const ForjaCodigoPage = lazy(() => import("@/pages/forja-codigo/ForjaCodigoPage").then((m) => ({ default: m.ForjaCodigoPage })));
 const RaidPage = lazy(() => import("@/pages/aventuras/RaidPage").then((m) => ({ default: m.RaidPage })));
@@ -217,6 +218,7 @@ export default function App() {
           <Route path="/meu-mundo/clima" element={<ClimaPage />} />
           <Route path="/forja-codigo" element={<ForjaCodigoPage />} />
           <Route path="/sala-de-cinema" element={<SalaCinemaPage />} />
+          <Route path="/estacao" element={<EstacaoPage />} />
           <Route path="/biblioteca-mestrado" element={<BibliotecaMestradoPage />} />
           <Route path="/raid" element={<RaidPage />} />
           <Route path="/companheiro" element={<CompanheiroPage />} />

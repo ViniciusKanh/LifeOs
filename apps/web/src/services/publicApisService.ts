@@ -2,7 +2,7 @@ import { api } from "./api";
 
 /**
  * APIs públicas gratuitas por tela — tipos espelham os services da API
- * (videoCourseService, airQualityService, hfTrendsService, transitService,
+ * (videoCourseService, airQualityService, hfTrendsService,
  * loreScrollService, skyWindowService, cinemaService, marketThermometerService).
  * Chaves só vão no PUT e nunca voltam: o servidor devolve apenas a origem.
  */
@@ -123,36 +123,6 @@ export interface HfOverview {
   xpTotal: number;
   triagedToday: number;
   rules: { triage: number; dailyCap: number };
-}
-
-/* ───────── Hora de Sair ───────── */
-export interface Arrival {
-  line: string;
-  destination: string;
-  inMinutes: number;
-  at: string;
-  accessible: boolean;
-}
-export interface TransitStop {
-  id: string;
-  code: number;
-  name: string;
-  address: string | null;
-  walk: number;
-  ride: number | null;
-  lines: string[];
-  now: string | null;
-  arrivals: Arrival[];
-  recommendation: (Arrival & { leaveInMinutes: number; fitsEvent: boolean | null }) | null;
-  error: string | null;
-}
-export interface TransitOverview {
-  key: KeyStatus;
-  event: { id: string; title: string; startsAt: string; minutesTo: number } | null;
-  stops: TransitStop[];
-  today: { leftAt: string; onTime: boolean; line: string | null; eventTitle: string | null } | null;
-  onTimeTotal: number;
-  rules: { onTime: number; coins: number; bufferMinutes: number; graceMinutes: number };
 }
 
 /* ───────── Pergaminho do Dia ───────── */
@@ -286,14 +256,7 @@ export const publicApis = {
     overview: () => api.get<HfOverview>("/hf"),
     decide: (arxivId: string, decision: "salvar" | "dispensar" | "desfazer") => api.post<{ xp: number; paperId: string | null }>("/hf/decide", { arxivId, decision }),
   },
-  transit: {
-    overview: () => api.get<TransitOverview>("/transit"),
-    search: (q: string) => api.get<Array<{ code: number; name: string; address: string | null }>>(`/transit/stops/search?q=${enc(q)}`),
-    addStop: (p: { code: number; name: string; address?: string | null; walkMinutes: number; rideMinutes?: number | null; lines?: string[] }) => api.post<{ id: string }>("/transit/stops", p),
-    updateStop: (id: string, p: { walkMinutes?: number; rideMinutes?: number | null; lines?: string[]; first?: boolean }) => api.patch<{ ok: true }>(`/transit/stops/${enc(id)}`, p),
-    removeStop: (id: string) => api.delete<void>(`/transit/stops/${enc(id)}`),
-    depart: (stopId: string) => api.post<{ onTime: boolean; xp: number; line: string | null; busInMinutes: number | null }>("/transit/depart", { stopId }),
-  },
+
   lore: {
     overview: () => api.get<LoreOverview>("/lore"),
     read: (index: number) => api.post<{ xp: number; streak: number }>("/lore/read", { index }),

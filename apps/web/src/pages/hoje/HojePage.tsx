@@ -1,4 +1,3 @@
-import { LeaveNow } from "@/components/today/LeaveNow";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -130,10 +129,6 @@ function ClassicHojePage() {
         </div>
       ) : null}
       {isRpg && <ProtocolSuggestionBanner />}
-      {/* Hora de Sair: previsão real do ônibus (SPTrans) antes do próximo compromisso. */}
-      <div className="mb-4">
-        <LeaveNow />
-      </div>
       {isRpg ? null : (
         <>
         <p className="font-display font-bold text-2xl">Hoje</p>

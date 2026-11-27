@@ -54,16 +54,6 @@ export function useHfActions() {
   return { decide: useMutation({ mutationFn: ({ arxivId, decision }: { arxivId: string; decision: "salvar" | "dispensar" | "desfazer" }) => svc.hf.decide(arxivId, decision), onSettled: refresh }) };
 }
 
-export const useTransit = (enabled = true) => useQuery({ queryKey: TRANSIT_KEY, queryFn: svc.transit.overview, enabled, staleTime: 30_000, refetchInterval: 60_000 });
-export function useTransitActions() {
-  const refresh = useRefresh(TRANSIT_KEY);
-  return {
-    addStop: useMutation({ mutationFn: svc.transit.addStop, onSuccess: refresh }),
-    updateStop: useMutation({ mutationFn: ({ id, ...p }: { id: string; walkMinutes?: number; rideMinutes?: number | null; lines?: string[]; first?: boolean }) => svc.transit.updateStop(id, p), onSuccess: refresh }),
-    removeStop: useMutation({ mutationFn: svc.transit.removeStop, onSuccess: refresh }),
-    depart: useMutation({ mutationFn: svc.transit.depart, onSettled: refresh }),
-  };
-}
 
 export const useLore = () => useQuery({ queryKey: LORE_KEY, queryFn: svc.lore.overview, staleTime: 10 * 60_000 });
 export function useLoreActions() {

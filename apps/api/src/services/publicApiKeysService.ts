@@ -70,7 +70,7 @@ export async function validatePublicKey(provider: PublicApiProvider, key: string
       // Mesmo login usado nas consultas (https e http, resposta tolerante).
       const { sptransLogin, TransitError } = await import("./transitService.js");
       try {
-        await sptransLogin(cleanPublicKey(key));
+        await sptransLogin(cleanPublicKey(key), true);
       } catch (e) {
         if (e instanceof TransitError) return e.message;
         throw e;
