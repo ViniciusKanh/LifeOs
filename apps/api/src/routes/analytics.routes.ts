@@ -2,6 +2,8 @@ import { itemDef } from "../config/items.js";
 import { buildTimelineEvents } from "../services/heroHubService.js";
 import { skillTimelineEvents } from "../services/personalSkillsService.js";
 import { codeTimelineEvents } from "../services/codeForgeService.js";
+import { wakatimeTimelineEvents } from "../services/wakatimeService.js";
+import { nutritionTimelineEvents } from "../services/nutritionService.js";
 import { researchTimelineEvents } from "../services/researchLibraryService.js";
 import { adventureTimelineEvents } from "../services/adventureHubService.js";
 import { Router } from "express";
@@ -416,17 +418,22 @@ analyticsRouter.get("/timeline", async (req, res) => {
   // Árvore de Habilidades: um evento por nível comprovado em prova.
   const skillEvents = await skillTimelineEvents(db, ownerId, qFrom, qTo);
   // Forja do Código e Biblioteca do Mestrado: só marcos (PR mesclada, release, dia de commits, fichamento).
-  const [codeEvents, researchEvents, adventureEvents] = await Promise.all([
+  const [codeEvents, researchEvents, adventureEvents, wakaEvents, mealEvents] = await Promise.all([
     codeTimelineEvents(db, ownerId, qFrom, qTo),
     researchTimelineEvents(db, ownerId, qFrom, qTo),
     // Raid derrotada, lugar descoberto no Atlas e evolução do Companheiro.
     adventureTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
+    // Tempo programando (WakaTime) e refeições: um resumo por dia, nunca um evento por item.
+    wakatimeTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
+    nutritionTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
   ]);
 
   const events = [
     ...guildEvents,
     ...skillEvents,
     ...codeEvents,
+    ...wakaEvents,
+    ...mealEvents,
     ...researchEvents,
     ...adventureEvents,
     ...warCouncilEvents,

@@ -35,6 +35,7 @@ import {
 import { useTheme } from "@/hooks/useTheme";
 import { RPGAvatarButton, RPGPageHeader } from "@/components/rpg";
 import { RpgHealthAttributes } from "@/components/health/RpgHealthSections";
+import { HeroKitchen } from "@/components/health/HeroKitchen";
 import type { MoodEntryInput, SleepEntryInput, WaterEntryInput, WorkoutInput } from "@/services/healthService";
 import { aggregateSleepNights } from "@/utils/sleepNights";
 import { useHealthHub } from "@/hooks/useModuleHub";
@@ -456,6 +457,9 @@ export function SaudePage() {
           onOpenHistory={() => setHistoryOpen("mood")}
         />
       </div>
+
+      {/* Cozinha do Herói: refeições por código de barras (Open Food Facts) ou manual. */}
+      <HeroKitchen />
 
       {/* Atributo Força (musculação: PRs, 1RM) e Treino técnico (lutas e danças: tempo, rounds, carga). */}
       <div className="mt-4">

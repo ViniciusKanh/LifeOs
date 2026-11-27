@@ -849,7 +849,6 @@ function PrivacyModal({ open, onClose, o, onSetting, onExport, onDeleteAll, onDe
         {([
           ["locationEnabled", "Usar localização no check-in", "Desligada por padrão. Nada roda em segundo plano."],
           ["preciseLocation", "Precisão exata", "Sem isso, o GPS é arredondado para ~110 m antes de salvar."],
-          ["useStravaRoutes", "Usar rotas do Strava", "Revela no mapa o trajeto dos treinos importados (opcional)."],
         ] as const).map(([k, label, hint]) => (
           <div key={k} className="flex items-center justify-between gap-3">
             <span>
@@ -866,7 +865,7 @@ function PrivacyModal({ open, onClose, o, onSetting, onExport, onDeleteAll, onDe
               {o.routes.map((r) => (
                 <li key={r.id} className="flex items-center justify-between">
                   <span>
-                    {r.name} {r.distanceKm ? `· ${nf(r.distanceKm)} km` : ""} {r.source === "strava" ? "(Strava)" : ""}
+                    {r.name} {r.distanceKm ? `· ${nf(r.distanceKm)} km` : ""}
                   </span>
                   <button type="button" className="text-rpg-red" onClick={() => onDeleteRoute(r.id)} aria-label={`Excluir rota ${r.name}`}>
                     <Trash2 size={13} />

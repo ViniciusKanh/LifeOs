@@ -110,8 +110,6 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/raid", label: "Chefe da Semana" },
           { to: "/companheiro", label: "Companheiro" },
           { to: "/atlas", label: "Atlas" },
-          { to: "/strava", label: "Strava" },
-          { to: "/trilha-sonora", label: "Trilha Sonora" },
           { to: "/tempo-de-jogo", label: "Tempo de Jogo" },
         ],
       },

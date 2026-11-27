@@ -86,6 +86,7 @@ import { personalSkillsRouter } from "./routes/personalSkills.routes.js";
 import { codeForgeRouter } from "./routes/codeForge.routes.js";
 import { researchRouter } from "./routes/research.routes.js";
 import { integrationsRouter } from "./routes/integrations.routes.js";
+import { clickupRouter, holidaysRouter, nutritionRouter, radarRouter, wakatimeRouter, zoteroRouter } from "./routes/personalIntegrations.routes.js";
 import { adventuresRouter, atlasRouter, companionRouter, raidRouter } from "./routes/adventures.routes.js";
 import { runMigrations } from "./db/migrate.js";
 
@@ -187,8 +188,15 @@ app.use("/api/push", pushRouter);
 // /api/cron/* (que usa segredo próprio, sem sessão de usuário — ver
 // cron.routes.ts) antes mesmo de chegar no roteador de verdade.
 app.use("/api/cron", cronRouter);
-// Integrações (Strava/Spotify/Steam) têm callbacks e webhook públicos: também antes dos roteadores em "/api".
+// Integrações (Steam) têm callback público: também antes dos roteadores em "/api".
 app.use("/api/integrations", integrationsRouter);
+// Integrações pessoais por tela (Zotero, Radar, WakaTime, ClickUp, refeições, feriados).
+app.use("/api/zotero", zoteroRouter);
+app.use("/api/radar", radarRouter);
+app.use("/api/wakatime", wakatimeRouter);
+app.use("/api/clickup", clickupRouter);
+app.use("/api/nutrition", nutritionRouter);
+app.use("/api/holidays", holidaysRouter);
 app.use("/api", libraryRouter);
 app.use("/api", educationRouter);
 app.use("/api/health", healthRouter);

@@ -572,7 +572,9 @@ export function AgendaCalendar({ today, onToast, initialView = "mes" }: { today:
         : `${dayBr(range.from)} – ${dayBr(range.to)}`;
 
   const Chip = ({ it, compact }: { it: CalendarItem; compact?: boolean }) => {
-    const c = CATEGORY_UI[itemCategory(it)];
+    // Feriado (BrasilAPI ou local) tem visual próprio de "dia de festival".
+    const holiday = it.sourceType === "holiday";
+    const c = holiday ? { cls: "border-rpg-gold/80 bg-rpg-gold/15 font-semibold", dot: "bg-rpg-gold" } : CATEGORY_UI[itemCategory(it)];
     const overdue = it.sourceType === "task" && it.startsAt.slice(0, 10) < today;
     return (
       <button
@@ -583,7 +585,7 @@ export function AgendaCalendar({ today, onToast, initialView = "mes" }: { today:
         style={{ borderRadius: 3 }}
         title={`${it.title}${overdue ? " (atrasada)" : ""}${editable(it) ? " — clique para editar, arraste para reagendar" : it.sourceType === "task" ? " — arraste para mudar o prazo" : ""}`}
       >
-        <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", c.dot)} aria-hidden />
+        {holiday ? <span aria-hidden>🎉</span> : <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", c.dot)} aria-hidden />}
         {!compact && timeOf(it.startsAt) && <span className="shrink-0 font-pixel text-[9px] text-rpg-muted">{timeOf(it.startsAt)}</span>}
         <span className="truncate">{it.title}</span>
       </button>

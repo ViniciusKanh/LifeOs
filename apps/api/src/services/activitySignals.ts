@@ -19,7 +19,8 @@ export type ActivityKind =
   | "release"
   | "artigo_lido"
   | "artigo_fichado"
-  | "exploracao";
+  | "exploracao"
+  | "programacao";
 
 export interface ActivityHit {
   kind: ActivityKind;
@@ -48,6 +49,7 @@ export const ACTIVITY_FAMILY: Record<ActivityKind, "tarefas" | "habitos" | "leit
   artigo_lido: "leitura",
   artigo_fichado: "estudo",
   exploracao: "exploracao",
+  programacao: "codigo",
 };
 
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -69,7 +71,7 @@ export async function collectActivity(db: Client, ownerId: string, tz: string, f
   const pv = range("reviewed_at");
   const ck = range("visited_at");
 
-  const [tasks, habits, reading, workouts, studies, code, papersRead, papersRev, checkins] = await Promise.all([
+  const [tasks, habits, reading, workouts, studies, code, papersRead, papersRev, checkins, waka] = await Promise.all([
     q(`SELECT id, title, priority, completed_at FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at IS NOT NULL AND ${t.sql}`, [ownerId, ...t.args]),
     q(`SELECT e.id, e.entry_date, h.name FROM habit_entries e LEFT JOIN habits h ON h.id = e.habit_id AND h.owner_id = e.owner_id
         WHERE e.owner_id = ? AND e.entry_date >= ? AND e.entry_date <= ?`, [ownerId, fromDay, toDay]),
@@ -86,6 +88,8 @@ export async function collectActivity(db: Client, ownerId: string, tz: string, f
         WHERE up.owner_id = ? AND up.reviewed_at IS NOT NULL AND ${pv.sql.replace(/reviewed_at/g, "up.reviewed_at")}`, [ownerId, ...pv.args]),
     q(`SELECT c.id, c.visited_at, p.name FROM atlas_checkins c JOIN atlas_places p ON p.id = c.place_id
         WHERE c.owner_id = ? AND ${ck.sql.replace(/visited_at/g, "c.visited_at")}`, [ownerId, ...ck.args]),
+    // Tempo programando (WakaTime): um golpe por dia com pelo menos 15 min reais.
+    q(`SELECT day_key, total_seconds FROM wakatime_days WHERE owner_id = ? AND day_key >= ? AND day_key <= ? AND total_seconds >= 900`, [ownerId, fromDay, toDay]),
   ]);
 
   const hits: ActivityHit[] = [];
@@ -105,6 +109,10 @@ export async function collectActivity(db: Client, ownerId: string, tz: string, f
   }
   for (const x of papersRead) push({ kind: "artigo_lido", id: `artigo-lido:${s(x.id)}`, at: s(x.read_at), label: s(x.title) || "Artigo", minutes: null, boost: 1 });
   for (const x of papersRev) push({ kind: "artigo_fichado", id: `artigo-fichado:${s(x.id)}`, at: s(x.reviewed_at), label: s(x.title) || "Artigo", minutes: null, boost: 1 });
+  for (const x of waka) {
+    const day = s(x.day_key);
+    push({ kind: "programacao", id: `programacao:${day}`, at: dateOnlyAt(day), day, label: "Tempo programando (WakaTime)", minutes: Math.round(Number(x.total_seconds) / 60), boost: 1 });
+  }
   for (const x of checkins) push({ kind: "exploracao", id: `exploracao:${s(x.id)}`, at: s(x.visited_at), label: s(x.name) || "Exploração", minutes: null, boost: 1 });
 
   // Filtra pelo dia local (as fontes só com data já vêm no intervalo).

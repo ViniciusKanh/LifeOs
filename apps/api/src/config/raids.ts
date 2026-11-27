@@ -41,6 +41,8 @@ export const RAID_DAMAGE: Record<ActivityKind, { base: number; dailyCap: number;
   artigo_lido: { base: 120, dailyCap: 5 },
   artigo_fichado: { base: 160, dailyCap: 3 },
   exploracao: { base: 60, dailyCap: 5 },
+  // Um golpe por dia, proporcional ao tempo real no editor (fator de duração limitado).
+  programacao: { base: 150, dailyCap: 1, byDuration: 60 },
 };
 
 export type RaidFamily = "tarefas" | "habitos" | "leitura" | "treinos" | "estudo" | "codigo" | "exploracao";
@@ -48,7 +50,7 @@ export type RaidFamily = "tarefas" | "habitos" | "leitura" | "treinos" | "estudo
 /** Efeitos semanais em rodízio determinístico (índice da semana). */
 export const RAID_EFFECTS: Array<{ key: string; name: string; description: string; families: RaidFamily[]; pct: number }> = [
   { key: "foco", name: "Foco Aprimorado", description: "Leitura, estudo e artigos causam 20% mais dano nesta Raid.", families: ["leitura", "estudo"], pct: 20 },
-  { key: "forja", name: "Forja Acesa", description: "Commits, PRs e releases causam 20% mais dano nesta Raid.", families: ["codigo"], pct: 20 },
+  { key: "forja", name: "Forja Acesa", description: "Commits, PRs, releases e tempo programando causam 20% mais dano nesta Raid.", families: ["codigo"], pct: 20 },
   { key: "ferro", name: "Corpo de Ferro", description: "Treinos causam 20% mais dano nesta Raid.", families: ["treinos"], pct: 20 },
   { key: "disciplina", name: "Disciplina", description: "Tarefas e hábitos causam 15% mais dano nesta Raid.", families: ["tarefas", "habitos"], pct: 15 },
 ];

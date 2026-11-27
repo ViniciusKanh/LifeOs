@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { award, todayKeyFor } from "./gamificationService.js";
 import { computeCapacitySummary, getDayTasks } from "./capacityPlannerService.js";
 import { weekStartOf } from "./recordsService.js";
+import { getHolidayPrefs, holidayMap } from "./holidayService.js";
 
 /**
  * Conselho de Guerra — planejamento da semana (o par "para frente" da
@@ -70,6 +71,8 @@ export interface PlanTaskInput {
 export interface PlanDayCapacity {
   date: string;
   capacityMinutes: number;
+  /** Nome do feriado (BrasilAPI/local): o dia não recebe missões automaticamente. */
+  holiday?: string | null;
 }
 
 export interface PlanAssignment {
@@ -81,7 +84,7 @@ export interface PlanAssignment {
 
 export interface DistributionResult {
   assignments: PlanAssignment[];
-  dayLoads: Array<{ date: string; capacityMinutes: number; plannedMinutes: number; tasks: number }>;
+  dayLoads: Array<{ date: string; capacityMinutes: number; plannedMinutes: number; tasks: number; holiday: string | null }>;
 }
 
 const PRIORITY_RANK: Record<Priority, number> = { Alta: 0, Média: 1, Baixa: 2 };
@@ -98,7 +101,8 @@ const PRIORITY_RANK: Record<Priority, number> = { Alta: 0, Média: 1, Baixa: 2 }
  *  - um dia planejado anteriormente e ainda válido é mantido.
  */
 export function distributeTasks(tasks: PlanTaskInput[], days: PlanDayCapacity[], firstDay: string): DistributionResult {
-  const usable = days.filter((d) => d.date >= firstDay);
+  // Feriado fica fora da distribuição automática (o usuário ainda pode mover missões para ele).
+  const usable = days.filter((d) => d.date >= firstDay && !d.holiday);
   const remaining = new Map(usable.map((d) => [d.date, Math.max(0, d.capacityMinutes)]));
   const count = new Map(usable.map((d) => [d.date, 0]));
   const planned = new Map(usable.map((d) => [d.date, 0]));
@@ -159,9 +163,10 @@ export function distributeTasks(tasks: PlanTaskInput[], days: PlanDayCapacity[],
     assignments: tasks.map((t) => assignments.get(t.id)!),
     dayLoads: days.map((d) => ({
       date: d.date,
-      capacityMinutes: d.date >= firstDay ? Math.max(0, d.capacityMinutes) : 0,
+      capacityMinutes: d.date >= firstDay && !d.holiday ? Math.max(0, d.capacityMinutes) : 0,
       plannedMinutes: planned.get(d.date) ?? 0,
       tasks: count.get(d.date) ?? 0,
+      holiday: d.holiday ?? null,
     })),
   };
 }
@@ -304,12 +309,14 @@ export async function listCandidates(db: Client, ownerId: string, weekStart: str
 
 /** Capacidade livre real de cada dia: janela útil − agenda fixa − carga que não está no plano. */
 export async function weekCapacity(db: Client, ownerId: string, weekStart: string, candidateIds: Set<string>): Promise<PlanDayCapacity[]> {
+  const prefs = await getHolidayPrefs(db, ownerId);
+  const holidays = prefs.council ? await holidayMap(db, ownerId, weekStart, addDaysKey(weekStart, 6)) : new Map<string, string>();
   return Promise.all(
     weekDays(weekStart).map(async (date) => {
       const [summary, dayTasks] = await Promise.all([computeCapacitySummary(db, ownerId, date), getDayTasks(db, ownerId, date)]);
       const candidateLoad = dayTasks.filter((t) => candidateIds.has(t.id)).reduce((s, t) => s + (t.estimateMinutes ?? 0), 0);
       const otherLoad = Math.max(0, summary.plannedMinutes - candidateLoad);
-      return { date, capacityMinutes: Math.max(0, summary.freeMinutes - otherLoad) };
+      return { date, capacityMinutes: Math.max(0, summary.freeMinutes - otherLoad), holiday: holidays.get(date) ?? null };
     }),
   );
 }

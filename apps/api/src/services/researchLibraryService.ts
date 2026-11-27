@@ -125,9 +125,14 @@ export async function previewDoi(db: Client, ownerId: string, raw: string) {
   return { ...found.meta, savedId: str(saved.rows[0]?.id) };
 }
 
-async function upsertPaper(db: Client, meta: PaperMetadata): Promise<string> {
+/** Metadados de um artigo vindos de fora (Zotero, Radar): o DOI pode não existir. */
+export type PaperDraft = Omit<PaperMetadata, "doi"> & { doi: string | null };
+
+async function upsertPaper(db: Client, meta: PaperDraft): Promise<string> {
   const now = new Date().toISOString();
-  const existing = await db.execute({ sql: "SELECT id FROM research_papers WHERE doi = ?", args: [meta.doi] });
+  // Sem DOI não há chave global confiável: cada item vira um registro próprio
+  // (a deduplicação fica no vínculo de origem, ex.: zotero_items).
+  const existing = meta.doi ? await db.execute({ sql: "SELECT id FROM research_papers WHERE doi = ?", args: [meta.doi] }) : { rows: [] };
   if (existing.rows[0]) {
     const id = String(existing.rows[0].id);
     // Atualiza os indicadores (citações mudam com o tempo) e completa o que faltava.
@@ -159,22 +164,40 @@ export async function savePaper(db: Client, ownerId: string, input: { doi: strin
     throw new ResearchError("As bases acadêmicas não responderam agora. Tente de novo em instantes.", 502);
   }
   if (!found) throw new ResearchError("Nenhuma base acadêmica encontrou esse DOI.", 404);
-  const paperId = await upsertPaper(db, found.meta);
+  const r = await addPaperFromMetadata(db, ownerId, found.meta, input);
+  if (!r.created) throw new ResearchError("Esse artigo já está na sua biblioteca.", 409);
+  return getPaper(db, ownerId, r.id);
+}
+
+/**
+ * Coloca um artigo na biblioteca do usuário a partir de metadados já obtidos
+ * (DOI, Zotero, Radar). Se ele já estiver lá, devolve o existente (created=false).
+ * O XP de "artigo salvo" segue o mesmo teto diário em qualquer origem.
+ */
+export async function addPaperFromMetadata(
+  db: Client,
+  ownerId: string,
+  meta: PaperDraft,
+  input: { overrides?: PaperOverrides; academicProjectId?: string | null; categoryId?: string | null; status?: PaperStatus; priority?: "baixa" | "media" | "alta"; tags?: string[] } = {},
+): Promise<{ id: string; created: boolean; xp: number }> {
+  const paperId = await upsertPaper(db, meta);
   const dup = await db.execute({ sql: "SELECT id FROM user_papers WHERE owner_id = ? AND paper_id = ?", args: [ownerId, paperId] });
-  if (dup.rows[0]) throw new ResearchError("Esse artigo já está na sua biblioteca.", 409);
+  if (dup.rows[0]) return { id: String(dup.rows[0].id), created: false, xp: 0 };
   const settings = await getSettings(db, ownerId);
   const pos = await db.execute({ sql: "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM user_papers WHERE owner_id = ?", args: [ownerId] });
   const id = nanoid();
   await db.execute({
-    sql: `INSERT INTO user_papers (id, owner_id, paper_id, academic_project_id, category_id, status, priority, overrides_json, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, ownerId, paperId, input.academicProjectId === undefined ? settings.activeProjectId : input.academicProjectId, input.categoryId ?? null, input.status ?? "para_ler", input.priority ?? "media", JSON.stringify(sanitizeOverrides(input.overrides)), Number(pos.rows[0]?.p ?? 0)],
+    sql: `INSERT INTO user_papers (id, owner_id, paper_id, academic_project_id, category_id, status, priority, overrides_json, position, tags_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, ownerId, paperId, input.academicProjectId === undefined ? settings.activeProjectId : input.academicProjectId, input.categoryId ?? null, input.status ?? "para_ler", input.priority ?? "media", JSON.stringify(sanitizeOverrides(input.overrides)), Number(pos.rows[0]?.p ?? 0), JSON.stringify((input.tags ?? []).slice(0, 12))],
   });
   const { today } = await userDayContext(db, ownerId);
   const added = await db.execute({ sql: "SELECT COUNT(*) AS n FROM xp_events WHERE owner_id = ? AND source_type = 'research' AND event_type = 'paper_added' AND day_key = ?", args: [ownerId, today] });
+  let xp = 0;
   if (Number(added.rows[0]?.n ?? 0) < RESEARCH_XP.addedDailyCap) {
-    await award(db, ownerId, { sourceType: "research", sourceId: paperId, eventType: "paper_added", xp: RESEARCH_XP.paper_added, coins: 0, label: `Artigo salvo: ${found.meta.title.slice(0, 80)}` }, today);
+    const ok = await award(db, ownerId, { sourceType: "research", sourceId: paperId, eventType: "paper_added", xp: RESEARCH_XP.paper_added, coins: 0, label: `Artigo salvo: ${meta.title.slice(0, 80)}` }, today);
+    if (ok) xp = RESEARCH_XP.paper_added;
   }
-  return getPaper(db, ownerId, id);
+  return { id, created: true, xp };
 }
 
 function sanitizeOverrides(o: PaperOverrides | undefined): PaperOverrides {

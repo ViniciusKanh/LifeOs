@@ -405,7 +405,7 @@ export async function syncSteam(db: Client, ownerId: string, opts: { force?: boo
   }
 }
 
-/** Minutos registrados no LifeOS por dia (tarefas cronometradas, estudo, leitura, treinos, sessões). */
+/** Minutos registrados no LifeOS por dia (tarefas cronometradas, estudo, leitura e treinos). */
 async function registeredMinutes(db: Client, ownerId: string, tz: string, from: string, to: string) {
   const map = new Map<string, number>();
   const add = (day: string, m: number) => map.set(day, (map.get(day) ?? 0) + Math.max(0, m));
@@ -418,7 +418,6 @@ async function registeredMinutes(db: Client, ownerId: string, tz: string, from: 
     q("time_entries", "started_at", "duration_minutes"),
     q("reading_sessions", "started_at", "duration_minutes"),
     q("workouts", "performed_at", "duration_minutes"),
-    q("music_sessions", "started_at", "(julianday(COALESCE(ended_at, started_at)) - julianday(started_at)) * 1440"),
     db.execute({ sql: "SELECT occurred_at, duration_minutes FROM study_sessions WHERE owner_id = ? AND occurred_at >= ? AND occurred_at <= ?", args: [ownerId, from, `${to}T23:59:59`] }).then((r) => {
       for (const x of r.rows) add(String(x.occurred_at).slice(0, 10), Number(x.duration_minutes ?? 0));
     }),
@@ -511,7 +510,7 @@ export async function getSteamOverview(db: Client, ownerId: string, rangeDays: 7
     balance: {
       gameMin,
       productiveMin: prodMin,
-      productiveSources: "Cronômetro de tarefas, estudo, leitura, treinos e sessões da Trilha Sonora",
+      productiveSources: "Cronômetro de tarefas, estudo, leitura e treinos",
       weekGameMin: weekGame,
       weeklyLimitHours: settings.weeklyLimitHours,
     },

@@ -212,7 +212,7 @@ atlasRouter.delete("/routes/:id", async (req, res) => {
 
 atlasRouter.put("/settings", async (req, res) => {
   try {
-    const b = z.object({ locationEnabled: z.boolean(), preciseLocation: z.boolean(), useStravaRoutes: z.boolean() }).partial().parse(req.body);
+    const b = z.object({ locationEnabled: z.boolean(), preciseLocation: z.boolean() }).partial().parse(req.body);
     return res.json(await saveAtlasSettings(getDb(), req.user!.id, b));
   } catch (err) {
     return fail(res, err);

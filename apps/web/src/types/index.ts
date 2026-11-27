@@ -103,7 +103,7 @@ export interface AdminUserOverview {
   audit: Array<{ action: string; created_at: string; actor_name: string | null }>;
 }
 
-export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth" | "redis" | "strava" | "spotify" | "steam";
+export type AdminIntegration = "gemini" | "turso" | "smtp" | "google_oauth" | "redis" | "steam";
 
 export interface AdminSetting {
   id: string;
@@ -1022,7 +1022,7 @@ export interface CalendarItem {
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
-  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin" | "contract";
+  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin" | "contract" | "holiday";
   sourceId: string | null;
   link: string | null;
   /** Categoria visual do evento (estudo, foco, saúde...) — eventos antigos vêm como null. */

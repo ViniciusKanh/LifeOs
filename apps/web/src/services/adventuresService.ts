@@ -1,6 +1,6 @@
 import { api } from "./api";
 
-/** Raid, Companheiro, Atlas e integrações (Strava, Spotify, Steam) — tipos espelham os services da API. */
+/** Raid, Companheiro, Atlas e Steam — tipos espelham os services da API. */
 
 export type RaidFamily = "tarefas" | "habitos" | "leitura" | "treinos" | "estudo" | "codigo" | "exploracao";
 export type RaidState = "nao_iniciada" | "em_batalha" | "derrotado" | "encerrada";
@@ -14,7 +14,7 @@ export interface RaidOverview {
   damage: { total: number; byFamily: Partial<Record<RaidFamily, number>>; strikes: number };
   recentStrikes: Array<{ id: string; family: RaidFamily; kind: string; at: string; label: string; damage: number; afterDefeat: boolean }>;
   healing: { total: number; days: Array<{ day: string; amount: number }>; enabled: boolean; capPct: number; perDayPct: number };
-  weekDays: Array<{ day: string; damage: number; heal: number; rest: boolean; future: boolean }>;
+  weekDays: Array<{ day: string; damage: number; heal: number; rest: boolean; future: boolean; holiday?: string | null }>;
   effect: { key: string; name: string; description: string; pct: number; families: RaidFamily[] };
   objectives: Array<{ key: RaidFamily; label: string; target: number; done: number; complete: boolean }>;
   rewards: { xp: number; coins: number; trophy: string; monument: boolean };
@@ -68,7 +68,7 @@ export interface AtlasPlace {
   lastVisitAt: string | null;
 }
 export interface AtlasOverview {
-  settings: { locationEnabled: boolean; preciseLocation: boolean; useStravaRoutes: boolean };
+  settings: { locationEnabled: boolean; preciseLocation: boolean };
   cellDeg: number;
   cells: string[];
   places: AtlasPlace[];
@@ -103,64 +103,6 @@ export interface PlaceSearchResult {
   state: string | null;
   country: string | null;
   countryCode: string | null;
-}
-
-export interface StravaOverview {
-  configured: boolean;
-  connection: {
-    athleteName: string | null;
-    username: string | null;
-    avatarUrl: string | null;
-    connectedAt: string;
-    lastSyncAt: string | null;
-    lastSyncStatus: string | null;
-    lastError: string | null;
-    settings: { autoImport: boolean; registerChronicle: boolean; awardXp: boolean };
-  } | null;
-  totals: {
-    activities: number;
-    distanceKm: number;
-    minutes: number;
-    calories: number | null;
-    caloriesCoverage: number;
-    xp: number;
-    week: { activities: number; distanceKm: number; minutes: number };
-    lastWeek: { activities: number; distanceKm: number; minutes: number };
-  };
-  weeklyGoal: { target: number; doneDays: number; weekStart: string; weekEnd: string };
-  activeDays30: number;
-  activities: Array<{ id: string; name: string; kind: string; category: string; sport: string | null; performedAt: string; minutes: number; distanceKm: number | null; paceMinKm: number | null; speedKmh: number | null; elevationM: number | null; avgHr: number | null; calories: number | null; linkedManual: boolean; url: string }>;
-  xpRules: { min: number; max: number; dailyCap: number; weeklyBonus: { days: number; xp: number } };
-}
-
-export type MusicSessionKind = "foco" | "estudos" | "dissertacao" | "codigo" | "leitura" | "projeto";
-export interface SpotifyOverview {
-  configured: boolean;
-  connection: { displayName: string | null; product: string | null; premium: boolean; avatarUrl: string | null; connectedAt: string; lastSyncAt: string | null; lastError: string | null } | null;
-  settings: { recordHistory: boolean; linkSessions: boolean; stats: boolean; insights: boolean; privateMode: boolean };
-  openSession: { id: string; kind: MusicSessionKind; startedAt: string; tasks: number; plays: number } | null;
-  summary: { listenedMin: number | null; plays: number; sessions: number; sessionsWithMusic: number; tasksInSessions: number; avgSessionMin: number; coverageNote: string };
-  genres: Array<{ genre: string; plays: number; sessions: number; tasks: number; minutes: number; tasksPerHour: number | null }>;
-  sessions: Array<{ id: string; kind: MusicSessionKind; startedAt: string; endedAt: string | null; minutes: number; tasks: number; plays: number; listenedMin: number; withMusic: boolean; topGenre: string | null; topArtist: string | null; cover: string | null; day: string }>;
-  recentPlays: Array<{ track: string; artists: string[]; playedAt: string; image: string | null }>;
-  insight:
-    | { sufficient: false; message: string; need: string; withMusic: number; withoutMusic: number }
-    | { sufficient: true; message: string; caveat: string; withMusic: number; withoutMusic: number; tasksPerHourWith: number; tasksPerHourWithout: number; diffPct: number | null; durationCaveat: boolean; genres: Array<{ genre: string; sessions: number; tasksPerHour: number }> }
-    | null;
-  playlists: Array<{ slot: string; id: string; name: string; image: string | null; url: string | null }>;
-  sessionKinds: MusicSessionKind[];
-  playlistSlots: string[];
-}
-export interface NowPlaying {
-  isPlaying: boolean;
-  progressMs: number;
-  durationMs: number;
-  trackId: string;
-  track: string;
-  artists: string[];
-  album: string | null;
-  image: string | null;
-  url: string;
 }
 
 export interface SteamOverview {
@@ -222,8 +164,6 @@ export interface AdventureWorld {
   companion: { name: string; color: PetColor; stage: number; mood: PetMood; appearance: Record<PetSlot, string | null> } | null;
   atlasPlaces: number;
   steamLastGame: string | null;
-  stravaConnected: boolean;
-  spotifyConnected: boolean;
 }
 
 export const adventuresService = {
@@ -252,26 +192,6 @@ export const adventuresService = {
   deleteJournal: (id: string) => api.delete<{ ok: true }>(`/atlas/journal/${id}`),
   exportAtlas: () => api.get<unknown>("/atlas/export"),
   deleteAtlasHistory: () => api.delete<{ ok: true }>("/atlas/history", { confirm: "APAGAR" }),
-
-  strava: () => api.get<StravaOverview>("/integrations/strava"),
-  stravaConnect: () => api.get<{ url: string }>("/integrations/strava/connect"),
-  stravaSync: () => api.post<{ skipped: boolean; imported: number; linked: number }>("/integrations/strava/sync"),
-  stravaSettings: (p: Partial<NonNullable<StravaOverview["connection"]>["settings"]>) => api.put<StravaOverview>("/integrations/strava/settings", p),
-  stravaDisconnect: (deleteData: boolean) => api.post<{ ok: true }>("/integrations/strava/disconnect", { deleteData }),
-
-  spotify: () => api.get<SpotifyOverview>("/integrations/spotify"),
-  spotifyConnect: () => api.get<{ url: string }>("/integrations/spotify/connect"),
-  nowPlaying: () => api.get<{ nowPlaying: NowPlaying | null }>("/integrations/spotify/now-playing"),
-  player: (action: "play" | "pause" | "next" | "previous") => api.post<{ ok: true }>(`/integrations/spotify/player/${action}`),
-  spotifySync: () => api.post<{ skipped: boolean; added: number }>("/integrations/spotify/sync"),
-  userPlaylists: () => api.get<{ playlists: Array<{ id: string; name: string; image: string | null; url: string; tracks: number | null }> }>("/integrations/spotify/playlists"),
-  setJourneyPlaylist: (slot: string, playlist: { id: string; name: string; image?: string | null; url?: string | null } | null) => api.put<{ ok: true }>(`/integrations/spotify/journey-playlists/${slot}`, { playlist }),
-  startSession: (kind: MusicSessionKind) => api.post<{ id: string }>("/integrations/spotify/sessions", { kind }),
-  stopSession: () => api.post<{ stopped: number }>("/integrations/spotify/sessions/stop"),
-  deleteSession: (id: string) => api.delete<{ ok: true }>(`/integrations/spotify/sessions/${id}`),
-  spotifySettings: (p: Partial<SpotifyOverview["settings"]>) => api.put<{ ok: true }>("/integrations/spotify/settings", p),
-  deleteSpotifyHistory: () => api.delete<{ ok: true }>("/integrations/spotify/history"),
-  spotifyDisconnect: (deleteData: boolean) => api.post<{ ok: true }>("/integrations/spotify/disconnect", { deleteData }),
 
   steam: (range: 7 | 14 | 30) => api.get<SteamOverview>(`/integrations/steam?range=${range}`),
   steamConnect: () => api.get<{ url: string }>("/integrations/steam/connect"),

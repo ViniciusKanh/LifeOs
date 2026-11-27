@@ -1615,7 +1615,7 @@ export class WorldEngine {
       if (px >= l.x && px <= l.x + l.w && py >= l.y && py <= l.y + l.h) return this.placeSelection(l.key);
     }
     // Personagens (caixa do sprite na tela). Dos aldeões, só o ferreiro (abre a Forja do Código).
-    const chars = [...this.chars.values()].filter((c) => !c.isNpc || c.id === "npc-ferreiro" || c.id === "npc-bardo").sort((a, b) => b.x + b.y - (a.x + a.y));
+    const chars = [...this.chars.values()].filter((c) => !c.isNpc || c.id === "npc-ferreiro").sort((a, b) => b.x + b.y - (a.x + a.y));
     for (const c of chars) {
       const s = this.toScreen(c.x, c.y, zAtFloat(c.x, c.y));
       const hw = 22 * this.cam.zoom;

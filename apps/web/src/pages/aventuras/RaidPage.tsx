@@ -208,14 +208,15 @@ export function RaidPage() {
                 <div className="mt-3 grid grid-cols-7 gap-1">
                   {o.weekDays.map((d) => {
                     const wd = new Date(`${d.day}T12:00:00Z`).getUTCDay();
-                    const canRest = d.day >= o.today && !o.settings.restWeekdays.includes(wd);
+                    // Feriado com trégua já é descanso automático (não dá para desmarcar aqui).
+                    const canRest = d.day >= o.today && !o.settings.restWeekdays.includes(wd) && !d.holiday;
                     return (
                       <button
                         key={d.day}
                         type="button"
                         disabled={!canRest || a.restDay.isPending}
                         onClick={() => a.restDay.mutate({ day: d.day, rest: !d.rest }, { onError: (e) => notify(errMsg(e, "Não foi possível marcar o descanso."), "error") })}
-                        title={canRest ? (d.rest ? "Desmarcar descanso" : "Marcar como dia de descanso") : d.rest ? "Descanso" : undefined}
+                        title={d.holiday ? `🎉 ${d.holiday}${d.rest ? " — trégua: o chefe não se cura" : ""}` : canRest ? (d.rest ? "Desmarcar descanso" : "Marcar como dia de descanso") : d.rest ? "Descanso" : undefined}
                         aria-pressed={d.rest}
                         className={clsx(
                           "flex flex-col items-center border px-0.5 py-1 text-[10px] disabled:cursor-default",
@@ -224,7 +225,7 @@ export function RaidPage() {
                         )}
                         style={R}
                       >
-                        <span className="text-rpg-muted">{WEEKDAYS[wd]}</span>
+                        <span className="text-rpg-muted">{d.holiday ? "🎉" : WEEKDAYS[wd]}</span>
                         {d.rest ? <Moon size={11} className="text-rpg-blue" aria-label="descanso" /> : d.future ? <span className="text-rpg-muted">·</span> : d.damage ? <span className="font-semibold text-rpg-green">{d.damage >= 1000 ? `${Math.round(d.damage / 100) / 10}k` : d.damage}</span> : d.heal ? <span className="text-rpg-red">+{d.heal}</span> : <span className="text-rpg-muted">0</span>}
                       </button>
                     );

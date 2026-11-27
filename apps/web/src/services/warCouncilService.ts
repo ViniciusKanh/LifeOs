@@ -59,7 +59,8 @@ export interface CouncilProposal {
   firstDay: string;
   candidates: CouncilCandidate[];
   assignments: Array<{ taskId: string; plannedDate: string | null; unplacedReason: string | null }>;
-  dayLoads: Array<{ date: string; capacityMinutes: number; plannedMinutes: number; tasks: number }>;
+  /** holiday: nome do feriado (BrasilAPI/local) — o dia não recebe missões automaticamente. */
+  dayLoads: Array<{ date: string; capacityMinutes: number; plannedMinutes: number; tasks: number; holiday?: string | null }>;
 }
 
 export interface CouncilEventInput {

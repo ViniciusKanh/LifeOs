@@ -1,10 +1,10 @@
 /**
- * Cenas pixel art dos sistemas de aventura (Raid, Companheiro, Campo de
- * Treinamento, Taverna musical e Sala do Aventureiro). Mesma linguagem visual
+ * Cenas pixel art dos sistemas de aventura (Raid, Companheiro e Sala do
+ * Aventureiro). Mesma linguagem visual
  * de scenes.ts: 320×180 lógicos, sem imagens externas nem logotipos de
  * terceiros, animação derivada só de `t`.
  */
-import { glow, hash, lantern, painter, planks, spriteAt, stoneWall, flames, bookshelf, candle, nightWindow, SCENE_H, SCENE_W, type R } from "./scenes";
+import { glow, hash, lantern, painter, planks, spriteAt, stoneWall, flames, nightWindow, SCENE_H, SCENE_W, type R } from "./scenes";
 import { shade, type Look } from "./sprites";
 import { DEFAULT_AVATAR_LOOK, normalizeLook } from "./looks";
 
@@ -387,145 +387,6 @@ export function drawRaidScene(ctx: CanvasRenderingContext2D, t: number, o: RaidS
   const mage = normalizeLook({ ...DEFAULT_AVATAR_LOOK, outfit: "manto", shirt: "#2B3A67", hat: "chapeu_mago", hatColor: "#2B3A67", prop: "cajado", hairStyle: "longo", beard: "cheia", hair: "#D8D8D8" }, DEFAULT_AVATAR_LOOK);
   spriteAt(ctx, mage, defeated ? "celebrate" : "think", Math.floor(t / 220) % 4, 70, 150, 1.25);
   if (o.pet) drawHusky(ctx, 92, 166, 1.5, { ...o.pet, mood: defeated ? "feliz" : o.pet.mood === "descansando" ? "feliz" : o.pet.mood }, t);
-}
-
-/* ═════════════════════════════ Campo de Treinamento ═════════════════════════════ */
-
-export function drawTrainingScene(ctx: CanvasRenderingContext2D, t: number, o: { hero?: Look; still?: boolean; active?: boolean } = {}) {
-  if (o.still) t = 0;
-  const r = painter(ctx);
-  const sky = ctx.createLinearGradient(0, 0, 0, 110);
-  sky.addColorStop(0, "#6aa8e8");
-  sky.addColorStop(1, "#f6c98a");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, SCENE_W, SCENE_H);
-  // sol e nuvens
-  glow(ctx, 260, 50, 40, "255,220,150", 0.6);
-  r(254, 44, 12, 12, "#ffe6a8");
-  for (let i = 0; i < 4; i++) {
-    const cx = ((i * 90 + t / 60) % 380) - 30;
-    r(cx, 18 + i * 8, 30, 6, "rgba(255,255,255,0.8)");
-    r(cx + 6, 14 + i * 8, 18, 5, "rgba(255,255,255,0.8)");
-  }
-  // montanhas, castelo e cachoeira
-  ctx.fillStyle = "#7b8fb8";
-  ctx.beginPath();
-  ctx.moveTo(0, 96);
-  for (let x = 0; x <= SCENE_W; x += 20) ctx.lineTo(x, 70 + Math.sin(x / 37) * 14 + hash(x, 1) * 6);
-  ctx.lineTo(SCENE_W, 110);
-  ctx.lineTo(0, 110);
-  ctx.fill();
-  for (const [cx, w, h] of [[210, 8, 28], [222, 12, 20], [238, 8, 30]] as const) r(cx, 70 - h + 20, w, h, "#5d6a8f");
-  r(258, 60, 18, 56, "#6aa0d8");
-  for (let y = 60; y < 116; y += 4) r(258 + ((y + t / 30) % 18), y, 2, 3, "rgba(255,255,255,0.8)");
-  // grama e trilha
-  r(0, 104, SCENE_W, 76, "#4f9a4a");
-  for (let i = 0; i < 160; i++) r(hash(i, 2) * SCENE_W, 104 + hash(i, 3) * 76, 2, 2, hash(i, 4) > 0.5 ? "#5fb85a" : "#3f7a3c");
-  ctx.fillStyle = "#c9a26a";
-  ctx.beginPath();
-  ctx.moveTo(0, 160);
-  ctx.quadraticCurveTo(160, 132, SCENE_W, 150);
-  ctx.lineTo(SCENE_W, 166);
-  ctx.quadraticCurveTo(160, 150, 0, 178);
-  ctx.fill();
-  // árvores floridas, cerca e poste do santuário
-  for (const [tx, col] of [[24, "#e78fc0"], [300, "#a875f5"]] as const) {
-    r(tx, 80, 6, 34, "#6b4528");
-    for (let i = 0; i < 14; i++) r(tx - 18 + hash(i, tx) * 40, 52 + hash(i, tx + 1) * 34, 10, 8, i % 3 ? col : shade(col, -20));
-  }
-  for (let x = 40; x < 140; x += 14) {
-    r(x, 118, 3, 14, "#8a5d3b");
-    r(x - 4, 122, 14, 2, "#a0703f");
-  }
-  r(62, 92, 22, 26, "#7a7484");
-  r(64, 94, 18, 22, "#5a5466");
-  r(69, 99, 8, 8, "#f16d75");
-  r(68, 101, 10, 4, "#f16d75");
-  glow(ctx, 73, 103, 22, "241,109,117", 0.25 + 0.1 * Math.sin(t / 400));
-  // placa da trilha (seta laranja genérica)
-  r(232, 116, 3, 30, "#6b4528");
-  r(222, 108, 24, 12, "#8a5d3b");
-  ctx.fillStyle = "#f2732b";
-  ctx.beginPath();
-  ctx.moveTo(227, 117);
-  ctx.lineTo(234, 110);
-  ctx.lineTo(241, 117);
-  ctx.fill();
-  // herói correndo
-  const hero = o.hero ?? normalizeLook({ ...DEFAULT_AVATAR_LOOK, hat: "bandana", hatColor: "#C8423B" }, DEFAULT_AVATAR_LOOK);
-  const runX = o.active === false ? 150 : 110 + ((t / 25) % 120);
-  spriteAt(ctx, hero, "walk", Math.floor(t / 90) % 4, runX, 156, 1.7);
-  for (let i = 0; i < 3; i++) r(runX - 18 - i * 7, 154 - i, 4, 2, "rgba(230,210,170,0.7)");
-}
-
-/* ═════════════════════════════ Taverna musical ═════════════════════════════ */
-
-export function drawTavernMusicScene(ctx: CanvasRenderingContext2D, t: number, o: { playing: boolean; hero?: Look; pet?: PetLook | null; still?: boolean }) {
-  if (o.still) t = 0;
-  const r = painter(ctx);
-  stoneWall(r, 0, 0, SCENE_W, 122, "#5a4c46");
-  planks(r, 122, 58, "#6b4a32");
-  nightWindow(r, ctx, 196, 18, 56, 70, t, false);
-  // lareira
-  stoneWall(r, 252, 48, 62, 74, "#6e5f58");
-  r(262, 84, 42, 38, "#1a1210");
-  flames(r, 266, 120, 34, 28, t, 1);
-  glow(ctx, 283, 104, 70, "255,140,60", 0.32 + 0.06 * Math.sin(t / 130));
-  // estante e estandarte com nota musical
-  bookshelf(r, 6, 34, 56, 88, 3);
-  r(118, 10, 40, 54, "#5b2a7a");
-  r(118, 10, 40, 3, "#f1c66a");
-  ctx.fillStyle = "#e9e2cf";
-  ctx.beginPath();
-  ctx.arc(132, 46, 5, 0, Math.PI * 2);
-  ctx.arc(146, 42, 5, 0, Math.PI * 2);
-  ctx.fill();
-  r(136, 22, 2, 24, "#e9e2cf");
-  r(150, 18, 2, 24, "#e9e2cf");
-  r(136, 18, 16, 4, "#e9e2cf");
-  lantern(r, ctx, 84, 40, t);
-  // cristal
-  ctx.fillStyle = "#a875f5";
-  ctx.beginPath();
-  ctx.moveTo(78, 100);
-  ctx.lineTo(86, 84);
-  ctx.lineTo(94, 100);
-  ctx.fill();
-  glow(ctx, 86, 94, 22, "168,117,245", 0.35);
-  // mesa, notebook e caneca
-  r(100, 130, 120, 8, "#8a5d3b");
-  r(106, 138, 6, 30, "#5a3a22");
-  r(206, 138, 6, 30, "#5a3a22");
-  r(150, 112, 34, 18, "#2a2a32");
-  r(152, 114, 30, 14, o.playing ? "#2f9e6a" : "#3a3f48");
-  glow(ctx, 167, 121, 24, o.playing ? "79,212,154" : "89,169,248", 0.3);
-  r(194, 120, 9, 10, "#c8742e");
-  r(203, 122, 3, 5, "#c8742e");
-  for (let i = 0; i < 3; i++) r(196 + i * 2, 114 - ((t / 90 + i * 5) % 10), 1, 3, "rgba(230,230,230,0.6)");
-  candle(r, ctx, 116, 124, t);
-  // herói com fones
-  const hero = o.hero ?? DEFAULT_AVATAR_LOOK;
-  spriteAt(ctx, hero, "typing", Math.floor(t / 160) % 4, 140, 152, 1.7);
-  r(124, 97, 3, 7, "#4fd49a");
-  r(154, 97, 3, 7, "#4fd49a");
-  r(126, 93, 29, 2, "#2a2a32");
-  // notas musicais subindo quando está tocando
-  if (o.playing)
-    for (let i = 0; i < 4; i++) {
-      const k = ((t / 1400 + i * 0.25) % 1);
-      const nx = 150 + Math.sin(k * 6 + i) * 18 + i * 8;
-      const ny = 80 - k * 60;
-      const a = 1 - k;
-      r(nx, ny, 3, 3, `rgba(168,117,245,${a})`);
-      r(nx + 2, ny - 7, 1, 8, `rgba(168,117,245,${a})`);
-      r(nx + 2, ny - 7, 4, 1, `rgba(168,117,245,${a})`);
-    }
-  if (o.pet) drawHusky(ctx, 238, 170, 1.6, { ...o.pet, mood: "descansando" }, t);
-  else {
-    // gato da taverna dormindo
-    r(228, 160, 20, 8, "#e9e2cf");
-    r(244, 156, 7, 7, "#e9e2cf");
-  }
 }
 
 /* ═════════════════════════════ Sala do Aventureiro ═════════════════════════════ */

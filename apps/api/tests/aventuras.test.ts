@@ -5,9 +5,7 @@ import { getDb } from "../src/db/client.js";
 import { computeMaxHp, simulateRaid, strikesFromHits, weekBounds } from "../src/services/raidService.js";
 import type { ActivityHit } from "../src/services/activitySignals.js";
 import { computeStatus, resolveAppearance, stageForXp, traitsFromHits } from "../src/services/companionService.js";
-import { categoryForSport, handleStravaWebhook, importActivity, xpForActivity, type StravaActivity } from "../src/services/stravaService.js";
-import { cellsAround, decodePolyline } from "../src/services/atlasService.js";
-import { musicInsight, summarizeSessions } from "../src/services/spotifyService.js";
+import { cellsAround } from "../src/services/atlasService.js";
 import { dailyFromSnapshots, getSteamGame, syncSteamAchievements, writeSnapshots } from "../src/services/steamService.js";
 import { setIntegrationFetchForTests } from "../src/services/integrationsCore.js";
 import { encryptSecret } from "../src/services/cryptoService.js";
@@ -140,117 +138,11 @@ describe("Companheiro", () => {
   });
 });
 
-/* ───────────── Strava ───────────── */
-
-const activity = (over: Partial<StravaActivity> = {}): StravaActivity => ({
-  id: 987654321,
-  name: "Corrida no parque",
-  sport_type: "Run",
-  start_date: new Date(Date.now() - 3600_000).toISOString(),
-  elapsed_time: 3500,
-  moving_time: 3360,
-  distance: 10020,
-  total_elevation_gain: 40,
-  average_speed: 2.98,
-  ...over,
-});
-const SETTINGS = { autoImport: true, registerChronicle: true, awardXp: true };
-
-describe("Strava → Saúde", () => {
-  it("mapeia esportes e calcula XP com limites", () => {
-    expect(categoryForSport("TrailRun")).toBe("corrida");
-    expect(categoryForSport("MountainBikeRide")).toBe("bike");
-    expect(categoryForSport("WeightTraining")).toBe("musculacao");
-    expect(categoryForSport("Kitesurf")).toBe("outro");
-    expect(xpForActivity(1, null)).toBe(10);
-    expect(xpForActivity(600, 100)).toBe(60);
-  });
-
-  it("importa uma vez, vincula treino manual equivalente e não duplica XP", async () => {
-    const { userId } = await createAuthenticatedAgent();
-    const db = getDb();
-    const a = activity();
-    const first = await importActivity(db, userId, a, SETTINGS);
-    expect(first.created).toBe(true);
-    const again = await importActivity(db, userId, a, SETTINGS);
-    expect(again.created).toBe(false);
-    expect(again.workoutId).toBe(first.workoutId);
-    const n = await db.execute({ sql: "SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? AND source = 'strava'", args: [userId] });
-    expect(Number(n.rows[0]!.n)).toBe(1);
-    const xp = await db.execute({ sql: "SELECT COUNT(*) AS n FROM xp_events WHERE owner_id = ? AND source_type = 'workout' AND event_type = 'imported'", args: [userId] });
-    expect(Number(xp.rows[0]!.n)).toBe(1);
-
-    // Treino manual equivalente vira o mesmo registro (sem duplicar na Saúde).
-    const manualId = nanoid();
-    const start = new Date(Date.now() - 26 * 3600_000);
-    await db.execute({ sql: "INSERT INTO workouts (id, owner_id, kind, category, duration_minutes, performed_at) VALUES (?, ?, 'Bike', 'bike', 60, ?)", args: [manualId, userId, start.toISOString()] });
-    const linked = await importActivity(db, userId, activity({ id: 111, sport_type: "Ride", start_date: new Date(start.getTime() + 20 * 60_000).toISOString(), moving_time: 3300, distance: 24680 }), SETTINGS);
-    expect(linked).toMatchObject({ linked: true, created: false, workoutId: manualId });
-    const row = await db.execute({ sql: "SELECT source, distance_km FROM workouts WHERE id = ?", args: [manualId] });
-    expect(row.rows[0]).toMatchObject({ source: "strava", distance_km: 24.68 });
-    // Atividade privada é ignorada.
-    expect((await importActivity(db, userId, activity({ id: 222, private: true }), SETTINGS)).workoutId).toBeNull();
-  });
-
-  it("webhook é idempotente, trata exclusão e revogação", async () => {
-    const { userId } = await createAuthenticatedAgent();
-    const db = getDb();
-    const athlete = String(Math.floor(Math.random() * 1e9));
-    await db.execute({
-      sql: "INSERT INTO strava_connections (owner_id, athlete_id, access_token_enc, refresh_token_enc, expires_at) VALUES (?, ?, ?, ?, ?)",
-      args: [userId, athlete, encryptSecret("tok"), encryptSecret("ref"), Math.floor(Date.now() / 1000) + 3600],
-    });
-    const a = activity({ id: 555 });
-    setIntegrationFetchForTests(async () => new Response(JSON.stringify(a), { status: 200 }));
-    const ev = { object_type: "activity" as const, object_id: 555, aspect_type: "create" as const, owner_id: Number(athlete), event_time: 1700000000 };
-    expect(await handleStravaWebhook(db, ev)).toBe("processado");
-    expect(await handleStravaWebhook(db, ev)).toBe("duplicado");
-    expect(await handleStravaWebhook(db, { ...ev, aspect_type: "delete", event_time: 1700000100 })).toBe("processado");
-    const left = await db.execute({ sql: "SELECT COUNT(*) AS n FROM workouts WHERE owner_id = ? AND external_id = '555'", args: [userId] });
-    expect(Number(left.rows[0]!.n)).toBe(0);
-    await handleStravaWebhook(db, { object_type: "athlete", object_id: Number(athlete), aspect_type: "update", owner_id: Number(athlete), event_time: 1700000200, updates: { authorized: "false" } });
-    const conn = await db.execute({ sql: "SELECT COUNT(*) AS n FROM strava_connections WHERE owner_id = ?", args: [userId] });
-    expect(Number(conn.rows[0]!.n)).toBe(0);
-  });
-
-  it("renova token expirado antes de sincronizar e não expõe segredos no painel", async () => {
-    const { agent, userId } = await createAuthenticatedAgent();
-    const db = getDb();
-    process.env.STRAVA_CLIENT_ID = "123";
-    process.env.STRAVA_CLIENT_SECRET = "segredo";
-    await db.execute({
-      sql: "INSERT INTO strava_connections (owner_id, athlete_id, access_token_enc, refresh_token_enc, expires_at) VALUES (?, ?, ?, ?, ?)",
-      args: [userId, String(Math.floor(Math.random() * 1e9)), encryptSecret("velho"), encryptSecret("ref"), 1000],
-    });
-    const calls: string[] = [];
-    setIntegrationFetchForTests(async (url, init) => {
-      calls.push(url);
-      if (url.includes("/oauth/token")) return new Response(JSON.stringify({ access_token: "novo", refresh_token: "ref2", expires_at: Math.floor(Date.now() / 1000) + 3600 }), { status: 200 });
-      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer novo");
-      return new Response(JSON.stringify([activity({ id: 777 })]), { status: 200 });
-    });
-    const res = await agent.post("/api/integrations/strava/sync");
-    expect(res.status).toBe(200);
-    expect(res.body.imported).toBe(1);
-    expect(calls[0]).toContain("/oauth/token");
-    const panel = await agent.get("/api/integrations/strava");
-    expect(JSON.stringify(panel.body)).not.toMatch(/novo|ref2|segredo/);
-    expect(panel.body.totals.activities).toBe(1);
-    delete process.env.STRAVA_CLIENT_ID;
-    delete process.env.STRAVA_CLIENT_SECRET;
-  });
-});
-
 /* ───────────── Atlas ───────────── */
 
 describe("Atlas de Exploração", () => {
-  it("células e polyline", () => {
+  it("check-in revela 3×3 células", () => {
     expect(cellsAround(-23.55, -46.63, 1)).toHaveLength(9);
-    expect(decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@")).toEqual([
-      [38.5, -120.2],
-      [40.7, -120.95],
-      [43.252, -126.453],
-    ]);
   });
 
   it("check-in manual revela só o entorno, revisita não duplica descoberta e GPS exige consentimento", async () => {
@@ -291,48 +183,6 @@ describe("Atlas de Exploração", () => {
   });
 });
 
-/* ───────────── Spotify ───────────── */
-
-describe("Trilha Sonora (Spotify)", () => {
-  const mk = (i: number, music: boolean, tasks: number) => ({
-    session: { id: `s${i}`, kind: "foco", started_at: `2026-11-${String(i + 1).padStart(2, "0")}T10:00:00.000Z`, ended_at: `2026-11-${String(i + 1).padStart(2, "0")}T11:00:00.000Z` },
-    tasks: Array.from({ length: tasks }, () => ({ completed_at: `2026-11-${String(i + 1).padStart(2, "0")}T10:30:00.000Z` })),
-    plays: music ? Array.from({ length: 4 }, (_, k) => ({ played_at: `2026-11-${String(i + 1).padStart(2, "0")}T10:${10 + k * 10}:00.000Z`, duration_ms: 180000, artist_ids: ["a1"], artists: ["Artista"], album_image: null })) : [],
-  });
-
-  it("sem amostra mínima informa dados insuficientes", () => {
-    const xs = [mk(0, true, 2), mk(1, false, 1)];
-    const stats = summarizeSessions(xs.map((x) => x.session), xs.flatMap((x) => x.tasks), xs.flatMap((x) => x.plays), new Map());
-    const ins = musicInsight(stats);
-    expect(ins.sufficient).toBe(false);
-    expect(ins.message).toBe("Dados insuficientes para avaliar a relação entre música e produtividade.");
-  });
-
-  it("com amostra compara tarefas por hora como associação observada", () => {
-    const xs = [...Array.from({ length: 5 }, (_, i) => mk(i, true, 3)), ...Array.from({ length: 5 }, (_, i) => mk(i + 10, false, 2))];
-    const stats = summarizeSessions(xs.map((x) => x.session), xs.flatMap((x) => x.tasks), xs.flatMap((x) => x.plays), new Map([["a1", ["lo-fi"]]]));
-    expect(stats[0]).toMatchObject({ withMusic: true, tasks: 3, plays: 4, topGenre: "lo-fi" });
-    const ins = musicInsight(stats);
-    expect(ins.sufficient).toBe(true);
-    if (ins.sufficient) {
-      expect(ins.diffPct).toBe(50);
-      expect(ins.caveat).toContain("não prova de causa");
-      expect(ins.genres[0]).toMatchObject({ genre: "lo-fi", sessions: 5 });
-    }
-  });
-
-  it("sessões funcionam sem Spotify conectado e painel não inventa dados", async () => {
-    const { agent } = await createAuthenticatedAgent();
-    expect((await agent.post("/api/integrations/spotify/sessions").send({ kind: "foco" })).status).toBe(201);
-    const ov = await agent.get("/api/integrations/spotify");
-    expect(ov.body.connection).toBeNull();
-    expect(ov.body.openSession.kind).toBe("foco");
-    expect(ov.body.insight.sufficient).toBe(false);
-    expect((await agent.post("/api/integrations/spotify/sessions/stop")).body.stopped).toBe(1);
-    expect((await agent.post("/api/integrations/spotify/sessions").send({ kind: "festa" })).status).toBe(400);
-  });
-});
-
 /* ───────────── Steam ───────────── */
 
 describe("Tempo de Jogo (Steam)", () => {
@@ -368,13 +218,13 @@ describe("Tempo de Jogo (Steam)", () => {
     expect((await agent.post("/api/integrations/steam/trophies").send({ appid: 10, apiName: "NADA", pin: true })).status).toBe(404);
   });
 
-  it("admin_settings aceita as credenciais de Strava, Spotify e Steam (migration 0107)", async () => {
+  it("admin_settings aceita a credencial da Steam (migration 0107)", async () => {
     const db = getDb();
-    for (const integration of ["strava", "spotify", "steam"]) {
+    for (const integration of ["steam"]) {
       await db.execute({ sql: "INSERT OR REPLACE INTO admin_settings (id, integration, key_name, encrypted_value, is_active) VALUES (?, ?, 'teste', ?, 1)", args: [nanoid(), integration, encryptSecret("x")] });
     }
     const r = await db.execute("SELECT COUNT(*) AS n FROM admin_settings WHERE key_name = 'teste'");
-    expect(Number(r.rows[0]!.n)).toBe(3);
+    expect(Number(r.rows[0]!.n)).toBe(1);
     await db.execute("DELETE FROM admin_settings WHERE key_name = 'teste'");
   });
 

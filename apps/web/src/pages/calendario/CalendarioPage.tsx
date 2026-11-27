@@ -16,6 +16,7 @@ const SOURCE_TONE: Record<CalendarItem["sourceType"], "blue" | "purple" | "green
   academic_project: "green",
   life_admin: "amber",
   contract: "purple",
+  holiday: "amber",
 };
 
 function toISODate(d: Date) {

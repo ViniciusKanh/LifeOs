@@ -97,8 +97,6 @@ const ForjaCodigoPage = lazy(() => import("@/pages/forja-codigo/ForjaCodigoPage"
 const RaidPage = lazy(() => import("@/pages/aventuras/RaidPage").then((m) => ({ default: m.RaidPage })));
 const CompanheiroPage = lazy(() => import("@/pages/aventuras/CompanheiroPage").then((m) => ({ default: m.CompanheiroPage })));
 const AtlasPage = lazy(() => import("@/pages/aventuras/AtlasPage").then((m) => ({ default: m.AtlasPage })));
-const StravaPage = lazy(() => import("@/pages/aventuras/StravaPage").then((m) => ({ default: m.StravaPage })));
-const TrilhaSonoraPage = lazy(() => import("@/pages/aventuras/TrilhaSonoraPage").then((m) => ({ default: m.TrilhaSonoraPage })));
 const TempoDeJogoPage = lazy(() => import("@/pages/aventuras/TempoDeJogoPage").then((m) => ({ default: m.TempoDeJogoPage })));
 const BibliotecaMestradoPage = lazy(() => import("@/pages/biblioteca-mestrado/BibliotecaMestradoPage").then((m) => ({ default: m.BibliotecaMestradoPage })));
 const DiarioPage = lazy(() => import("@/pages/diario/DiarioPage").then((m) => ({ default: m.DiarioPage })));
@@ -220,8 +218,8 @@ export default function App() {
           <Route path="/raid" element={<RaidPage />} />
           <Route path="/companheiro" element={<CompanheiroPage />} />
           <Route path="/atlas" element={<AtlasPage />} />
-          <Route path="/strava" element={<StravaPage />} />
-          <Route path="/trilha-sonora" element={<TrilhaSonoraPage />} />
+          <Route path="/strava" element={<Navigate to="/saude" replace />} />
+          <Route path="/trilha-sonora" element={<Navigate to="/meu-mundo" replace />} />
           <Route path="/tempo-de-jogo" element={<TempoDeJogoPage />} />
           <Route path="/diario" element={<DiarioPage />} />
           <Route path="/administracao" element={<AdministracaoPage />} />

@@ -1,4 +1,5 @@
 import type { getDb } from "../db/client.js";
+import { holidaysBetween } from "./holidayService.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -9,7 +10,7 @@ export interface CalendarItem {
   startsAt: string;
   endsAt: string | null;
   allDay: boolean;
-  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin" | "contract";
+  sourceType: "manual" | "task" | "goal" | "academic_project" | "life_admin" | "contract" | "holiday";
   sourceId: string | null;
   link: string | null;
   /** Categoria visual (estudo, foco, saúde...) — eventos antigos vêm como null. */
@@ -162,6 +163,11 @@ export async function getCalendarItems(db: Db, ownerId: string, from: string, to
     });
   }
 
+  // Feriados (BrasilAPI + locais do usuário): dia inteiro, somente leitura. Falha da API não derruba a agenda.
+  const holidays = await holidaysBetween(db, ownerId, from.slice(0, 10), to.slice(0, 10)).catch(() => ({ items: [] }));
+  for (const h of holidays.items) {
+    items.push({ id: `holiday_${h.date}_${h.type}`, title: h.name, description: h.type === "nacional" ? "Feriado nacional" : "Feriado local", startsAt: h.date, endsAt: null, allDay: true, sourceType: "holiday", sourceId: null, link: null, category: "feriado" });
+  }
   items.sort((a, b) => (a.startsAt < b.startsAt ? -1 : 1));
   return items;
 }

@@ -10,6 +10,7 @@ import { drawForgeScene, SMITH } from "@/components/living-world/engine/scenes";
 import { useCodeForge, useCodeForgeActions } from "@/hooks/useCodeForge";
 import type { CodeKind, ForgeOverview } from "@/services/codeForgeService";
 import { ApiError } from "@/services/api";
+import { WakaTimeAnvil } from "@/components/forge/WakaTimeAnvil";
 
 const R = { borderRadius: 6 };
 const KIND_ICON: Record<CodeKind, typeof GitBranch> = { commit: GitBranch, pr_opened: GitPullRequest, pr_merged: GitMerge, issue_closed: CheckCircle2, release: Rocket };
@@ -236,7 +237,7 @@ export function ForjaCodigoPage() {
         </p>
       )}
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-3">
           <section className="rpg-ornate relative aspect-[16/9] max-h-[420px] w-full overflow-hidden p-0" aria-label="Oficina do ferreiro">
             <PixelScene draw={draw} label={`Oficina do ferreiro no nível ${level}`} />
@@ -277,6 +278,8 @@ export function ForjaCodigoPage() {
             </div>
             {q.isLoading ? <div className="h-28 animate-pulse rounded bg-rpg-bg-2" /> : o && o.connected ? <Heatmap data={o.heatmap} /> : <p className="text-sm text-rpg-muted">Conecte o GitHub para ver suas contribuições.</p>}
           </section>
+
+          <WakaTimeAnvil notify={notify} />
 
           <section className="rpg-panel p-4" aria-label="Repositórios em atividade">
             <div className="mb-2 flex items-center justify-between gap-2">

@@ -7,7 +7,7 @@ import { ApiError } from "@/services/api";
 
 /**
  * Peças compartilhadas pelas telas de aventura (Raid, Companheiro, Atlas,
- * Strava, Trilha Sonora, Tempo de Jogo) — mesmo visual RPG das outras telas.
+ * Tempo de Jogo) — mesmo visual RPG das outras telas.
  */
 
 export const R = { borderRadius: 6 } as const;

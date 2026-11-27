@@ -174,7 +174,6 @@ export function MeuMundoPage() {
       setDrawer({ kind: "agent", key: s.key });
     }
     else if (s.type === "npc" && s.id === "npc-ferreiro") navigate("/forja-codigo");
-    else if (s.type === "npc" && s.id === "npc-bardo") navigate("/trilha-sonora");
     else if (s.type === "pet") navigate("/companheiro");
     else if (s.type === "habit") setDrawer({ kind: "habit", id: s.id });
     else if (s.type === "slot") setDrawer({ kind: "slot", key: s.key });

@@ -15,7 +15,7 @@ export async function getAdventureWorld(db: Client, ownerId: string) {
       return fallback;
     }
   };
-  const [raid, companion, atlas, steam, strava, spotify] = await Promise.all([
+  const [raid, companion, atlas, steam] = await Promise.all([
     safe(() => raidWorldStatus(db, ownerId), null),
     safe(() => companionWorldLook(db, ownerId), null),
     safe(async () => Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM atlas_places WHERE owner_id = ?", args: [ownerId] })).rows[0]?.n ?? 0), 0),
@@ -23,10 +23,8 @@ export async function getAdventureWorld(db: Client, ownerId: string) {
       const r = await db.execute({ sql: "SELECT name FROM steam_games WHERE owner_id = ? AND rtime_last_played IS NOT NULL ORDER BY rtime_last_played DESC LIMIT 1", args: [ownerId] });
       return r.rows[0] ? String(r.rows[0].name) : null;
     }, null),
-    safe(async () => Boolean((await db.execute({ sql: "SELECT 1 FROM strava_connections WHERE owner_id = ?", args: [ownerId] })).rows[0]), false),
-    safe(async () => Boolean((await db.execute({ sql: "SELECT 1 FROM spotify_connections WHERE owner_id = ?", args: [ownerId] })).rows[0]), false),
   ]);
-  return { raid, companion, atlasPlaces: atlas, steamLastGame: steam, stravaConnected: strava, spotifyConnected: spotify };
+  return { raid, companion, atlasPlaces: atlas, steamLastGame: steam };
 }
 
 /** Eventos relevantes para a Timeline (sem ruído: só marcos). */

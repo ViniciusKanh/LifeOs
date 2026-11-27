@@ -12,6 +12,8 @@ import { usePaperDetail, useRelated, useResearchActions, useResearchHub, useRese
 import { useWorldWeather } from "@/hooks/useLivingWorld";
 import { researchService, type LibraryHub, type LibraryPaper, type PaperMeta, type PaperOverrides, type PaperStatus, type RelationKind } from "@/services/researchService";
 import { ApiError } from "@/services/api";
+import { ArticleRadar } from "@/components/research/ArticleRadar";
+import { ZoteroPortal } from "@/components/research/ZoteroPortal";
 
 const R = { borderRadius: 6 };
 const inputCls = "w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold";
@@ -540,7 +542,7 @@ export function BibliotecaMestradoPage() {
         </div>
       </header>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <section className="rpg-ornate relative aspect-[16/9] max-h-[340px] w-full overflow-hidden p-0" aria-label="A biblioteca">
           <PixelScene draw={draw} label="Biblioteca com o bibliotecário lendo" />
         </section>
@@ -568,7 +570,16 @@ export function BibliotecaMestradoPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      {/* Integrações: Radar semanal (arXiv + OpenAlex) e Portal do Zotero. */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <ArticleRadar notify={notify} onOpenPaper={(id) => {
+          setSelected(id);
+          document.getElementById("artigo-selecionado")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }} />
+        <ZoteroPortal notify={notify} />
+      </div>
+
+      <div id="artigo-selecionado" className="grid grid-cols-1 scroll-mt-4 gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         {selected ? (
           <SelectedPaper id={selected} hub={hub} notify={notify} onDeleted={() => setSelected(null)} onOpenReview={() => setReviewOpen(true)} />
         ) : (
@@ -580,7 +591,7 @@ export function BibliotecaMestradoPage() {
         <RelatedPanel paperId={selected} onAdd={addRelated} adding={adding} />
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section className="rpg-panel p-4" aria-label="Lista de leitura">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 font-rpg text-lg font-bold text-rpg-text">

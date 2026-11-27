@@ -12,7 +12,7 @@ import { recordWorldEvent } from "./livingWorldService.js";
  *
  * Privacidade: localização desligada por padrão (check-in manual não usa GPS),
  * coordenadas de GPS arredondadas (~110 m) se a precisão exata não for
- * autorizada, rotas do Strava só com opt-in, histórico privado e exportável.
+ * autorizada, histórico privado e exportável.
  * Nominatim (OpenStreetMap) só recebe o termo buscado ou um ponto isolado.
  */
 
@@ -44,31 +44,6 @@ export function cellsAround(lat: number, lng: number, radius = 1): string[] {
 export function cellAreaKm2(lat: number): number {
   const side = CELL_DEG * 111.32;
   return side * side * Math.cos((lat * Math.PI) / 180);
-}
-
-/** Decodifica polyline do Google/Strava (precisão 5). */
-export function decodePolyline(str: string): Array<[number, number]> {
-  const out: Array<[number, number]> = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-  while (index < str.length) {
-    for (const which of [0, 1]) {
-      let result = 0;
-      let shift = 0;
-      let b: number;
-      do {
-        b = str.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20 && index < str.length);
-      const delta = result & 1 ? ~(result >> 1) : result >> 1;
-      if (which === 0) lat += delta;
-      else lng += delta;
-    }
-    out.push([lat / 1e5, lng / 1e5]);
-  }
-  return out;
 }
 
 function haversineKm(a: [number, number], b: [number, number]) {
@@ -169,22 +144,20 @@ export async function reversePlace(lat: number, lng: number) {
 /* ─────────────────────────── Configurações ─────────────────────────── */
 
 export async function getAtlasSettings(db: Client, ownerId: string) {
-  const r = await db.execute({ sql: "SELECT location_enabled, precise_location, use_strava_routes FROM atlas_settings WHERE owner_id = ?", args: [ownerId] });
+  const r = await db.execute({ sql: "SELECT location_enabled, precise_location FROM atlas_settings WHERE owner_id = ?", args: [ownerId] });
   const row = r.rows[0];
   return {
     locationEnabled: row ? Number(row.location_enabled) === 1 : false,
     preciseLocation: row ? Number(row.precise_location) === 1 : false,
-    useStravaRoutes: row ? Number(row.use_strava_routes) === 1 : false,
   };
 }
 
-export async function saveAtlasSettings(db: Client, ownerId: string, patch: Partial<{ locationEnabled: boolean; preciseLocation: boolean; useStravaRoutes: boolean }>) {
+export async function saveAtlasSettings(db: Client, ownerId: string, patch: Partial<{ locationEnabled: boolean; preciseLocation: boolean }>) {
   const cur = { ...(await getAtlasSettings(db, ownerId)), ...patch };
   await db.execute({
-    sql: `INSERT INTO atlas_settings (owner_id, location_enabled, precise_location, use_strava_routes, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
-          ON CONFLICT (owner_id) DO UPDATE SET location_enabled = excluded.location_enabled, precise_location = excluded.precise_location,
-            use_strava_routes = excluded.use_strava_routes, updated_at = excluded.updated_at`,
-    args: [ownerId, cur.locationEnabled ? 1 : 0, cur.preciseLocation ? 1 : 0, cur.useStravaRoutes ? 1 : 0],
+    sql: `INSERT INTO atlas_settings (owner_id, location_enabled, precise_location, updated_at) VALUES (?, ?, ?, datetime('now'))
+          ON CONFLICT (owner_id) DO UPDATE SET location_enabled = excluded.location_enabled, precise_location = excluded.precise_location, updated_at = excluded.updated_at`,
+    args: [ownerId, cur.locationEnabled ? 1 : 0, cur.preciseLocation ? 1 : 0],
   });
   return cur;
 }
@@ -311,17 +284,10 @@ export async function createCheckin(db: Client, ownerId: string, input: CheckinI
 
 /* ─────────────────────────── Rotas ─────────────────────────── */
 
-/** Rota de um treino do Strava: só entra se o usuário autorizou no Atlas. */
-export async function importStravaRoute(db: Client, ownerId: string, r: { workoutId: string; name: string; polyline: string; distanceKm: number | null; startedAt: string }) {
-  const settings = await getAtlasSettings(db, ownerId);
-  if (!settings.useStravaRoutes) return;
-  await saveRoute(db, ownerId, { name: r.name, source: "strava", workoutId: r.workoutId, points: decodePolyline(r.polyline), distanceKm: r.distanceKm, startedAt: r.startedAt });
-}
-
 export async function saveRoute(
   db: Client,
   ownerId: string,
-  r: { name: string; source: "manual" | "strava"; workoutId?: string | null; points: Array<[number, number]>; distanceKm?: number | null; startedAt: string }
+  r: { name: string; source: "manual"; workoutId?: string | null; points: Array<[number, number]>; distanceKm?: number | null; startedAt: string }
 ) {
   if (r.points.length < 2) throw new AtlasError(400, "A rota precisa de pelo menos dois pontos.");
   // Simplifica: guarda no máximo ~300 pontos.

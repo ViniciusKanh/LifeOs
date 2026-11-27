@@ -7,6 +7,7 @@ import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
 import { AdvisorPanel, MODULE_ART, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
 import { AgendaCalendar, AgendaIndicators, AgendaRankPanel, ConflictsPanel, SuggestionsPanel, TimeDistribution, TimeTower } from "@/components/agenda/AgendaRPG";
 import { IcsSubscribeCard } from "./CalendarioPage";
+import { HolidaysPanel } from "@/components/agenda/HolidaysPanel";
 
 const TABS = ["visao", "calendario", "semana", "rotina", "automacoes", "ia"] as const;
 type Tab = (typeof TABS)[number];
@@ -73,13 +74,19 @@ export function AgendaRpgPage() {
           <div className="min-w-0 space-y-3">
             <ConflictsPanel hub={hub} onToast={notify} />
             <SuggestionsPanel hub={hub} onToast={notify} />
+            <HolidaysPanel today={today} onToast={notify} />
           </div>
           <div className="xl:col-span-3">
             <TimeDistribution hub={hub} />
           </div>
         </div>
       )}
-      {tab === "calendario" && <AgendaCalendar today={today} onToast={notify} />}
+      {tab === "calendario" && (
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <AgendaCalendar today={today} onToast={notify} />
+          <HolidaysPanel today={today} onToast={notify} />
+        </div>
+      )}
       {tab === "semana" && <AgendaCalendar today={today} onToast={notify} initialView="semana" />}
       {tab === "rotina" && hub && (
         <div className="grid items-start gap-3 lg:grid-cols-2">

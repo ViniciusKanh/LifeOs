@@ -2,6 +2,9 @@ import { getDb } from "../db/client.js";
 import { runDueAutomationsForAll } from "../services/automationRunner.js";
 import { Router } from "express";
 import { steamDailySnapshots } from "../services/steamService.js";
+import { wakatimeDailySync } from "../services/wakatimeService.js";
+import { clickUpDailySync } from "../services/clickupService.js";
+import { radarWeeklyScans } from "../services/radarService.js";
 
 /**
  * Endpoints de cron — chamados por um agendador externo (Vercel Cron,
@@ -44,7 +47,13 @@ cronRouter.get("/notification-triggers", async (req, res) => {
   });
   // Snapshots diários da Steam (o gráfico de tempo por dia depende deles).
   const steamSnapshots = await steamDailySnapshots(getDb()).catch(() => 0);
-  return res.json({ automations, steamSnapshots });
+  // Integrações pessoais: WakaTime (janela de 14 dias), ClickUp (incremental) e Radar (1x por semana).
+  const [waka, clickup, radar] = await Promise.all([
+    wakatimeDailySync(getDb()).catch(() => 0),
+    clickUpDailySync(getDb()).catch(() => 0),
+    radarWeeklyScans(getDb()).catch(() => 0),
+  ]);
+  return res.json({ automations, steamSnapshots, waka, clickup, radar });
 });
 
 // Lembrete do Diário removido junto com as notificações.

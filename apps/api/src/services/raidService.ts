@@ -2,6 +2,7 @@ import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { BOSSES, RAID_DAMAGE, RAID_EFFECTS, RAID_RULES, type RaidFamily } from "../config/raids.js";
 import { ACTIVITY_FAMILY, collectActivity, type ActivityHit } from "./activitySignals.js";
+import { getHolidayPrefs, holidayMap } from "./holidayService.js";
 import { award, levelForXp } from "./gamificationService.js";
 import { localDayRangeUtc, shiftDayKey, userDayContext } from "./localDayService.js";
 import { recordWorldEvent } from "./livingWorldService.js";
@@ -12,7 +13,7 @@ import { grantCollectionItem } from "./adventureCollection.js";
  *
  * Decisão central: o dano é DERIVADO das fontes reais a cada leitura
  * (activitySignals). Não existe tabela de golpes — por isso re-sincronizar
- * Strava/GitHub ou reabrir a tela nunca duplica dano. Só o desfecho é gravado
+ * o GitHub ou reabrir a tela nunca duplica dano. Só o desfecho é gravado
  * (status/defeated_at) e a recompensa passa por award(), que é idempotente.
  */
 
@@ -242,8 +243,14 @@ export async function ensureCurrentRaid(db: Client, ownerId: string): Promise<{ 
 }
 
 async function restDaysOf(db: Client, ownerId: string, from: string, to: string): Promise<Set<string>> {
-  const r = await db.execute({ sql: "SELECT day_key FROM raid_rest_days WHERE owner_id = ? AND day_key >= ? AND day_key <= ?", args: [ownerId, from, to] });
-  return new Set(r.rows.map((x) => String(x.day_key)));
+  const [r, prefs] = await Promise.all([
+    db.execute({ sql: "SELECT day_key FROM raid_rest_days WHERE owner_id = ? AND day_key >= ? AND day_key <= ?", args: [ownerId, from, to] }),
+    getHolidayPrefs(db, ownerId),
+  ]);
+  const days = new Set(r.rows.map((x) => String(x.day_key)));
+  // Trégua de feriado: o chefe não se cura em feriado (nacional ou local), se o usuário quiser.
+  if (prefs.raidTruce) for (const d of (await holidayMap(db, ownerId, from, to)).keys()) days.add(d);
+  return days;
 }
 
 async function evaluate(db: Client, ownerId: string, raid: RaidRow, tz: string, today: string) {
@@ -348,7 +355,8 @@ export async function getRaidOverview(db: Client, ownerId: string) {
     args: [ownerId, raid.week_start],
   });
   const state = raid.status === "derrotado" ? "derrotado" : raid.status === "encerrada" ? "encerrada" : sim.damage === 0 ? "nao_iniciada" : "em_batalha";
-  const weekDays: Array<{ day: string; damage: number; heal: number; rest: boolean; future: boolean }> = [];
+  const holidays = await holidayMap(db, ownerId, raid.week_start, raid.week_end);
+  const weekDays: Array<{ day: string; damage: number; heal: number; rest: boolean; future: boolean; holiday: string | null }> = [];
   for (let d = raid.week_start; d <= raid.week_end; d = shiftDayKey(d, 1)) {
     const wd = new Date(`${d}T12:00:00Z`).getUTCDay();
     weekDays.push({
@@ -357,6 +365,7 @@ export async function getRaidOverview(db: Client, ownerId: string) {
       heal: sim.heals.find((h) => h.day === d)?.amount ?? 0,
       rest: settings.restWeekdays.includes(wd) || restDays.has(d),
       future: d > today,
+      holiday: holidays.get(d) ?? null,
     });
   }
 

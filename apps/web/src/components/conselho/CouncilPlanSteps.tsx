@@ -70,7 +70,7 @@ function TaskCard({
           {proposal.dayLoads.map((d) => (
             <option key={d.date} value={d.date} disabled={d.date < proposal.firstDay}>
               {fmtDay(d.date)}
-              {d.date < proposal.firstDay ? " (já passou)" : ""}
+              {d.date < proposal.firstDay ? " (já passou)" : d.holiday ? ` 🎉 ${d.holiday}` : ""}
             </option>
           ))}
         </select>
@@ -168,6 +168,11 @@ export function CouncilDistributionStep({
             >
               <div>
                 <p className="font-pixel text-xs text-rpg-gold-light capitalize">{fmtDay(d.date)}</p>
+                {d.holiday && !past && (
+                  <p className="mt-0.5 inline-flex max-w-full items-center gap-1 border border-rpg-gold/60 bg-rpg-gold/10 px-1 text-[10px] text-rpg-gold-light" style={{ borderRadius: 3 }} title="Feriado: o Conselho não distribui missões aqui, mas você pode mover uma para este dia.">
+                    🎉 <span className="truncate">{d.holiday}</span>
+                  </p>
+                )}
                 {past ? (
                   <p className="text-[11px] text-rpg-muted">Já passou</p>
                 ) : (

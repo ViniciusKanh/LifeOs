@@ -3,14 +3,14 @@ import { decryptSecret } from "./cryptoService.js";
 import { readOAuthState, signOAuthState } from "./googleAuthService.js";
 
 /**
- * Infra comum das integrações externas (Strava, Spotify, Steam, Nominatim).
+ * Infra comum das integrações externas (Steam, Nominatim e futuras).
  * - Credenciais de app: admin_settings (criptografadas, tela de Configurações)
  *   com fallback para variáveis de ambiente. Nunca vão para o frontend.
  * - fetchJson: timeout, retry com backoff em 429/5xx e erro tipado sem vazar token.
  * - state do OAuth: JWT assinado e curto (mesmo mecanismo do login com Google).
  */
 
-export type IntegrationKey = "strava" | "spotify" | "steam";
+export type IntegrationKey = "steam";
 
 export class IntegrationError extends Error {
   constructor(public status: number, message: string, public code = "erro_integracao") {
@@ -44,10 +44,14 @@ export async function getIntegrationSecret(db: Client, integration: IntegrationK
 export interface FetchJsonOptions {
   timeoutMs?: number;
   retries?: number;
-  /** Rótulo usado nas mensagens de erro (ex.: "Strava"). */
+  /** Rótulo usado nas mensagens de erro (ex.: "Steam"). */
   label: string;
   /** Mensagem específica para 403 (ex.: conta fora da lista de usuários do app). */
   forbiddenMessage?: string;
+  /** Lê cabeçalhos da resposta de sucesso (ex.: versão da biblioteca no Zotero). */
+  onHeaders?: (headers: Headers) => void;
+  /** "text" devolve o corpo cru (ex.: Atom/XML do arXiv). Padrão: JSON. */
+  responseType?: "json" | "text";
 }
 
 async function apiErrorDetail(res: Response): Promise<string> {
@@ -70,8 +74,10 @@ export async function fetchJson<T>(url: string, init: RequestInit, opts: FetchJs
     try {
       const res = await fetchImpl(url, { ...init, signal: ctrl.signal });
       if (res.ok) {
+        opts.onHeaders?.(res.headers);
         if (res.status === 204) return null as T;
         const text = await res.text();
+        if (opts.responseType === "text") return text as T;
         return (text ? JSON.parse(text) : null) as T;
       }
       // Motivo devolvido pela própria API (sem tokens), para a mensagem não ficar genérica.
