@@ -372,20 +372,29 @@ function breakerResult(api: CityApi, ok: boolean) {
 }
 
 /**
- * Código e mensagem do erro do gateway WSO2 ({ fault: { code, message, description } }),
- * para o usuário saber o motivo exato (ex.: 900908 recurso proibido, 900901 credencial inválida).
- * Só texto do próprio gateway, curto e sem cabeçalhos — nunca inclui o token.
+ * Motivo exato do erro, sem token:
+ * - gateway WSO2: { fault: { code, message, description } } (ex.: 900908 recurso proibido);
+ * - fonte por trás do gateway (Portal de Dados Abertos/CKAN): { success: false, error: { message, __type } }.
+ * `origin` diz quem recusou — um 403 da fonte não é falta de inscrição no APILIB.
  */
-export async function faultDetail(res: Response): Promise<string | null> {
+export async function faultDetail(res: Response): Promise<{ origin: "gateway" | "fonte"; text: string } | null> {
   try {
-    const text = (await res.text()).slice(0, 2000);
-    type Fault = { code?: unknown; message?: unknown; description?: unknown };
-    const body = JSON.parse(text) as Fault & { fault?: Fault };
-    const f: Fault = body.fault ?? body;
-    const parts = [f.code, f.message, f.description]
-      .filter((x) => x != null && String(x).trim())
-      .map((x) => String(x).replace(/Bearer\s+\S+/gi, "Bearer •••").replace(/\s+/g, " ").trim());
-    return parts.length ? parts.join(" · ").slice(0, 220) : null;
+    const raw = (await res.text()).slice(0, 2000);
+    type Fault = { code?: unknown; message?: unknown; description?: unknown; __type?: unknown };
+    const body = JSON.parse(raw) as Fault & { fault?: Fault; error?: Fault | string; success?: unknown };
+    const clean = (parts: unknown[]) =>
+      parts
+        .filter((x) => x != null && String(x).trim())
+        .map((x) => String(x).replace(/Bearer\s+\S+/gi, "Bearer •••").replace(/\s+/g, " ").trim())
+        .join(" · ")
+        .slice(0, 220);
+    if (body.fault) {
+      const t = clean([body.fault.code, body.fault.message, body.fault.description]);
+      return t ? { origin: "gateway", text: t } : null;
+    }
+    const e = typeof body.error === "string" ? { message: body.error } : body.error;
+    const t = clean(e ? [e.__type, e.message] : [body.code, body.message, body.description]);
+    return t ? { origin: "fonte", text: t } : null;
   } catch {
     return null;
   }
@@ -430,7 +439,11 @@ async function gatewayGet(api: CityApi, url: string, cred: ResolvedCred, ownerId
       const m = stateFromHttp(res.status);
       if (res.status >= 500) breakerResult(api, false);
       const detail = await faultDetail(res);
-      throw new CityError(m.http, detail ? `${m.message} (APILIB: ${detail})` : m.message, m.state);
+      // 403 vindo da fonte (ex.: conjunto restrito no Portal de Dados Abertos): a inscrição está certa,
+      // quem bloqueia é a Prefeitura — o usuário não tem o que fazer no Store.
+      if (res.status === 403 && detail?.origin === "fonte")
+        throw new CityError(503, `A fonte da Prefeitura recusou o acesso a este conjunto de dados (não é problema da sua inscrição). Fonte: ${detail.text}`, "indisponivel");
+      throw new CityError(m.http, detail ? `${m.message} (${detail.origin === "gateway" ? "APILIB" : "Fonte"}: ${detail.text})` : m.message, m.state);
     }
     breakerResult(api, true);
     const text = await res.text();

@@ -166,6 +166,12 @@ describe("/api/city — credencial e status", () => {
     const by = Object.fromEntries(st.body.apis.map((a: { api: string; state: string }) => [a.api, a.state]));
     expect(by.fila).toBe("conectada");
     expect(by.sof).toBe("sem_autorizacao");
+    // 403 da fonte (CKAN do Portal de Dados Abertos) não é falta de inscrição.
+    handler = (url) => (url.includes("/ibge/censo/") ? json({ success: false, error: { message: "Acesso negado: Usuário não está autorizado a ler o recurso x", __type: "Authorization Error" } }, 403) : defaultHandler(url));
+    await agent.post("/api/city/test").send({ apis: ["censo"] }).expect(200);
+    const censo = (await agent.get("/api/city/status")).body.apis.find((a: { api: string }) => a.api === "censo");
+    expect(censo.state).toBe("desatualizada"); // havia cópia salva do teste anterior
+    expect(censo.message).toContain("Authorization Error");
   });
 
   it("client_credentials: pede token uma vez (Basic) e reaproveita", async () => {
