@@ -1,3 +1,4 @@
+import { ExpeditionsPanel } from "@/components/atlas/ExpeditionsPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
@@ -738,6 +739,9 @@ export function AtlasPage() {
           </Panel>
         </aside>
       </div>
+
+      {/* Expedições da Semana: lugares reais do OpenStreetMap ainda não visitados. */}
+      <ExpeditionsPanel notify={notify} />
 
       <CheckinModal draft={draft} setDraft={setDraft} onSave={saveDraft} saving={a.checkin.isPending} />
       <Modal open={consentOpen} onClose={() => setConsentOpen(false)} title="Usar sua localização no Atlas?">

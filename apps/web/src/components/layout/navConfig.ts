@@ -111,6 +111,8 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/companheiro", label: "Companheiro" },
           { to: "/atlas", label: "Atlas" },
           { to: "/tempo-de-jogo", label: "Tempo de Jogo" },
+          { to: "/xadrez", label: "Arena de Xadrez" },
+          { to: "/bestiario", label: "Bestiário" },
         ],
       },
       {

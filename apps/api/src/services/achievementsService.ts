@@ -34,6 +34,16 @@ const METRIC_KEYS = [
   "sky_album_count",
   "cinema_rated",
   "cinema_genres",
+  "chess_wins",
+  "chess_puzzles",
+  "chess_peak_rating",
+  "aoc_stars",
+  "aoc_full_events",
+  "expedition_missions",
+  "bestiary_species",
+  "bestiary_legendary",
+  "podcast_episodes",
+  "podcast_hours",
   "code_commits_total",
   "code_prs_merged",
   "code_releases_total",
@@ -220,6 +230,17 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("sky_album_count", "SELECT COUNT(*) FROM sky_album WHERE owner_id = ?");
   addScalar("cinema_rated", "SELECT COUNT(*) FROM cinema_items WHERE owner_id = ? AND status = 'visto' AND rating IS NOT NULL");
   addScalar("cinema_genres", "SELECT COUNT(DISTINCT j.value) FROM cinema_items c, json_each(c.genres_json) j WHERE c.owner_id = ? AND c.status = 'visto'");
+  // Xadrez, Advent of Code, Expedições, Bestiário e Podcasts: só registros reais.
+  addScalar("chess_wins", "SELECT COUNT(*) FROM lichess_games WHERE owner_id = ? AND result = 'vitoria'");
+  addScalar("chess_puzzles", "SELECT COUNT(*) FROM lichess_puzzles WHERE owner_id = ? AND win = 1");
+  addScalar("chess_peak_rating", "SELECT COALESCE((SELECT MAX(CAST(j.value AS INTEGER)) FROM lichess_accounts a, json_each(a.peak_json) j WHERE a.owner_id = ? AND j.key <> 'puzzle'), 0)");
+  addScalar("aoc_stars", "SELECT COUNT(*) FROM aoc_stars WHERE owner_id = ?");
+  addScalar("aoc_full_events", "SELECT COUNT(*) FROM (SELECT year FROM aoc_stars WHERE owner_id = ? GROUP BY year HAVING COUNT(*) >= CASE WHEN year >= 2025 THEN 24 ELSE 50 END)");
+  addScalar("expedition_missions", "SELECT COUNT(*) FROM expedition_missions WHERE owner_id = ? AND status = 'concluida'");
+  addScalar("bestiary_species", "SELECT COUNT(*) FROM bestiary_species WHERE owner_id = ?");
+  addScalar("bestiary_legendary", "SELECT COUNT(*) FROM bestiary_species WHERE owner_id = ? AND rarity = 'lendaria'");
+  addScalar("podcast_episodes", "SELECT COUNT(*) FROM podcast_listens WHERE owner_id = ?");
+  addScalar("podcast_hours", "SELECT COALESCE(SUM(duration_seconds), 0) / 3600 FROM podcast_listens WHERE owner_id = ?");
   addScalar("papers_saved", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ?");
   addScalar("papers_read", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status IN ('lido', 'fichado')");
   addScalar("papers_reviewed", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status = 'fichado'");

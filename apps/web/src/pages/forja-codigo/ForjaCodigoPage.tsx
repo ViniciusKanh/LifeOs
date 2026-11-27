@@ -11,6 +11,7 @@ import { useCodeForge, useCodeForgeActions } from "@/hooks/useCodeForge";
 import type { CodeKind, ForgeOverview } from "@/services/codeForgeService";
 import { ApiError } from "@/services/api";
 import { WakaTimeAnvil } from "@/components/forge/WakaTimeAnvil";
+import { AdventOfCodePanel } from "@/components/forge/AdventOfCodePanel";
 
 const R = { borderRadius: 6 };
 const KIND_ICON: Record<CodeKind, typeof GitBranch> = { commit: GitBranch, pr_opened: GitPullRequest, pr_merged: GitMerge, issue_closed: CheckCircle2, release: Rocket };
@@ -280,6 +281,9 @@ export function ForjaCodigoPage() {
           </section>
 
           <WakaTimeAnvil notify={notify} />
+
+          {/* Advent of Code: evento sazonal (dezembro) com estrelas, chefe e ranking privado. */}
+          <AdventOfCodePanel notify={notify} />
 
           <section className="rpg-panel p-4" aria-label="Repositórios em atividade">
             <div className="mb-2 flex items-center justify-between gap-2">

@@ -1,3 +1,4 @@
+import { AudioReading } from "@/components/library/AudioReading";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -411,6 +412,9 @@ export function BibliotecaPage() {
       <QuoteWall books={allBooks} />
 
       </div>
+
+      {/* No tema RPG a Leitura em Áudio é uma aba própria; no clássico aparece aqui. */}
+      {!isRpg && <AudioReading />}
 
       {modal === "isbn" && <IsbnModal onClose={() => setModal("none")} onCreate={createBook} />}
       {modal === "manual" && <ManualBookModal onClose={() => setModal("none")} onCreate={createBook} />}

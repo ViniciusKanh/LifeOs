@@ -18,7 +18,7 @@ import { getFocusTaskIds } from "./dayFocusService.js";
  * - nível é sempre derivado do XP total (levelForXp), nunca gravado.
  */
 
-export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest" | "bank" | "tavern" | "forge" | "skill" | "code" | "research" | "raid" | "companion" | "workout" | "atlas" | "music" | "steam" | "nutrition" | "video_course" | "transit" | "lore" | "sky" | "cinema";
+export type XpSourceType = "task" | "day" | "habit_entry" | "habit_streak" | "focus" | "project" | "journal" | "review" | "life_admin" | "achievement" | "contract" | "experiment" | "campaign" | "grimoire" | "quest" | "bank" | "tavern" | "forge" | "skill" | "code" | "research" | "raid" | "companion" | "workout" | "atlas" | "music" | "steam" | "nutrition" | "video_course" | "transit" | "lore" | "sky" | "cinema" | "chess" | "bestiary" | "podcast" | "expedition";
 
 export interface XpGrant {
   sourceType: XpSourceType;

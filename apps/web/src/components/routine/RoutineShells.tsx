@@ -1,5 +1,6 @@
+import { AudioReading } from "@/components/library/AudioReading";
 import { useState } from "react";
-import { BarChart3, BookOpen, Bot, CalendarDays, Flame, GraduationCap, History, LayoutGrid, Library, ListChecks, Map as MapIcon, Plus, Repeat, ScanLine, ScrollText, Sparkles, Trophy, Upload, Zap, Bell } from "lucide-react";
+import { BarChart3, BookOpen, Bot, CalendarDays, Flame, GraduationCap, Headphones, History, LayoutGrid, Library, ListChecks, Map as MapIcon, Plus, Repeat, ScanLine, ScrollText, Sparkles, Trophy, Upload, Zap, Bell } from "lucide-react";
 import { RPGButton, RPGToast } from "@/components/rpg";
 import { AdvisorPanel, KitSection, MODULE_ART, MedalStrip, MissionList, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
 import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
@@ -144,7 +145,7 @@ export function HabitsShell({ tab, onTab, onNew, onEdit, onGenerate, canGenerate
 
 /* ════════════════════════════════ Biblioteca ════════════════════════════════ */
 
-export const LIBRARY_TABS = ["academia", "trilhas", "aprendizados", "recomendacoes", "classico", "automacoes", "ia"] as const;
+export const LIBRARY_TABS = ["academia", "trilhas", "aprendizados", "audio", "recomendacoes", "classico", "automacoes", "ia"] as const;
 export type LibraryTab = (typeof LIBRARY_TABS)[number];
 
 export function LibraryShell({ tab, onTab, onManual, onIsbn }: { tab: LibraryTab; onTab: (t: LibraryTab) => void; onManual: () => void; onIsbn: () => void }) {
@@ -193,6 +194,7 @@ export function LibraryShell({ tab, onTab, onManual, onIsbn }: { tab: LibraryTab
           { value: "academia", label: "Academia", icon: <Library size={15} /> },
           { value: "trilhas", label: "Trilhas", icon: <MapIcon size={15} /> },
           { value: "aprendizados", label: "Aprendizados", icon: <GraduationCap size={15} /> },
+          { value: "audio", label: "Leitura em Áudio", icon: <Headphones size={15} /> },
           { value: "recomendacoes", label: "Recomendações", icon: <Sparkles size={15} /> },
           { value: "classico", label: "Painel completo", icon: <LayoutGrid size={15} /> },
           { value: "automacoes", label: "Automações", icon: <Zap size={15} /> },
@@ -234,6 +236,8 @@ export function LibraryShell({ tab, onTab, onManual, onIsbn }: { tab: LibraryTab
       {tab === "aprendizados" && (hub ? <LearningsPanel hub={hub} onToast={notify} /> : <Skeleton />)}
       {tab === "recomendacoes" && <BookRecommendations onAdd={createBook} />}
       {tab === "automacoes" && <AutomationsPanel module="library" title="Automações da Biblioteca" intro="Progresso, lembretes, metas, Grimório, resumo, ISBN e recomendações. Cartões e livros só são criados com a sua confirmação." />}
+      {/* Leitura em Áudio: podcasts (Podcast Index) com player e XP de estudo. */}
+      {tab === "audio" && <AudioReading />}
       {tab === "ia" && <AdvisorPanel module="library" title="Oráculo Literário" avatar="/assets/rpg/avatars/mago.webp" />}
       {hub && <SessionModal open={session.open} hub={hub} bookId={session.bookId} session={session.edit} onClose={() => setSession({ open: false, bookId: null, edit: null })} onToast={notify} />}
       <RPGToast message={toast?.msg ?? null} tone={toast?.tone} onClose={() => setToast(null)} />

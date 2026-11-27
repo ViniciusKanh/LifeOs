@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
-import { Briefcase, Bus, ChevronRight, Clapperboard, Flame, Hammer, Library, PartyPopper, Percent, PlayCircle, Radar, ScrollText, Sparkles, UtensilsCrossed, Wind } from "lucide-react";
+import { Briefcase, Compass, Crown, Headphones, PawPrint, Star, Bus, ChevronRight, Clapperboard, Flame, Hammer, Library, PartyPopper, Percent, PlayCircle, Radar, ScrollText, Sparkles, UtensilsCrossed, Wind } from "lucide-react";
 import { useClickUp, useHolidays, useNutrition, useRadar, useWakatime, useZotero } from "@/hooks/usePersonalIntegrations";
 import { usePublicKeys } from "@/hooks/usePublicApis";
 import type { KeyStatus } from "@/services/publicApisService";
 
-type State = "ok" | "off" | "warn" | "load";
+// "info": status visto só na própria tela (não consultamos a API aqui).
+type State = "ok" | "off" | "warn" | "load" | "info";
 
 function Row({ icon, name, screen, to, state, detail }: { icon: ReactNode; name: string; screen: string; to: string; state: State; detail: string }) {
-  const dot = state === "ok" ? "bg-cat-green" : state === "warn" ? "bg-cat-orange" : state === "load" ? "bg-slate/40 animate-pulse" : "bg-slate/40";
+  const dot = state === "ok" ? "bg-cat-green" : state === "warn" ? "bg-cat-orange" : state === "load" ? "bg-slate/40 animate-pulse" : state === "info" ? "bg-cat-blue/60" : "bg-slate/40";
   return (
     <li>
       <Link to={to} className="flex items-center gap-3 rounded-lg border border-paper-border px-3 py-2 hover:bg-paper-raised dark:border-ink-border dark:hover:bg-ink-raised rpg:rpg-tile">
@@ -22,7 +23,7 @@ function Row({ icon, name, screen, to, state, detail }: { icon: ReactNode; name:
             {screen} · {detail}
           </span>
         </span>
-        <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", dot)} aria-label={state === "ok" ? "Ativa" : state === "warn" ? "Com aviso" : "Desconectada"} />
+        <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", dot)} aria-label={state === "ok" ? "Ativa" : state === "warn" ? "Com aviso" : state === "info" ? "Status na tela da integração" : "Desconectada"} />
         <ChevronRight size={14} className="shrink-0 text-slate" aria-hidden />
       </Link>
     </li>
@@ -61,6 +62,12 @@ export function PersonalIntegrationsCard() {
       <Row icon={<Sparkles size={18} />} name="NASA APOD" screen="Meu Mundo · Vitral do Céu" to="/meu-mundo" state={keys.isLoading ? "load" : "ok"} detail={keyDetail(keys.data?.nasa, "DEMO_KEY (limite baixo)")} />
       <Row icon={<Clapperboard size={18} />} name="TMDB" screen="Sala de Cinema" to="/sala-de-cinema" state={keyState(keys.data?.tmdb)} detail={keyDetail(keys.data?.tmdb, "chave de API (grátis)")} />
       <Row icon={<Percent size={18} />} name="Banco Central (SGS)" screen="Banco do Reino · Termômetro" to="/banco" state="ok" detail="sem chave" />
+      {/* As telas abaixo carregam os próprios dados ao abrir (evita consultas externas nas Configurações). */}
+      <Row icon={<Crown size={18} />} name="Lichess" screen="Aventuras · Arena de Xadrez" to="/xadrez" state="info" detail="usuário público · token opcional para puzzles" />
+      <Row icon={<Star size={18} />} name="Advent of Code" screen="Forja do Código" to="/forja-codigo" state="info" detail="cookie de sessão · evento em dezembro" />
+      <Row icon={<Compass size={18} />} name="OpenStreetMap (Overpass)" screen="Atlas · Expedições da Semana" to="/atlas" state="info" detail="sem chave · usa a cidade do Clima" />
+      <Row icon={<PawPrint size={18} />} name="iNaturalist" screen="Aventuras · Bestiário" to="/bestiario" state="info" detail="login público, sem senha" />
+      <Row icon={<Headphones size={18} />} name="Podcast Index" screen="Biblioteca · Leitura em Áudio" to="/biblioteca?aba=audio" state="info" detail="chave e segredo grátis" />
     </ul>
   );
 }

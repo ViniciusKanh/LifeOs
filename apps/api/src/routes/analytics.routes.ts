@@ -6,6 +6,8 @@ import { wakatimeTimelineEvents } from "../services/wakatimeService.js";
 import { nutritionTimelineEvents } from "../services/nutritionService.js";
 import { videoCourseTimelineEvents } from "../services/videoCourseService.js";
 import { cinemaTimelineEvents } from "../services/cinemaService.js";
+import { chessTimelineEvents } from "../services/chessArenaService.js";
+import { podcastTimelineEvents } from "../services/podcastService.js";
 import { researchTimelineEvents } from "../services/researchLibraryService.js";
 import { adventureTimelineEvents } from "../services/adventureHubService.js";
 import { Router } from "express";
@@ -414,7 +416,7 @@ analyticsRouter.get("/timeline", async (req, res) => {
   // Árvore de Habilidades: um evento por nível comprovado em prova.
   const skillEvents = await skillTimelineEvents(db, ownerId, qFrom, qTo);
   // Forja do Código e Biblioteca do Mestrado: só marcos (PR mesclada, release, dia de commits, fichamento).
-  const [codeEvents, researchEvents, adventureEvents, wakaEvents, mealEvents, videoEvents, cinemaEvents] = await Promise.all([
+  const [codeEvents, researchEvents, adventureEvents, wakaEvents, mealEvents, videoEvents, cinemaEvents, chessEvents, podcastEvents] = await Promise.all([
     codeTimelineEvents(db, ownerId, qFrom, qTo),
     researchTimelineEvents(db, ownerId, qFrom, qTo),
     // Raid derrotada, lugar descoberto no Atlas e evolução do Companheiro.
@@ -425,6 +427,9 @@ analyticsRouter.get("/timeline", async (req, res) => {
     // Aulas de cursos em vídeo (resumo por dia) e títulos vistos na Sala de Cinema.
     videoCourseTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
     cinemaTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
+    // Partidas de xadrez e episódios de podcast: um resumo por dia.
+    chessTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
+    podcastTimelineEvents(db, ownerId, qFrom, qTo).catch(() => []),
   ]);
 
   const events = [
@@ -435,6 +440,8 @@ analyticsRouter.get("/timeline", async (req, res) => {
     ...mealEvents,
     ...videoEvents,
     ...cinemaEvents,
+    ...chessEvents,
+    ...podcastEvents,
     ...researchEvents,
     ...adventureEvents,
     ...warCouncilEvents,

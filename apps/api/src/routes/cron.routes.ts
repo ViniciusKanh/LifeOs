@@ -3,6 +3,7 @@ import { runDueAutomationsForAll } from "../services/automationRunner.js";
 import { Router } from "express";
 import { steamDailySnapshots } from "../services/steamService.js";
 import { wakatimeDailySync } from "../services/wakatimeService.js";
+import { lichessDailySync } from "../services/chessArenaService.js";
 import { clickUpDailySync } from "../services/clickupService.js";
 import { radarWeeklyScans } from "../services/radarService.js";
 
@@ -48,11 +49,13 @@ cronRouter.get("/notification-triggers", async (req, res) => {
   // Snapshots diários da Steam (o gráfico de tempo por dia depende deles).
   const steamSnapshots = await steamDailySnapshots(getDb()).catch(() => 0);
   // Integrações pessoais: WakaTime (janela de 14 dias), ClickUp (incremental) e Radar (1x por semana).
-  const [waka, clickup, radar] = await Promise.all([
+  // Lichess entra aqui para partidas de dias sem visita à Arena (o histórico tem limite de 60 por consulta).
+  const [waka, clickup, radar, chess] = await Promise.all([
     wakatimeDailySync(getDb()).catch(() => 0),
     clickUpDailySync(getDb()).catch(() => 0),
     radarWeeklyScans(getDb()).catch(() => 0),
+    lichessDailySync(getDb()).catch(() => 0),
   ]);
-  return res.json({ automations, steamSnapshots, waka, clickup, radar });
+  return res.json({ automations, steamSnapshots, waka, clickup, radar, chess });
 });
 

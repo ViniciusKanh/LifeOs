@@ -46,7 +46,7 @@ export function cellAreaKm2(lat: number): number {
   return side * side * Math.cos((lat * Math.PI) / 180);
 }
 
-function haversineKm(a: [number, number], b: [number, number]) {
+export function haversineKm(a: [number, number], b: [number, number]) {
   const R = 6371;
   const dLat = ((b[0] - a[0]) * Math.PI) / 180;
   const dLng = ((b[1] - a[1]) * Math.PI) / 180;
