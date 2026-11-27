@@ -10,15 +10,12 @@ import {
   PLACE_CATEGORIES,
   createCheckin,
   deleteAtlasHistory,
-  deleteJournal,
   deletePlace,
   deleteRoute,
   exportAtlas,
   getAtlasOverview,
-  journalPhoto,
   reversePlace,
   saveAtlasSettings,
-  saveJournal,
   saveRoute,
   searchPlaces,
   updatePlace,
@@ -214,50 +211,6 @@ atlasRouter.put("/settings", async (req, res) => {
   try {
     const b = z.object({ locationEnabled: z.boolean(), preciseLocation: z.boolean() }).partial().parse(req.body);
     return res.json(await saveAtlasSettings(getDb(), req.user!.id, b));
-  } catch (err) {
-    return fail(res, err);
-  }
-});
-
-const journalSchema = z.object({
-  placeId: z.string().max(40).nullable().optional(),
-  title: z.string().trim().min(1, "Dê um título.").max(140),
-  body: z.string().trim().max(5000).nullable().optional(),
-  rating: z.number().int().min(1).max(5).nullable().optional(),
-  category: z.string().trim().max(40).nullable().optional(),
-  tags: z.array(z.string().trim().min(1).max(30)).max(8).optional(),
-  photo: z.string().max(720_000).nullable().optional(),
-  visitedOn: day,
-});
-
-atlasRouter.post("/journal", async (req, res) => {
-  try {
-    return res.status(201).json({ id: await saveJournal(getDb(), req.user!.id, journalSchema.parse(req.body)) });
-  } catch (err) {
-    return fail(res, err);
-  }
-});
-
-atlasRouter.put("/journal/:id", async (req, res) => {
-  try {
-    return res.json({ id: await saveJournal(getDb(), req.user!.id, journalSchema.parse(req.body), String(req.params.id)) });
-  } catch (err) {
-    return fail(res, err);
-  }
-});
-
-atlasRouter.get("/journal/:id/photo", async (req, res) => {
-  try {
-    return res.json({ photo: await journalPhoto(getDb(), req.user!.id, String(req.params.id)) });
-  } catch (err) {
-    return fail(res, err);
-  }
-});
-
-atlasRouter.delete("/journal/:id", async (req, res) => {
-  try {
-    await deleteJournal(getDb(), req.user!.id, String(req.params.id));
-    return res.json({ ok: true });
   } catch (err) {
     return fail(res, err);
   }

@@ -5,7 +5,7 @@ import { getDb } from "../src/db/client.js";
 import { setIntegrationFetchForTests } from "../src/services/integrationsCore.js";
 import { applyRecords, gameFromRaw, importGames, importPuzzles, resetChessDailyForTests } from "../src/services/chessArenaService.js";
 import { aocDays, applyStars, cleanSession, latestEventYear, parseBoard, unlockAt } from "../src/services/adventOfCodeService.js";
-import { buildOverpassQuery, parseOverpass, pickMissions, resetExpeditionCacheForTests } from "../src/services/expeditionService.js";
+import { buildOverpassQuery, kindFromNominatim, parseOverpass, pickMissions, poisFromNominatim, resetExpeditionCacheForTests } from "../src/services/expeditionService.js";
 import { importSpecies, rarityOf } from "../src/services/bestiaryService.js";
 import { podcastAuthHeaders, resetPodcastCacheForTests } from "../src/services/podcastService.js";
 import { userDayContext } from "../src/services/localDayService.js";
@@ -142,17 +142,40 @@ describe("Expedições da Semana (Overpass)", () => {
     expect(pickMissions(withDist, 2, "s", new Set())).toEqual(pickMissions(withDist, 2, "s", new Set()));
   });
 
-  it("gera 3 missões na cidade do usuário e conclui com o check-in do Atlas", async () => {
+  it("lê o Nominatim: classe OSM certa, dentro do raio, sem praças nem lugares sem nome", () => {
+    expect(kindFromNominatim("tourism", "museum")).toBe("museu");
+    expect(kindFromNominatim("historic", "monument")).toBe("cultura");
+    expect(kindFromNominatim("amenity", "parking")).toBeNull();
+    const pois = poisFromNominatim(
+      [
+        { place_id: 1, osm_type: "way", osm_id: 10, lat: "-23.551", lon: "-46.633", name: "Museu A", display_name: "Museu A, SP", category: "tourism", type: "museum" },
+        { place_id: 2, osm_type: "way", osm_id: 11, lat: "-23.552", lon: "-46.633", name: "Praça B", display_name: "Praça B", category: "leisure", type: "park" },
+        { place_id: 3, osm_type: "way", osm_id: 12, lat: "-23.552", lon: "-46.633", name: "", display_name: "Rua X", category: "leisure", type: "park" },
+        { place_id: 4, osm_type: "node", osm_id: 13, lat: "-23.90", lon: "-46.633", name: "Museu Longe", display_name: "x", category: "tourism", type: "museum" },
+        { place_id: 5, osm_type: "way", osm_id: 14, lat: "-23.553", lon: "-46.633", name: "Museu", display_name: "x", category: "amenity", type: "parking" },
+      ],
+      { lat: -23.55, lng: -46.633 },
+      3000,
+    );
+    expect(pois.map((p) => `${p.osmRef}:${p.kind}`)).toEqual(["w10:museu"]);
+  });
+
+  it("gera 3 missões na cidade do usuário (Nominatim) e conclui com o check-in do Atlas", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
     const db = getDb();
     await db.execute({ sql: "UPDATE user_settings SET context_city = 'São Paulo', context_latitude = -23.55, context_longitude = -46.63, context_timezone = 'America/Sao_Paulo' WHERE user_id = ?", args: [userId] });
-    setIntegrationFetchForTests(async (url, init) => {
-      expect(url).toContain("overpass");
-      expect(String(init?.body)).toContain("around");
-      return json({ elements: [1, 2, 3, 4].map((i) => ({ type: "node", id: i, lat: -23.55 + i / 100, lon: -46.63, tags: { tourism: i % 2 ? "museum" : "viewpoint", name: `Lugar ${i}` } })) });
+    let n = 0;
+    setIntegrationFetchForTests(async (url) => {
+      expect(url).toContain("nominatim.openstreetmap.org/search");
+      expect(url).toContain("bounded=1");
+      n++;
+      // Cada termo devolve um lugar diferente, a ~1 km um do outro.
+      return json([{ place_id: n, osm_type: "node", osm_id: 100 + n, lat: String(-23.55 + n / 100), lon: "-46.63", name: `Lugar ${n}`, display_name: `Lugar ${n}`, category: n % 2 ? "tourism" : "amenity", type: n % 2 ? "museum" : "library" }]);
     });
+    await db.execute({ sql: "INSERT INTO expedition_settings (owner_id, radius_m, kinds_json) VALUES (?, 15000, '[\"museu\",\"biblioteca\",\"cultura\",\"mirante\"]')", args: [userId] });
     const o = (await agent.get("/api/expeditions")).body;
     expect(o.configured).toBe(true);
+    expect(o.unavailable).toBeNull();
     expect(o.missions).toHaveLength(3);
     const m = o.missions[0];
     const swap = await agent.post(`/api/expeditions/${o.missions[1].id}/swap`);
@@ -167,6 +190,7 @@ describe("Expedições da Semana (Overpass)", () => {
     const other = await createAuthenticatedAgent();
     expect((await other.agent.post(`/api/expeditions/${m.id}/swap`)).status).toBe(404);
   });
+
 });
 
 /* ───────────── Bestiário ───────────── */

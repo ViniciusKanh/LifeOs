@@ -5,13 +5,15 @@ import { getContextLocation } from "./contextLocationService.js";
 import { fetchJson } from "./integrationsCore.js";
 import { userDayContext } from "./localDayService.js";
 import { recordWorldEvent } from "./livingWorldService.js";
-import { haversineKm, type PLACE_CATEGORIES } from "./atlasService.js";
+import { haversineKm, nominatim, type NominatimPlace, type PLACE_CATEGORIES } from "./atlasService.js";
 import { weekKeyOf } from "./radarService.js";
 
 /**
- * Expedições da Semana (Atlas) — três lugares reais (OpenStreetMap, via
- * Overpass, sem chave) perto do centro escolhido que o usuário ainda não
- * visitou. O centro é a cidade do Contexto do Dia ou um lugar já salvo no
+ * Expedições da Semana (Atlas) — três lugares reais do OpenStreetMap perto do
+ * centro escolhido que o usuário ainda não visitou. A busca usa o Nominatim (o
+ * mesmo serviço do Atlas, sem chave, 1 req/s com cache); o Overpass ficou só
+ * como reserva opcional (OVERPASS_URL), porque o servidor público passou a
+ * recusar consultas (406) e os espelhos vivem fora do ar. O centro é a cidade do Contexto do Dia ou um lugar já salvo no
  * Atlas: nunca guardamos a posição atual.
  *
  * A missão se cumpre com o check-in normal do Atlas (que já paga a descoberta).
@@ -25,7 +27,7 @@ export type ExpeditionKind = (typeof EXPEDITION_KINDS)[number];
 type PlaceCategory = (typeof PLACE_CATEGORIES)[number];
 export const KIND_CATEGORY: Record<ExpeditionKind, PlaceCategory> = { parque: "parque", museu: "museu", biblioteca: "cultura", mirante: "mirante", trilha: "natureza", cultura: "cultura" };
 
-const OVERPASS = process.env.OVERPASS_URL?.trim() || "https://overpass-api.de/api/interpreter";
+const OVERPASS = process.env.OVERPASS_URL?.trim() || null;
 const UA = "LifeOS/1.0 (+https://github.com/ViniciusKanh/LifeOs; app pessoal)";
 const CACHE_MS = 6 * 3600_000;
 
@@ -81,20 +83,81 @@ export function parseOverpass(raw: { elements?: RawEl[] } | null): Poi[] {
   return out;
 }
 
+/* Termos de busca no Nominatim por tipo (português; o filtro abaixo confere a classe OSM). */
+export const NOMINATIM_TERMS: Record<ExpeditionKind, string[]> = {
+  parque: ["parque"],
+  museu: ["museu"],
+  biblioteca: ["biblioteca"],
+  mirante: ["mirante"],
+  trilha: ["trilha"],
+  cultura: ["teatro", "monumento"],
+};
+
+/** Tipo da expedição a partir da classe/tipo OSM do Nominatim. Exportada para testes. */
+export function kindFromNominatim(cls?: string, type?: string): ExpeditionKind | null {
+  return kindOf({ [cls ?? ""]: type ?? "", ...(cls === "route" ? { route: type ?? "" } : {}), ...(cls === "historic" ? { historic: type ?? "yes" } : {}) });
+}
+
+/** Converte resultados do Nominatim em lugares (mesmo osm_ref do Atlas). Exportada para testes. */
+export function poisFromNominatim(list: NominatimPlace[], center: { lat: number; lng: number }, radiusM: number): Poi[] {
+  const out: Poi[] = [];
+  for (const x of list) {
+    if (!x.osm_type || !x.osm_id) continue;
+    const kind = kindFromNominatim(x.category ?? x.class, x.type);
+    // Só lugares com nome próprio (sem nome, o Nominatim devolve o endereço).
+    const name = x.name?.trim();
+    const lat = Number(x.lat);
+    const lng = Number(x.lon);
+    if (!kind || !name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    // A busca por "parque" traz muitas praças (leisure=park); como expedição, valem os parques de verdade.
+    if (kind === "parque" && /^(praça|praca|largo|canteiro|jardim de chuva)\b/i.test(name)) continue;
+    if (haversineKm([center.lat, center.lng], [lat, lng]) * 1000 > radiusM) continue;
+    out.push({ osmRef: `${x.osm_type[0]}${x.osm_id}`, name: name.slice(0, 160), kind, lat, lng });
+  }
+  return out;
+}
+
 const memo = new Map<string, { at: number; pois: Poi[] }>();
 export function resetExpeditionCacheForTests() {
   memo.clear();
 }
+
+async function fromNominatim(lat: number, lng: number, radius: number, kinds: ExpeditionKind[]) {
+  const dLat = radius / 111_000;
+  const dLng = radius / (111_000 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  const viewbox = `${(lng - dLng).toFixed(5)},${(lat + dLat).toFixed(5)},${(lng + dLng).toFixed(5)},${(lat - dLat).toFixed(5)}`;
+  const all: Poi[] = [];
+  let failures = 0;
+  const terms = kinds.flatMap((k) => NOMINATIM_TERMS[k]);
+  for (const term of terms) {
+    try {
+      const list = await nominatim<NominatimPlace[]>(`search?q=${encodeURIComponent(term)}&format=jsonv2&limit=20&bounded=1&viewbox=${viewbox}`);
+      all.push(...poisFromNominatim(list ?? [], { lat, lng }, radius));
+    } catch {
+      failures++;
+    }
+  }
+  if (failures === terms.length) throw new ExpeditionError("O OpenStreetMap não respondeu agora. Tente em alguns minutos.", 502);
+  const seen = new Set<string>();
+  return all.filter((p) => !seen.has(p.osmRef) && seen.add(p.osmRef));
+}
+
+async function fromOverpass(url: string, lat: number, lng: number, radius: number, kinds: ExpeditionKind[]) {
+  const raw = await fetchJson<{ elements?: RawEl[] }>(
+    url,
+    { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA, Accept: "application/json" }, body: `data=${encodeURIComponent(buildOverpassQuery(lat, lng, radius, kinds))}` },
+    { label: "OpenStreetMap (Overpass)", timeoutMs: 20_000, retries: 0 },
+  );
+  return parseOverpass(raw);
+}
+
 async function fetchPois(lat: number, lng: number, radius: number, kinds: ExpeditionKind[]) {
   const key = `${lat.toFixed(3)},${lng.toFixed(3)},${radius},${kinds.join("|")}`;
   const hit = memo.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.pois;
-  const raw = await fetchJson<{ elements?: RawEl[] }>(
-    OVERPASS,
-    { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA, Accept: "application/json" }, body: `data=${encodeURIComponent(buildOverpassQuery(lat, lng, radius, kinds))}` },
-    { label: "OpenStreetMap (Overpass)", timeoutMs: 30_000, retries: 1 },
-  );
-  const pois = parseOverpass(raw);
+  let pois: Poi[] | null = null;
+  if (OVERPASS) pois = await fromOverpass(OVERPASS, lat, lng, radius, kinds).catch(() => null);
+  if (!pois?.length) pois = await fromNominatim(lat, lng, radius, kinds);
   memo.set(key, { at: Date.now(), pois });
   return pois;
 }
@@ -204,8 +267,8 @@ export async function getExpeditions(db: Client, ownerId: string) {
   const gained = await settleMissions(db, ownerId, week, today);
   try {
     await ensureMissions(db, ownerId, week, center, s);
-  } catch {
-    unavailable = "O OpenStreetMap (Overpass) não respondeu agora. Tente em alguns minutos.";
+  } catch (e) {
+    unavailable = e instanceof ExpeditionError ? e.message : "O OpenStreetMap não respondeu agora. Tente em alguns minutos.";
   }
   const [missions, totals, xp] = await Promise.all([
     db.execute({ sql: "SELECT * FROM expedition_missions WHERE owner_id = ? AND week_key = ? AND status <> 'trocada' ORDER BY created_at", args: [ownerId, week] }),

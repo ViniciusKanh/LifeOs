@@ -63,7 +63,7 @@ export function ExperimentsTab({ o, notify }: { o: ForgeOverview; notify: Notify
         <Counter label="Tempo total de cálculo" value={`${(totalMs / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s`} tone="cyan" icon={<History size={16} />} />
       </div>
       <KitSection
-        title="Diário de Experimentos"
+        title="Registro de Experimentos"
         icon={<FlaskConical size={15} />}
         tone="legendary"
         action={

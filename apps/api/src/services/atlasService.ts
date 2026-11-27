@@ -60,7 +60,7 @@ const geoCache = new Map<string, { at: number; value: unknown }>();
 let lastNominatim = 0;
 
 /** Respeita a política do Nominatim: 1 requisição/s, User-Agent identificável e cache. */
-async function nominatim<T>(path: string): Promise<T> {
+export async function nominatim<T>(path: string): Promise<T> {
   const hit = geoCache.get(path);
   if (hit && Date.now() - hit.at < 24 * 3_600_000) return hit.value as T;
   const wait = lastNominatim + 1100 - Date.now();
@@ -72,7 +72,7 @@ async function nominatim<T>(path: string): Promise<T> {
   return value;
 }
 
-interface NominatimPlace {
+export interface NominatimPlace {
   place_id: number;
   osm_type?: string;
   osm_id?: number;
@@ -349,7 +349,7 @@ async function regionBbox(db: Client, city: string, state: string | null): Promi
 }
 
 export async function getAtlasOverview(db: Client, ownerId: string, opts: { region?: string | null } = {}) {
-  const [places, checkins, cells, routes, settings, journal, ach] = await Promise.all([
+  const [places, checkins, cells, routes, settings, ach] = await Promise.all([
     db.execute({ sql: "SELECT * FROM atlas_places WHERE owner_id = ? ORDER BY last_visit_at DESC", args: [ownerId] }),
     db.execute({
       sql: `SELECT c.id, c.method, c.visited_at, c.xp, p.id AS place_id, p.name, p.category, p.neighborhood, p.city, p.state FROM atlas_checkins c
@@ -359,7 +359,6 @@ export async function getAtlasOverview(db: Client, ownerId: string, opts: { regi
     db.execute({ sql: "SELECT cell FROM atlas_cells WHERE owner_id = ? LIMIT 20000", args: [ownerId] }),
     db.execute({ sql: "SELECT id, name, source, points_json, distance_km, started_at FROM atlas_routes WHERE owner_id = ? ORDER BY started_at DESC LIMIT 50", args: [ownerId] }),
     getAtlasSettings(db, ownerId),
-    db.execute({ sql: "SELECT j.id, j.title, j.body, j.rating, j.category, j.tags_json, j.visited_on, j.place_id, j.photo IS NOT NULL AS has_photo, p.name AS place_name FROM atlas_journal j LEFT JOIN atlas_places p ON p.id = j.place_id WHERE j.owner_id = ? ORDER BY j.visited_on DESC LIMIT 30", args: [ownerId] }),
     db.execute({
       sql: `SELECT a.code, a.title, a.description, a.threshold, a.metric, u.unlocked_at FROM achievements a
             LEFT JOIN user_achievements u ON u.achievement_id = a.id AND u.owner_id = ? WHERE a.code LIKE 'atlas_%' ORDER BY a.threshold`,
@@ -431,18 +430,6 @@ export async function getAtlasOverview(db: Client, ownerId: string, opts: { regi
       region,
       regions: [...cityCount.entries()].map(([key, v]) => ({ key, label: `${v.city}${v.state ? ` · ${v.state}` : ""}`, places: v.n })),
     },
-    journal: journal.rows.map((j) => ({
-      id: String(j.id),
-      title: String(j.title),
-      body: j.body == null ? null : String(j.body),
-      rating: j.rating == null ? null : Number(j.rating),
-      category: j.category == null ? null : String(j.category),
-      tags: JSON.parse(String(j.tags_json ?? "[]")) as string[],
-      visitedOn: String(j.visited_on),
-      placeId: j.place_id == null ? null : String(j.place_id),
-      placeName: j.place_name == null ? null : String(j.place_name),
-      hasPhoto: Number(j.has_photo) === 1,
-    })),
     achievements: ach.rows.map((a) => ({ code: String(a.code), title: String(a.title), description: String(a.description), threshold: Number(a.threshold), unlockedAt: a.unlocked_at == null ? null : String(a.unlocked_at) })),
     xpRules: ATLAS_XP,
   };
@@ -484,7 +471,7 @@ export async function deleteRoute(db: Client, ownerId: string, id: string) {
 
 /** Apaga todo o histórico geográfico do usuário (lugares, check-ins, rotas, células e diário). */
 export async function deleteAtlasHistory(db: Client, ownerId: string) {
-  for (const t of ["atlas_checkins", "atlas_journal", "atlas_routes", "atlas_cells", "atlas_places"]) {
+  for (const t of ["atlas_checkins", "atlas_routes", "atlas_cells", "atlas_places"]) {
     await db.execute({ sql: `DELETE FROM ${t} WHERE owner_id = ?`, args: [ownerId] });
   }
 }
@@ -496,61 +483,8 @@ export async function exportAtlas(db: Client, ownerId: string) {
     places: await q("SELECT id, name, category, lat, lng, neighborhood, city, state, country, favorite, visits, first_visit_at, last_visit_at FROM atlas_places WHERE owner_id = ?"),
     checkins: await q("SELECT id, place_id, method, visited_at, xp FROM atlas_checkins WHERE owner_id = ?"),
     routes: await q("SELECT id, name, source, points_json, distance_km, started_at FROM atlas_routes WHERE owner_id = ?"),
-    journal: await q("SELECT id, place_id, title, body, rating, category, tags_json, visited_on FROM atlas_journal WHERE owner_id = ?"),
     revealedCells: (await q("SELECT cell FROM atlas_cells WHERE owner_id = ?")).map((c) => c.cell),
   };
-}
-
-/* ─────────────────────────── Diário do Explorador ─────────────────────────── */
-
-export interface JournalInput {
-  placeId?: string | null;
-  title: string;
-  body?: string | null;
-  rating?: number | null;
-  category?: string | null;
-  tags?: string[];
-  photo?: string | null;
-  visitedOn: string;
-}
-
-const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
-export const MAX_PHOTO_CHARS = 700_000;
-
-export async function saveJournal(db: Client, ownerId: string, input: JournalInput, id?: string) {
-  if (input.photo && (!PHOTO_RE.test(input.photo) || input.photo.length > MAX_PHOTO_CHARS)) throw new AtlasError(400, "Foto inválida ou grande demais (máx. ~500 KB, JPG/PNG/WebP).");
-  if (input.placeId) {
-    const p = await db.execute({ sql: "SELECT id FROM atlas_places WHERE id = ? AND owner_id = ?", args: [input.placeId, ownerId] });
-    if (!p.rows[0]) throw new AtlasError(404, "Lugar não encontrado.");
-  }
-  const tags = JSON.stringify((input.tags ?? []).slice(0, 8));
-  if (id) {
-    const r = await db.execute({
-      sql: `UPDATE atlas_journal SET place_id = ?, title = ?, body = ?, rating = ?, category = ?, tags_json = ?, visited_on = ?,
-              photo = CASE WHEN ? = 1 THEN ? ELSE photo END, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`,
-      args: [input.placeId ?? null, input.title, input.body ?? null, input.rating ?? null, input.category ?? null, tags, input.visitedOn, input.photo === undefined ? 0 : 1, input.photo ?? null, id, ownerId],
-    });
-    if (r.rowsAffected === 0) throw new AtlasError(404, "Registro não encontrado.");
-    return id;
-  }
-  const newId = nanoid();
-  await db.execute({
-    sql: "INSERT INTO atlas_journal (id, owner_id, place_id, title, body, rating, category, tags_json, photo, visited_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    args: [newId, ownerId, input.placeId ?? null, input.title, input.body ?? null, input.rating ?? null, input.category ?? null, tags, input.photo ?? null, input.visitedOn],
-  });
-  return newId;
-}
-
-export async function journalPhoto(db: Client, ownerId: string, id: string) {
-  const r = await db.execute({ sql: "SELECT photo FROM atlas_journal WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
-  const photo = r.rows[0]?.photo;
-  if (!photo) throw new AtlasError(404, "Foto não encontrada.");
-  return String(photo);
-}
-
-export async function deleteJournal(db: Client, ownerId: string, id: string) {
-  const r = await db.execute({ sql: "DELETE FROM atlas_journal WHERE id = ? AND owner_id = ?", args: [id, ownerId] });
-  if (r.rowsAffected === 0) throw new AtlasError(404, "Registro não encontrado.");
 }
 
 export { IntegrationError };

@@ -87,7 +87,6 @@ export interface AtlasOverview {
     region: { key: string; city: string; state: string | null; revealedCells: number; totalCells: number; pct: number; bbox: [number, number, number, number] } | null;
     regions: Array<{ key: string; label: string; places: number }>;
   };
-  journal: Array<{ id: string; title: string; body: string | null; rating: number | null; category: string | null; tags: string[]; visitedOn: string; placeId: string | null; placeName: string | null; hasPhoto: boolean }>;
   achievements: Array<{ code: string; title: string; description: string; threshold: number; unlockedAt: string | null }>;
   xpRules: Record<string, number>;
 }
@@ -187,9 +186,6 @@ export const adventuresService = {
   saveRoute: (b: { name: string; points: Array<[number, number]>; startedAt: string }) => api.post<{ id: string }>("/atlas/routes", b),
   deleteRoute: (id: string) => api.delete<{ ok: true }>(`/atlas/routes/${id}`),
   atlasSettings: (p: Partial<AtlasOverview["settings"]>) => api.put<AtlasOverview["settings"]>("/atlas/settings", p),
-  saveJournal: (b: Record<string, unknown>, id?: string) => (id ? api.put<{ id: string }>(`/atlas/journal/${id}`, b) : api.post<{ id: string }>("/atlas/journal", b)),
-  journalPhoto: (id: string) => api.get<{ photo: string }>(`/atlas/journal/${id}/photo`),
-  deleteJournal: (id: string) => api.delete<{ ok: true }>(`/atlas/journal/${id}`),
   exportAtlas: () => api.get<unknown>("/atlas/export"),
   deleteAtlasHistory: () => api.delete<{ ok: true }>("/atlas/history", { confirm: "APAGAR" }),
 

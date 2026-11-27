@@ -44,7 +44,7 @@ export function WorkoutCard({
 
       {/* Resumo da semana — calculado só dos registros (nada estimado). */}
       <section aria-label="Resumo da semana" className="mb-4 rounded-xl border border-growth/20 bg-growth/5 p-3 rpg:rounded-[3px] rpg:border-2 rpg:border-rpg-border rpg:bg-rpg-bg/60">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-growth rpg:font-pixel rpg:text-rpg-gold-light">Diário de treinos · semana</p>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-growth rpg:font-pixel rpg:text-rpg-gold-light">Treinos da semana</p>
         <dl className="grid grid-cols-3 gap-2 text-center">
           <SummaryStat label="Sessões" value={String(summary.sessions)} />
           <SummaryStat label="Tempo" value={summary.minutes ? formatHM(summary.minutes) : "0min"} />

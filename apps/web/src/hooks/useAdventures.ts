@@ -53,8 +53,6 @@ export function useAtlasActions() {
     deletePlace: useMutation({ mutationFn: adventuresService.deletePlace, onSuccess: r }),
     deleteRoute: useMutation({ mutationFn: adventuresService.deleteRoute, onSuccess: r }),
     settings: useMutation({ mutationFn: adventuresService.atlasSettings, onSuccess: r }),
-    saveJournal: useMutation({ mutationFn: ({ id, ...b }: Record<string, unknown> & { id?: string }) => adventuresService.saveJournal(b, id), onSuccess: r }),
-    deleteJournal: useMutation({ mutationFn: adventuresService.deleteJournal, onSuccess: r }),
     deleteHistory: useMutation({ mutationFn: adventuresService.deleteAtlasHistory, onSuccess: r }),
   };
 }

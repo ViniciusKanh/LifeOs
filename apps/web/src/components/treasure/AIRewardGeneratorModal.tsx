@@ -120,7 +120,7 @@ export function AIRewardGeneratorModal({ onClose, onDone, onManual }: { onClose:
           />
           {mode === "quick" ? (
             <p className="text-xs text-rpg-muted">
-              Usa só um resumo: nível, saldo, média de moedas, nomes das recompensas que você já tem e as categorias que mais resgata. Nada do diário, saúde ou e-mail é enviado.
+              Usa só um resumo: nível, saldo, média de moedas, nomes das recompensas que você já tem e as categorias que mais resgata. Nada de saúde ou e-mail é enviado.
             </p>
           ) : (
             <div className="space-y-3">

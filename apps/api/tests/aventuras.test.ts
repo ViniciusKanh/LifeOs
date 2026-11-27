@@ -174,12 +174,11 @@ describe("Atlas de Exploração", () => {
     expect(Number(left.rows[0]!.n)).toBe(0);
   });
 
-  it("diário valida foto", async () => {
+  it("o Diário do Explorador foi removido junto com o Diário", async () => {
     const { agent } = await createAuthenticatedAgent();
-    expect((await agent.post("/api/atlas/journal").send({ title: "Passeio", visitedOn: "2026-11-20", photo: "javascript:alert(1)" })).status).toBe(400);
-    const ok = await agent.post("/api/atlas/journal").send({ title: "Passeio", visitedOn: "2026-11-20", rating: 5, photo: "data:image/png;base64,iVBORw0KGgo=" });
-    expect(ok.status).toBe(201);
-    expect((await agent.get(`/api/atlas/journal/${ok.body.id}/photo`)).body.photo).toContain("data:image/png");
+    expect((await agent.post("/api/atlas/journal").send({ title: "Passeio", visitedOn: "2026-11-20" })).status).toBe(404);
+    const o = (await agent.get("/api/atlas")).body;
+    expect(o).not.toHaveProperty("journal");
   });
 });
 

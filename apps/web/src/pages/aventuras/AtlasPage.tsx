@@ -5,7 +5,7 @@ import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import clsx from "clsx";
-import { BookOpen, Building2, Compass, Download, Footprints, Landmark, LocateFixed, Lock, MapPin, Navigation, Route, Search, Shield, Star, Trash2, Trees, Utensils, Mountain, ShoppingBag, Theater, Church, Trophy, Camera } from "lucide-react";
+import { Building2, Compass, Download, Footprints, Landmark, LocateFixed, Lock, MapPin, Navigation, Route, Search, Shield, Star, Trash2, Trees, Utensils, Mountain, ShoppingBag, Theater, Church, Trophy } from "lucide-react";
 import { RPGButton, RPGSwitch, RPGTabs, RPGToast } from "@/components/rpg";
 import { Modal } from "@/components/ui/Modal";
 import { useAtlas, useAtlasActions } from "@/hooks/useAdventures";
@@ -236,33 +236,6 @@ const localNow = () => {
   return d.toISOString().slice(0, 16);
 };
 
-/** Reduz a foto no navegador (JPEG ~1280px) antes de enviar. */
-async function compressPhoto(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => {
-      const i = new Image();
-      i.onload = () => res(i);
-      i.onerror = rej;
-      i.src = url;
-    });
-    const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.width * scale);
-    c.height = Math.round(img.height * scale);
-    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-    let q = 0.82;
-    let out = c.toDataURL("image/jpeg", q);
-    while (out.length > 650_000 && q > 0.4) {
-      q -= 0.12;
-      out = c.toDataURL("image/jpeg", q);
-    }
-    return out;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 export function AtlasPage() {
   const [region, setRegion] = useState<string | null>(null);
   const q = useAtlas(region);
@@ -281,7 +254,6 @@ export function AtlasPage() {
   const [fly, setFly] = useState<[number, number] | null>(null);
   const [consentOpen, setConsentOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [journalOpen, setJournalOpen] = useState(false);
   const [routeRec, setRouteRec] = useState<{ points: Array<[number, number]>; started: string } | null>(null);
   const watchRef = useRef<number | null>(null);
   const o = q.data;
@@ -706,25 +678,6 @@ export function AtlasPage() {
             )}
           </Panel>
 
-          <Panel title="Diário do Explorador" icon={<BookOpen size={17} className="text-rpg-pink" aria-hidden />}>
-            <p className="text-sm text-rpg-muted">Registre impressões, fotos e anotações das suas explorações.</p>
-            {o.journal.length > 0 && (
-              <ul className="mt-2 space-y-1 text-sm">
-                {o.journal.slice(0, 3).map((j) => (
-                  <li key={j.id} className="flex items-center justify-between gap-2">
-                    <span className="truncate text-rpg-text">
-                      {j.hasPhoto && <Camera size={12} className="mr-1 inline text-rpg-muted" aria-label="com foto" />}
-                      {j.title}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-rpg-muted">{fmtDay(j.visitedOn)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <RPGButton variant="pink" className="mt-3 w-full" onClick={() => setJournalOpen(true)}>
-              <BookOpen size={15} aria-hidden /> Abrir diário
-            </RPGButton>
-          </Panel>
 
           <Panel title="Privacidade" icon={<Lock size={17} className="text-rpg-muted" aria-hidden />}>
             <p className="text-[11px] text-rpg-muted">Histórico privado. O OpenStreetMap só recebe o termo buscado ou um ponto isolado; nada é publicado.</p>
@@ -761,7 +714,6 @@ export function AtlasPage() {
         </div>
       </Modal>
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} o={o} onSetting={(p) => a.settings.mutate(p)} onExport={() => void exportData()} onDeleteAll={() => a.deleteHistory.mutate(undefined, { onSuccess: () => { setPrivacyOpen(false); notify("Histórico do Atlas apagado."); } })} onDeleteRoute={(id) => a.deleteRoute.mutate(id)} />
-      <JournalModal open={journalOpen} onClose={() => setJournalOpen(false)} o={o} notify={notify} />
     </div>
   );
 }
@@ -886,7 +838,7 @@ function PrivacyModal({ open, onClose, o, onSetting, onExport, onDeleteAll, onDe
         </div>
         <div className="border border-rpg-red/50 p-3" style={R}>
           <p className="font-semibold text-rpg-red">Apagar todo o histórico</p>
-          <p className="text-xs text-rpg-muted">Remove lugares, check-ins, rotas, névoa revelada e o diário. O XP já ganho permanece.</p>
+          <p className="text-xs text-rpg-muted">Remove lugares, check-ins, rotas e a névoa revelada. O XP já ganho permanece.</p>
           <div className="mt-2 flex gap-2">
             <input aria-label="Digite APAGAR para confirmar" className={clsx(INPUT, "flex-1")} style={R} placeholder="Digite APAGAR" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             <RPGButton variant="danger" disabled={confirm !== "APAGAR"} onClick={onDeleteAll}>
@@ -899,118 +851,4 @@ function PrivacyModal({ open, onClose, o, onSetting, onExport, onDeleteAll, onDe
   );
 }
 
-function JournalModal({ open, onClose, o, notify }: { open: boolean; onClose: () => void; o: AtlasOverview; notify: (m: string, t?: "success" | "error") => void }) {
-  const a = useAtlasActions();
-  const empty = { id: undefined as string | undefined, title: "", body: "", rating: 0, category: "", tags: "", placeId: "", visitedOn: new Date().toISOString().slice(0, 10), photo: undefined as string | null | undefined };
-  const [f, setF] = useState(empty);
-  const [viewPhoto, setViewPhoto] = useState<string | null>(null);
-  useEffect(() => {
-    if (!open) setF(empty);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  const save = () =>
-    a.saveJournal.mutate(
-      { id: f.id, title: f.title.trim(), body: f.body.trim() || null, rating: f.rating || null, category: f.category || null, tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean), placeId: f.placeId || null, visitedOn: f.visitedOn, ...(f.photo !== undefined ? { photo: f.photo } : {}) },
-      { onSuccess: () => { setF(empty); notify("Registro salvo no Diário do Explorador."); }, onError: (e) => notify(errMsg(e, "Não foi possível salvar."), "error") }
-    );
-  return (
-    <Modal open={open} onClose={onClose} title="Diário do Explorador" size="lg">
-      <div className="grid gap-4 md:grid-cols-2">
-        <form
-          className="space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (f.title.trim()) save();
-          }}
-        >
-          <input className={clsx(INPUT, "w-full")} style={R} placeholder="Título" value={f.title} maxLength={140} onChange={(e) => setF({ ...f, title: e.target.value })} aria-label="Título" />
-          <div className="grid grid-cols-2 gap-2">
-            <select className={INPUT} style={R} value={f.placeId} onChange={(e) => setF({ ...f, placeId: e.target.value })} aria-label="Lugar">
-              <option value="">Sem lugar</option>
-              {o.places.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <input type="date" className={INPUT} style={R} value={f.visitedOn} onChange={(e) => setF({ ...f, visitedOn: e.target.value })} aria-label="Data" />
-          </div>
-          <textarea className={clsx(INPUT, "h-24 w-full")} style={R} placeholder="Impressões, descobertas, o que sentiu…" value={f.body} maxLength={5000} onChange={(e) => setF({ ...f, body: e.target.value })} aria-label="Texto" />
-          <div className="grid grid-cols-2 gap-2">
-            <input className={INPUT} style={R} placeholder="Categoria do passeio" value={f.category} maxLength={40} onChange={(e) => setF({ ...f, category: e.target.value })} aria-label="Categoria do passeio" />
-            <input className={INPUT} style={R} placeholder="Marcadores (vírgula)" value={f.tags} onChange={(e) => setF({ ...f, tags: e.target.value })} aria-label="Marcadores" />
-          </div>
-          <div className="flex items-center gap-1" role="radiogroup" aria-label="Avaliação pessoal">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} type="button" role="radio" aria-checked={f.rating === n} onClick={() => setF({ ...f, rating: f.rating === n ? 0 : n })} className={n <= f.rating ? "text-rpg-gold" : "text-rpg-muted"} aria-label={`${n} estrela(s)`}>
-                <Star size={18} fill={n <= f.rating ? "currentColor" : "none"} />
-              </button>
-            ))}
-          </div>
-          <label className="flex items-center gap-2 text-xs text-rpg-muted">
-            <Camera size={14} aria-hidden /> Foto (opcional)
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="text-xs"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  setF({ ...f, photo: await compressPhoto(file) });
-                } catch {
-                  notify("Não foi possível ler a foto.", "error");
-                }
-              }}
-            />
-          </label>
-          {f.photo && <img src={f.photo} alt="Prévia da foto" className="max-h-32 rounded" />}
-          <RPGButton type="submit" disabled={!f.title.trim() || a.saveJournal.isPending} className="w-full">
-            {f.id ? "Atualizar registro" : "Salvar no diário"}
-          </RPGButton>
-        </form>
-        <div className="max-h-[420px] space-y-2 overflow-auto">
-          {o.journal.length === 0 ? (
-            <EmptyNote>Seus registros aparecem aqui.</EmptyNote>
-          ) : (
-            o.journal.map((j) => (
-              <article key={j.id} className="rpg-tile p-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-rpg-text">{j.title}</p>
-                    <p className="text-[11px] text-rpg-muted">
-                      {fmtDay(j.visitedOn)}
-                      {j.placeName ? ` · ${j.placeName}` : ""}
-                      {j.rating ? ` · ${"★".repeat(j.rating)}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    {j.hasPhoto && (
-                      <button type="button" aria-label="Ver foto" className="text-rpg-muted hover:text-rpg-text" onClick={() => void adventuresService.journalPhoto(j.id).then((r) => setViewPhoto(r.photo))}>
-                        <Camera size={14} />
-                      </button>
-                    )}
-                    <button type="button" aria-label="Editar" className="text-rpg-muted hover:text-rpg-text" onClick={() => setF({ id: j.id, title: j.title, body: j.body ?? "", rating: j.rating ?? 0, category: j.category ?? "", tags: j.tags.join(", "), placeId: j.placeId ?? "", visitedOn: j.visitedOn, photo: undefined })}>
-                      <BookOpen size={14} />
-                    </button>
-                    <button type="button" aria-label="Excluir" className="text-rpg-red" onClick={() => a.deleteJournal.mutate(j.id)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-                {j.body && <p className="mt-1 line-clamp-3 text-sm text-rpg-text">{j.body}</p>}
-                {j.tags.length > 0 && <p className="mt-1 text-[10px] text-rpg-muted">{j.tags.map((t) => `#${t}`).join(" ")}</p>}
-              </article>
-            ))
-          )}
-        </div>
-      </div>
-      {viewPhoto && (
-        <button type="button" className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80" onClick={() => setViewPhoto(null)} aria-label="Fechar foto">
-          <img src={viewPhoto} alt="Foto do diário" className="max-h-[85vh] max-w-[90vw]" />
-        </button>
-      )}
-    </Modal>
-  );
-}
 
