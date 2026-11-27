@@ -31,7 +31,7 @@ export interface Tavern3 {
   stepsState: Array<{ key: StepKey; done: boolean; required: boolean }>;
   canClose: boolean;
   reward: { xp: number; coins: number };
-  indicators: { xpToday: number; coinsToday: number; missionsDone: number; habits: { done: number; total: number }; focusMinutes: number; streakDays: number; lifeScore: number; lifeScoreAvg7: number | null; achievementsToday: number };
+  indicators: { xpToday: number; coinsToday: number; missionsDone: number; habits: { done: number; total: number }; streakDays: number; lifeScore: number; lifeScoreAvg7: number | null; achievementsToday: number };
   balance: {
     dims: Array<{ key: string; today: number; avg7: number | null }>;
     days: number;
@@ -83,5 +83,5 @@ export const STEP_LABEL: Record<StepKey, { title: string; hint: string }> = {
   reflection: { title: "Reflexão do dia", hint: "Acontecimentos, desafios e decisões do dia." },
   learnings: { title: "Registrar aprendizados", hint: "O que aprendi, o que funcionou e o que evitar." },
   gratitude: { title: "Gratidão e cuidado", hint: "Gratidão, humor, energia e cuidado pessoal." },
-  tomorrow: { title: "Preparar o amanhã", hint: "Missão principal, prioridades e blocos de foco." },
+  tomorrow: { title: "Preparar o amanhã", hint: "Missão principal, prioridades e blocos de trabalho." },
 };

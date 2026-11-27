@@ -14,6 +14,7 @@ import { Router } from "express";
 import { KNOWLEDGE, RELICS, TITLES } from "../config/codex.js";
 import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
+import { LIFE_DIMS } from "../config/lifeScore.js";
 import { changePct, computeInsights, computeLifeScore, computeRangeMetrics, saveLifeScoreSnapshot } from "../services/metricsService.js";
 import { getLevelHistory, getXpIndex } from "../services/gamificationService.js";
 import { groupRowsByLocalDay, localDayOfStored, localDayRangeUtc, shiftDayKey, userDayContext } from "../services/localDayService.js";
@@ -32,8 +33,8 @@ function isoDate(d: Date) {
  * GET /api/analytics/life-score?date=YYYY-MM-DD
  * Quando é o score de HOJE, grava um snapshot diário em life_scores
  * (upsert — só o último cálculo do dia fica). É daí que sai a evolução
- * real do Life Score: parte das dimensões (produtividade, educação,
- * profissional) não pode ser recalculada para datas passadas, então o
+ * real do Life Score: parte das dimensões (educação, hábitos, saúde)
+ * não pode ser recalculada para datas passadas, então o
  * histórico só existe a partir dos dias em que o score foi de fato visto.
  */
 analyticsRouter.get("/life-score", async (req, res) => {
@@ -52,7 +53,7 @@ analyticsRouter.get("/life-score/history", async (req, res) => {
   const { today } = await userDayContext(getDb(), req.user!.id);
   const from = shiftDayKey(today, -(days - 1));
   const result = await getDb().execute({
-    sql: `SELECT score_date, overall_score, productivity, health, education, reading, habits, professional, goals
+    sql: `SELECT score_date, overall_score, ${LIFE_DIMS.join(", ")}
           FROM life_scores WHERE owner_id = ? AND score_date >= ? ORDER BY score_date ASC`,
     args: [req.user!.id, from],
   });
@@ -60,13 +61,9 @@ analyticsRouter.get("/life-score/history", async (req, res) => {
     (result.rows as unknown as Array<Record<string, number | string>>).map((r) => ({
       date: String(r.score_date),
       overall: Number(r.overall_score),
-      productivity: Number(r.productivity ?? 0),
-      health: Number(r.health ?? 0),
-      education: Number(r.education ?? 0),
-      reading: Number(r.reading ?? 0),
-      habits: Number(r.habits ?? 0),
-      professional: Number(r.professional ?? 0),
-      goals: Number(r.goals ?? 0),
+      // Dimensão sem snapshot (NULL) vira 0 só aqui, para os gráficos; "missing" diz quais eram NULL.
+      ...Object.fromEntries(LIFE_DIMS.map((d) => [d, Number(r[d] ?? 0)])),
+      missing: LIFE_DIMS.filter((d) => r[d] == null),
     }))
   );
 });

@@ -13,7 +13,7 @@ const spring = { type: "spring" as const, stiffness: 260, damping: 20 };
 
 /** Planejar — prioridades do dia sendo marcadas uma a uma. */
 function PlanScene() {
-  const items = ["Revisar metas", "3 prioridades", "Bloco de foco"];
+  const items = ["Revisar metas", "3 prioridades", "Bloco de estudo"];
   return (
     <div className="w-full space-y-2.5 px-2">
       {items.map((label, i) => (

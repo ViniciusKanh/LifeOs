@@ -7,8 +7,8 @@ import {
   BarChart3,
   Bot,
   BookOpen,
-  Briefcase,
   CheckSquare,
+  Code2,
   Coins,
   Compass,
   Crown,
@@ -27,6 +27,7 @@ import {
   Sparkles,
   Swords,
   Target,
+  TrendingDown,
   TrendingUp,
   Trophy,
   Wand2,
@@ -34,187 +35,273 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { RPGBadge, RPGButton, RPGPortrait, RPGProgressBar, RPGToast } from "@/components/rpg";
-import { rpgColor } from "@/components/rpg/rpgAssets";
+import { RPGProgressRing } from "@/components/rpg/RPGProgressRing";
+import { RPGQuestCard } from "@/components/rpg/RPGQuestCard";
+import { RPG_TONE_BG, RPG_TONE_TEXT, rpgColor, type RpgTone } from "@/components/rpg/rpgAssets";
 import { IndicatorCard, KitSection, MODULE_ART, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
 import { AutomationsPanel } from "@/components/automations/AutomationsPanel";
 import { DEFAULT_QUOTE, findNavItem } from "@/components/layout/navConfig";
 import { useUrlTab } from "@/components/hero/HeroShared";
 import { useAdvisor } from "@/hooks/useModuleHub";
-import { useHeroDashboard, useTodayActions } from "@/hooks/useDayHero";
+import { useHeroDashboard } from "@/hooks/useDayHero";
 import type { HeroDashboard as Hub } from "@/services/dayHeroService";
+import type { LifeDim } from "@/types";
+import { LIFE_DIM_LINK, LIFE_DIM_TONE } from "@/utils/lifeDims";
 import { itemArtUrl, artFit } from "@/utils/inventoryDisplay";
 
 const ART = `${MODULE_ART}/herodash`;
 const R = { borderRadius: 4 } as const;
 const nf = (n: number) => n.toLocaleString("pt-BR");
-const DIM_ICON: Record<string, JSX.Element> = { productivity: <CheckSquare size={15} />, health: <Heart size={15} />, habits: <Repeat size={15} />, goals: <Target size={15} />, reading: <BookOpen size={15} />, education: <GraduationCap size={15} />, professional: <Briefcase size={15} /> };
-const DIM_TONE: Record<string, "blue" | "green" | "cyan" | "orange" | "pink" | "purple"> = { productivity: "blue", health: "green", habits: "cyan", goals: "orange", reading: "pink", education: "purple", professional: "purple" };
-const DIM_TEXT: Record<string, string> = { productivity: "text-rpg-blue", health: "text-rpg-green", habits: "text-rpg-cyan", goals: "text-rpg-orange", reading: "text-rpg-pink", education: "text-rpg-purple", professional: "text-rpg-purple" };
+const DIM_ICON: Record<LifeDim, JSX.Element> = {
+  productivity: <CheckSquare size={16} />,
+  health: <Heart size={16} />,
+  habits: <Repeat size={16} />,
+  education: <GraduationCap size={16} />,
+  knowledge: <BookOpen size={16} />,
+  code: <Code2 size={16} />,
+};
+const BORDER_TOP: Record<RpgTone, string> = {
+  gold: "border-t-rpg-gold",
+  purple: "border-t-rpg-purple",
+  blue: "border-t-rpg-blue",
+  green: "border-t-rpg-green",
+  red: "border-t-rpg-red",
+  orange: "border-t-rpg-orange",
+  cyan: "border-t-rpg-cyan",
+  pink: "border-t-rpg-pink",
+  muted: "border-t-rpg-border",
+};
 const TIER_TONE: Record<string, "muted" | "green" | "gold" | "purple"> = { bronze: "muted", silver: "green", gold: "gold", platinum: "purple" };
 const TIER_LABEL: Record<string, string> = { bronze: "Bronze", silver: "Prata", gold: "Ouro", platinum: "Platina" };
 
 /* ═══════════════════════════════ Banner ═══════════════════════════════ */
 
+/** Medalhão do Life Score: valor de hoje + tendência da média do período contra o anterior. */
+function LifeScoreMedal({ hub }: { hub: Hub }) {
+  const s = hub.status;
+  const trend = s.lifeScorePeriodAvg != null && s.lifeScorePreviousAvg != null ? s.lifeScorePeriodAvg - s.lifeScorePreviousAvg : null;
+  return (
+    <Link
+      to="/dashboard?aba=atributos"
+      className="flex items-center gap-3 border-t border-rpg-border/60 pt-3 hover:brightness-110 lg:flex-col lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0 lg:text-center"
+      aria-label={`Life Score de hoje: ${s.lifeScore} de 100 — ver atributos`}
+    >
+      <RPGProgressRing value={s.lifeScore} size={112} tone="gold" label="Life Score" displayValue={String(s.lifeScore)} valueClassName="font-rpg text-4xl text-rpg-gold-light" className="hidden sm:block" />
+      <RPGProgressRing value={s.lifeScore} size={76} tone="gold" label="Life Score" displayValue={String(s.lifeScore)} valueClassName="font-rpg text-2xl text-rpg-gold-light" className="sm:hidden" />
+      <div className="min-w-0">
+        <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-gold">Life Score</p>
+        {trend == null ? (
+          <p className="text-xs text-rpg-muted">Sem histórico para comparar</p>
+        ) : (
+          <p className={clsx("inline-flex items-center gap-1 text-xs font-semibold", trend >= 0 ? "text-rpg-green" : "text-rpg-red")}>
+            {trend >= 0 ? <TrendingUp size={13} aria-hidden /> : <TrendingDown size={13} aria-hidden />}
+            {trend >= 0 ? "+" : ""}
+            {trend} na média do período
+          </p>
+        )}
+        <p className="text-[11px] text-rpg-muted">{s.dimsWithData} de {hub.attributes.length} dimensões com dado</p>
+      </div>
+    </Link>
+  );
+}
+
+const BANNER_LINKS = [
+  { to: "/perfil?aba=custom", icon: <Pencil size={12} aria-hidden />, label: "Avatar" },
+  { to: "/codex", icon: <Crown size={12} aria-hidden />, label: "Títulos" },
+  { to: "/build", icon: <Compass size={12} aria-hidden />, label: "Classe" },
+  { to: "/perfil", icon: null, label: "Perfil completo" },
+];
+
 export function HeroBanner({ hub }: { hub: Hub }) {
   const h = hub.hero;
   const quote = findNavItem("/dashboard")?.item.quote ?? DEFAULT_QUOTE;
+  const missing = Math.max(0, h.xpForNextLevel - h.xpIntoLevel);
   return (
     <header className="relative overflow-hidden border-2 border-rpg-gold/60 bg-rpg-bg-2" style={R}>
-      <img src={`${ART}/banner-scene.webp`} alt="" aria-hidden className="pixelated absolute inset-y-0 right-0 h-full w-full object-cover object-right opacity-80 sm:w-2/3" />
-      <div className="absolute inset-0 bg-gradient-to-r from-rpg-bg via-rpg-bg/85 to-rpg-bg/30" aria-hidden />
-      <div className="relative grid gap-3 p-3 sm:p-4 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,320px)] lg:items-center">
-        <div className="flex items-center gap-3">
-          <div className="relative shrink-0">
-            <RPGPortrait size="xl" className="hidden sm:block" />
-            <RPGPortrait size="lg" className="sm:hidden" />
-            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 border-2 border-rpg-gold bg-rpg-bg px-2 font-pixel text-[11px] text-rpg-gold-light" style={R}>
-              Nv. {h.level}
-            </span>
-          </div>
-          <div className="min-w-0 lg:hidden">
-            <p className="rpg-title truncate text-2xl font-bold">{h.name}</p>
-            <p className="text-sm text-rpg-gold-light">{h.archetype?.name ?? "Build em formação"}</p>
-          </div>
+      <img src={`${ART}/banner-scene.webp`} alt="" aria-hidden className="pixelated absolute inset-y-0 right-0 h-full w-full object-cover object-right opacity-70 sm:w-2/3" />
+      <div className="absolute inset-0 bg-gradient-to-r from-rpg-bg via-rpg-bg/90 to-rpg-bg/40" aria-hidden />
+      <div className="relative grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 p-3 sm:p-4 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <div className="relative shrink-0 self-start sm:self-center">
+          <RPGPortrait size="xl" className="hidden sm:block" />
+          <RPGPortrait size="lg" className="sm:hidden" />
+          <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap border-2 border-rpg-gold bg-rpg-bg px-2 font-pixel text-[11px] text-rpg-gold-light" style={R}>
+            Nv. {h.level}
+          </span>
         </div>
         <div className="min-w-0">
-          <p className="rpg-title hidden text-3xl font-bold leading-tight lg:block">{h.name}</p>
-          <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-muted">Arquétipo atual</p>
-          <p className="flex flex-wrap items-center gap-2 font-rpg text-xl font-bold text-rpg-gold-light">
-            {h.archetype?.name ?? "Build em formação"}
+          <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-muted">{h.archetype ? `Arquétipo · ${h.archetype.name}` : "Build em formação"}</p>
+          <h1 className="rpg-title truncate text-2xl font-bold leading-tight sm:text-3xl">{h.name}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Link to="/codex" aria-label="Trocar título">
+              <RPGBadge tone="gold" icon={<Crown size={11} aria-hidden />}>{h.title?.name ?? "Sem título"}</RPGBadge>
+            </Link>
             {h.archetype?.tags.slice(0, 3).map((t) => (
-              <RPGBadge key={t} tone="purple">
+              <RPGBadge key={t} tone="purple" className="hidden sm:inline-flex">
                 {t}
               </RPGBadge>
             ))}
-          </p>
-          <p className="mt-1.5 inline-block border border-rpg-gold/40 bg-rpg-bg/60 px-3 py-1 text-sm italic text-rpg-text/90" style={R}>
-            “{quote}”
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Link to="/perfil?aba=custom" className="inline-flex min-h-[32px] items-center gap-1 border border-rpg-border px-2 text-[11px] text-rpg-text hover:border-rpg-gold" style={R}>
-              <Pencil size={11} aria-hidden /> Avatar e aparência
-            </Link>
-            <Link to="/codex" className="inline-flex min-h-[32px] items-center gap-1 border border-rpg-border px-2 text-[11px] text-rpg-text hover:border-rpg-gold" style={R}>
-              <Crown size={11} aria-hidden /> Títulos
-            </Link>
-            <Link to="/build" className="inline-flex min-h-[32px] items-center gap-1 border border-rpg-border px-2 text-[11px] text-rpg-text hover:border-rpg-gold" style={R}>
-              <Compass size={11} aria-hidden /> Classe e arquétipo
-            </Link>
-            <Link to="/perfil" className="inline-flex min-h-[32px] items-center gap-1 border border-rpg-border px-2 text-[11px] text-rpg-text hover:border-rpg-gold" style={R}>
-              Perfil completo
-            </Link>
           </div>
-        </div>
-        <div className="space-y-2 border-t border-rpg-border/60 pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-gold">Progresso de nível</p>
-            <p className="font-pixel text-[11px] text-rpg-purple tabular-nums">
-              {nf(h.xpIntoLevel)} / {nf(h.xpForNextLevel)} XP
-            </p>
-          </div>
-          <RPGProgressBar label="XP do nível" showLabel={false} value={h.xpIntoLevel} max={Math.max(1, h.xpForNextLevel)} tone="purple" />
-          <p className="text-[11px] text-rpg-muted">
-            Faltam {nf(Math.max(0, h.xpForNextLevel - h.xpIntoLevel))} XP para o nível {h.level + 1} · {nf(h.totalXp)} XP total
-          </p>
-          <div className="flex items-center gap-2 border border-rpg-gold/40 bg-rpg-bg/60 p-2" style={R}>
-            <Crown size={22} className="shrink-0 text-rpg-gold" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] uppercase text-rpg-muted">Título atual</p>
-              <p className="truncate font-semibold text-rpg-text">{h.title?.name ?? "Nenhum título equipado"}</p>
+          <div className="mt-2 max-w-xl">
+            <div className="mb-0.5 flex flex-wrap items-baseline justify-between gap-x-2 text-[11px]">
+              <span className="font-pixel uppercase tracking-widest text-rpg-gold">XP do nível</span>
+              <span className="font-semibold tabular-nums text-rpg-purple">
+                {nf(h.xpIntoLevel)} / {nf(h.xpForNextLevel)} · faltam {nf(missing)} para o Nv. {h.level + 1}
+              </span>
             </div>
-            <Link to="/codex" className="text-[11px] text-rpg-blue hover:underline">
-              Trocar
-            </Link>
+            <RPGProgressBar label="XP do nível" showLabel={false} value={h.xpIntoLevel} max={Math.max(1, h.xpForNextLevel)} tone="purple" />
+            <p className="mt-0.5 text-[11px] text-rpg-muted">{nf(h.totalXp)} XP total</p>
           </div>
+          <p className="mt-1.5 hidden text-sm italic text-rpg-text/85 md:block">“{quote}”</p>
+          <nav className="mt-2 hidden flex-wrap gap-1.5 sm:flex" aria-label="Atalhos do herói">
+            {BANNER_LINKS.map((l) => (
+              <Link key={l.to} to={l.to} className="inline-flex min-h-[32px] items-center gap-1 border border-rpg-border bg-rpg-bg/60 px-2 text-[11px] text-rpg-text hover:border-rpg-gold" style={R}>
+                {l.icon} {l.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+        <div className="col-span-2 lg:col-span-1">
+          <LifeScoreMedal hub={hub} />
         </div>
       </div>
     </header>
   );
 }
 
-/* ═══════════════════════════════ Status e atributos ═══════════════════════════════ */
+/* ═══════════════════════════════ HUD e atributos ═══════════════════════════════ */
 
-const STATUS_BORDER = { purple: "border-rpg-purple/60", gold: "border-rpg-gold/60", pink: "border-rpg-pink/60", orange: "border-rpg-orange/60", green: "border-rpg-green/60", blue: "border-rpg-blue/60", red: "border-rpg-red/60" } as const;
-const STATUS_TEXT = { purple: "text-rpg-purple", gold: "text-rpg-gold", pink: "text-rpg-pink", orange: "text-rpg-orange", green: "text-rpg-green", blue: "text-rpg-blue", red: "text-rpg-red" } as const;
+const HUD_BORDER: Record<RpgTone, string> = {
+  gold: "border-rpg-gold/60",
+  purple: "border-rpg-purple/60",
+  blue: "border-rpg-blue/60",
+  green: "border-rpg-green/60",
+  red: "border-rpg-red/60",
+  orange: "border-rpg-orange/60",
+  cyan: "border-rpg-cyan/60",
+  pink: "border-rpg-pink/60",
+  muted: "border-rpg-border",
+};
 
+/** HUD compacto: recursos e contadores do herói numa faixa (Life Score já está no banner). */
 export function HeroStatus({ hub }: { hub: Hub }) {
   const s = hub.status;
-  const cards = [
-    { to: "/timeline", icon: <Zap size={22} />, label: "XP hoje", value: `+${nf(s.xpToday)}`, tone: "purple" as const },
-    { to: "/tesouro", icon: <Coins size={22} />, label: "Moedas", value: nf(s.coins), tone: "gold" as const },
-    { to: "/tesouro?aba=bau", icon: <Gem size={22} />, label: "Gemas", value: nf(s.gems), tone: "pink" as const },
-    { to: "/conquistas", icon: <Trophy size={22} />, label: "Conquistas", value: `${s.achievements.unlocked}/${s.achievements.total}`, tone: "orange" as const },
-    { to: "/habitos", icon: <Repeat size={22} />, label: "Hábitos ativos", value: s.habitsActive, tone: "green" as const },
-    { to: "/tarefas", icon: <Swords size={22} />, label: "Missões abertas", value: s.missionsOpen, tone: "blue" as const },
-    { to: "/hoje", icon: <BarChart3 size={22} />, label: "Life Score", value: `${s.lifeScore}/100`, tone: "purple" as const },
-    { to: "/timeline", icon: <Flame size={22} />, label: "Sequência", value: `${s.streakDays} dias`, tone: "red" as const },
+  const cards: Array<{ to: string; icon: JSX.Element; label: string; value: string | number; tone: RpgTone }> = [
+    { to: "/timeline", icon: <Zap size={20} />, label: "XP hoje", value: `+${nf(s.xpToday)}`, tone: "purple" },
+    { to: "/tesouro", icon: <Coins size={20} />, label: "Moedas", value: nf(s.coins), tone: "gold" },
+    { to: "/tesouro?aba=bau", icon: <Gem size={20} />, label: "Gemas", value: nf(s.gems), tone: "pink" },
+    { to: "/timeline", icon: <Flame size={20} />, label: "Sequência", value: `${s.streakDays} dias`, tone: "red" },
+    { to: "/conquistas", icon: <Trophy size={20} />, label: "Conquistas", value: `${s.achievements.unlocked}/${s.achievements.total}`, tone: "orange" },
+    { to: "/tarefas", icon: <Swords size={20} />, label: "Missões abertas", value: s.missionsOpen, tone: "blue" },
   ];
-  // Ficha compacta: no desktop o Status divide a linha com Atributos e Radar (1/3
-  // da largura), então usa 2 colunas e rótulo em até 2 linhas — nada é cortado.
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+    <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Status do herói">
       {cards.map((c) => (
         <Link
           key={c.label}
           to={c.to}
-          className={`flex min-w-0 items-center gap-2 border-2 bg-rpg-panel px-2 py-2 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold ${STATUS_BORDER[c.tone]}`}
-          style={{ borderRadius: 4 }}
+          className={clsx("flex min-w-0 items-center gap-2.5 border-2 bg-rpg-panel px-3 py-2.5 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold", HUD_BORDER[c.tone])}
+          style={R}
           aria-label={`${c.label}: ${c.value}`}
         >
-          <span className={`flex h-8 w-8 shrink-0 items-center justify-center [&>svg]:h-[18px] [&>svg]:w-[18px] ${STATUS_TEXT[c.tone]}`} aria-hidden>
+          <span className={clsx("shrink-0", RPG_TONE_TEXT[c.tone])} aria-hidden>
             {c.icon}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 block font-pixel text-[9px] uppercase leading-tight text-rpg-muted">{c.label}</span>
-            <span className="block break-words font-rpg text-base font-bold leading-tight text-rpg-text tabular-nums">{c.value}</span>
+          <span className="min-w-0">
+            <span className="block truncate font-pixel text-[9px] uppercase leading-tight text-rpg-muted">{c.label}</span>
+            <span className="block truncate font-rpg text-lg font-bold leading-tight text-rpg-text tabular-nums">{c.value}</span>
           </span>
         </Link>
       ))}
-    </div>
+    </section>
+  );
+}
+
+type Attr = Hub["attributes"][number];
+
+/** Cartão de uma dimensão do Life Score — sem dado aparece tracejado e fora da média. */
+function DimCard({ a, onOpen, detailed }: { a: Attr; onOpen: () => void; detailed?: boolean }) {
+  const tone = LIFE_DIM_TONE[a.key];
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={clsx(
+          "flex h-full w-full flex-col gap-1.5 border-2 border-t-[3px] bg-rpg-bg-2 p-2.5 text-left hover:border-rpg-gold/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rpg-gold",
+          a.hasData ? "border-rpg-border" : "border-dashed border-rpg-border opacity-80",
+          BORDER_TOP[tone],
+        )}
+        style={R}
+        aria-label={`${a.label}: ${a.hasData ? `${a.value} de 100` : "sem dado"} — ver detalhes`}
+      >
+        <span className="flex items-center gap-2">
+          <span className={clsx("hidden h-7 w-7 shrink-0 items-center justify-center border border-current min-[400px]:flex", RPG_TONE_TEXT[tone])} style={{ borderRadius: 3 }} aria-hidden>
+            {DIM_ICON[a.key]}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-rpg-text sm:text-sm">{a.label}</span>
+          {a.hasData ? (
+            <span className="font-rpg text-xl font-bold leading-none text-rpg-text tabular-nums sm:text-2xl">{a.value}</span>
+          ) : (
+            <span className="shrink-0 text-[11px] text-rpg-muted">sem dado</span>
+          )}
+        </span>
+        <span className="rpg-bar block" aria-hidden>
+          <span className={RPG_TONE_BG[tone]} style={{ width: `${a.hasData ? a.value : 0}%` }} />
+        </span>
+        <span className={clsx("text-[11px] leading-snug text-rpg-muted", !detailed && "hidden sm:block")}>{a.hasData ? (a.detail ?? a.source) : a.source}</span>
+        <span className="mt-auto flex items-center justify-between gap-2 text-[11px]">
+          {!a.hasData ? (
+            <span className="text-rpg-muted">fora da média</span>
+          ) : a.delta == null ? (
+            <span className="text-rpg-muted">sem histórico</span>
+          ) : (
+            <span className={a.delta > 0 ? "text-rpg-green" : a.delta < 0 ? "text-rpg-red" : "text-rpg-muted"}>
+              {a.delta > 0 ? "▲ +" : a.delta < 0 ? "▼ " : "= "}
+              {a.delta}
+            </span>
+          )}
+          {a.periodAvg != null && <span className="truncate text-rpg-muted">média: {a.periodAvg}</span>}
+        </span>
+      </button>
+    </li>
   );
 }
 
 export function AttributesPanel({ hub, detailed }: { hub: Hub; detailed?: boolean }) {
-  const [open, setOpen] = useState<Hub["attributes"][number] | null>(null);
+  const [open, setOpen] = useState<Attr | null>(null);
   return (
-    <KitSection title="Atributos do herói" icon={<Sparkles size={16} />} action={<span className="text-[10px] text-rpg-muted">indicadores do Life Score</span>}>
-      <ul className="space-y-1.5">
+    <KitSection title="Atributos do herói" icon={<Sparkles size={16} />} action={<span className="hidden text-[10px] text-rpg-muted sm:inline">Life Score de hoje · toque para detalhes</span>}>
+      <ul className="grid grid-cols-2 gap-2 lg:grid-cols-3">
         {hub.attributes.map((a) => (
-          <li key={a.key}>
-            <button type="button" onClick={() => setOpen(a)} className="flex w-full items-center gap-2 text-left hover:brightness-110" aria-label={`${a.label}: ${a.value} de 100 — ver detalhes`}>
-              <span className={DIM_TEXT[a.key]} aria-hidden>
-                {DIM_ICON[a.key]}
-              </span>
-              <span className="w-24 shrink-0 truncate text-sm text-rpg-text">{a.label}</span>
-              <RPGProgressBar className="flex-1" label={a.label} showLabel={false} value={a.value} max={100} tone={DIM_TONE[a.key]} />
-              <span className="w-8 shrink-0 text-right font-pixel text-[11px] text-rpg-text tabular-nums">{a.value}</span>
-              {detailed && <span className={clsx("w-12 shrink-0 text-right text-[10px] tabular-nums", a.delta == null ? "text-rpg-muted" : a.delta >= 0 ? "text-rpg-green" : "text-rpg-red")}>{a.delta == null ? "—" : `${a.delta >= 0 ? "+" : ""}${a.delta}`}</span>}
-            </button>
-          </li>
+          <DimCard key={a.key} a={a} detailed={detailed} onOpen={() => setOpen(a)} />
         ))}
       </ul>
-      <p className="mt-2 text-[10px] text-rpg-muted">Escala 0–100 do Life Score de hoje. Diferente dos atributos de progressão da Build (Conhecimento, Disciplina…).</p>
+      <p className="mt-2 text-[10px] text-rpg-muted">Escala 0–100 do Life Score. Dimensão sem dado fica tracejada e fora da média — nada é inventado. Variação = média do período contra o período anterior.</p>
       <Modal open={!!open} onClose={() => setOpen(null)} title={open?.label ?? ""} size="sm">
         {open && (
           <div className="space-y-2 text-sm">
             <p className="text-rpg-text">
-              Hoje: <strong>{open.value}/100</strong> · média do período: {open.periodAvg ?? "sem histórico"} · período anterior: {open.previousAvg ?? "sem histórico"}
+              Hoje: <strong>{open.hasData ? `${open.value}/100` : "sem dado"}</strong> · média do período: {open.periodAvg ?? "sem histórico"} · período anterior: {open.previousAvg ?? "sem histórico"}
             </p>
-            <p className="text-xs text-rpg-muted">Origem: {open.source}.</p>
+            {open.detail && <p className="text-xs text-rpg-text/90">{open.detail}.</p>}
+            <p className="text-xs text-rpg-muted">Como é calculado: {open.source}.</p>
             {open.series.filter((p) => p.value != null).length > 1 ? (
               <div className="h-32">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={open.series}>
                     <XAxis dataKey="day" hide />
                     <YAxis domain={[0, 100]} hide />
-                    <Tooltip contentStyle={{ background: "#14122b", border: "1px solid #6b5a2e", fontSize: 12 }} />
-                    <Line type="monotone" dataKey="value" stroke={rpgColor("purple")} dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
+                    <Tooltip contentStyle={{ background: "rgb(var(--rpg-panel))", border: "1px solid rgb(var(--rpg-border))", fontSize: 12 }} />
+                    <Line type="monotone" dataKey="value" name={open.label} stroke={rpgColor(LIFE_DIM_TONE[open.key])} dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <p className="text-xs text-rpg-muted">Histórico insuficiente: os snapshots diários são gravados quando o Life Score é calculado.</p>
+              <p className="text-xs text-rpg-muted">Histórico insuficiente: um snapshot é gravado por dia em que o Life Score é calculado.</p>
             )}
+            <Link to={LIFE_DIM_LINK[open.key]} className="inline-flex min-h-[32px] items-center text-xs text-rpg-blue hover:underline">
+              Abrir o módulo →
+            </Link>
           </div>
         )}
       </Modal>
@@ -223,36 +310,57 @@ export function AttributesPanel({ hub, detailed }: { hub: Hub; detailed?: boolea
 }
 
 export function BalanceRadar({ hub, period, onPeriod }: { hub: Hub; period: string; onPeriod: (p: string) => void }) {
-  const rows = hub.attributes.map((a) => ({ dim: a.label, atual: hub.radar.current[a.key] ?? hub.radar.today[a.key] ?? 0, anterior: hub.radar.previous[a.key] ?? 0 }));
+  const rows = hub.attributes.map((a) => ({ dim: a.label, atual: hub.radar.current[a.key] ?? (a.hasData ? hub.radar.today[a.key] : 0) ?? 0, anterior: hub.radar.previous[a.key] ?? 0 }));
   const hasPrev = Object.values(hub.radar.previous).some((v) => v != null);
+  const ranked = hub.attributes.filter((a) => a.hasData).sort((x, y) => y.value - x.value);
+  const strongest = ranked[0];
+  const weakest = ranked.length > 1 ? ranked[ranked.length - 1] : undefined;
+  // No celular os rótulos longos ("Conhecimento") precisam de raio menor para não cortar.
+  const narrow = typeof window !== "undefined" && window.innerWidth < 480;
   return (
     <KitSection
-      title="Perfil de equilíbrio"
+      title="Equilíbrio"
       icon={<Compass size={16} />}
       action={
-        <select aria-label="Período do radar" className="min-h-[32px] border border-rpg-border bg-rpg-bg-2 px-1.5 text-xs text-rpg-text" style={R} value={period} onChange={(e) => onPeriod(e.target.value)}>
-          <option value="7d">7 dias</option>
-          <option value="30d">30 dias</option>
-          <option value="90d">90 dias</option>
-          <option value="365d">Ano</option>
-        </select>
+        <div className="flex border border-rpg-border" style={R} role="group" aria-label="Período do radar">
+          {(["7d", "30d", "90d", "365d"] as const).map((p) => (
+            <button key={p} type="button" onClick={() => onPeriod(p)} aria-pressed={period === p} className={clsx("min-h-[30px] px-2 text-[11px]", period === p ? "bg-rpg-gold/15 text-rpg-gold-light" : "text-rpg-muted hover:text-rpg-text")}>
+              {p === "365d" ? "Ano" : p}
+            </button>
+          ))}
+        </div>
       }
     >
-      <div className="h-64">
+      <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={rows} outerRadius="70%">
+          <RadarChart data={rows} outerRadius={narrow ? "58%" : "72%"}>
             <PolarGrid stroke="rgb(var(--rpg-border))" />
-            <PolarAngleAxis dataKey="dim" tick={{ fill: "rgb(var(--rpg-text-muted))", fontSize: 11 }} />
+            <PolarAngleAxis dataKey="dim" tick={{ fill: "rgb(var(--rpg-text-muted))", fontSize: narrow ? 10 : 11 }} />
             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
             {hasPrev && <Radar name="Período anterior" dataKey="anterior" stroke={rpgColor("gold")} fill={rpgColor("gold")} fillOpacity={0.06} strokeWidth={1.5} isAnimationActive={false} />}
-            <Radar name="Atual" dataKey="atual" stroke={rpgColor("purple")} fill={rpgColor("purple")} fillOpacity={0.35} strokeWidth={2} isAnimationActive={false} />
-            <Tooltip contentStyle={{ background: "#14122b", border: "1px solid #6b5a2e", fontSize: 12 }} />
+            <Radar name="Média do período" dataKey="atual" stroke={rpgColor("purple")} fill={rpgColor("purple")} fillOpacity={0.35} strokeWidth={2} isAnimationActive={false} />
+            <Tooltip contentStyle={{ background: "rgb(var(--rpg-panel))", border: "1px solid rgb(var(--rpg-border))", fontSize: 12 }} />
           </RadarChart>
         </ResponsiveContainer>
       </div>
-      <p className="text-[10px] text-rpg-muted">
-        Roxo: média do período ({hub.radar.snapshots} dia(s) com snapshot{hub.radar.snapshots ? "" : " — usando hoje"}). Dourado: período anterior{hasPrev ? "" : " (sem histórico)"}. Dimensão sem dado aparece como 0, sem extrapolar.
+      <p className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] text-rpg-muted">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2.5 w-2.5 bg-rpg-purple" aria-hidden /> Média do período · {hub.radar.snapshots ? `${hub.radar.snapshots} dia(s)` : "usando hoje"}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2.5 w-2.5 border border-rpg-gold" aria-hidden /> {hasPrev ? "Período anterior" : "Sem período anterior"}
+        </span>
       </p>
+      {strongest && (
+        <p className="mt-1 text-center text-[11px] text-rpg-muted">
+          Mais forte: <b className="text-rpg-green">{strongest.label}</b>
+          {weakest && weakest.key !== strongest.key && (
+            <>
+              {" "}· Atenção: <b className="text-rpg-orange">{weakest.label}</b>
+            </>
+          )}
+        </p>
+      )}
     </KitSection>
   );
 }
@@ -305,26 +413,30 @@ export function ArchetypeCards({ hub }: { hub: Hub }) {
   );
 }
 
-export function FeaturedMission({ hub, notify }: { hub: Hub; notify: (m: string, tone?: "success" | "error") => void }) {
+export function FeaturedMission({ hub }: { hub: Hub }) {
   const f = hub.featured;
+  const due = f?.dueDate ? new Date(`${f.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR") : null;
   return (
     <KitSection title="Missão em destaque" icon={<Swords size={16} />} tone="gold">
-      {f ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <Link to={`/tarefas?task=${f.id}`} className="font-rpg text-lg font-bold text-rpg-text hover:underline">
-              {f.title}
+      <RPGQuestCard
+        label="Missão prioritária"
+        title={f?.title ?? null}
+        priority={f?.priority ?? null}
+        reasons={f ? f.reasons.slice(0, 2).join(" · ") : null}
+        facts={f ? [{ icon: <Target size={14} />, label: "Prazo", value: due ?? "sem prazo" }, { icon: <Activity size={14} />, label: "Status", value: f.status }] : []}
+        actions={
+          f ? (
+            <Link to={`/tarefas?task=${f.id}`} className="rpg-btn rpg-btn-primary inline-flex items-center justify-center gap-1.5 text-sm">
+              <Play size={14} aria-hidden /> Abrir missão
             </Link>
-            <p className="text-[11px] text-rpg-muted">
-              Prioridade {f.priority} · {f.dueDate ? `prazo ${new Date(`${f.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR")}` : "sem prazo"} · {f.reasons.slice(0, 2).join(" · ")}
-            </p>
-          </div>
-          <Link to={`/tarefas?task=${f.id}`} className="rpg-btn rpg-btn-primary inline-flex items-center gap-1.5 text-sm">
-            <Play size={14} aria-hidden /> Abrir missão
-          </Link>
-        </div>
-      ) : (
-        <p className="text-sm text-rpg-muted">Nenhuma missão aberta. <Link to="/tarefas?nova=1" className="text-rpg-blue hover:underline">Criar missão</Link></p>
+          ) : null
+        }
+        emptyText="Nenhuma missão aberta. Crie uma em Missões para ela aparecer aqui."
+      />
+      {!f && (
+        <Link to="/tarefas?nova=1" className="mt-2 inline-flex min-h-[32px] items-center text-xs text-rpg-blue hover:underline">
+          Criar missão →
+        </Link>
       )}
     </KitSection>
   );
@@ -371,13 +483,13 @@ export function JourneyTrail({ hub }: { hub: Hub }) {
 
 /* ═══════════════════════════════ Campanhas, conquistas, tesouro ═══════════════════════════════ */
 
-export function CampaignsPanel({ hub }: { hub: Hub }) {
+export function CampaignsPanel({ hub, compact }: { hub: Hub; compact?: boolean }) {
   return (
     <KitSection title="Campanhas ativas" icon={<Hammer size={16} />} action={<Link to="/forja-campanhas" className="text-xs text-rpg-blue hover:underline">Forja →</Link>}>
       {hub.campaigns.length === 0 ? (
         <p className="text-sm text-rpg-muted">Nenhuma campanha ativa.</p>
       ) : (
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className={clsx("grid gap-2", !compact && "sm:grid-cols-2")}>
           {hub.campaigns.map((c) => (
             <li key={c.id}>
               <Link to={`/forja-campanhas/${c.id}`} className="block border-2 border-rpg-border bg-rpg-bg-2/60 p-2 hover:border-rpg-gold" style={R}>
@@ -610,7 +722,6 @@ export function HeroDashboardScreen() {
   const q = useHeroDashboard(period, range ?? undefined);
   const [tab, setTab] = useUrlTab(TABS, "visao");
   const [toast, setToast] = useState<{ msg: string; tone: "success" | "error" } | null>(null);
-  const notify = (msg: string, tone: "success" | "error" = "success") => setToast({ msg, tone });
   const hub = q.data;
   if (q.isError)
     return (
@@ -642,28 +753,25 @@ export function HeroDashboardScreen() {
           { value: "atributos", label: "Atributos", icon: <Sparkles size={15} /> },
           { value: "evolucao", label: "Evolução", icon: <TrendingUp size={15} /> },
           { value: "arvore", label: "Árvore", icon: <GitBranch size={15} /> },
-          { value: "campanhas", label: "Campanhas e Tesouro", icon: <Hammer size={15} /> },
-          { value: "relatorios", label: "Mestre da Evolução", icon: <Bot size={15} /> },
+          { value: "campanhas", label: "Campanhas", icon: <Hammer size={15} /> },
+          { value: "relatorios", label: "Mestre", icon: <Bot size={15} /> },
           { value: "automacoes", label: "Automações", icon: <Zap size={15} /> },
         ]}
       />
       {tab === "visao" && (
         <>
-          <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <KitSection title="Status do herói" icon={<Activity size={16} />}>
-              <HeroStatus hub={hub} />
-            </KitSection>
+          <HeroStatus hub={hub} />
+          <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
             <AttributesPanel hub={hub} />
             <BalanceRadar hub={hub} period={period} onPeriod={(p) => (setRange(null), setPeriod(p))} />
           </div>
-          <ArchetypeCards hub={hub} />
           <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-            <FeaturedMission hub={hub} notify={notify} />
+            <FeaturedMission hub={hub} />
             <NextEvolutions hub={hub} />
           </div>
           <JourneyTrail hub={hub} />
-          <div className="grid items-start gap-3 lg:grid-cols-3">
-            <CampaignsPanel hub={hub} />
+          <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <CampaignsPanel hub={hub} compact />
             <RecentAchievements hub={hub} />
             <TreasureSummary hub={hub} />
           </div>

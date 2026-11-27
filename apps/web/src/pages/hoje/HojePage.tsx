@@ -94,13 +94,6 @@ function ClassicHojePage() {
   const { projects } = useProjects();
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
 
-  // "Iniciar cronômetro": abre o cronômetro real da tarefa e a coloca em andamento.
-  const startFocus = async (id: string) => {
-    await taskService.startTime(id);
-    queryClient.invalidateQueries({ queryKey: ["tasks", "time-active", id] });
-    await moveTask({ id, status: "Em Andamento" });
-  };
-
   const priorities = useMemo(() => {
     const priorityWeight: Record<Task["priority"], number> = { Alta: 0, Média: 1, Baixa: 2 };
     return tasks
@@ -218,7 +211,6 @@ function ClassicHojePage() {
               today={today}
               onComplete={(id) => void moveTask({ id, status: "Concluído" })}
               onAdd={() => setTaskModalOpen(true)}
-              onStartFocus={(id) => void startFocus(id)}
             />
           ) : (
           <Card className="p-5">

@@ -65,7 +65,7 @@ export default function DesktopUpdatePrompt() {
       <div className="space-y-3 text-sm">
         <p>Esta atualização é da parte nativa do app (janela, recursos do Windows). Suas telas e dados já ficam sempre na versão mais recente.</p>
         {u.notes && <p className="whitespace-pre-line rounded-lg border border-black/10 dark:border-white/10 rpg:border-rpg-border p-3 opacity-90">{u.notes}</p>}
-        <p className="text-xs opacity-75">O LifeOS vai fechar para instalar e abrir de novo. Se houver uma sessão de foco ou cronômetro em andamento, finalize antes.</p>
+        <p className="text-xs opacity-75">O LifeOS vai fechar para instalar e abrir de novo. Salve o que estiver editando antes.</p>
         {busy && (
           <div role="progressbar" aria-label="Download da atualização" aria-valuenow={u.progress ?? undefined} aria-valuemin={0} aria-valuemax={100} className="h-2.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
             <div className="h-full bg-gradient-to-r from-brand-500 to-cat-purple rpg:from-rpg-purple rpg:to-rpg-gold transition-[width]" style={{ width: `${u.progress ?? 40}%` }} />

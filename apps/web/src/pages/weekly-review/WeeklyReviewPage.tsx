@@ -275,7 +275,8 @@ export function WeeklyReviewPage() {
         productivity: saved.productivity_pct ?? 0,
         health: saved.health_pct ?? 0,
         education: saved.education_pct ?? 0,
-        reading: saved.reading_pct ?? 0,
+        // Revisões salvas antes da 0.5.38 guardavam a antiga dimensão Leitura nesta coluna.
+        knowledge: saved.reading_pct ?? 0,
         habits: saved.habits_pct ?? 0,
         tasksCompleted: saved.tasks_completed ?? 0,
         pagesRead: saved.pages_read ?? 0,
@@ -285,7 +286,7 @@ export function WeeklyReviewPage() {
           productivity: computed.lifeScore.productivity,
           health: computed.lifeScore.health,
           education: computed.lifeScore.education,
-          reading: computed.lifeScore.reading,
+          knowledge: computed.lifeScore.knowledge,
           habits: computed.lifeScore.habits,
           tasksCompleted: computed.tasksCompleted,
           pagesRead: computed.pagesRead,
@@ -300,7 +301,7 @@ export function WeeklyReviewPage() {
     { label: "Produtividade", value: score.productivity },
     { label: "Saúde", value: score.health },
     { label: "Educação", value: score.education },
-    { label: "Leitura", value: score.reading },
+    { label: "Conhecimento", value: score.knowledge },
     { label: "Hábitos", value: score.habits },
   ].sort((a, b) => b.value - a.value) : [];
   const strongest = dimensionSignals[0];
@@ -505,7 +506,7 @@ export function WeeklyReviewPage() {
                 { l: "Produtividade", v: score.productivity, d: changePct?.productivity, tone: "bg-rpg-blue", icon: <ListChecks size={16} /> },
                 { l: "Saúde", v: score.health, d: changePct?.health, tone: "bg-rpg-green", icon: <Heart size={16} /> },
                 { l: "Educação", v: score.education, d: changePct?.education, tone: "bg-rpg-purple", icon: <GraduationCap size={16} /> },
-                { l: "Leitura", v: score.reading, d: changePct?.reading, tone: "bg-rpg-cyan", icon: <BookOpen size={16} /> },
+                { l: "Conhecimento", v: score.knowledge, d: changePct?.knowledge, tone: "bg-rpg-cyan", icon: <BookOpen size={16} /> },
                 { l: "Hábitos", v: score.habits, d: changePct?.habits, tone: "bg-rpg-pink", icon: <Repeat size={16} /> },
               ].map((m) => (
                 <div key={m.l} className="border-2 border-rpg-border bg-rpg-bg/50 p-3" style={{ borderRadius: 4 }}>
@@ -621,9 +622,9 @@ export function WeeklyReviewPage() {
                 <MetricTile
                   icon={<BookOpen size={16} />}
                   tone="teal"
-                  label="Leitura"
-                  value={`${score.reading}%`}
-                  trend={changePct ? <PointsTrend points={changePct.reading} /> : <span className="text-[11px] text-slate">—</span>}
+                  label="Conhecimento"
+                  value={`${score.knowledge}%`}
+                  trend={changePct ? <PointsTrend points={changePct.knowledge} /> : <span className="text-[11px] text-slate">—</span>}
                 />
                 <MetricTile
                   icon={<Repeat size={16} />}

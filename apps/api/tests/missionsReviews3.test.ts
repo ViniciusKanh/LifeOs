@@ -45,7 +45,7 @@ describe("Revisões — regras puras", () => {
     expect(bucketsOf("weekly", "2026-11-02", "2026-11-08")).toHaveLength(7);
   });
   it("sem base anterior não vira −100% nem +∞", () => {
-    const base = { xp: 0, coins: 0, tasksDone: 0, habitsDone: 0, habitDays: 0, workouts: 0, workoutMinutes: 0, pagesRead: 0, readingDays: 0, studyMinutes: 0, focusMinutes: 0, sleepAvgMinutes: null, moodAvg: null, energyAvg: null, goalsCompleted: 0, contractsFulfilled: 0, projectsCompleted: 0, lifeScore: null, lifeScoreDays: 0, dims: {}, days: 7 } as unknown as WindowMetrics;
+    const base = { xp: 0, coins: 0, tasksDone: 0, habitsDone: 0, habitDays: 0, workouts: 0, workoutMinutes: 0, pagesRead: 0, readingDays: 0, studyMinutes: 0, sleepAvgMinutes: null, moodAvg: null, energyAvg: null, goalsCompleted: 0, contractsFulfilled: 0, projectsCompleted: 0, lifeScore: null, lifeScoreDays: 0, dims: {}, days: 7 } as unknown as WindowMetrics;
     const ind = compareIndicators({ ...base, tasksDone: 5, lifeScore: 70 }, base, false);
     const tasks = ind.find((i) => i.key === "tasksDone")!;
     expect(tasks.deltaPct).toBeNull();

@@ -209,7 +209,6 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "hero:performance_alerts":
       return runPerformanceAlerts(db, ownerId, config);
     case "today:next_action":
-    case "today:focus_blocks":
     case "today:progress_sync":
     case "hero:attributes_refresh":
     case "hero:progression":
@@ -248,7 +247,6 @@ async function execute(db: Db, ownerId: string, module: AutomationModule, key: s
     case "missions:breakdown_offer":
     case "missions:chronicle_marks":
     case "missions:reviews_feed":
-    case "missions:focus_timer":
     case "reviews:ai_draft":
     case "reviews:comparison":
     case "reviews:bottlenecks":

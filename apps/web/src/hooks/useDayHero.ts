@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { dayHeroService, type RitualKind, type TimerLink, type TimerMode } from "@/services/dayHeroService";
+import { dayHeroService, type RitualKind } from "@/services/dayHeroService";
 import { notifyGamification } from "@/services/gamificationService";
 
 export const TODAY_HUB_KEY = ["today-hub"] as const;
@@ -30,8 +30,5 @@ export function useTodayActions() {
     setMain: useMutation({ mutationFn: dayHeroService.setMain, onSuccess: () => sync(["tasks"]) }),
     saveRitual: useMutation({ mutationFn: (steps: Array<{ id?: string; label: string; kind: RitualKind; refId?: string | null }>) => dayHeroService.saveRitual(steps), onSuccess: () => sync() }),
     toggleRitual: useMutation({ mutationFn: ({ id, done }: { id: string; done: boolean }) => dayHeroService.toggleRitual(id, done), onSuccess: () => sync() }),
-    startTimer: useMutation({ mutationFn: (input: { mode: TimerMode; plannedMinutes?: number | null; linkType?: TimerLink; linkId?: string | null }) => dayHeroService.startTimer(input), onSuccess: () => sync(["tasks"]) }),
-    pauseTimer: useMutation({ mutationFn: dayHeroService.pauseTimer, onSuccess: () => sync() }),
-    stopTimer: useMutation({ mutationFn: dayHeroService.stopTimer, onSuccess: () => sync(["tasks"], ["analytics"]) }),
   };
 }

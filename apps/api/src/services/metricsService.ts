@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "../db/client.js";
-import { isDailyReadingGoal, pagesReadOn } from "./dailyReadingGoalService.js";
+import {
+  CODE_ACTIVE_DAY_MIN,
+  CODE_ACTIVE_DAYS_TARGET,
+  CODE_WEEK_TARGET_MIN,
+  KNOWLEDGE_WEEK_TARGET_MIN,
+  LIFE_DIMS,
+  LIFE_WINDOW_DAYS,
+  PAPER_MINUTES,
+  READING_MIN_PER_PAGE,
+  type LifeDim,
+} from "../config/lifeScore.js";
 import { dayKeyIn, userTimezone } from "./gamificationService.js";
 import { utcRangeFilter } from "./healthService.js";
 import { localDayOfStored, localDayRangeUtc } from "./localDayService.js";
@@ -44,48 +54,57 @@ async function scalar(db: Db, sql: string, args: Array<string | number>): Promis
  * geral pra baixo só porque o módulo nunca foi usado). Ver
  * computeLifeScore, que usa esse flag pra montar o `overall`.
  */
-interface DimensionScore {
+export interface DimensionScore {
   score: number;
   hasData: boolean;
 }
 
-/** Produtividade: % de tarefas concluídas sobre o total já criado. */
-async function productivityScore(db: Db, ownerId: string): Promise<DimensionScore> {
-  const total = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ?", [ownerId]);
-  if (total === 0) return { score: 0, hasData: false };
-  const done = await scalar(db, "SELECT COUNT(*) FROM tasks WHERE owner_id = ? AND status = 'Concluído'", [ownerId]);
-  return { score: clamp((done / total) * 100), hasData: true };
-}
-
 /**
- * Profissional: mesmo cálculo, restrito a tarefas vinculadas a um
- * projeto kind='professional' (ver seletor de projeto no TaskModal —
- * sem vincular a um projeto profissional, a tarefa não entra aqui
- * mesmo sendo trabalho de verdade). Mesmo filtro da tela Profissional
- * (GET /api/tasks/professional), para o score bater com o que o
- * usuário vê ali.
+ * Produtividade = Missões. Janela dos últimos 7 dias locais (hoje incluso).
+ *
+ * Toda missão principal (sem pai, não arquivada) cujo prazo — due_date,
+ * ou planned_date quando não há prazo — cai na janela entra na conta:
+ * - concluída até o dia do prazo: 1 ponto;
+ * - concluída depois do prazo: 0,5 ponto;
+ * - aberta com prazo já vencido: 0 ponto;
+ * - aberta com prazo hoje: fica fora (o dia ainda não acabou).
+ * Missão sem prazo (ou com prazo futuro) concluída dentro da janela
+ * também conta como 1 de 1 — entregou trabalho real.
+ * Sem nenhuma missão para medir na janela, a dimensão fica sem dado
+ * (não derruba a média por uma semana sem planejamento).
  */
-async function professionalScore(db: Db, ownerId: string): Promise<DimensionScore> {
-  // Restrito a p.kind = 'professional' (mesmo filtro usado pela tela
-  // Profissional em GET /api/tasks/professional). 'workspace' é um kind
-  // genérico de projeto ("Projetos" no Deadline Radar, por exemplo), não
-  // profissional — antes essa dimensão incluía tarefas 'workspace' que
-  // nunca apareciam na tela Profissional, então o usuário terminava tudo
-  // que via ali e mesmo assim o score não batia 100%.
-  const total = await scalar(
-    db,
-    `SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id = t.project_id
-     WHERE t.owner_id = ? AND p.kind = 'professional'`,
-    [ownerId]
-  );
-  if (total === 0) return { score: 0, hasData: false };
-  const done = await scalar(
-    db,
-    `SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id = t.project_id
-     WHERE t.owner_id = ? AND p.kind = 'professional' AND t.status = 'Concluído'`,
-    [ownerId]
-  );
-  return { score: clamp((done / total) * 100), hasData: true };
+export async function productivityScore(db: Db, ownerId: string, date: string, tz: string): Promise<DimensionScore & { points: number; total: number }> {
+  const from = isoDate(addDays(date, -(LIFE_WINDOW_DAYS - 1)));
+  const next = isoDate(addDays(date, 1));
+  const doneF = localDaysFilter("completed_at", from, next, tz);
+  const result = await db.execute({
+    sql: `SELECT status, completed_at, substr(COALESCE(due_date, planned_date), 1, 10) AS target
+          FROM tasks
+          WHERE owner_id = ? AND parent_task_id IS NULL AND archived_at IS NULL
+            AND ((substr(COALESCE(due_date, planned_date), 1, 10) BETWEEN ? AND ?)
+                 OR (status = 'Concluído' AND completed_at IS NOT NULL AND ${doneF.sql}))`,
+    args: [ownerId, from, date, ...doneF.args],
+  });
+  let points = 0;
+  let total = 0;
+  for (const row of result.rows as unknown as Array<{ status: string; completed_at: string | null; target: string | null }>) {
+    const done = row.status === "Concluído" && !!row.completed_at;
+    const doneDay = done ? localDayOfStored(String(row.completed_at), tz) : null;
+    const inWindow = !!row.target && row.target >= from && row.target <= date;
+    if (inWindow) {
+      if (done) {
+        total += 1;
+        points += doneDay! <= row.target! ? 1 : 0.5;
+      } else if (row.target! < date) {
+        total += 1;
+      }
+    } else if (done && doneDay! >= from && doneDay! <= date) {
+      total += 1;
+      points += 1;
+    }
+  }
+  if (total === 0) return { score: 0, hasData: false, points: 0, total: 0 };
+  return { score: clamp((points / total) * 100), hasData: true, points, total };
 }
 
 /** Saúde diária: quatro registros verificáveis, com os mesmos alvos exibidos na tela. */
@@ -142,40 +161,73 @@ async function educationScore(db: Db, ownerId: string): Promise<DimensionScore> 
   return { score: clamp(scores.reduce((a, b) => a + b, 0) / scores.length), hasData: true };
 }
 
-function goalProgressScore(goal: { kind: string; status: string; target_value: number | null; current_value: number }) {
-  if (goal.status === "done") return 100;
-  if (goal.kind === "percentage" || goal.kind === "task_based") return clamp(goal.current_value);
-  if (goal.kind === "numeric" && goal.target_value) return clamp((goal.current_value / goal.target_value) * 100);
-  if (goal.kind === "binary") return 0;
-  return 0;
+/**
+ * Conhecimento: minutos de aprendizado nos últimos 7 dias, somando
+ * livros (sessões de leitura), podcasts ouvidos, aulas em vídeo
+ * concluídas e papers lidos/fichados. Meta: KNOWLEDGE_WEEK_TARGET_MIN.
+ * Só fica sem dado quando o usuário nunca usou nenhuma dessas fontes.
+ */
+export async function knowledgeScore(db: Db, ownerId: string, date: string, tz: string): Promise<DimensionScore & { minutes: number }> {
+  const from = isoDate(addDays(date, -(LIFE_WINDOW_DAYS - 1)));
+  const next = isoDate(addDays(date, 1));
+  const readF = localDaysFilter("started_at", from, next, tz);
+  const paperF = localDaysFilter("read_at", from, next, tz);
+  const [reading, podcast, lessons, papers, sources] = await Promise.all([
+    scalar(db, `SELECT COALESCE(SUM(COALESCE(duration_minutes, pages_read * ${READING_MIN_PER_PAGE})), 0) FROM reading_sessions WHERE owner_id = ? AND ${readF.sql}`, [ownerId, ...readF.args]),
+    scalar(db, "SELECT COALESCE(SUM(duration_seconds), 0) / 60.0 FROM podcast_listens WHERE owner_id = ? AND day_key BETWEEN ? AND ?", [ownerId, from, date]),
+    scalar(db, "SELECT COALESCE(SUM(duration_seconds), 0) / 60.0 FROM video_lessons WHERE owner_id = ? AND done_day BETWEEN ? AND ?", [ownerId, from, date]),
+    scalar(db, `SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND read_at IS NOT NULL AND ${paperF.sql}`, [ownerId, ...paperF.args]),
+    scalar(
+      db,
+      `SELECT (SELECT COUNT(*) FROM books WHERE owner_id = ?1) + (SELECT COUNT(*) FROM podcast_follows WHERE owner_id = ?1)
+            + (SELECT COUNT(*) FROM podcast_listens WHERE owner_id = ?1) + (SELECT COUNT(*) FROM video_courses WHERE owner_id = ?1)
+            + (SELECT COUNT(*) FROM user_papers WHERE owner_id = ?1)`,
+      [ownerId]
+    ),
+  ]);
+  const minutes = Math.round(reading + podcast + lessons + papers * PAPER_MINUTES);
+  if (sources === 0 && minutes === 0) return { score: 0, hasData: false, minutes: 0 };
+  return { score: clamp((minutes / KNOWLEDGE_WEEK_TARGET_MIN) * 100), hasData: true, minutes };
 }
 
 /**
- * Leitura: se houver uma meta ativa de páginas/leitura (ex.: 20 páginas
- * por dia), a nota usa páginas lidas hoje contra essa meta. Sem essa
- * meta cadastrada, cai para o progresso real dos livros em leitura.
+ * Código: últimos 7 dias. Com WakaTime conectado, 60% vem dos minutos
+ * de editor (meta CODE_WEEK_TARGET_MIN) e 40% dos dias com atividade
+ * (meta CODE_ACTIVE_DAYS_TARGET). Sem WakaTime, só os dias com atividade
+ * (commits/contribuições do GitHub e estrelas do Advent of Code).
+ * Sem nenhuma dessas integrações conectada, a dimensão fica sem dado.
  */
-async function readingScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
-  const readingGoals = await db.execute({
-    sql: "SELECT title, kind, unit, status, target_value FROM goals WHERE owner_id = ? AND status = 'active' AND kind = 'numeric' AND target_value > 0",
-    args: [ownerId],
-  });
-  const dailyTarget = Math.min(...(readingGoals.rows as unknown as Array<{ title: string; kind: string; unit: string | null; status: string; target_value: number }>)
-    .filter(isDailyReadingGoal).map((goal) => Number(goal.target_value)));
-  if (Number.isFinite(dailyTarget) && dailyTarget > 0) {
-    const pagesToday = await pagesReadOn(db, ownerId, date);
-    return { score: clamp((pagesToday / dailyTarget) * 100), hasData: true };
+export async function codeScore(db: Db, ownerId: string, date: string, tz: string): Promise<DimensionScore & { minutes: number; activeDays: number }> {
+  const from = isoDate(addDays(date, -(LIFE_WINDOW_DAYS - 1)));
+  const [conn, waka, contrib, stars] = await Promise.all([
+    db.execute({
+      sql: `SELECT (SELECT COUNT(*) FROM wakatime_connections WHERE owner_id = ?1) AS waka,
+                   (SELECT COUNT(*) FROM code_integrations WHERE owner_id = ?1) AS gh,
+                   (SELECT COUNT(*) FROM aoc_accounts WHERE owner_id = ?1) AS aoc`,
+      args: [ownerId],
+    }),
+    db.execute({ sql: "SELECT day_key, total_seconds FROM wakatime_days WHERE owner_id = ? AND day_key BETWEEN ? AND ?", args: [ownerId, from, date] }),
+    db.execute({ sql: "SELECT day_key FROM code_contrib_days WHERE owner_id = ? AND count > 0 AND day_key BETWEEN ? AND ?", args: [ownerId, from, date] }),
+    db.execute({ sql: "SELECT earned_at FROM aoc_stars WHERE owner_id = ? AND earned_at >= ?", args: [ownerId, isoDate(addDays(from, -1))] }),
+  ]);
+  const c = conn.rows[0] as unknown as { waka: number; gh: number; aoc: number } | undefined;
+  const hasWaka = Number(c?.waka ?? 0) > 0;
+  if (!hasWaka && Number(c?.gh ?? 0) === 0 && Number(c?.aoc ?? 0) === 0) return { score: 0, hasData: false, minutes: 0, activeDays: 0 };
+  const days = new Set<string>();
+  let minutes = 0;
+  for (const r of waka.rows) {
+    const m = Number(r.total_seconds ?? 0) / 60;
+    minutes += m;
+    if (m >= CODE_ACTIVE_DAY_MIN) days.add(String(r.day_key));
   }
-
-  const result = await db.execute({
-    sql: `SELECT current_page, total_pages FROM books
-          WHERE owner_id = ? AND status = 'Lendo' AND total_pages IS NOT NULL AND total_pages > 0`,
-    args: [ownerId],
-  });
-  const rows = result.rows as unknown as Array<{ current_page: number; total_pages: number }>;
-  if (rows.length === 0) return { score: 0, hasData: false };
-  const avg = rows.reduce((sum, b) => sum + b.current_page / b.total_pages, 0) / rows.length;
-  return { score: clamp(avg * 100), hasData: true };
+  for (const r of contrib.rows) days.add(String(r.day_key));
+  for (const r of stars.rows) {
+    const d = localDayOfStored(String(r.earned_at), tz);
+    if (d >= from && d <= date) days.add(d);
+  }
+  const daysPart = clamp((days.size / CODE_ACTIVE_DAYS_TARGET) * 100);
+  const score = hasWaka ? clamp(0.6 * clamp((minutes / CODE_WEEK_TARGET_MIN) * 100) + 0.4 * daysPart) : daysPart;
+  return { score, hasData: true, minutes: Math.round(minutes), activeDays: days.size };
 }
 
 /**
@@ -198,105 +250,6 @@ async function habitsScore(db: Db, ownerId: string, date: string): Promise<Dimen
 }
 
 /**
- * Metas: calcula cada meta com sua lógica real e depois equilibra por
- * período (semanal/mensal/semestral/anual). Assim uma meta semanal
- * concluída e uma anual concluída contam como períodos vencidos, sem
- * uma pilha de metas de um período diluir todos os outros.
- */
-function goalPeriodStart(period: string | null, date: string) {
-  const year = date.slice(0, 4);
-  if (period === "anual") return `${year}-01-01`;
-  if (period === "semestral") return `${year}-${date.slice(5, 7) <= "06" ? "01" : "07"}-01`;
-  if (period === "mensal") return `${date.slice(0, 7)}-01`;
-  const day = new Date(`${date}T00:00:00Z`);
-  day.setUTCDate(day.getUTCDate() - (period === "semanal" ? (day.getUTCDay() + 6) % 7 : 29));
-  return day.toISOString().slice(0, 10);
-}
-
-async function goalsScore(db: Db, ownerId: string, date: string): Promise<DimensionScore> {
-  const result = await db.execute({
-    sql: "SELECT id, parent_goal_id, title, kind, unit, status, target_value, current_value, period, completed_at, due_date FROM goals WHERE owner_id = ? AND status != 'abandoned'",
-    args: [ownerId],
-  });
-  const rows = (result.rows as unknown as Array<{
-    id: string;
-    parent_goal_id: string | null;
-    title: string;
-    kind: string;
-    unit: string | null;
-    status: string;
-    target_value: number | null;
-    current_value: number;
-    period: string | null;
-    completed_at: string | null;
-    due_date: string | null;
-  }>).filter((goal) => {
-    if (goal.status === "done") {
-      return !!(goal.completed_at && goal.completed_at.slice(0, 10) >= goalPeriodStart(goal.period, date) && goal.completed_at.slice(0, 10) <= date);
-    }
-    // Meta ativa com prazo vencido e nunca concluída/renovada: sem isso,
-    // um valor antigo "congelado" arrastava a nota do período pra
-    // sempre, mesmo com o usuário nunca mais tocando na meta.
-    if (goal.due_date && goal.due_date.slice(0, 10) < date) return false;
-    return true;
-  });
-  if (rows.length === 0) return { score: 0, hasData: false };
-  const pagesToday = rows.some(isDailyReadingGoal) ? await pagesReadOn(db, ownerId, date) : 0;
-
-  // Metas "task_based" com tarefas vinculadas (tasks.goal_id): progresso real
-  // vem da conclusão delas, não de um valor manual — mesma regra usada nas
-  // rotas de metas e no Goal Forecast, pra não haver dois números diferentes
-  // pro mesmo "quanto essa meta andou".
-  const taskLinksResult = await db.execute({
-    sql: `SELECT goal_id, COUNT(*) AS total, SUM(CASE WHEN status = 'Concluído' THEN 1 ELSE 0 END) AS done
-          FROM tasks WHERE owner_id = ? AND goal_id IS NOT NULL GROUP BY goal_id`,
-    args: [ownerId],
-  });
-  const taskLinks = new Map(
-    (taskLinksResult.rows as unknown as Array<{ goal_id: string; total: number; done: number }>).map((r) => [r.goal_id, { total: r.total, done: r.done }])
-  );
-
-  const childrenByParent = new Map<string, typeof rows>();
-  for (const goal of rows) {
-    if (!goal.parent_goal_id) continue;
-    const children = childrenByParent.get(goal.parent_goal_id) ?? [];
-    children.push(goal);
-    childrenByParent.set(goal.parent_goal_id, children);
-  }
-
-  const scoreCache = new Map<string, number>();
-  const scoreGoal = (goal: (typeof rows)[number]): number => {
-    if (scoreCache.has(goal.id)) return scoreCache.get(goal.id)!;
-    const children = childrenByParent.get(goal.id) ?? [];
-    const links = taskLinks.get(goal.id);
-    const score =
-      goal.status === "done"
-        ? 100
-        : goal.kind === "task_based" && children.length > 0
-          ? clamp(children.reduce((sum, child) => sum + scoreGoal(child), 0) / children.length)
-          : goal.kind === "task_based" && links && links.total > 0
-            ? clamp((links.done / links.total) * 100)
-            : goalProgressScore(isDailyReadingGoal(goal) ? { ...goal, current_value: pagesToday } : goal);
-    scoreCache.set(goal.id, score);
-    return score;
-  };
-
-  const periodBuckets = new Map<string, number[]>();
-  for (const goal of rows) {
-    // Submetas alimentam a meta pai e não devem contar duas vezes no
-    // Life Score global, a menos que sejam metas soltas sem pai.
-    if (goal.parent_goal_id) continue;
-    const period = goal.period ?? "sem_periodo";
-    const bucket = periodBuckets.get(period) ?? [];
-    bucket.push(scoreGoal(goal));
-    periodBuckets.set(period, bucket);
-  }
-
-  const periodScores = [...periodBuckets.values()].map((scores) => scores.reduce((sum, score) => sum + score, 0) / scores.length);
-  return { score: clamp(periodScores.reduce((sum, score) => sum + score, 0) / periodScores.length), hasData: true };
-}
-
-/**
  * Saúde é sempre contabilizada (hasData: true) — assim como hábitos,
  * é uma dimensão "do dia": 0% significa "não bebeu água/dormiu
  * mal/não treinou hoje", sinal real que deve pesar na média, não
@@ -311,11 +264,20 @@ export interface LifeScoreBreakdown {
   overall: number;
   productivity: number;
   health: number;
-  education: number;
-  reading: number;
   habits: number;
-  professional: number;
-  goals: number;
+  education: number;
+  knowledge: number;
+  code: number;
+  /** Dimensões sem nenhum dado (fora da média do overall). */
+  missing: LifeDim[];
+  /** Números reais por trás das dimensões semanais (para explicar a nota na tela). */
+  details: {
+    missionsPoints: number;
+    missionsTotal: number;
+    knowledgeMinutes: number;
+    codeMinutes: number;
+    codeActiveDays: number;
+  };
 }
 
 export async function computeLifeScore(ownerId: string, dateArg?: string): Promise<LifeScoreBreakdown> {
@@ -323,63 +285,70 @@ export async function computeLifeScore(ownerId: string, dateArg?: string): Promi
   const tz = await userTimezone(db, ownerId);
   // Sem data explícita, "hoje" é o dia no fuso do usuário (nunca o dia UTC).
   const date = dateArg ?? dayKeyIn(new Date(), tz);
-  const [productivity, health, education, reading, habits, professional, goals] = await Promise.all([
-    productivityScore(db, ownerId),
+  const [productivity, health, habits, education, knowledge, code] = await Promise.all([
+    productivityScore(db, ownerId, date, tz),
     healthScore(db, ownerId, date, tz).then(toHealthDimension),
-    educationScore(db, ownerId),
-    readingScore(db, ownerId, date),
     habitsScore(db, ownerId, date),
-    professionalScore(db, ownerId),
-    goalsScore(db, ownerId, date),
+    educationScore(db, ownerId),
+    knowledgeScore(db, ownerId, date, tz),
+    codeScore(db, ownerId, date, tz),
   ]);
 
-  // "overall" é a média só das dimensões com dado real (hasData). Uma
-  // dimensão sem nenhum dado (ex.: nunca vinculou tarefa a um projeto
-  // profissional, nunca cadastrou uma formação, nenhuma meta ativa)
-  // antes entrava como 0 na média e derrubava o Life Score mesmo sem
-  // ter nada de fato "errado" — módulo nunca usado não é a mesma
-  // coisa que "fez 0% do que deveria". Health e Hábitos são exceção:
-  // são dimensões "do dia" e sempre contam (0% ali é sinal real).
-  const dims = [productivity, health, education, reading, habits, professional, goals];
-  const withData = dims.filter((d) => d.hasData);
-  const overall = withData.length > 0 ? clamp(withData.reduce((a, b) => a + b.score, 0) / withData.length) : 0;
+  // "overall" é a média só das dimensões com dado real (hasData): módulo
+  // nunca usado (nenhuma integração de código, nenhuma formação...) não é
+  // o mesmo que "fez 0%" e não derruba o Life Score. Saúde e Hábitos são
+  // dimensões "do dia" e sempre contam quando existem.
+  const dims: Record<LifeDim, DimensionScore> = { productivity, health, habits, education, knowledge, code };
+  const withData = LIFE_DIMS.filter((d) => dims[d].hasData);
+  const overall = withData.length > 0 ? clamp(withData.reduce((a, d) => a + dims[d].score, 0) / withData.length) : 0;
 
   return {
     date,
     overall,
     productivity: productivity.score,
     health: health.score,
-    education: education.score,
-    reading: reading.score,
     habits: habits.score,
-    professional: professional.score,
-    goals: goals.score,
+    education: education.score,
+    knowledge: knowledge.score,
+    code: code.score,
+    missing: LIFE_DIMS.filter((d) => !dims[d].hasData),
+    details: {
+      missionsPoints: productivity.points,
+      missionsTotal: productivity.total,
+      knowledgeMinutes: knowledge.minutes,
+      codeMinutes: code.minutes,
+      codeActiveDays: code.activeDays,
+    },
   };
 }
 
-/** Grava (ou atualiza) o snapshot do Life Score do dia em life_scores — fonte do histórico real. */
+/**
+ * Grava (ou atualiza) o snapshot do Life Score do dia em life_scores — fonte do histórico real.
+ * As colunas antigas (reading, professional, goals) ficam nulas a partir daqui; dimensão
+ * sem dado também é gravada como NULL, para o histórico não confundir "sem dado" com 0.
+ */
 export async function saveLifeScoreSnapshot(ownerId: string, score: LifeScoreBreakdown): Promise<void> {
   const db = getDb();
+  const v = (d: LifeDim) => (score.missing.includes(d) ? null : Math.round(score[d]));
   await db.execute({
-    sql: `INSERT INTO life_scores (id, owner_id, score_date, overall_score, productivity, health, education, reading, habits, professional, goals)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO life_scores (id, owner_id, score_date, overall_score, productivity, health, habits, education, knowledge, code, reading, professional, goals)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
           ON CONFLICT (owner_id, score_date) DO UPDATE SET
             overall_score = excluded.overall_score, productivity = excluded.productivity, health = excluded.health,
-            education = excluded.education, reading = excluded.reading, habits = excluded.habits,
-            professional = excluded.professional, goals = excluded.goals`,
+            habits = excluded.habits, education = excluded.education, knowledge = excluded.knowledge, code = excluded.code,
+            reading = NULL, professional = NULL, goals = NULL`,
     args: [
       // id aleatório: o único conflito possível é (owner_id, score_date), alvo do UPSERT.
       randomUUID(),
       ownerId,
       score.date,
       Math.round(score.overall),
-      Math.round(score.productivity),
-      Math.round(score.health),
-      Math.round(score.education),
-      Math.round(score.reading),
-      Math.round(score.habits),
-      Math.round(score.professional),
-      Math.round(score.goals),
+      v("productivity"),
+      v("health"),
+      v("habits"),
+      v("education"),
+      v("knowledge"),
+      v("code"),
     ],
   });
 }

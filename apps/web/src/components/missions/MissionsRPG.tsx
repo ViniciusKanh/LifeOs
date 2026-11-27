@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
-import { BarChart3, CalendarPlus, CheckCircle2, Circle, Flame, Gauge, Layers, ListChecks, Play, Plus, Sparkles, Trash2, Trophy, Wand2, X } from "lucide-react";
+import { BarChart3, CalendarPlus, CheckCircle2, Circle, Flame, Gauge, Layers, ListChecks, Plus, Sparkles, Trash2, Trophy, Wand2, X } from "lucide-react";
 import type { MissionsHub } from "@/services/planningHubService";
 import { usePlanningActions } from "@/hooks/usePlanningHub";
 import { taskService } from "@/services/taskService";
@@ -73,7 +73,6 @@ export function MissionLoad({ hub }: { hub: MissionsHub }) {
     <KitSection title="Análise de carga" icon={<Gauge size={16} />}>
       <div className="grid grid-cols-2 gap-2">
         <IndicatorCard tone="gold" icon={<BarChart3 size={20} />} label="Estimado pendente" value={hm(l.pendingEstimateMinutes)} hint={`${l.unestimated} sem estimativa`} />
-        <IndicatorCard tone="purple" icon={<Play size={20} />} label="Executado (semana)" value={hm(l.executedWeekMinutes)} hint="sessões de foco" />
         <IndicatorCard tone="blue" icon={<ListChecks size={20} />} label="Pendentes" value={l.pending} hint={l.byPriority.map((p) => `${p.priority[0]}:${p.count}`).join(" · ")} />
         <IndicatorCard tone={l.overdue ? "red" : "green"} icon={<Flame size={20} />} label="Atrasadas" value={l.overdue} hint="prazo ou dia planejado passou" />
       </div>
@@ -211,7 +210,7 @@ export function MissionMaster({ hub, onToast }: { hub: MissionsHub; onToast: (m:
           </div>
         </div>
       ) : (
-        <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+        <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
           <button
             type="button"
             className="rpg-btn rpg-btn-primary inline-flex items-center justify-center gap-1 text-xs"
@@ -219,18 +218,6 @@ export function MissionMaster({ hub, onToast }: { hub: MissionsHub; onToast: (m:
             onClick={() => actions.breakdown.mutate(f.id, { onSuccess: (r) => setProposal({ ai: r.ai, items: r.subtasks, note: r.note }), onError: err })}
           >
             <Sparkles size={13} aria-hidden /> {actions.breakdown.isPending ? "Dividindo…" : "Dividir com IA"}
-          </button>
-          <button
-            type="button"
-            className="rpg-btn rpg-btn-secondary inline-flex items-center justify-center gap-1 text-xs"
-            onClick={() =>
-              taskService
-                .startTime(f.id)
-                .then(() => onToast("Cronômetro iniciado. Pare pelo cartão da missão."))
-                .catch(err)
-            }
-          >
-            <Play size={13} aria-hidden /> Iniciar
           </button>
           <button
             type="button"

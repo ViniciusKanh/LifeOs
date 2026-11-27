@@ -168,4 +168,4 @@ export const PLAN_DETAIL_META: Record<PlanDetail, { label: string; hint: string 
   detalhado: { label: "Detalhado", hint: "35–65: trilha de curso inteira" },
 };
 export const PROOF_LABEL: Record<ProofKind, string> = { quiz: "Quiz (teoria)", desafio: "Desafio prático", misto: "Misto" };
-export const LINK_LABEL: Record<LinkKind, string> = { modalidade: "Treino (luta/dança)", formacao: "Formação (Educação)", disciplina: "Disciplina (Educação)", projeto: "Projeto (Foco)" };
+export const LINK_LABEL: Record<LinkKind, string> = { modalidade: "Treino (luta/dança)", formacao: "Formação (Educação)", disciplina: "Disciplina (Educação)", projeto: "Projeto (histórico)" };

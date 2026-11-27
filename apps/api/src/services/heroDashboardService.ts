@@ -3,7 +3,8 @@ import { TITLES, KNOWLEDGE, ATTRIBUTE_META, type AttributeKey } from "../config/
 import { ATTRIBUTE_GUIDES, BUILD_ATTRIBUTES } from "../config/build.js";
 import { getPlayerProfile, xpToReachLevel } from "./gamificationService.js";
 import { shiftDayKey, userDayContext } from "./localDayService.js";
-import { computeLifeScore } from "./metricsService.js";
+import { computeLifeScore, saveLifeScoreSnapshot } from "./metricsService.js";
+import { KNOWLEDGE_WEEK_TARGET_MIN, LIFE_DIMS, LIFE_DIM_LABEL, LIFE_DIM_SOURCE, type LifeDim } from "../config/lifeScore.js";
 import { getBuildOverview } from "./characterBuildService.js";
 import { getCodex } from "./codexService.js";
 import { listAchievements } from "./achievementsService.js";
@@ -23,18 +24,18 @@ import { notifyFromAutomation } from "./automationService.js";
  */
 
 type Outcome = { status: "ok" | "skipped" | "error"; summary: string };
-const DIMS = ["productivity", "health", "habits", "goals", "reading", "education", "professional"] as const;
-type Dim = (typeof DIMS)[number];
-const DIM_LABEL: Record<Dim, string> = { productivity: "Produtividade", health: "Saúde", habits: "Hábitos", goals: "Metas", reading: "Leitura", education: "Educação", professional: "Profissional" };
-const DIM_SOURCE: Record<Dim, string> = {
-  productivity: "% das tarefas concluídas (Missões)",
-  health: "Água, sono e exercício do dia (Saúde)",
-  habits: "% dos hábitos cumpridos hoje (Hábitos)",
-  goals: "Progresso das metas ativas (Metas)",
-  reading: "Leitura recente (Biblioteca)",
-  education: "Progresso das formações (Educação)",
-  professional: "Tarefas de projetos profissionais (Profissional)",
-};
+const DIMS = LIFE_DIMS;
+type Dim = LifeDim;
+const DIM_LABEL = LIFE_DIM_LABEL;
+const DIM_SOURCE = LIFE_DIM_SOURCE;
+
+/** Frase curta com o número real por trás da nota (só nas dimensões semanais). */
+export function dimDetail(d: Dim, x: Awaited<ReturnType<typeof computeLifeScore>>["details"]): string | null {
+  if (d === "productivity") return x.missionsTotal ? `${String(x.missionsPoints).replace(".", ",")} de ${x.missionsTotal} missões no prazo (7 dias)` : null;
+  if (d === "knowledge") return `${x.knowledgeMinutes} de ${KNOWLEDGE_WEEK_TARGET_MIN} min na semana`;
+  if (d === "code") return `${x.codeMinutes} min de editor · ${x.codeActiveDays} dia(s) ativos`;
+  return null;
+}
 
 export const PERIODS = { "7d": 7, "30d": 30, "90d": 90, "365d": 365 } as const;
 export type Period = keyof typeof PERIODS;
@@ -69,7 +70,7 @@ export async function getHeroDashboard(db: Client, ownerId: string, period: Peri
   const [profile, life, history, build, codex, achievements, campaigns, focus, inventory, treasure, xpDays, missionsDays, goalsDone, goalsNear, gems, habitsActive, missionsOpen, userRow] = await Promise.all([
     getPlayerProfile(db, ownerId),
     computeLifeScore(ownerId, today),
-    db.execute({ sql: "SELECT score_date, overall_score, productivity, health, habits, goals, reading, education, professional FROM life_scores WHERE owner_id = ? AND score_date >= ? AND score_date <= ? ORDER BY score_date", args: [ownerId, prevFrom, to] }),
+    db.execute({ sql: `SELECT score_date, overall_score, ${LIFE_DIMS.join(", ")} FROM life_scores WHERE owner_id = ? AND score_date >= ? AND score_date <= ? ORDER BY score_date`, args: [ownerId, prevFrom, to] }),
     getBuildOverview(db, ownerId),
     getCodex(db, ownerId),
     listAchievements(ownerId),
@@ -91,6 +92,9 @@ export async function getHeroDashboard(db: Client, ownerId: string, period: Peri
     db.execute({ sql: "SELECT name, avatar_url FROM users WHERE id = ?", args: [ownerId] }),
   ]);
 
+  // O painel também grava o snapshot de hoje (mesmo upsert do /analytics/life-score):
+  // sem isso, quem só abre o Painel nunca formaria histórico das dimensões novas.
+  await saveLifeScoreSnapshot(ownerId, life).catch((err) => console.error("[hero] falha ao salvar snapshot do Life Score:", err));
   const snaps = history.rows.map((r) => ({
     day: String(r.score_date),
     overall: Number(r.overall_score),
@@ -108,8 +112,11 @@ export async function getHeroDashboard(db: Client, ownerId: string, period: Peri
     previousAvg: avgPrev[d],
     delta: avgCur[d] != null && avgPrev[d] != null ? avgCur[d]! - avgPrev[d]! : null,
     source: DIM_SOURCE[d],
+    hasData: !life.missing.includes(d),
+    detail: dimDetail(d, life.details),
     series: cur.map((s) => ({ day: s.day, value: s[d] })),
   }));
+  const overallAvg = (rows: typeof snaps) => (rows.length ? Math.round(rows.reduce((a, r) => a + r.overall, 0) / rows.length) : null);
 
   const unlockedTitles = new Set(codex.titles.filter((t) => t.unlocked).map((t) => t.id));
   const milestones = levelMilestones(profile.level, unlockedTitles);
@@ -179,6 +186,9 @@ export async function getHeroDashboard(db: Client, ownerId: string, period: Peri
       habitsActive: Number(habitsActive.rows[0]?.n ?? 0),
       missionsOpen: Number(missionsOpen.rows[0]?.n ?? 0),
       lifeScore: Math.round(life.overall),
+      lifeScorePeriodAvg: overallAvg(cur),
+      lifeScorePreviousAvg: overallAvg(prev),
+      dimsWithData: DIMS.length - life.missing.length,
       streakDays: profile.streakDays,
     },
     attributes,

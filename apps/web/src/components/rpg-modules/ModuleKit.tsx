@@ -189,7 +189,7 @@ export function ModuleTabs<T extends string>({
   label: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0 lg:grid-cols-6">
+    <div role="tablist" aria-label={label} className={clsx("-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0", tabs.length === 7 ? "sm:grid-cols-4 lg:grid-cols-7" : "lg:grid-cols-6")}>
       {tabs.map((t) => (
         <button
           key={t.value}

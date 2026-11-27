@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { LIFE_DIM_LABEL } from "@/utils/lifeDims";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -50,7 +51,7 @@ const R = { borderRadius: 4 };
 type Toast = (m: string, tone?: "success" | "error") => void;
 const TABS = ["visao", "balanco", "aprendizados", "pergaminho", "amanha", "conquistas", "historico", "conselho", "automacoes"] as const;
 type Tab = (typeof TABS)[number];
-const DIM_LABEL: Record<string, string> = { productivity: "Produtividade", health: "Saúde", habits: "Hábitos", goals: "Metas", reading: "Leitura", education: "Educação", professional: "Profissional" };
+const DIM_LABEL: Record<string, string> = LIFE_DIM_LABEL;
 const TIER: Record<string, { label: string; tone: "muted" | "blue" | "gold" | "purple" }> = { bronze: { label: "Comum", tone: "muted" }, silver: { label: "Raro", tone: "blue" }, gold: { label: "Épico", tone: "gold" }, platinum: { label: "Lendário", tone: "purple" } };
 const FIELD = "w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold";
 
@@ -103,12 +104,11 @@ function Indicators({ t }: { t: Tavern3 }) {
     </div>
   );
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
       {card(<Zap />, `+${i.xpToday.toLocaleString("pt-BR")}`, "XP hoje", "text-rpg-purple")}
       {card(<Coins />, `+${i.coinsToday}`, "Moedas", "text-rpg-gold-light")}
       {card(<Trophy />, i.missionsDone, "Missões", "text-rpg-orange")}
       {card(<Repeat />, `${i.habits.done}/${i.habits.total}`, "Hábitos", "text-rpg-green")}
-      {card(<Timer />, `${Math.floor(i.focusMinutes / 60)}h ${i.focusMinutes % 60}min`, "Foco", "text-rpg-blue")}
       {card(<Flame />, `${i.streakDays} dias`, "Sequência", "text-rpg-red")}
       {card(<BarChart3 />, i.lifeScore, "Life Score", "text-rpg-pink", i.lifeScoreAvg7 != null ? `Média 7 dias: ${i.lifeScoreAvg7}` : "Sem histórico de 7 dias")}
       {card(<Star />, i.achievementsToday, "Conquistas", "text-rpg-gold")}
@@ -313,7 +313,7 @@ function BalanceTab({ t, notify }: { t: Tavern3; notify: Toast }) {
             Água: <b>{(d.water.todayMl / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} L</b>
           </li>
           <li>
-            Leitura: <b>{t.balance.signals.readingPages} pág.</b> · Foco: <b>{t.indicators.focusMinutes} min</b>
+            Leitura: <b>{t.balance.signals.readingPages} pág.</b>
           </li>
           <li>Sono da última noite: {d.sleep?.durationMinutes ? <b>{Math.floor(d.sleep.durationMinutes / 60)}h{String(d.sleep.durationMinutes % 60).padStart(2, "0")}</b> : "sem registro"}</li>
         </ul>
@@ -420,8 +420,8 @@ function TomorrowTab({ t, notify }: { t: Tavern3; notify: Toast }) {
           </p>
         ))}
         <div className="mt-3 border-t border-rpg-border/60 pt-2">
-          <p className="mb-1 text-[11px] text-rpg-muted">Janelas livres sugeridas para foco (nada é agendado sem você):</p>
-          <select value={blockTask} onChange={(e) => setBlockTask(e.target.value)} className={`${FIELD} mb-1.5`} style={{ borderRadius: 3 }} aria-label="Missão do bloco de foco">
+          <p className="mb-1 text-[11px] text-rpg-muted">Janelas livres sugeridas para missões (nada é agendado sem você):</p>
+          <select value={blockTask} onChange={(e) => setBlockTask(e.target.value)} className={`${FIELD} mb-1.5`} style={{ borderRadius: 3 }} aria-label="Missão do bloco de trabalho">
             <option value="">Bloco sem missão vinculada</option>
             {candidates.map((c) => (
               <option key={c.id} value={c.id}>
@@ -508,11 +508,11 @@ function TomorrowTab({ t, notify }: { t: Tavern3; notify: Toast }) {
       </KitSection>
       <div className="flex items-start">
       </div>
-      <Modal open={!!confirm} onClose={() => setConfirm(null)} title="Reservar bloco de foco" size="sm">
+      <Modal open={!!confirm} onClose={() => setConfirm(null)} title="Reservar bloco de trabalho" size="sm">
         {confirm && (
           <div className="space-y-3 text-sm text-rpg-text">
             <p>
-              Criar na Agenda de amanhã um bloco de foco das <b>{confirm.start}</b> às <b>{confirm.end}</b>
+              Criar na Agenda de amanhã um bloco de trabalho das <b>{confirm.start}</b> às <b>{confirm.end}</b>
               {blockTask ? ` para “${candidates.find((c) => c.id === blockTask)?.title ?? "missão"}”` : ""}?
             </p>
             <div className="flex justify-end gap-2">
@@ -524,7 +524,7 @@ function TomorrowTab({ t, notify }: { t: Tavern3; notify: Toast }) {
                 disabled={focusBlock.isPending}
                 onClick={() =>
                   focusBlock.mutate(
-                    { start: confirm.start, end: confirm.end, title: blockTask ? `Foco: ${candidates.find((c) => c.id === blockTask)?.title ?? "missão"}` : "Bloco de foco", taskId: blockTask || null },
+                    { start: confirm.start, end: confirm.end, title: blockTask ? `Missão: ${candidates.find((c) => c.id === blockTask)?.title ?? "missão"}` : "Bloco de trabalho", taskId: blockTask || null },
                     { onSuccess: () => (notify("Bloco reservado na Agenda de amanhã."), setConfirm(null)), onError: (e) => notify(e instanceof Error ? e.message : "Erro", "error") },
                   )
                 }

@@ -50,7 +50,7 @@ describe("datas locais do Dashboard e da gamificação", () => {
   });
 
   it("variação semanal do Life Score usa o snapshot de ~7 dias atrás", () => {
-    const snap = (date: string, overall: number) => ({ date, overall, productivity: 0, health: 0, education: 0, reading: 0, habits: 0, professional: 0, goals: 0 }) as LifeScoreBreakdown;
+    const snap = (date: string, overall: number) => ({ date, overall, productivity: 0, health: 0, habits: 0, education: 0, knowledge: 0, code: 0, missing: [] }) as LifeScoreBreakdown;
     const history = [snap("2026-10-10", 40), snap("2026-10-15", 50), snap("2026-10-22", 62)];
     expect(lifeScoreWeekDelta(history, "2026-10-22")).toEqual({ delta: 12, since: "2026-10-15" });
     expect(lifeScoreWeekDelta([snap("2026-10-22", 62)], "2026-10-22")).toBeNull();

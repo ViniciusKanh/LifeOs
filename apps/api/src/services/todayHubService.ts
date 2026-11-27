@@ -1,14 +1,15 @@
 import type { Client } from "@libsql/client";
 import { nanoid } from "nanoid";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
-import { awardFocusSession, getDifficultyRewards, getPlayerProfile, getPriorityRewards, isDifficulty } from "./gamificationService.js";
+import { getDifficultyRewards, getPlayerProfile, getPriorityRewards, isDifficulty } from "./gamificationService.js";
 import { localDayRangeUtc, shiftDayKey, userDayContext } from "./localDayService.js";
 import { getFocusTasks } from "./priorityService.js";
 import { getCalendarItems } from "./calendarAggregationService.js";
 import { getHabitsHub } from "./habitsHubService.js";
 import { getQuestBoard } from "./questsService.js";
 import { computeLifeScore } from "./metricsService.js";
-import { findConflicts, nextFreeSlot, type TimedBlock } from "./planningHubService.js";
+import { LIFE_DIMS, type LifeDim } from "../config/lifeScore.js";
+import { findConflicts, type TimedBlock } from "./planningHubService.js";
 import { notifyFromAutomation } from "./automationService.js";
 import { utcRangeFilter } from "./healthService.js";
 import { getFocusTaskIds, setFocusTaskIds } from "./dayFocusService.js";
@@ -17,7 +18,7 @@ import { getFocusTaskIds, setFocusTaskIds } from "./dayFocusService.js";
  * Hoje 3.0 — Central da Jornada Diária (camada de execução).
  *
  * Fontes oficiais: tasks/subtasks (missões), habit_entries (hábitos),
- * events + agregador de calendário (agenda), time_entries (foco), módulos de
+ * events + agregador de calendário (agenda), módulos de
  * saúde/biblioteca (sinais) e xp_events/coin_ledger (economia). As únicas
  * tabelas próprias são o ritual configurável e o estado do cronômetro.
  * A missão principal é o foco do dia (day_focus.focus_task_ids) — a mesma
@@ -52,7 +53,7 @@ export const DEFAULT_RITUAL: RitualStep[] = [
   { id: "d-planning", label: "Planejar o dia", kind: "planning", refId: null, position: 0 },
   { id: "d-task", label: "Executar a missão principal", kind: "task", refId: null, position: 1 },
   { id: "d-health", label: "Cuidar da saúde (água, treino ou humor)", kind: "health", refId: null, position: 2 },
-  { id: "d-study", label: "Sessão de foco ou estudo", kind: "focus", refId: null, position: 3 },
+  { id: "d-study", label: "Estudar ou ler (15+ min)", kind: "study", refId: null, position: 3 },
   { id: "d-close", label: "Encerrar a jornada", kind: "manual", refId: null, position: 4 },
 ];
 export const RITUAL_KINDS: RitualKind[] = ["manual", "planning", "task", "habit", "focus", "health", "study"];
@@ -95,115 +96,6 @@ export async function toggleRitualStep(db: Client, ownerId: string, stepId: stri
   else await db.execute({ sql: "DELETE FROM daily_ritual_checks WHERE owner_id = ? AND step_id = ? AND day_key = ? AND source = 'manual'", args: [ownerId, id, today] });
 }
 
-/* ─────────────────────────────── Cronômetro ─────────────────────────────── */
-
-export type TimerMode = "pomodoro" | "free" | "block";
-export type TimerLink = "task" | "subject" | "deck" | "project" | null;
-
-export interface TimerState {
-  entryId: string;
-  mode: TimerMode;
-  plannedMinutes: number | null;
-  startedAt: string; // ISO UTC
-  pausedAt: string | null;
-  pausedMs: number;
-  linkType: TimerLink;
-  linkId: string | null;
-  linkLabel: string | null;
-}
-
-const toIso = (sqlite: string) => (sqlite.includes("T") ? sqlite : `${sqlite.replace(" ", "T")}Z`);
-
-/** Tempo efetivo (ms) — calculado por timestamps persistidos, então sobrevive a aba minimizada/recarga. */
-export function elapsedMs(s: Pick<TimerState, "startedAt" | "pausedAt" | "pausedMs">, now = Date.now()): number {
-  const end = s.pausedAt ? Date.parse(s.pausedAt) : now;
-  return Math.max(0, end - Date.parse(s.startedAt) - s.pausedMs);
-}
-
-export async function getTimer(db: Client, ownerId: string): Promise<TimerState | null> {
-  const r = await db.execute({
-    sql: `SELECT s.*, e.ended_at FROM focus_timer_state s LEFT JOIN time_entries e ON e.id = s.entry_id AND e.owner_id = s.owner_id WHERE s.owner_id = ?`,
-    args: [ownerId],
-  });
-  const row = r.rows[0];
-  if (!row) return null;
-  // O apontamento pode ter sido fechado pelo cronômetro de uma tarefa em outra tela.
-  if (row.ended_at != null) {
-    await db.execute({ sql: "DELETE FROM focus_timer_state WHERE owner_id = ?", args: [ownerId] });
-    return null;
-  }
-  return {
-    entryId: String(row.entry_id),
-    mode: String(row.mode) as TimerMode,
-    plannedMinutes: row.planned_minutes == null ? null : Number(row.planned_minutes),
-    startedAt: toIso(String(row.started_at)),
-    pausedAt: row.paused_at == null ? null : toIso(String(row.paused_at)),
-    pausedMs: Number(row.paused_ms ?? 0),
-    linkType: row.link_type == null ? null : (String(row.link_type) as TimerLink),
-    linkId: row.link_id == null ? null : String(row.link_id),
-    linkLabel: row.link_label == null ? null : String(row.link_label),
-  };
-}
-
-async function resolveLink(db: Client, ownerId: string, type: TimerLink, id: string | null) {
-  if (!type || !id) return { label: null as string | null, projectId: null as string | null, taskId: null as string | null };
-  const table = { task: "tasks", subject: "subjects", deck: "flashcard_decks", project: "projects" }[type];
-  const col = type === "task" ? "title" : "name";
-  const r = await db.execute({ sql: `SELECT ${col} AS label${type === "task" ? ", project_id" : ""} FROM ${table} WHERE id = ? AND owner_id = ?`, args: [id, ownerId] });
-  const row = r.rows[0];
-  if (!row) throw new TodayError("Atividade vinculada não encontrada.", 404);
-  return { label: String(row.label), projectId: type === "task" ? (row.project_id == null ? null : String(row.project_id)) : type === "project" ? id : null, taskId: type === "task" ? id : null };
-}
-
-export async function startTimer(db: Client, ownerId: string, input: { mode: TimerMode; plannedMinutes?: number | null; linkType?: TimerLink; linkId?: string | null }) {
-  if (await getTimer(db, ownerId)) throw new TodayError("Já existe um cronômetro em andamento.", 409);
-  const link = await resolveLink(db, ownerId, input.linkType ?? null, input.linkId ?? null);
-  const planned = input.mode === "pomodoro" ? (input.plannedMinutes ?? 25) : input.mode === "block" ? (input.plannedMinutes ?? 50) : null;
-  if (planned != null && (planned < 5 || planned > 480)) throw new TodayError("Duração entre 5 e 480 minutos.");
-  const id = nanoid();
-  const note = input.linkType === "subject" ? `[Estudo] ${link.label}` : input.linkType === "deck" ? `[Grimório] ${link.label}` : null;
-  // Mesmo comportamento do cronômetro de tarefas: só um apontamento aberto por vez.
-  await db.batch(
-    [
-      { sql: "UPDATE time_entries SET ended_at = datetime('now') WHERE owner_id = ? AND ended_at IS NULL", args: [ownerId] },
-      { sql: "INSERT INTO time_entries (id, owner_id, task_id, project_id, started_at, kind, notes) VALUES (?, ?, ?, ?, datetime('now'), ?, ?)", args: [id, ownerId, link.taskId, link.projectId, input.mode === "pomodoro" ? "pomodoro" : "focus", note] },
-      {
-        sql: "INSERT INTO focus_timer_state (owner_id, entry_id, mode, planned_minutes, started_at, link_type, link_id, link_label) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)",
-        args: [ownerId, id, input.mode, planned, input.linkType ?? null, input.linkId ?? null, link.label],
-      },
-    ],
-    "write",
-  );
-  return getTimer(db, ownerId);
-}
-
-export async function pauseTimer(db: Client, ownerId: string, pause: boolean) {
-  const t = await getTimer(db, ownerId);
-  if (!t) throw new TodayError("Nenhum cronômetro em andamento.", 404);
-  if (pause && !t.pausedAt) await db.execute({ sql: "UPDATE focus_timer_state SET paused_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE owner_id = ?", args: [ownerId] });
-  if (!pause && t.pausedAt) await db.execute({ sql: "UPDATE focus_timer_state SET paused_ms = ?, paused_at = NULL WHERE owner_id = ?", args: [t.pausedMs + (Date.now() - Date.parse(t.pausedAt)), ownerId] });
-  return getTimer(db, ownerId);
-}
-
-/**
- * Encerra: grava a duração REAL (sem pausas) no apontamento, soma na tarefa
- * vinculada e paga o foco pela regra oficial (idempotente pelo id do apontamento).
- */
-export async function stopTimer(db: Client, ownerId: string) {
-  const t = await getTimer(db, ownerId);
-  if (!t) throw new TodayError("Nenhum cronômetro em andamento.", 404);
-  const minutes = Math.floor(elapsedMs(t) / 60_000);
-  const stmts: Array<{ sql: string; args: Array<string | number | null> }> = [
-    { sql: "UPDATE time_entries SET ended_at = datetime('now'), duration_minutes = ? WHERE id = ? AND owner_id = ?", args: [minutes, t.entryId, ownerId] },
-    { sql: "DELETE FROM focus_timer_state WHERE owner_id = ?", args: [ownerId] },
-  ];
-  if (t.linkType === "task" && t.linkId) stmts.push({ sql: "UPDATE tasks SET time_spent_minutes = time_spent_minutes + ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?", args: [minutes, t.linkId, ownerId] });
-  await db.batch(stmts, "write");
-  const e = await db.execute({ sql: "SELECT project_id FROM time_entries WHERE id = ?", args: [t.entryId] });
-  await awardFocusSession(db, ownerId, t.entryId, minutes, e.rows[0]?.project_id == null ? null : String(e.rows[0].project_id));
-  return { minutes, entryId: t.entryId };
-}
-
 /** Missão principal = foco do dia (day_focus; mesma fonte do bônus oficial de missão principal). */
 export async function setMainMission(db: Client, ownerId: string, taskId: string | null) {
   if (taskId) {
@@ -222,7 +114,7 @@ export async function getTodayHub(db: Client, ownerId: string) {
   const { tz, today } = await userDayContext(db, ownerId);
   const { start, end } = localDayRangeUtc(today, tz);
   const f = (col: string) => utcRangeFilter(col, start, end);
-  const [profile, life, lifeWeek, tasks, focusIds, calendar, habits, focus, done, water, workouts, mood, sleep, pages, timer, ritual, quests, achToday, prio, diff] = await Promise.all([
+  const [profile, life, lifeWeek, tasks, focusIds, calendar, habits, done, water, workouts, mood, sleep, pages, ritual, quests, achToday, prio, diff, study] = await Promise.all([
     getPlayerProfile(db, ownerId),
     computeLifeScore(ownerId, today),
     db.execute({ sql: "SELECT overall_score FROM life_scores WHERE owner_id = ? AND score_date = ?", args: [ownerId, shiftDayKey(today, -7)] }),
@@ -239,7 +131,6 @@ export async function getTodayHub(db: Client, ownerId: string) {
     getFocusTaskIds(db, ownerId, today),
     getCalendarItems(db, ownerId, today, today),
     getHabitsHub(db, ownerId),
-    db.execute({ sql: `SELECT COALESCE(SUM(duration_minutes), 0) AS m, COUNT(*) AS n FROM time_entries WHERE owner_id = ? AND ended_at IS NOT NULL AND ${f("ended_at").sql}`, args: [ownerId, ...f("ended_at").args] }),
     db.execute({ sql: `SELECT id, title FROM tasks WHERE owner_id = ? AND status = 'Concluído' AND completed_at IS NOT NULL AND ${f("completed_at").sql}`, args: [ownerId, ...f("completed_at").args] }),
     db.execute({ sql: `SELECT COALESCE(SUM(amount_ml), 0) AS v FROM water_entries WHERE owner_id = ? AND ${f("recorded_at").sql}`, args: [ownerId, ...f("recorded_at").args] }),
     db.execute({ sql: `SELECT COALESCE(SUM(duration_minutes), 0) AS v, COUNT(*) AS n FROM workouts WHERE owner_id = ? AND ${f("performed_at").sql}`, args: [ownerId, ...f("performed_at").args] }),
@@ -247,12 +138,12 @@ export async function getTodayHub(db: Client, ownerId: string) {
     // Sono: a noite que TERMINOU hoje (despertar no dia local), em minutos de uma única noite.
     db.execute({ sql: `SELECT duration_minutes, quality FROM sleep_entries WHERE owner_id = ? AND ${f("woke_up_at").sql} ORDER BY woke_up_at DESC LIMIT 1`, args: [ownerId, ...f("woke_up_at").args] }),
     db.execute({ sql: `SELECT COALESCE(SUM(pages_read), 0) AS v, COALESCE(SUM(duration_minutes), 0) AS m FROM reading_sessions WHERE owner_id = ? AND ${f("started_at").sql}`, args: [ownerId, ...f("started_at").args] }),
-    getTimer(db, ownerId),
     listRitualSteps(db, ownerId),
     getQuestBoard(db, ownerId).catch(() => null),
     db.execute({ sql: `SELECT a.title, a.tier FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id WHERE ua.owner_id = ? AND ${f("ua.unlocked_at").sql}`, args: [ownerId, ...f("ua.unlocked_at").args] }),
     getPriorityRewards(db, ownerId),
     getDifficultyRewards(db, ownerId),
+    db.execute({ sql: `SELECT COALESCE(SUM(duration_minutes), 0) AS m FROM study_sessions WHERE owner_id = ? AND ${f("occurred_at").sql}`, args: [ownerId, ...f("occurred_at").args] }),
   ]);
 
   const ranked = await getFocusTasks(db, ownerId, 5);
@@ -307,7 +198,6 @@ export async function getTodayHub(db: Client, ownerId: string) {
   const conflicts = findConflicts(timed).map((c) => ({ a: c.a.title, b: c.b.title, minutes: c.overlapMinutes }));
 
   // Ritual: etapas automáticas são detectadas por eventos reais e registradas (idempotente) no histórico.
-  const focusMin = Number(focus.rows[0]?.m ?? 0);
   const detect = (s: RitualStep): boolean | null => {
     switch (s.kind) {
       case "planning":
@@ -316,9 +206,10 @@ export async function getTodayHub(db: Client, ownerId: string) {
         return s.refId ? done.rows.some((d) => String(d.id) === s.refId) : mainId ? done.rows.some((d) => String(d.id) === mainId) : done.rows.length > 0;
       case "habit":
         return s.refId ? habits.habits.some((h) => h.id === s.refId && h.doneToday) : habits.ritual.total > 0 && habits.ritual.done >= habits.ritual.total;
+      // "focus" é o nome antigo desta etapa (o módulo Foco saiu); vale leitura ou estudo.
       case "focus":
       case "study":
-        return focusMin >= 15 || Number(pages.rows[0]?.m ?? 0) >= 15;
+        return Number(pages.rows[0]?.m ?? 0) >= 15 || Number(study.rows[0]?.m ?? 0) >= 15;
       case "health":
         return Number(water.rows[0]?.v ?? 0) > 0 || Number(workouts.rows[0]?.n ?? 0) > 0 || !!mood.rows[0];
       default:
@@ -341,7 +232,7 @@ export async function getTodayHub(db: Client, ownerId: string) {
   const history = await db.execute({ sql: "SELECT day_key, COUNT(*) AS n FROM daily_ritual_checks WHERE owner_id = ? AND day_key >= ? GROUP BY day_key", args: [ownerId, shiftDayKey(today, -6)] });
 
   const prevLife = lifeWeek.rows[0]?.overall_score;
-  const dims = { productivity: life.productivity, health: life.health, habits: life.habits, goals: life.goals, reading: life.reading, education: life.education, professional: life.professional };
+  const dims = Object.fromEntries(LIFE_DIMS.map((d) => [d, life[d]])) as Record<LifeDim, number>;
   const nextHabitReward = habits.ritual.nextReward;
   const xpWeekAvg = await db.execute({ sql: "SELECT COALESCE(SUM(xp), 0) AS v FROM xp_events WHERE owner_id = ? AND day_key >= ? AND day_key < ?", args: [ownerId, shiftDayKey(today, -7), today] });
   const coinsToday = await db.execute({ sql: `SELECT COALESCE(SUM(amount), 0) AS v FROM coin_ledger WHERE owner_id = ? AND amount > 0 AND ${f("created_at").sql}`, args: [ownerId, ...f("created_at").args] });
@@ -354,8 +245,6 @@ export async function getTodayHub(db: Client, ownerId: string) {
     indicators: {
       prioritiesDone: done.rows.length,
       prioritiesTotal: done.rows.length + missions.length,
-      focusMinutes: focusMin,
-      focusSessions: Number(focus.rows[0]?.n ?? 0),
       missionsDone: done.rows.length,
     },
     main: main ? { ...main, subtaskList: mainSubtasks, manual: focusIds.length > 0 } : null,
@@ -373,7 +262,6 @@ export async function getTodayHub(db: Client, ownerId: string) {
       waterMl: Number(water.rows[0]?.v ?? 0),
       readingPages: Number(pages.rows[0]?.v ?? 0),
     },
-    timer,
     ritual: { steps, custom: ritual.custom, done: steps.filter((s) => s.done).length, total: steps.length, history: history.rows.map((h) => ({ day: String(h.day_key), checks: Number(h.n) })) },
     rewards: {
       nextHabit: nextHabitReward,
@@ -385,34 +273,17 @@ export async function getTodayHub(db: Client, ownerId: string) {
 
 export type TodayHub = Awaited<ReturnType<typeof getTodayHub>>;
 
-/** Próxima melhor ação (determinística): conflito → atrasada → missão principal → hábito pendente → foco. */
+/** Próxima melhor ação (determinística): conflito → atrasada → missão principal → prioridade → hábito pendente. */
 export function nextBestAction(h: Pick<TodayHub, "conflicts" | "missions" | "main" | "habits" | "indicators"> & { focusNow?: TodayHub["focusNow"] }): { kind: string; text: string; targetId: string | null } {
   if (h.conflicts.length) return { kind: "conflict", text: `Resolva o conflito na agenda: ${h.conflicts[0]!.a} × ${h.conflicts[0]!.b}.`, targetId: null };
   const overdue = h.missions.find((m) => m.overdue);
   if (overdue) return { kind: "overdue", text: `Conclua ou reagende a missão atrasada “${overdue.title}”.`, targetId: overdue.id };
-  if (h.main && h.main.status !== "Concluído") return { kind: "main", text: `Inicie um bloco de foco na missão principal “${h.main.title}”.`, targetId: h.main.id };
+  if (h.main && h.main.status !== "Concluído") return { kind: "main", text: `Avance na missão principal “${h.main.title}”.`, targetId: h.main.id };
   const lead = h.focusNow?.[0];
   if (lead) return { kind: "focus_now", text: `Próxima prioridade: “${lead.title}”.`, targetId: lead.id };
   const habit = h.habits.items.find((i) => !i.done);
   if (habit) return { kind: "habit", text: `Cumpra o hábito “${habit.name}”.`, targetId: habit.id };
-  if (h.indicators.focusMinutes < 25) return { kind: "focus", text: "Faça um Pomodoro de 25 minutos em algo importante.", targetId: null };
   return { kind: "rest", text: "Dia em ordem: revise o que fez e prepare amanhã na Taverna.", targetId: null };
-}
-
-/** Blocos de foco sugeridos nas janelas livres de hoje (nada é agendado sem você). */
-export function focusBlocks(h: Pick<TodayHub, "agenda">, nowMinutes: number, count = 3, duration = 50) {
-  const busy = h.agenda.filter((a) => !a.allDay && a.startsAt.length > 10).map((a) => ({ start: minutesOf(a.startsAt)!, end: a.endsAt && a.endsAt.length > 10 ? minutesOf(a.endsAt)! : minutesOf(a.startsAt)! + 60 }));
-  const out: Array<{ start: string; end: string }> = [];
-  let from = Math.max(8 * 60, nowMinutes);
-  for (let i = 0; i < count; i++) {
-    const slot = nextFreeSlot(busy, duration, from);
-    if (slot == null) break;
-    const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-    out.push({ start: hm(slot), end: hm(slot + duration) });
-    busy.push({ start: slot, end: slot + duration + 10 });
-    from = slot + duration + 10;
-  }
-  return out;
 }
 
 /* ─────────────────────────────── Automações ─────────────────────────────── */

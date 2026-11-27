@@ -382,13 +382,11 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
 /** Catálogo fixo de métricas disponíveis para troféus customizados — nunca texto livre de fórmula. */
 export const CUSTOM_ACHIEVEMENT_METRICS = [
   { value: "tasks_completed_in_day", label: "Tarefas concluídas em um dia" },
-  { value: "focus_minutes_in_day", label: "Minutos de foco em um dia" },
   { value: "habit_checks_in_day", label: "Hábitos marcados em um dia" },
   { value: "water_ml_in_day", label: "Água (ml) em um dia" },
   { value: "workouts_in_day", label: "Treinos em um dia" },
   { value: "tasks_completed_total", label: "Tarefas concluídas (total)" },
   { value: "books_completed_total", label: "Livros concluídos (total)" },
-  { value: "focus_minutes_total", label: "Minutos de foco (total)" },
   { value: "weekly_reviews_total", label: "Weekly Reviews preenchidas (total)" },
   { value: "goals_completed_total", label: "Metas concluídas (total)" },
   { value: "habit_best_streak", label: "Sequência de dias de hábito (streak)" },

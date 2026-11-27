@@ -11,7 +11,7 @@ import { getTreasureHub } from "./heroHubService.js";
 import { getHabitsHub } from "./habitsHubService.js";
 import { getLibraryHub } from "./libraryHubService.js";
 import { getAdminHub } from "./lifeAdminHubService.js";
-import { focusBlocks, getTodayHub, nextBestAction } from "./todayHubService.js";
+import { getTodayHub, nextBestAction } from "./todayHubService.js";
 import { getGuildHub as getPactGuildHub } from "./contractGuildService.js";
 import { getTavern3 } from "./tavern3Service.js";
 import { getForgeOverview } from "./forgeService.js";
@@ -119,7 +119,7 @@ async function agendaFacts(db: Client, ownerId: string): Promise<{ items: Adviso
   const h = await getAgendaHub(db, ownerId);
   const i = h.indicators;
   const items: AdvisorItem[] = [
-    { kind: "dado", text: `Semana: ${i.eventsWeek} compromisso(s)/prazo(s), ${hm(i.plannedMinutes)} planejadas, ${i.focusBlocks} bloco(s) de foco agendado(s).` },
+    { kind: "dado", text: `Semana: ${i.eventsWeek} compromisso(s)/prazo(s), ${hm(i.plannedMinutes)} planejadas.` },
   ];
   if (i.completionPct != null) items.push({ kind: "dado", text: `Cumprimento das missões planejadas até hoje: ${i.completionPct}%.` });
   if (h.conflicts.length > 0) {
@@ -255,7 +255,7 @@ async function adminFacts(db: Client, ownerId: string): Promise<{ items: Advisor
 async function todayFacts(db: Client, ownerId: string): Promise<{ items: AdvisorItem[]; insufficient: boolean }> {
   const h = await getTodayHub(db, ownerId);
   const items: AdvisorItem[] = [];
-  items.push({ kind: "dado", text: `Hoje: ${h.indicators.missionsDone} missão(ões) concluída(s), ${h.missions.length} pendente(s); hábitos ${h.habits.done}/${h.habits.total}; ${h.indicators.focusMinutes} min de foco; ${h.profile.xpToday} XP.` });
+  items.push({ kind: "dado", text: `Hoje: ${h.indicators.missionsDone} missão(ões) concluída(s), ${h.missions.length} pendente(s); hábitos ${h.habits.done}/${h.habits.total}; ${h.profile.xpToday} XP.` });
   if (h.main) items.push({ kind: "dado", text: `Missão principal (fixada por você): ${h.main.title}${h.main.subtasks.total ? ` (${h.main.subtasks.done}/${h.main.subtasks.total} subtarefas)` : ""}.` });
   if (h.focusNow.length) items.push({ kind: "dado", text: `Foco agora (ranking por prazo e prioridade): ${h.focusNow.map((m) => m.title).join(", ")}.` });
   const overdue = h.missions.filter((m) => m.overdue);
@@ -265,9 +265,6 @@ async function todayFacts(db: Client, ownerId: string): Promise<{ items: Advisor
   if (pct != null) items.push({ kind: "inferencia", text: `${pct}% das missões previstas para hoje já foram concluídas.` });
   const na = nextBestAction(h);
   items.push({ kind: "sugestao", text: na.text });
-  const now = new Date();
-  const blocks = focusBlocks(h, now.getHours() * 60 + now.getMinutes(), 2);
-  if (blocks.length) items.push({ kind: "sugestao", text: `Janelas livres para foco: ${blocks.map((b) => `${b.start}–${b.end}`).join(", ")} (horário do servidor).` });
   return { items, insufficient: !h.missions.length && !h.habits.total && !h.agenda.length };
 }
 
@@ -293,7 +290,7 @@ async function tavernFacts(db: Client, ownerId: string): Promise<{ items: Adviso
   const t = await getTavern3(db, ownerId);
   const i = t.indicators;
   const items: AdvisorItem[] = [];
-  items.push({ kind: "dado", text: `Hoje: ${i.missionsDone} missão(ões), hábitos ${i.habits.done}/${i.habits.total}, ${i.focusMinutes} min de foco, +${i.xpToday} XP, Life Score ${i.lifeScore}${i.lifeScoreAvg7 != null ? ` (média 7 dias ${i.lifeScoreAvg7})` : ""}.` });
+  items.push({ kind: "dado", text: `Hoje: ${i.missionsDone} missão(ões), hábitos ${i.habits.done}/${i.habits.total}, +${i.xpToday} XP, Life Score ${i.lifeScore}${i.lifeScoreAvg7 != null ? ` (média 7 dias ${i.lifeScoreAvg7})` : ""}.` });
   if (t.achievements.length) items.push({ kind: "dado", text: `Conquistas de hoje: ${t.achievements.map((a) => a.title).join(", ")}.` });
   const pend = t.stepsState.filter((s) => s.required && !s.done).length;
   items.push({ kind: "dado", text: t.ritual.completedAt ? "Ritual de hoje já encerrado." : `${pend} etapa(s) obrigatória(s) do ritual pendente(s).` });

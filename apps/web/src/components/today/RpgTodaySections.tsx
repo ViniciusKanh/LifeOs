@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
-import { CalendarDays, Check, Play, Plus, Square, Swords, Timer } from "lucide-react";
+import { CalendarDays, Check, Play, Plus, Swords } from "lucide-react";
 import type { FocusTask, Task } from "@/types";
 import { useDifficultySettings, useGamificationRules } from "@/hooks/useGamification";
-import { useTaskTimer } from "@/hooks/useTasks";
 import { previewTaskReward } from "@/utils/gamification";
 import { useAuth } from "@/hooks/useAuth";
 import { useSignals } from "@/hooks/useSignals";
@@ -100,8 +99,7 @@ const DIFFICULTY: Record<string, string> = { Baixa: "Fácil", Média: "Média", 
 /**
  * "Missões de hoje": as prioridades reais do dia com dificuldade (prioridade),
  * projeto, prazo, duração estimada e a recompensa prevista pelas regras do
- * backend. A missão principal (1ª do Priority Score) ganha "Iniciar cronômetro",
- * que mede o tempo real da tarefa — parar registra os blocos de 25 min (XP).
+ * backend. A missão principal (1ª do Priority Score) fica destacada.
  */
 export function RpgTodayMissions({
   tasks,
@@ -110,7 +108,6 @@ export function RpgTodayMissions({
   today,
   onComplete,
   onAdd,
-  onStartFocus,
 }: {
   tasks: Task[];
   mainTaskId: string | null;
@@ -118,11 +115,9 @@ export function RpgTodayMissions({
   today: string;
   onComplete: (id: string) => void;
   onAdd: () => void;
-  onStartFocus: (id: string) => void;
 }) {
   const { data: rules } = useGamificationRules();
   const { rewards: scale, priority: priorityScale } = useDifficultySettings();
-  const timer = useTaskTimer(mainTaskId);
   const fmtDate = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
   return (
@@ -173,19 +168,6 @@ export function RpgTodayMissions({
                         </span>
                       )}
                     </div>
-                    {isMain && (
-                      <div className="mt-2">
-                        {timer.activeEntry ? (
-                          <RPGButton variant="secondary" className="!py-1.5" onClick={() => void timer.stop()}>
-                            <Square size={12} aria-hidden /> Parar cronômetro
-                          </RPGButton>
-                        ) : (
-                          <RPGButton variant="blue" className="!py-1.5" onClick={() => onStartFocus(t.id)}>
-                            <Timer size={13} aria-hidden /> Iniciar cronômetro
-                          </RPGButton>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               </li>

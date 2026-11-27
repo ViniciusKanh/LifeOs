@@ -21,7 +21,6 @@ import {
   Search,
   Sparkles,
   Target,
-  Timer,
   Upload,
   Workflow,
   X,
@@ -118,7 +117,6 @@ export function MissionsScreen() {
     [projects, goals, contracts],
   );
   const auto = (key: string) => automations.find((a) => a.key === key);
-  const focusOn = auto("focus_timer")?.enabled ?? true;
   const breakdownOn = auto("breakdown_offer")?.enabled ?? true;
   const breakdownMin = Number(auto("breakdown_offer")?.config?.minMinutes ?? 120) || 120;
 
@@ -252,8 +250,6 @@ export function MissionsScreen() {
     onMove: moveCard,
     onAdd: (status: string) => setModal({ task: null, status }),
     onArchive: doArchive,
-    // Cronômetro de foco removido do LifeOS.
-    onFocus: null,
     onBreakdown: breakdownOn ? (t: BoardTask) => openAdvisor({ mode: "breakdown", taskId: t.id, message: "Divida esta missão em etapas executáveis, com estimativa e ordem.", autoSend: true }) : null,
   };
 

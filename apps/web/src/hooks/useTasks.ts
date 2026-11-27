@@ -174,38 +174,3 @@ export function useProfessionalTasks() {
   const query = useQuery({ queryKey: ["tasks", "professional"], queryFn: taskService.professionalList });
   return { tasks: query.data ?? [], isLoading: query.isLoading };
 }
-
-export function useTaskTimer(taskId: string | null) {
-  const queryClient = useQueryClient();
-
-  const activeQuery = useQuery({
-    queryKey: ["tasks", "time-active", taskId],
-    queryFn: () => taskService.activeTimeEntry(taskId as string),
-    enabled: !!taskId,
-    // Sem polling: iniciar/encerrar já invalidam esta consulta.
-    staleTime: 5 * 60_000,
-  });
-
-  const start = useMutation({
-    mutationFn: () => taskService.startTime(taskId as string),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", "time-active", taskId] }),
-  });
-
-  const stop = useMutation({
-    mutationFn: () => taskService.stopTime(taskId as string),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks", "time-active", taskId] });
-      queryClient.invalidateQueries({ queryKey: TASKS_KEY });
-      // Blocos completos de foco rendem XP no backend.
-      notifyGamification();
-    },
-  });
-
-  return {
-    activeEntry: activeQuery.data ?? null,
-    start: start.mutateAsync,
-    stop: stop.mutateAsync,
-    isStarting: start.isPending,
-    isStopping: stop.isPending,
-  };
-}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BookOpen, Briefcase, CalendarClock, CalendarDays, CheckSquare, GraduationCap, Heart, ListChecks, Repeat, Target } from "lucide-react";
+import { BookOpen, CalendarClock, CalendarDays, CheckSquare, Code2, GraduationCap, Heart, ListChecks, Repeat, Target } from "lucide-react";
 import { RpgLevelSpotlight } from "@/components/dashboard/RpgHeroSpotlight";
 import { WeeklyRecordsBoard } from "@/components/dashboard/WeeklyRecordsBoard";
 import { QuestBoardWidget } from "@/components/quests/QuestBoardWidget";
@@ -38,20 +38,18 @@ const DIM_META: Array<{ key: keyof typeof DIM_EXPLAIN; label: string; color: str
   { key: "productivity", label: "Produtividade", color: "#2F80FF", icon: <CheckSquare size={14} />, to: "/tarefas" },
   { key: "health", label: "Saúde", color: "#12B76A", icon: <Heart size={14} />, to: "/saude" },
   { key: "habits", label: "Hábitos", color: "#08B6A6", icon: <Repeat size={14} />, to: "/habitos" },
-  { key: "goals", label: "Metas", color: "#FF7A45", icon: <Target size={14} />, to: "/metas" },
-  { key: "reading", label: "Leitura", color: "#FF3D93", icon: <BookOpen size={14} />, to: "/biblioteca" },
   { key: "education", label: "Educação", color: "#9550FF", icon: <GraduationCap size={14} />, to: "/educacao" },
-  { key: "professional", label: "Profissional", color: "#7C4DFF", icon: <Briefcase size={14} />, to: "/profissional" },
+  { key: "knowledge", label: "Conhecimento", color: "#FF3D93", icon: <BookOpen size={14} />, to: "/biblioteca" },
+  { key: "code", label: "Código", color: "#FF7A45", icon: <Code2 size={14} />, to: "/forja-codigo" },
 ];
 
 const DIM_EXPLAIN = {
-  productivity: "% das suas tarefas concluídas.",
-  health: "Água, sono e exercício de hoje.",
+  productivity: "Missões com prazo nos últimos 7 dias concluídas a tempo.",
+  health: "Água, sono, exercício e humor de hoje.",
   habits: "% dos hábitos cumpridos hoje.",
-  goals: "Equilíbrio entre metas semanais, mensais e anuais.",
-  reading: "Meta diária de páginas ou progresso dos livros em leitura.",
   education: "Progresso médio das suas formações.",
-  professional: "Tarefas concluídas em projetos profissionais.",
+  knowledge: "Minutos de livros, podcasts, aulas e papers na semana (meta: 300).",
+  code: "WakaTime, commits e Advent of Code na semana.",
 };
 
 /** Painel do Herói: no tema RPG, o centro de evolução; nos demais temas, o Dashboard clássico. */

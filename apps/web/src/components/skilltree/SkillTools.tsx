@@ -173,11 +173,12 @@ export function SkillEditor({
         </fieldset>
         <fieldset className="border border-rpg-border p-2 sm:col-span-2" style={{ borderRadius: 3 }}>
           <legend className="px-1 text-xs text-rpg-gold-light">Prática real (opcional)</legend>
-          <p className="mb-2 text-[11px] text-rpg-muted">Vincule a origem dos minutos: treinos de luta/dança, estudos de uma formação/disciplina ou sessões de foco de um projeto. Opcionalmente exija um mínimo por nível antes da prova.</p>
+          <p className="mb-2 text-[11px] text-rpg-muted">Vincule a origem dos minutos: treinos de luta/dança, estudos de uma formação/disciplina. Opcionalmente exija um mínimo por nível antes da prova.</p>
           <div className="grid gap-2 sm:grid-cols-3">
             <select aria-label="Origem da prática" value={linkKind} onChange={(e) => (setLinkKind(e.target.value as LinkKind | ""), setLinkRef(""))} className={FIELD}>
               <option value="">Sem vínculo</option>
-              {(Object.keys(LINK_LABEL) as LinkKind[]).map((k) => (
+              {/* "projeto" vinha das sessões de Foco (removidas): só aparece para vínculos antigos. */}
+              {(Object.keys(LINK_LABEL) as LinkKind[]).filter((k) => k !== "projeto" || linkKind === "projeto").map((k) => (
                 <option key={k} value={k}>
                   {LINK_LABEL[k]}
                 </option>

@@ -5,6 +5,7 @@ import { awardReviewClosed, dayKeyIn, reviewRewardStatus, todayKeyFor, userTimez
 import { periodRange, periodKeyForDay, shiftPeriodKey, isReviewRewardEligible, savePeriodicReview } from "./periodicReviewService.js";
 import { loadDirectionGoals } from "./directionService.js";
 import { computeLifeScore, computeRangeMetrics } from "./metricsService.js";
+import { LIFE_DIMS, LIFE_DIM_LABEL, type LifeDim } from "../config/lifeScore.js";
 import { validateFocus, type FocusRef } from "./warCouncilService.js";
 import { automationConfig, notifyFromAutomation } from "./automationService.js";
 import { evaluateAchievements } from "./achievementsService.js";
@@ -64,9 +65,10 @@ export const shiftKey = (kind: ReviewKind, key: string, delta: number) => (kind 
 
 /* ───────────────────────────── indicadores ───────────────────────────── */
 
-const DIMS = ["productivity", "health", "habits", "goals", "education", "reading", "professional"] as const;
-type Dim = (typeof DIMS)[number];
-export const DIM_LABEL: Record<Dim, string> = { productivity: "Produtividade", health: "Saúde", habits: "Hábitos", goals: "Metas", education: "Educação", reading: "Leitura", professional: "Profissional" };
+// Dimensões oficiais do Life Score (config/lifeScore.ts) — mesma fonte do Painel do Herói.
+const DIMS = LIFE_DIMS;
+type Dim = LifeDim;
+export const DIM_LABEL: Record<Dim, string> = LIFE_DIM_LABEL;
 
 export interface WindowMetrics {
   xp: number;
@@ -79,7 +81,6 @@ export interface WindowMetrics {
   pagesRead: number;
   readingDays: number;
   studyMinutes: number;
-  focusMinutes: number;
   sleepAvgMinutes: number | null;
   moodAvg: number | null;
   energyAvg: number | null;
@@ -108,7 +109,7 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     return db.execute({ sql: `${head} AND ${f.sql}`, args: [ownerId, ...f.args] });
   };
   const a = [ownerId, from, to];
-  const [xp, coins, tasks, habits, habitDays, workouts, pages, readDays, study, focus, sleep, mood, goals, contracts, projects, life, proofs] = await Promise.all([
+  const [xp, coins, tasks, habits, habitDays, workouts, pages, readDays, study, sleep, mood, goals, contracts, projects, life, proofs] = await Promise.all([
     db.execute({ sql: "SELECT COALESCE(SUM(xp), 0) AS n FROM xp_events WHERE owner_id = ? AND day_key BETWEEN ? AND ?", args: a }),
     q("SELECT COALESCE(SUM(amount), 0) AS n FROM coin_ledger WHERE owner_id = ? AND amount > 0", "created_at"),
     q("SELECT COUNT(*) AS n FROM tasks WHERE owner_id = ? AND status = 'Concluído'", "COALESCE(completed_at, updated_at)"),
@@ -118,15 +119,13 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     q("SELECT COALESCE(SUM(pages_read), 0) AS n FROM reading_sessions WHERE owner_id = ?", "started_at"),
     q("SELECT COUNT(DISTINCT substr(started_at, 1, 10)) AS n FROM reading_sessions WHERE owner_id = ?", "started_at"),
     q("SELECT COALESCE(SUM(duration_minutes), 0) AS n FROM study_sessions WHERE owner_id = ?", "occurred_at"),
-    q("SELECT COALESCE(SUM(duration_minutes), 0) AS n FROM time_entries WHERE owner_id = ?", "started_at"),
     q("SELECT AVG(duration_minutes) AS v FROM sleep_entries WHERE owner_id = ?", "went_to_bed_at"),
     q("SELECT AVG(mood) AS v, AVG(energy) AS e FROM mood_entries WHERE owner_id = ?", "recorded_at"),
     q("SELECT COUNT(*) AS n FROM goals WHERE owner_id = ? AND status = 'done'", "completed_at"),
     q("SELECT COUNT(*) AS n FROM contracts WHERE owner_id = ? AND status = 'concluido'", "completed_at"),
     q("SELECT COUNT(*) AS n FROM projects WHERE owner_id = ? AND status = 'completed'", "completed_at"),
     db.execute({
-      sql: `SELECT COUNT(*) AS n, AVG(overall_score) AS v, AVG(productivity) AS productivity, AVG(health) AS health, AVG(habits) AS habits, AVG(goals) AS goals,
-                   AVG(education) AS education, AVG(reading) AS reading, AVG(professional) AS professional
+      sql: `SELECT COUNT(*) AS n, AVG(overall_score) AS v, ${DIMS.map((d) => `AVG(${d}) AS ${d}`).join(", ")}
             FROM life_scores WHERE owner_id = ? AND score_date BETWEEN ? AND ?`,
       args: a,
     }),
@@ -145,7 +144,6 @@ export async function windowMetrics(db: Client, ownerId: string, from: string, t
     pagesRead: one(pages.rows),
     readingDays: one(readDays.rows),
     studyMinutes: one(study.rows),
-    focusMinutes: one(focus.rows),
     sleepAvgMinutes: avg(sleep.rows) == null ? null : Math.round(avg(sleep.rows)!),
     moodAvg: avg(mood.rows),
     energyAvg: avg(mood.rows, "e"),
@@ -182,7 +180,6 @@ const INDICATORS: Array<{ key: keyof WindowMetrics; label: string; unit: string;
   { key: "pagesRead", label: "Páginas lidas", unit: "páginas", kind: "sum" },
   { key: "readingDays", label: "Dias de leitura", unit: "dias", kind: "sum" },
   { key: "studyMinutes", label: "Estudo", unit: "min", kind: "sum" },
-  { key: "focusMinutes", label: "Tempo de foco", unit: "min", kind: "sum" },
   { key: "sleepAvgMinutes", label: "Sono médio", unit: "min/noite", kind: "avg" },
   { key: "energyAvg", label: "Energia média", unit: "/5", kind: "avg" },
   { key: "goalsCompleted", label: "Metas concluídas", unit: "metas", kind: "sum" },
@@ -570,7 +567,7 @@ async function mirrorLegacy(db: Client, ownerId: string, kind: ReviewKind, key: 
             ON CONFLICT (owner_id, week_start_date) DO UPDATE SET productivity_pct = excluded.productivity_pct, health_pct = excluded.health_pct, education_pct = excluded.education_pct,
               reading_pct = excluded.reading_pct, habits_pct = excluded.habits_pct, tasks_completed = excluded.tasks_completed, pages_read = excluded.pages_read,
               what_worked = excluded.what_worked, what_didnt_work = excluded.what_didnt_work, what_to_improve = excluded.what_to_improve, next_priorities = excluded.next_priorities`,
-      args: [nanoid(), ownerId, key, life.productivity, life.health, life.education, life.reading, life.habits, metrics.tasksCompleted, metrics.pagesRead, strip(s.answers.worked ?? "") || null, strip(s.answers.didnt ?? "") || null, s.actions.map((a) => a.text).join("\n") || null, s.plan.priorities.join("\n") || null],
+      args: [nanoid(), ownerId, key, life.productivity, life.health, life.education, null, life.habits, metrics.tasksCompleted, metrics.pagesRead, strip(s.answers.worked ?? "") || null, strip(s.answers.didnt ?? "") || null, s.actions.map((a) => a.text).join("\n") || null, s.plan.priorities.join("\n") || null],
     });
   } else {
     const wins = strip(s.answers.wins ?? s.answers.proud ?? s.answers.goals ?? s.answers.how ?? "");

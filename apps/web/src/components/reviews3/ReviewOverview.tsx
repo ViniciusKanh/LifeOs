@@ -123,7 +123,7 @@ export function RevisorCard({ d, className }: { d: JourneyReview; className?: st
 
 /* ═════════════ Retrato do período ═════════════ */
 
-const MAIN_KEYS = ["xp", "coins", "tasksDone", "habitsDone", "workouts", "pagesRead", "focusMinutes", "sleepAvgMinutes"];
+const MAIN_KEYS = ["xp", "coins", "tasksDone", "habitsDone", "workouts", "pagesRead", "studyMinutes", "sleepAvgMinutes"];
 
 export function Portrait({ d }: { d: JourneyReview }) {
   const [all, setAll] = useState(false);

@@ -19,7 +19,6 @@ import {
   Plus,
   Sparkles,
   Target,
-  Timer,
 } from "lucide-react";
 import { Tag } from "@/components/forge3/ForgeShared";
 import { BOARD_COLUMNS, fmtMin, type MissionsOverview } from "@/services/missions3Service";
@@ -35,8 +34,6 @@ export interface BoardHandlers {
   onMove: (t: BoardTask, status: string, beforeId: string | null, afterId: string | null) => void;
   onAdd: (status: string) => void;
   onArchive: (t: BoardTask) => void;
-  /** null quando a automação "Foco integrado" está desligada. */
-  onFocus: ((t: BoardTask) => void) | null;
   /** null quando a automação "Quebra de etapas" está desligada. */
   onBreakdown: ((t: BoardTask) => void) | null;
 }
@@ -365,11 +362,6 @@ function MissionCard({
                   {c.label}
                 </MenuItem>
               ))}
-              {h.onFocus && !done && (
-                <MenuItem icon={<Timer size={13} />} onClick={() => (onMenu(), h.onFocus!(t))}>
-                  Iniciar foco
-                </MenuItem>
-              )}
               {h.onBreakdown && !done && (
                 <MenuItem icon={<Hammer size={13} />} onClick={() => (onMenu(), h.onBreakdown!(t))}>
                   Quebrar em etapas
@@ -451,11 +443,6 @@ function MissionCard({
           </>
         ) : null}
         <span className="ml-auto flex items-center gap-1">
-          {h.onFocus && !done && (
-            <button onClick={() => h.onFocus!(t)} className="border border-rpg-purple/50 p-1 text-rpg-purple hover:bg-rpg-purple/15" style={{ borderRadius: 3 }} aria-label={`Iniciar foco em "${t.title}"`} title="Iniciar foco (registra o tempo nesta missão)">
-              <Timer size={12} />
-            </button>
-          )}
           {done && (
             <button onClick={() => h.onArchive(t)} className="border border-rpg-border p-1 text-rpg-muted hover:text-rpg-gold" style={{ borderRadius: 3 }} aria-label={`Arquivar "${t.title}"`} title="Arquivar">
               <Archive size={12} />

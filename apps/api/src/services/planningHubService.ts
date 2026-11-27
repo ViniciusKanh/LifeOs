@@ -13,7 +13,7 @@ import { generateText, getGeminiConfig } from "./geminiService.js";
  * Camada RPG de Agenda, Conselho de Guerra, Missões e Quadro de Avisos.
  *
  * Fonte única de verdade: tudo é DERIVADO das tabelas de origem (events,
- * tasks, subtasks, weekly_plans, focus_sessions, quest_assignments...).
+ * tasks, subtasks, weekly_plans, quest_assignments...).
  * Nada aqui concede XP ou moedas — recompensas continuam saindo só de
  * gamificationService.award() pelas rotas de origem (idempotentes).
  *
@@ -175,7 +175,7 @@ export async function getAgendaHub(db: Client, ownerId: string) {
   const weekEnd = shiftDayKey(weekStart, 6);
   const in14 = shiftDayKey(today, 14);
 
-  const [events, upcoming, tasksWeek, sealed, focusR, completedR, todayTasks] = await Promise.all([
+  const [events, upcoming, tasksWeek, sealed, completedR, todayTasks] = await Promise.all([
     weekEvents(db, ownerId, weekStart, weekEnd),
     weekEvents(db, ownerId, today, in14),
     db.execute({
@@ -184,7 +184,6 @@ export async function getAgendaHub(db: Client, ownerId: string) {
       args: [ownerId, weekStart, weekEnd, weekStart, weekEnd],
     }),
     db.execute({ sql: "SELECT week_start FROM weekly_plans WHERE owner_id = ? AND sealed_at IS NOT NULL ORDER BY week_start DESC LIMIT 60", args: [ownerId] }),
-    db.execute({ sql: "SELECT started_at, actual_minutes FROM focus_sessions WHERE owner_id = ? AND started_at >= ? AND actual_minutes IS NOT NULL", args: [ownerId, shiftDayKey(weekStart, -1)] }),
     db.execute({
       sql: `SELECT completed_at, planned_date FROM tasks WHERE owner_id = ? AND status = ? AND completed_at IS NOT NULL AND planned_date IS NOT NULL`,
       args: [ownerId, DONE],
@@ -212,18 +211,14 @@ export async function getAgendaHub(db: Client, ownerId: string) {
   let planStreak = 0;
   for (let w = sealedWeeks.has(weekStart) ? weekStart : shiftDayKey(weekStart, -7); sealedWeeks.has(w); w = shiftDayKey(w, -7)) planStreak++;
 
-  const focusRows = (focusR.rows as unknown as Row[]).filter((f) => localDayOfStored(String(f.started_at), tz) >= weekStart);
-  const focusBlocksScheduled = events.filter((e) => eventCategory(e) === "foco" || e.source_type === "task").length;
-
-  // Pontos do Planejador: planos selados, missões concluídas até o dia planejado e sessões de foco da semana.
+  // Pontos do Planejador: planos selados e missões concluídas até o dia planejado.
   const onTime = (completedR.rows as unknown as Row[]).filter((r) => localDayOfStored(String(r.completed_at), tz) <= String(r.planned_date)).length;
-  const points = sealedWeeks.size * 40 + onTime * 5 + focusRows.length * 3;
+  const points = sealedWeeks.size * 40 + onTime * 5;
 
-  // Consistência da semana: dias até hoje com pelo menos uma missão concluída ou sessão de foco.
+  // Consistência da semana: dias até hoje com pelo menos uma missão concluída.
   const elapsed = Array.from({ length: 7 }, (_, i) => shiftDayKey(weekStart, i)).filter((d) => d <= today);
   const activeDays = new Set<string>();
   for (const t of tasks) if (String(t.status) === DONE && t.completed_at) activeDays.add(localDayOfStored(String(t.completed_at), tz));
-  for (const f of focusRows) activeDays.add(localDayOfStored(String(f.started_at), tz));
   const consistencyPct = elapsed.length ? Math.round((elapsed.filter((d) => activeDays.has(d)).length / elapsed.length) * 100) : 0;
 
   const conflicts = findConflicts(timedBlocksOf(upcoming)).map((c) => {
@@ -292,11 +287,9 @@ export async function getAgendaHub(db: Client, ownerId: string) {
     weekStart,
     weekEnd,
     rank: tierRank(PLANNER_RANKS, points),
-    rankBreakdown: { sealedPlans: sealedWeeks.size, plannedOnTime: onTime, focusSessionsWeek: focusRows.length },
+    rankBreakdown: { sealedPlans: sealedWeeks.size, plannedOnTime: onTime },
     indicators: {
       eventsWeek: events.length + tasks.filter((t) => t.due_date && String(t.status) !== DONE).length,
-      focusBlocks: focusBlocksScheduled,
-      focusSessions: focusRows.length,
       planStreakWeeks: planStreak,
       plannedMinutes: timedMinutes + plannedTaskMinutes,
       completionPct: plannedSoFar.length ? Math.round((doneSoFar.length / plannedSoFar.length) * 100) : null,
@@ -340,7 +333,7 @@ export async function createAgendaBlock(
       id,
       ownerId,
       input.title,
-      input.category === "foco" ? "Bloco de foco criado na Agenda." : null,
+      input.category === "foco" ? "Bloco de trabalho criado na Agenda." : null,
       startsAt,
       `${input.date}T${hhmm(s + input.durationMinutes)}:00`,
       input.taskId ? "task" : "manual",
@@ -658,7 +651,7 @@ const PRIORITY_ORDER: Record<string, number> = { Alta: 0, Média: 1, Baixa: 2 };
 export async function getMissionsHub(db: Client, ownerId: string) {
   const { tz, today } = await userDayContext(db, ownerId);
   const weekStart = mondayKey(today);
-  const [tasksR, doneR, subR, focusR, capacity] = await Promise.all([
+  const [tasksR, doneR, subR, capacity] = await Promise.all([
     db.execute({
       sql: `SELECT t.id, t.title, t.description, t.status, t.priority, t.difficulty, t.due_date, t.planned_date, t.estimate_minutes, t.time_spent_minutes,
               t.project_id, t.goal_id, p.name AS project_name, g.title AS goal_title,
@@ -669,7 +662,6 @@ export async function getMissionsHub(db: Client, ownerId: string) {
     }),
     db.execute({ sql: "SELECT completed_at FROM tasks WHERE owner_id = ? AND status = ? AND completed_at IS NOT NULL ORDER BY completed_at DESC LIMIT 2000", args: [ownerId, DONE] }),
     db.execute({ sql: "SELECT task_id, COUNT(*) AS n, SUM(done) AS d FROM subtasks WHERE owner_id = ? GROUP BY task_id", args: [ownerId] }),
-    db.execute({ sql: "SELECT COALESCE(SUM(actual_minutes), 0) AS m FROM focus_sessions WHERE owner_id = ? AND started_at >= ?", args: [ownerId, shiftDayKey(weekStart, -1)] }),
     weekCapacity(db, ownerId, weekStart, new Set()),
   ]);
   const subBy = new Map((subR.rows as unknown as Row[]).map((r) => [String(r.task_id), { total: Number(r.n), done: Number(r.d ?? 0) }]));
@@ -740,7 +732,6 @@ export async function getMissionsHub(db: Client, ownerId: string) {
     load: {
       pendingEstimateMinutes: pendingEstimate,
       unestimated: tasks.filter((t) => t.estimateMinutes == null).length,
-      executedWeekMinutes: Number(focusR.rows[0]?.m ?? 0),
       pending: tasks.length,
       overdue: tasks.filter((t) => t.overdue).length,
       byPriority: ["Alta", "Média", "Baixa"].map((p) => ({ priority: p, count: tasks.filter((t) => t.priority === p).length })),

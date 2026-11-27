@@ -58,7 +58,7 @@ const toHm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${St
 
 export const CATEGORY_UI: Record<EventCategory, { label: string; cls: string; dot: string; icon: typeof CalendarDays }> = {
   evento: { label: "Evento", cls: "border-rpg-blue/60 bg-rpg-blue/10", dot: "bg-rpg-blue", icon: CalendarDays },
-  foco: { label: "Foco", cls: "border-rpg-purple/60 bg-rpg-purple/15", dot: "bg-rpg-purple", icon: Crosshair },
+  foco: { label: "Trabalho", cls: "border-rpg-purple/60 bg-rpg-purple/15", dot: "bg-rpg-purple", icon: Crosshair },
   estudo: { label: "Estudo", cls: "border-rpg-gold/60 bg-rpg-gold/10", dot: "bg-rpg-gold", icon: BookOpen },
   saude: { label: "Saúde", cls: "border-rpg-green/60 bg-rpg-green/10", dot: "bg-rpg-green", icon: HeartPulse },
   missao: { label: "Missão", cls: "border-rpg-orange/60 bg-rpg-orange/10", dot: "bg-rpg-orange", icon: Swords },
@@ -89,8 +89,8 @@ export function AgendaRankPanel({ hub }: { hub: AgendaHub }) {
       icon={<Hourglass size={26} />}
       rules={
         <>
-          Pontos: 40 por plano semanal selado ({b.sealedPlans}), 5 por missão concluída até o dia planejado ({b.plannedOnTime}) e 3 por sessão de foco nesta semana ({b.focusSessionsWeek}).
-          Consistência = dias da semana (até hoje) com missão concluída ou sessão de foco.
+          Pontos: 40 por plano semanal selado ({b.sealedPlans}) e 5 por missão concluída até o dia planejado ({b.plannedOnTime}).
+          Consistência = dias da semana (até hoje) com missão concluída.
         </>
       }
     />
@@ -100,9 +100,8 @@ export function AgendaRankPanel({ hub }: { hub: AgendaHub }) {
 export function AgendaIndicators({ hub }: { hub: AgendaHub }) {
   const i = hub.indicators;
   return (
-    <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+    <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
       <IndicatorCard tone="blue" icon={<CalendarDays size={24} />} label="Eventos da semana" value={i.eventsWeek} hint="compromissos e prazos" />
-      <IndicatorCard tone="purple" icon={<Crosshair size={24} />} label="Blocos de foco" value={i.focusBlocks} hint={`${i.focusSessions} sessão(ões) feitas`} />
       <IndicatorCard tone="orange" icon={<Flame size={24} />} label="Sequência de planejamento" value={`${i.planStreakWeeks} sem.`} hint="planos selados seguidos" />
       <IndicatorCard tone="gold" icon={<Clock size={24} />} label="Horas planejadas" value={hm(i.plannedMinutes)} hint="blocos + estimativas" />
       <IndicatorCard tone="green" icon={<CheckCircle2 size={24} />} label="Cumprimento" value={i.completionPct == null ? "--" : `${i.completionPct}%`} hint="missões planejadas até hoje" />
@@ -150,7 +149,7 @@ export function TimeTower({ hub, onToast }: { hub: AgendaHub; onToast: (m: strin
       }
     >
       {hub.tower.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Nada agendado para hoje. Crie um bloco de foco ou planeje missões no Conselho de Guerra.</p>
+        <p className="text-sm text-rpg-muted">Nada agendado para hoje. Crie um bloco de trabalho ou planeje missões no Conselho de Guerra.</p>
       ) : (
         <ol className="space-y-1.5">
           {hub.tower.map((b) => {
@@ -204,7 +203,7 @@ export function TimeTower({ hub, onToast }: { hub: AgendaHub; onToast: (m: strin
                 const task = tasksToday.find((t) => t.taskId === form.taskId);
                 actions.createBlock.mutate(
                   {
-                    title: form.title.trim() || task?.title || "Bloco de foco",
+                    title: form.title.trim() || task?.title || "Bloco de trabalho",
                     date: hub.today,
                     start: form.start,
                     durationMinutes: form.duration,

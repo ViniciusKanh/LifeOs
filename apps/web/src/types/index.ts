@@ -727,12 +727,17 @@ export interface LifeScoreBreakdown {
   overall: number;
   productivity: number;
   health: number;
-  education: number;
-  reading: number;
   habits: number;
-  professional: number;
-  goals: number;
+  education: number;
+  knowledge: number;
+  code: number;
+  /** Dimensões sem dado (ficam fora da média geral). */
+  missing: LifeDim[];
 }
+
+/** Dimensões oficiais do Life Score — espelho de apps/api/src/config/lifeScore.ts. */
+export const LIFE_DIMS = ["productivity", "health", "habits", "education", "knowledge", "code"] as const;
+export type LifeDim = (typeof LIFE_DIMS)[number];
 
 export interface RangeMetrics {
   from: string;
@@ -847,8 +852,9 @@ export interface WeeklyChangePct {
   productivity: number;
   health: number;
   education: number;
-  reading: number;
   habits: number;
+  knowledge: number;
+  code: number;
 }
 
 export interface WeeklyComputedMetrics extends RangeMetrics {

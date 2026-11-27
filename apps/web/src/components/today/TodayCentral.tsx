@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import clsx from "clsx";
 import {
   AlarmClock,
-  BarChart3,
   Bed,
   BookOpen,
   Bot,
@@ -35,7 +34,6 @@ import {
   Sunset,
   Swords,
   Target,
-  Timer,
   Trash2,
   Wand2,
   Zap,
@@ -54,7 +52,8 @@ import { useGrimoireDecks } from "@/hooks/useGrimoire";
 import { useUrlTab } from "@/components/hero/HeroShared";
 import { eventsService } from "@/services/eventsService";
 import { useJourneySync, useTodayActions, useTodayHub } from "@/hooks/useDayHero";
-import type { RitualKind, TimerMode, TodayHub, TodayMission } from "@/services/dayHeroService";
+import type { RitualKind, TodayHub, TodayMission } from "@/services/dayHeroService";
+import { LIFE_DIM_LABEL } from "@/utils/lifeDims";
 
 const ART = `${MODULE_ART}/today`;
 const R = { borderRadius: 4 } as const;
@@ -73,7 +72,7 @@ const durMin = (a: string, b: string | null) => (b && a.length > 10 && b.length 
 /* ═══════════════════════════════ Banner + indicadores ═══════════════════════════════ */
 
 /**
- * "Foco agora": em dias com várias missões, ninguém precisa eleger UMA principal.
+ * "Prioridades agora": em dias com várias missões, ninguém precisa eleger UMA principal.
  * Mostra as 3 prioridades do ranking (prazo + prioridade) e o que já foi concluído
  * hoje. Fixar uma missão principal é opcional e só serve para o bônus oficial.
  */
@@ -83,10 +82,10 @@ function FocusNowCard({ hub }: { hub: TodayHub }) {
   const m = hub.main;
   const doneCount = hub.doneToday.length;
   return (
-    <section className="rpg-panel rpg-panel-gold flex min-w-0 flex-col gap-2 p-3" aria-label="Foco agora">
+    <section className="rpg-panel rpg-panel-gold flex min-w-0 flex-col gap-2 p-3" aria-label="Prioridades agora">
       <div className="flex items-center gap-2">
         <Target size={16} className="text-rpg-gold" aria-hidden />
-        <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-gold">Foco agora</p>
+        <p className="font-pixel text-[10px] uppercase tracking-widest text-rpg-gold">Prioridades agora</p>
         <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} className="ml-auto text-[11px] text-rpg-blue hover:underline">
           Como funciona?
         </button>
@@ -172,7 +171,7 @@ export function TodayBanner({ hub }: { hub: TodayHub }) {
   );
 }
 
-const DIM_LABEL: Record<string, string> = { productivity: "Produtividade", health: "Saúde", habits: "Hábitos", goals: "Metas", reading: "Leitura", education: "Educação", professional: "Profissional" };
+const DIM_LABEL: Record<string, string> = LIFE_DIM_LABEL;
 
 export function TodayIndicators({ hub }: { hub: TodayHub }) {
   const [explain, setExplain] = useState(false);
@@ -180,7 +179,7 @@ export function TodayIndicators({ hub }: { hub: TodayHub }) {
   const p = hub.profile;
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <button type="button" onClick={() => setExplain(true)} className="text-left" aria-label="Life Score — ver cálculo">
           <IndicatorCard icon={<Gem size={22} />} label="Life Score" value={`${hub.lifeScore.overall}/100`} hint={hub.lifeScore.delta == null ? "toque para ver o cálculo" : `${hub.lifeScore.delta >= 0 ? "+" : ""}${hub.lifeScore.delta} vs. 7 dias atrás`} tone="purple" />
         </button>
@@ -188,7 +187,6 @@ export function TodayIndicators({ hub }: { hub: TodayHub }) {
         <IndicatorCard icon={<Coins size={22} />} label="Moedas" value={p.coins.toLocaleString("pt-BR")} hint={`+${p.coinsToday} hoje`} />
         <IndicatorCard icon={<Flame size={22} />} label="Sequência" value={`${p.streakDays} dias`} hint="dias seguidos com XP" tone="red" />
         <IndicatorCard icon={<Target size={22} />} label="Prioridades" value={`${i.prioritiesDone}/${i.prioritiesTotal}`} hint="missões de hoje" tone="green" />
-        <IndicatorCard icon={<Timer size={22} />} label="Foco" value={`${i.focusMinutes} min`} hint={`${i.focusSessions} sessão(ões)`} tone="blue" />
         <IndicatorCard icon={<CheckCircle2 size={22} />} label="Missões concluídas" value={i.missionsDone} hint="hoje" tone="green" />
       </div>
       <Modal open={explain} onClose={() => setExplain(false)} title="Life Score — como é calculado" size="sm">
@@ -207,7 +205,7 @@ export function TodayIndicators({ hub }: { hub: TodayHub }) {
 
 /* ═══════════════════════════════ Ritual ═══════════════════════════════ */
 
-const KIND_LABEL: Record<RitualKind, string> = { manual: "Manual", planning: "Planejamento (missão principal)", task: "Missão concluída", habit: "Hábito", focus: "Sessão de foco (15+ min)", health: "Saúde (água, treino ou humor)", study: "Estudo/leitura (15+ min)" };
+const KIND_LABEL: Record<RitualKind, string> = { manual: "Manual", planning: "Planejamento (missão principal)", task: "Missão concluída", habit: "Hábito", focus: "Estudo ou leitura (15+ min)", health: "Saúde (água, treino ou humor)", study: "Estudo/leitura (15+ min)" };
 
 export function RitualPanel({ hub, notify, compact }: { hub: TodayHub; notify: Notify; compact?: boolean }) {
   const { toggleRitual } = useTodayActions();
@@ -400,7 +398,6 @@ export function MissionsPanel({ hub, notify, limit }: { hub: TodayHub; notify: N
               <div className="flex flex-wrap items-start gap-1.5">
                 <RPGBadge tone={m.isMain ? "gold" : m.overdue ? "red" : "blue"}>{m.isMain ? "Principal (fixada)" : m.overdue ? "Atrasada" : "Hoje"}</RPGBadge>
                 <RPGBadge tone={PRIO_TONE[m.priority as keyof typeof PRIO_TONE] ?? "muted"}>{m.priority}</RPGBadge>
-                {hub.timer?.linkId === m.id && <RPGBadge tone="purple">Em foco</RPGBadge>}
                 <span className="ml-auto font-pixel text-[10px]">
                   <span className="text-rpg-purple">+{m.reward.xp} XP</span> <span className="text-rpg-gold-light">+{m.reward.coins} 🪙</span>
                 </span>
@@ -417,7 +414,7 @@ export function MissionsPanel({ hub, notify, limit }: { hub: TodayHub; notify: N
                   <Check size={12} aria-hidden /> Concluir
                 </RPGButton>
                 {m.isMain ? (
-                  <RPGButton variant="ghost" className="min-h-[34px] px-2 text-xs" onClick={() => setMain.mutate(null, { onSuccess: () => notify("Missão desafixada. O dia segue guiado pelo Foco agora.") })}>
+                  <RPGButton variant="ghost" className="min-h-[34px] px-2 text-xs" onClick={() => setMain.mutate(null, { onSuccess: () => notify("Missão desafixada. O dia segue guiado pelas Prioridades agora.") })}>
                     <Star size={12} aria-hidden /> Desafixar
                   </RPGButton>
                 ) : (
@@ -467,35 +464,6 @@ export function MissionsPanel({ hub, notify, limit }: { hub: TodayHub; notify: N
   );
 }
 
-
-const fmtClock = (ms: number) => {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${h ? `${h}:` : ""}${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
-
-export function FocusBlocksPanel({ hub }: { hub: TodayHub }) {
-  return (
-    <KitSection title="Blocos de foco sugeridos" icon={<BarChart3 size={16} />}>
-      {hub.focusBlocks.length === 0 ? (
-        <p className="text-sm text-rpg-muted">Sem janelas livres de 50 min no restante do dia (pela Agenda).</p>
-      ) : (
-        <ul className="space-y-1 text-sm">
-          {hub.focusBlocks.map((b) => (
-            <li key={b.start} className="flex justify-between border border-rpg-border/60 px-2 py-1.5" style={R}>
-              <span className="text-rpg-text">Bloco livre</span>
-              <span className="font-pixel text-[11px] text-rpg-gold">
-                {b.start}–{b.end}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="mt-1 text-[10px] text-rpg-muted">Sugestão pelas janelas da Agenda. Nada é agendado automaticamente.</p>
-    </KitSection>
-  );
-}
 
 /* ═══════════════════════════════ Hábitos, agenda, sinais ═══════════════════════════════ */
 
@@ -847,7 +815,7 @@ export function TodayCentral() {
           <RitualPanel hub={hub} notify={notify} />
         </div>
       )}
-      {tab === "automacoes" && <AutomationsPanel module="today" title="Automações do Hoje" intro="Planejamento, próxima ação, blocos de foco, progresso e alertas. Nada é criado ou movido sem a sua aprovação." />}
+      {tab === "automacoes" && <AutomationsPanel module="today" title="Automações do Hoje" intro="Planejamento, próxima ação, progresso e alertas. Nada é criado ou movido sem a sua aprovação." />}
       {tab === "ia" && (
         <div className="grid items-start gap-3 lg:grid-cols-2">
           <DayCouncil hub={hub} />

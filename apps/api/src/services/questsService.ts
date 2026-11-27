@@ -121,7 +121,8 @@ async function ensurePeriod(db: Client, ownerId: string, tz: string, period: Que
   return loadRows(db, ownerId, period, periodKey);
 }
 
-const active = (rows: AssignmentRow[]) => rows.filter((r) => !r.replacedAt);
+// Quests de modelos aposentados (ex.: as de Foco, removido do LifeOS) somem do quadro em vez de virar "Quest indisponível".
+const active = (rows: AssignmentRow[]) => rows.filter((r) => !r.replacedAt && !!templateByKey(r.templateKey));
 
 /** Progresso real de cada quest dentro do próprio período (até hoje). */
 async function progressFor(db: Client, ownerId: string, tz: string, rows: AssignmentRow[], today: string): Promise<Map<string, number>> {

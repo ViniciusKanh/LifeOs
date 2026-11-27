@@ -46,11 +46,9 @@ export interface AgendaHub {
   weekStart: string;
   weekEnd: string;
   rank: HubRank & { points: number };
-  rankBreakdown: { sealedPlans: number; plannedOnTime: number; focusSessionsWeek: number };
+  rankBreakdown: { sealedPlans: number; plannedOnTime: number };
   indicators: {
     eventsWeek: number;
-    focusBlocks: number;
-    focusSessions: number;
     planStreakWeeks: number;
     plannedMinutes: number;
     completionPct: number | null;
@@ -122,7 +120,6 @@ export interface MissionsHub {
   load: {
     pendingEstimateMinutes: number;
     unestimated: number;
-    executedWeekMinutes: number;
     pending: number;
     overdue: number;
     byPriority: Array<{ priority: string; count: number }>;

@@ -5,16 +5,11 @@ import { getDb } from "../db/client.js";
 import {
   RITUAL_KINDS,
   TodayError,
-  focusBlocks,
-  getTimer,
   getTodayHub,
   listRitualSteps,
   nextBestAction,
-  pauseTimer,
   saveRitual,
   setMainMission,
-  startTimer,
-  stopTimer,
   toggleRitualStep,
   type RitualKind,
 } from "../services/todayHubService.js";
@@ -23,7 +18,7 @@ import { PERIODS, getHeroDashboard, type Period } from "../services/heroDashboar
 /**
  * /api/today-hub e /api/hero-dashboard — Hoje 3.0 e Painel do Herói.
  * Concluir missões, hábitos e subtarefas continua nas rotas oficiais desses
- * módulos; aqui ficam agregação, ritual, cronômetro e missão principal.
+ * módulos; aqui ficam agregação, ritual e missão principal.
  */
 export const todayHubRouter = Router();
 export const heroDashboardRouter = Router();
@@ -47,8 +42,7 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => async (r
 
 todayHubRouter.get("/", async (req, res) => {
   const hub = await getTodayHub(getDb(), req.user!.id);
-  const nowMin = Number(z.coerce.number().min(0).max(1440).catch(-1).parse(req.query.now));
-  return res.json({ ...hub, nextAction: nextBestAction(hub), focusBlocks: nowMin >= 0 ? focusBlocks(hub, nowMin) : [] });
+  return res.json({ ...hub, nextAction: nextBestAction(hub) });
 });
 
 todayHubRouter.post(
@@ -82,30 +76,6 @@ todayHubRouter.post(
     await toggleRitualStep(getDb(), req.user!.id, p.data, body.data.done);
     return res.json({ ok: true });
   }),
-);
-
-todayHubRouter.get("/timer", async (req, res) => res.json(await getTimer(getDb(), req.user!.id)));
-todayHubRouter.post(
-  "/timer/start",
-  wrap(async (req, res) => {
-    const body = z
-      .object({ mode: z.enum(["pomodoro", "free", "block"]), plannedMinutes: z.number().int().min(5).max(480).nullable().optional(), linkType: z.enum(["task", "subject", "deck", "project"]).nullable().optional(), linkId: id.nullable().optional() })
-      .safeParse(req.body ?? {});
-    if (!body.success) return res.status(400).json({ error: "Cronômetro inválido." });
-    return res.status(201).json(await startTimer(getDb(), req.user!.id, body.data));
-  }),
-);
-todayHubRouter.post(
-  "/timer/pause",
-  wrap(async (req, res) => {
-    const body = z.object({ pause: z.boolean() }).safeParse(req.body ?? {});
-    if (!body.success) return res.status(400).json({ error: "Pedido inválido." });
-    return res.json(await pauseTimer(getDb(), req.user!.id, body.data.pause));
-  }),
-);
-todayHubRouter.post(
-  "/timer/stop",
-  wrap(async (req, res) => res.json(await stopTimer(getDb(), req.user!.id))),
 );
 
 heroDashboardRouter.get("/", async (req, res) => {

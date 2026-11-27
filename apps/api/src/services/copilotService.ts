@@ -72,7 +72,7 @@ function buildPrompt(ctx: Awaited<ReturnType<typeof buildContext>>): string {
 
   const lines = [
     `Life Score geral: ${score.overall}/100.`,
-    `Dimensões: produtividade ${score.productivity}, profissional ${score.professional}, saúde ${score.health}, educação ${score.education}, leitura ${score.reading}, hábitos ${score.habits}, metas ${score.goals} (todas 0-100).`,
+    `Dimensões: produtividade (missões da semana no prazo) ${score.productivity}, saúde ${score.health}, hábitos ${score.habits}, educação ${score.education}, conhecimento (livros, podcasts, aulas e papers) ${score.knowledge}, código ${score.code} (todas 0-100${score.missing.length ? `; sem dado: ${score.missing.join(", ")}` : ""}).`,
     `Tarefas em aberto: ${tasksOpen} (${tasksOverdue} atrasadas).`,
     `Hábitos cumpridos hoje: ${habitsDoneToday} de ${habitsTotal}.`,
     `Água registrada hoje: ${(waterMl / 1000).toFixed(1)} L.`,
@@ -663,8 +663,9 @@ async function buildWeeklyReviewContext(ownerId: string, weekStartDate: string) 
       productivity: lifeScore.productivity - prevLifeScore.productivity,
       health: lifeScore.health - prevLifeScore.health,
       education: lifeScore.education - prevLifeScore.education,
-      reading: lifeScore.reading - prevLifeScore.reading,
       habits: lifeScore.habits - prevLifeScore.habits,
+      knowledge: lifeScore.knowledge - prevLifeScore.knowledge,
+      code: lifeScore.code - prevLifeScore.code,
     },
   };
 }
@@ -687,7 +688,7 @@ function buildWeeklyReviewPrompt(ctx: Awaited<ReturnType<typeof buildWeeklyRevie
     `Tarefas atrasadas (em aberto, com prazo já vencido): ${overdueTasks}.`,
     `Páginas lidas: ${metrics.pagesRead} (${fmtPct(delta.pagesRead)}).`,
     `Consistência de hábitos na semana: ${metrics.habitsCompletionPct}% (${metrics.habitsDoneCount} de ${metrics.habitsPossibleCount} check-ins possíveis).`,
-    `Life Score ao final da semana — produtividade ${lifeScore.productivity} (${fmtPts(delta.productivity)}), saúde ${lifeScore.health} (${fmtPts(delta.health)}), educação ${lifeScore.education} (${fmtPts(delta.education)}), leitura ${lifeScore.reading} (${fmtPts(delta.reading)}), hábitos ${lifeScore.habits} (${fmtPts(delta.habits)}) — todas 0-100.`,
+    `Life Score ao final da semana — produtividade ${lifeScore.productivity} (${fmtPts(delta.productivity)}), saúde ${lifeScore.health} (${fmtPts(delta.health)}), educação ${lifeScore.education} (${fmtPts(delta.education)}), hábitos ${lifeScore.habits} (${fmtPts(delta.habits)}), conhecimento ${lifeScore.knowledge} (${fmtPts(delta.knowledge)}), código ${lifeScore.code} (${fmtPts(delta.code)}) — todas 0-100.`,
   ];
 
   return [

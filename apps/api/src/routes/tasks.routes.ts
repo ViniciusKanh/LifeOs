@@ -6,7 +6,7 @@ import { createTaskSchema, updateTaskSchema, moveTaskSchema } from "../validator
 import { addDependencySchema } from "../validators/project.schema.js";
 import { getFocusTasks } from "../services/priorityService.js";
 import { getAccessibleProject, getAccessibleTask } from "../services/projectAccessService.js";
-import { awardFocusSession, awardTaskCompletion, syncContractStatus } from "../services/gamificationService.js";
+import { awardTaskCompletion, syncContractStatus } from "../services/gamificationService.js";
 import { insertTask, maybeCheckInLinkedHabit, maybeSpawnNextOccurrence, moveTaskStatus, recomputePriorityScore } from "../services/taskWriteService.js";
 import { syncAutoHabitsAfterWrite } from "../services/habitAutoService.js";
 import { taskAttachmentCreateSchema, taskAttachmentUpdateSchema } from "../validators/attachment.schema.js";
@@ -260,76 +260,6 @@ tasksRouter.patch("/:id/move", async (req, res) => {
     return res.status(404).json({ error: "Tarefa não encontrada." });
   }
   return res.status(204).send();
-});
-
-/** GET /api/tasks/:id/time/active — apontamento de tempo em aberto para esta tarefa, se houver */
-tasksRouter.get("/:id/time/active", async (req, res) => {
-  const db = getDb();
-  const result = await db.execute({
-    sql: "SELECT * FROM time_entries WHERE task_id = ? AND owner_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
-    args: [req.params.id, req.user!.id],
-  });
-  return res.json(result.rows[0] ?? null);
-});
-
-/** POST /api/tasks/:id/time/start — inicia o cronômetro de uma tarefa (monitora o tempo gasto nela) */
-tasksRouter.post("/:id/time/start", async (req, res) => {
-  const db = getDb();
-  // A tarefa pode ser de um projeto compartilhado ("Colaboração total") —
-  // mas o apontamento de tempo é sempre de quem está de fato com o
-  // cronômetro aberto, por isso fica sob req.user!.id, não o dono da tarefa.
-  const task = await getAccessibleTask(db, req.user!.id, req.params.id);
-  if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
-
-  // Só um apontamento aberto por vez — fecha qualquer um pendurado antes de abrir outro.
-  await db.execute({
-    sql: "UPDATE time_entries SET ended_at = datetime('now') WHERE owner_id = ? AND ended_at IS NULL",
-    args: [req.user!.id],
-  });
-
-  const id = nanoid();
-  await db.execute({
-    sql: `INSERT INTO time_entries (id, owner_id, task_id, project_id, started_at, kind)
-          VALUES (?, ?, ?, ?, datetime('now'), 'manual')`,
-    args: [id, req.user!.id, req.params.id, (task.project_id as string | null) ?? null],
-  });
-  const created = await db.execute({ sql: "SELECT * FROM time_entries WHERE id = ?", args: [id] });
-  return res.status(201).json(created.rows[0]);
-});
-
-/** PATCH /api/tasks/:id/time/stop — encerra o cronômetro e soma o tempo em tasks.time_spent_minutes */
-tasksRouter.patch("/:id/time/stop", async (req, res) => {
-  const db = getDb();
-  const open = await db.execute({
-    sql: "SELECT * FROM time_entries WHERE task_id = ? AND owner_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
-    args: [req.params.id, req.user!.id],
-  });
-  const entry = open.rows[0];
-  if (!entry) return res.status(404).json({ error: "Nenhum apontamento de tempo em aberto para esta tarefa." });
-
-  await db.execute({
-    sql: `UPDATE time_entries
-          SET ended_at = datetime('now'),
-              duration_minutes = CAST((julianday(datetime('now')) - julianday(started_at)) * 24 * 60 AS INTEGER)
-          WHERE id = ?`,
-    args: [entry.id],
-  });
-  const updatedEntry = await db.execute({ sql: "SELECT * FROM time_entries WHERE id = ?", args: [entry.id] });
-  const minutes = Number(updatedEntry.rows[0]?.duration_minutes ?? 0);
-
-  // A tarefa pode pertencer a outro membro do projeto compartilhado
-  // ("Colaboração total") — o apontamento de tempo em si é sempre de
-  // quem rodou o cronômetro (req.user!.id), mas a soma em
-  // tasks.time_spent_minutes precisa do owner_id REAL da tarefa.
-  const taskRow = await getAccessibleTask(db, req.user!.id, req.params.id);
-  const realOwnerId = taskRow ? String(taskRow.owner_id) : req.user!.id;
-  await db.execute({
-    sql: "UPDATE tasks SET time_spent_minutes = time_spent_minutes + ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
-    args: [minutes, req.params.id, realOwnerId],
-  });
-  await awardFocusSession(db, req.user!.id, String(entry.id), minutes, entry.project_id == null ? null : String(entry.project_id));
-  const task = await db.execute({ sql: "SELECT * FROM tasks WHERE id = ? AND owner_id = ?", args: [req.params.id, realOwnerId] });
-  return res.json(task.rows[0]);
 });
 
 /** GET /api/tasks/:id/dependencies — ids das tarefas das quais esta depende. */

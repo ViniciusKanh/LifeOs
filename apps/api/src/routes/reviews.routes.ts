@@ -86,8 +86,9 @@ reviewsRouter.get("/weekly/compute", async (req, res) => {
       productivity: lifeScore.productivity - prevLifeScore.productivity,
       health: lifeScore.health - prevLifeScore.health,
       education: lifeScore.education - prevLifeScore.education,
-      reading: lifeScore.reading - prevLifeScore.reading,
       habits: lifeScore.habits - prevLifeScore.habits,
+      knowledge: lifeScore.knowledge - prevLifeScore.knowledge,
+      code: lifeScore.code - prevLifeScore.code,
     },
   });
 });
@@ -164,7 +165,8 @@ reviewsRouter.put("/weekly", async (req, res) => {
       lifeScore.productivity,
       lifeScore.health,
       lifeScore.education,
-      lifeScore.reading,
+      // reading_pct é histórico da antiga dimensão Leitura (substituída por Conhecimento).
+      null,
       lifeScore.habits,
       metrics.tasksCompleted,
       // Focus Mode foi removido do LifeOS — as colunas continuam existindo

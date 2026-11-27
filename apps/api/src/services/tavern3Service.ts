@@ -1,4 +1,5 @@
 import type { Client } from "@libsql/client";
+import { LIFE_DIMS } from "../config/lifeScore.js";
 import { GAMIFICATION_RULES } from "../config/gamification.js";
 import { getCalendarItems } from "./calendarAggregationService.js";
 import { notifyFromAutomation } from "./automationService.js";
@@ -41,7 +42,7 @@ const J = <T>(v: unknown, fb: T): T => {
     return fb;
   }
 };
-const DIMS = ["productivity", "health", "habits", "goals", "reading", "education", "professional"] as const;
+const DIMS = LIFE_DIMS;
 
 function parseRitual(r: Row | undefined, day: string) {
   return {
@@ -129,7 +130,7 @@ export async function getTavern3(db: Client, ownerId: string) {
     getTavernSummary(db, ownerId),
     db.execute({ sql: "SELECT * FROM tavern_rituals WHERE owner_id = ? AND day_key = ?", args: [ownerId, today] }),
     settingsOf(db, ownerId),
-    db.execute({ sql: "SELECT score_date, overall_score, productivity, health, habits, goals, reading, education, professional FROM life_scores WHERE owner_id = ? AND score_date >= ? AND score_date < ?", args: [ownerId, shiftDayKey(today, -7), today] }),
+    db.execute({ sql: `SELECT score_date, overall_score, ${LIFE_DIMS.join(", ")} FROM life_scores WHERE owner_id = ? AND score_date >= ? AND score_date < ?`, args: [ownerId, shiftDayKey(today, -7), today] }),
     db.execute({
       sql: `SELECT a.id, a.code, a.title, a.description, a.icon, a.tier, ua.unlocked_at FROM user_achievements ua JOIN achievements a ON a.id = ua.achievement_id
             WHERE ua.owner_id = ? AND ua.unlocked_at >= ?`,
@@ -164,7 +165,6 @@ export async function getTavern3(db: Client, ownerId: string) {
       coinsToday: hub.profile.coinsToday,
       missionsDone: hub.indicators.missionsDone,
       habits: { done: hub.habits.done, total: hub.habits.total },
-      focusMinutes: hub.indicators.focusMinutes,
       streakDays: hub.profile.streakDays,
       lifeScore: hub.lifeScore.overall,
       lifeScoreAvg7: overallAvg,
@@ -252,7 +252,7 @@ export async function closeRitual(db: Client, ownerId: string) {
   const hub = await getTodayHub(db, ownerId);
   let taskTitle: string | null = null;
   if (cur.tomorrowTaskId) taskTitle = String((await db.execute({ sql: "SELECT title FROM tasks WHERE id = ? AND owner_id = ?", args: [cur.tomorrowTaskId, ownerId] })).rows[0]?.title ?? "") || null;
-  const snapshot = { lifeScore: hub.lifeScore.overall, xpToday: hub.profile.xpToday, missionsDone: hub.indicators.missionsDone, habits: `${hub.habits.done}/${hub.habits.total}`, focusMinutes: hub.indicators.focusMinutes, tomorrowTaskTitle: taskTitle };
+  const snapshot = { lifeScore: hub.lifeScore.overall, xpToday: hub.profile.xpToday, missionsDone: hub.indicators.missionsDone, habits: `${hub.habits.done}/${hub.habits.total}`, tomorrowTaskTitle: taskTitle };
   const R = GAMIFICATION_RULES.tavern.close;
   const granted = await award(db, ownerId, { sourceType: "tavern", sourceId: today, eventType: "ritual_closed", xp: R.xp, coins: R.coins, label: "Ritual da Taverna concluído" }, today);
   await db.execute({

@@ -47,9 +47,6 @@ export const taskService = {
   // Área Profissional: tarefas em aberto de projetos kind='professional', ordenadas por Priority Score.
   professionalList: () => api.get<Task[]>("/tasks/professional"),
 
-  activeTimeEntry: (id: string) => api.get<TimeEntry | null>(`/tasks/${id}/time/active`),
-  startTime: (id: string) => api.post<TimeEntry>(`/tasks/${id}/time/start`),
-  stopTime: (id: string) => api.patch<Task>(`/tasks/${id}/time/stop`),
 };
 
 /** Importação em lote de tarefas convertidas de outros apps (ver utils/taskImport.ts). */

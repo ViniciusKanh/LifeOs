@@ -150,7 +150,7 @@ export function WeeklyRitual({
 }
 
 function WeekSnapshot({ d }: { d: JourneyReview }) {
-  const keys = ["tasksDone", "habitsDone", "focusMinutes", "workouts", "pagesRead", "sleepAvgMinutes", "xp"];
+  const keys = ["tasksDone", "habitsDone", "studyMinutes", "workouts", "pagesRead", "sleepAvgMinutes", "xp"];
   return (
     <div className="space-y-3">
       <p className="text-sm text-rpg-text">Olhe a semana com os números reais antes de responder. Nada aqui é estimado.</p>

@@ -19,14 +19,9 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
     expect(score.body.health).toBe(100);
   });
 
-  it("não deixa dimensões sem nenhum dado (profissional, educação, leitura, metas) derrubarem a nota geral", async () => {
+  it("não deixa dimensões sem nenhum dado (educação, conhecimento, código, hábitos) derrubarem a nota geral", async () => {
     const { agent } = await createAuthenticatedAgent();
-
-    // Usuário que só usa tarefas e hábitos — nenhuma tarefa vinculada
-    // a projeto profissional, nenhuma formação, nenhum livro em
-    // leitura, nenhuma meta ativa. Antes da correção, essas 4
-    // dimensões entravam como 0 na média e o "overall" ficava bem
-    // menor do que o que o usuário realmente fez.
+    // Missões sem prazo concluídas dentro da janela de 7 dias contam como entregues.
     const t1 = await agent.post("/api/tasks").send({ title: "Tarefa concluída 1" });
     const t2 = await agent.post("/api/tasks").send({ title: "Tarefa concluída 2" });
     await agent.patch(`/api/tasks/${t1.body.id}`).send({ status: "Concluído" });
@@ -34,135 +29,92 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
 
     const res = await agent.get("/api/analytics/life-score");
     expect(res.status).toBe(200);
-
-    // Sem tarefa profissional/educação/leitura/meta cadastrada: essas
-    // dimensões voltam 0 (nenhum dado), mas NÃO entram na média geral.
-    expect(res.body.professional).toBe(0);
-    expect(res.body.education).toBe(0);
-    expect(res.body.reading).toBe(0);
-    expect(res.body.goals).toBe(0);
     expect(res.body.productivity).toBe(100);
-
-    // "overall" deve refletir só as dimensões com dado real: aqui,
-    // produtividade (100%, tem dado) e saúde (0%, "do dia", sempre
-    // conta) — hábitos fica de fora porque o usuário não tem nenhum
-    // hábito cadastrado (sem dado, assim como profissional/educação/
-    // leitura/metas). Média = (100 + 0) / 2 = 50. Antes da correção,
-    // as 4 dimensões vazias entravam como 0% "de verdade" e o
-    // overall ficava em (100 + 0*6) / 7 ≈ 14 — bem menor do que o
-    // usuário realmente fez.
+    expect(res.body).not.toHaveProperty("reading");
+    expect(res.body).not.toHaveProperty("goals");
+    expect(res.body).not.toHaveProperty("professional");
+    expect(res.body.missing).toEqual(expect.arrayContaining(["habits", "education", "knowledge", "code"]));
+    // Só produtividade (100) e saúde (0, dimensão do dia) entram: (100 + 0) / 2.
     expect(res.body.overall).toBe(50);
   });
 
-  it("conta uma tarefa vinculada a um projeto profissional na dimensão Profissional", async () => {
+  it("Produtividade mede as missões com prazo na semana: no prazo vale 1, atrasada concluída 0,5, aberta vencida 0", async () => {
     const { agent } = await createAuthenticatedAgent();
+    const today = (await agent.get("/api/analytics/life-score")).body.date as string;
+    const day = (n: number) => {
+      const d = new Date(`${today}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const mk = async (title: string) => (await agent.post("/api/tasks").send({ title })).body.id as string;
+    const db = getDb();
+    const set = (id: string, due: string, status: string, completedAt: string | null) =>
+      db.execute({ sql: "UPDATE tasks SET due_date = ?, status = ?, completed_at = ? WHERE id = ?", args: [due, status, completedAt, id] });
+    await set(await mk("No prazo"), day(-1), "Concluído", `${day(-1)}T15:00:00.000Z`);
+    await set(await mk("Atrasada mas entregue"), day(-3), "Concluído", `${day(-1)}T15:00:00.000Z`);
+    await set(await mk("Vencida e aberta"), day(-2), "A Fazer", null);
+    await set(await mk("Vence hoje (dia não acabou)"), today, "A Fazer", null);
+    await set(await mk("Vencida há um mês (fora da janela)"), day(-30), "A Fazer", null);
 
-    const project = await agent.post("/api/projects").send({ name: "Cliente X", kind: "professional" });
-    expect(project.status).toBe(201);
-
-    const task = await agent.post("/api/tasks").send({ title: "Reunião com cliente", projectId: project.body.id });
-    await agent.patch(`/api/tasks/${task.body.id}`).send({ status: "Concluído" });
-
-    const res = await agent.get("/api/analytics/life-score");
-    expect(res.status).toBe(200);
-    expect(res.body.professional).toBe(100);
-  });
-
-  it("Produtividade vem só das missões concluídas (o módulo Foco saiu do LifeOS)", async () => {
-    const { agent } = await createAuthenticatedAgent();
-    const t1 = await agent.post("/api/tasks").send({ title: "Tarefa A" });
-    await agent.post("/api/tasks").send({ title: "Tarefa B" });
-    await agent.patch(`/api/tasks/${t1.body.id}`).send({ status: "Concluído" });
     const score = await agent.get("/api/analytics/life-score");
+    // (1 + 0,5 + 0) / 3 = 50
     expect(score.body.productivity).toBe(50);
   });
 
-  it("usa meta diária de páginas para a dimensão Leitura quando ela existe", async () => {
-    const { agent } = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
-
-    const goal = await agent.post("/api/goals").send({
-      title: "Ler 20 páginas por dia",
-      kind: "numeric",
-      targetValue: 20,
-      unit: "páginas",
-      period: "semanal",
-    });
-    expect(goal.status).toBe(201);
-
-    const book = await agent.post("/api/books").send({
-      title: "Livro em andamento",
-      totalPages: 300,
-      status: "Lendo",
-    });
-    expect(book.status).toBe(201);
-
-    const half = await agent.post(`/api/books/${book.body.id}/sessions`).send({
-      startedAt: `${today}T12:00:00.000Z`,
-      durationMinutes: 20,
-      pagesRead: 10,
-    });
-    expect(half.status).toBe(201);
-
-    const before = await agent.get(`/api/analytics/life-score?date=${today}`);
-    expect(before.status).toBe(200);
-    expect(before.body.reading).toBe(50);
-    expect(before.body.goals).toBe(50);
-
-    const full = await agent.post(`/api/books/${book.body.id}/sessions`).send({
-      startedAt: `${today}T13:00:00.000Z`,
-      durationMinutes: 20,
-      pagesRead: 10,
-    });
-    expect(full.status).toBe(201);
-
-    const after = await agent.get(`/api/analytics/life-score?date=${today}`);
-    expect(after.body.reading).toBe(100);
-    expect(after.body.goals).toBe(100);
-    const visibleGoals = await agent.get("/api/goals");
-    expect(visibleGoals.body[0]).toMatchObject({ current_value: 20, progress_source: "reading_today" });
-  });
-
-  it("equilibra metas por período no Life Score em vez de diluir tudo em uma média única", async () => {
-    const { agent } = await createAuthenticatedAgent();
-
-    const annual = await agent.post("/api/goals").send({ title: "Meta anual", kind: "binary", period: "anual" });
-    const weeklyA = await agent.post("/api/goals").send({ title: "Meta semanal A", kind: "binary", period: "semanal" });
-    const weeklyB = await agent.post("/api/goals").send({ title: "Meta semanal B", kind: "binary", period: "semanal" });
-    const weeklyC = await agent.post("/api/goals").send({ title: "Meta semanal C", kind: "binary", period: "semanal" });
-
-    await agent.patch(`/api/goals/${annual.body.id}`).send({ status: "done" });
-
-    const score = await agent.get("/api/analytics/life-score");
-    expect(score.status).toBe(200);
-
-    // Período anual = 100; período semanal = 0. A média equilibrada
-    // dos períodos é 50. A média antiga por meta individual seria 25.
-    expect(score.body.goals).toBe(50);
-    expect(weeklyA.status).toBe(201);
-    expect(weeklyB.status).toBe(201);
-    expect(weeklyC.status).toBe(201);
-  });
-
-  it("não carrega uma meta semanal concluída em semana antiga para o score atual", async () => {
-    const { agent } = await createAuthenticatedAgent();
-    const goal = await agent.post("/api/goals").send({ title: "Meta da semana passada", kind: "binary", period: "semanal" });
-    await agent.patch(`/api/goals/${goal.body.id}`).send({ status: "done" });
+  it("Conhecimento soma podcasts e livros da semana contra a meta de 300 min", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const empty = await agent.get("/api/analytics/life-score");
+    expect(empty.body.missing).toContain("knowledge");
+    const today = empty.body.date as string;
     await getDb().execute({
-      sql: "UPDATE goals SET completed_at = date('now', '-14 days') WHERE id = ?",
-      args: [goal.body.id],
+      sql: "INSERT INTO podcast_listens (owner_id, episode_id, feed_id, title, duration_seconds, day_key) VALUES (?, 1, 1, 'Episódio', 5400, ?)",
+      args: [userId, today],
     });
+    const book = await agent.post("/api/books").send({ title: "Livro", totalPages: 200, status: "Lendo" });
+    expect(book.status).toBe(201);
+    await getDb().execute({
+      sql: "INSERT INTO reading_sessions (id, book_id, owner_id, started_at, duration_minutes, pages_read) VALUES (?, ?, ?, ?, NULL, 30)",
+      args: [`rs-${userId}`, book.body.id, userId, `${today}T15:00:00.000Z`],
+    });
+    // 90 min de podcast + 30 páginas sem duração (2 min/página = 60 min) = 150 de 300.
     const score = await agent.get("/api/analytics/life-score");
-    expect(score.status).toBe(200);
-    expect(score.body.goals).toBe(0);
+    expect(score.body.knowledge).toBe(50);
+    expect(score.body.missing).not.toContain("knowledge");
   });
 
-  it("usa avanço registrado de meta por etapas no Life Score", async () => {
-    const { agent } = await createAuthenticatedAgent();
-    const goal = await agent.post("/api/goals").send({ title: "Preparar apresentação", kind: "task_based", period: "mensal" });
-    expect(goal.status).toBe(201);
-    expect((await agent.post(`/api/goals/${goal.body.id}/progress`).send({ value: 60 })).status).toBe(201);
-    const score = await agent.get("/api/analytics/life-score");
-    expect(score.body.goals).toBe(60);
+  it("Código combina minutos do WakaTime e dias com atividade; sem integração fica sem dado", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    const first = await agent.get("/api/analytics/life-score");
+    expect(first.body.missing).toContain("code");
+    const today = first.body.date as string;
+    const day = (n: number) => {
+      const d = new Date(`${today}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const db = getDb();
+    await db.execute({ sql: "INSERT INTO code_integrations (owner_id, username) VALUES (?, 'vini')", args: [userId] });
+    await db.execute({ sql: "INSERT INTO code_contrib_days (owner_id, day_key, count) VALUES (?, ?, 3), (?, ?, 1)", args: [userId, day(-1), userId, day(-4)] });
+    // Só GitHub: 2 dias ativos de 5 = 40.
+    expect((await agent.get("/api/analytics/life-score")).body.code).toBe(40);
+
+    await db.execute({ sql: "INSERT INTO wakatime_connections (owner_id, api_key_enc) VALUES (?, 'x')", args: [userId] });
+    await db.execute({ sql: "INSERT INTO wakatime_days (owner_id, day_key, total_seconds) VALUES (?, ?, 9000), (?, ?, 9000)", args: [userId, today, userId, day(-1)] });
+    // 300 de 600 min (50 → 30) + 3 dias ativos de 5 (60 → 24) = 54.
+    expect((await agent.get("/api/analytics/life-score")).body.code).toBe(54);
+  });
+
+  it("o snapshot grava as dimensões novas e deixa NULL o que não tem dado", async () => {
+    const { agent, userId } = await createAuthenticatedAgent();
+    await agent.get("/api/analytics/life-score");
+    const row = (await getDb().execute({ sql: "SELECT knowledge, code, reading, goals, professional, health FROM life_scores WHERE owner_id = ?", args: [userId] })).rows[0]!;
+    expect(row.knowledge).toBeNull();
+    expect(row.code).toBeNull();
+    expect(row.reading).toBeNull();
+    expect(row.goals).toBeNull();
+    expect(row.professional).toBeNull();
+    expect(row.health).toBe(0);
+    const history = await agent.get("/api/analytics/life-score/history?days=7");
+    expect(history.body[0].missing).toEqual(expect.arrayContaining(["knowledge", "code"]));
   });
 });
