@@ -371,6 +371,26 @@ function breakerResult(api: CityApi, ok: boolean) {
   breakers.set(api, b);
 }
 
+/**
+ * Código e mensagem do erro do gateway WSO2 ({ fault: { code, message, description } }),
+ * para o usuário saber o motivo exato (ex.: 900908 recurso proibido, 900901 credencial inválida).
+ * Só texto do próprio gateway, curto e sem cabeçalhos — nunca inclui o token.
+ */
+export async function faultDetail(res: Response): Promise<string | null> {
+  try {
+    const text = (await res.text()).slice(0, 2000);
+    type Fault = { code?: unknown; message?: unknown; description?: unknown };
+    const body = JSON.parse(text) as Fault & { fault?: Fault };
+    const f: Fault = body.fault ?? body;
+    const parts = [f.code, f.message, f.description]
+      .filter((x) => x != null && String(x).trim())
+      .map((x) => String(x).replace(/Bearer\s+\S+/gi, "Bearer •••").replace(/\s+/g, " ").trim());
+    return parts.length ? parts.join(" · ").slice(0, 220) : null;
+  } catch {
+    return null;
+  }
+}
+
 function stateFromHttp(status: number): { state: CityApiState; http: number; message: string } {
   if (status === 401) return { state: "credencial_invalida", http: 422, message: "O APILIB não aceitou a credencial (token expirado ou inválido)." };
   if (status === 403) return { state: "sem_autorizacao", http: 403, message: "Sua aplicação no APILIB não está inscrita nesta API. Assine-a no Store." };
@@ -409,7 +429,8 @@ async function gatewayGet(api: CityApi, url: string, cred: ResolvedCred, ownerId
     if (!res.ok) {
       const m = stateFromHttp(res.status);
       if (res.status >= 500) breakerResult(api, false);
-      throw new CityError(m.http, m.message, m.state);
+      const detail = await faultDetail(res);
+      throw new CityError(m.http, detail ? `${m.message} (APILIB: ${detail})` : m.message, m.state);
     }
     breakerResult(api, true);
     const text = await res.text();

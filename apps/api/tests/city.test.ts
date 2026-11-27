@@ -154,13 +154,14 @@ describe("/api/city — credencial e status", () => {
 
   it("token salvo: testa de verdade, marca conectada e nunca devolve o segredo", async () => {
     const { agent } = await createAuthenticatedAgent();
-    handler = (url) => (url.includes("/sf/sof/") ? new Response("", { status: 403 }) : defaultHandler(url));
+    handler = (url) => (url.includes("/sf/sof/") ? json({ fault: { code: 900908, message: "Resource forbidden", description: "Bearer token-secreto-999999 nao pode" } }, 403) : defaultHandler(url));
     const r = await agent.put("/api/city/credentials").send({ mode: "token", token: "Bearer token-secreto-999999" });
     expect(r.status).toBe(200);
     expect(calls.length).toBeGreaterThanOrEqual(12);
     expect(calls.every((c) => c.auth === "Bearer token-secreto-999999" && c.url.startsWith("https://gateway.apilib.prefeitura.sp.gov.br/"))).toBe(true);
     const st = await agent.get("/api/city/status");
     expect(JSON.stringify(st.body)).not.toContain("token-secreto");
+    expect(st.body.apis.find((a: { api: string }) => a.api === "sof").message).toContain("APILIB: 900908 · Resource forbidden");
     expect(st.body.credential).toMatchObject({ source: "pessoal", mode: "token", masked: "••••9999" });
     const by = Object.fromEntries(st.body.apis.map((a: { api: string; state: string }) => [a.api, a.state]));
     expect(by.fila).toBe("conectada");
