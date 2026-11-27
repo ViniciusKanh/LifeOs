@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "../db/client.js";
 import {
-  CODE_ACTIVE_DAY_MIN,
   CODE_ACTIVE_DAYS_TARGET,
-  CODE_WEEK_TARGET_MIN,
+  CODE_WEEK_TARGET_COMMITS,
   KNOWLEDGE_WEEK_TARGET_MIN,
   LIFE_DIMS,
   LIFE_WINDOW_DAYS,
@@ -191,43 +190,39 @@ export async function knowledgeScore(db: Db, ownerId: string, date: string, tz: 
 }
 
 /**
- * Código: últimos 7 dias. Com WakaTime conectado, 60% vem dos minutos
- * de editor (meta CODE_WEEK_TARGET_MIN) e 40% dos dias com atividade
- * (meta CODE_ACTIVE_DAYS_TARGET). Sem WakaTime, só os dias com atividade
- * (commits/contribuições do GitHub e estrelas do Advent of Code).
- * Sem nenhuma dessas integrações conectada, a dimensão fica sem dado.
+ * Código: últimos 7 dias, por VOLUME de commits (meta CODE_WEEK_TARGET_COMMITS,
+ * 80% da nota) mais constância (dias com commit ou estrela do Advent of Code,
+ * meta CODE_ACTIVE_DAYS_TARGET, 20%). Por dia vale o maior entre os commits
+ * coletados dos repositórios e a contagem de contribuições do GitHub — assim
+ * os dois modos da Forja (público e token) contam sem somar o mesmo commit duas vezes.
+ * O tempo de editor do WakaTime não entra mais (a pedido do usuário: contava muito pouco).
+ * Sem GitHub nem Advent of Code conectados, a dimensão fica sem dado.
  */
-export async function codeScore(db: Db, ownerId: string, date: string, tz: string): Promise<DimensionScore & { minutes: number; activeDays: number }> {
+export async function codeScore(db: Db, ownerId: string, date: string, tz: string): Promise<DimensionScore & { commits: number; activeDays: number }> {
   const from = isoDate(addDays(date, -(LIFE_WINDOW_DAYS - 1)));
-  const [conn, waka, contrib, stars] = await Promise.all([
+  const [conn, events, contrib, stars] = await Promise.all([
     db.execute({
-      sql: `SELECT (SELECT COUNT(*) FROM wakatime_connections WHERE owner_id = ?1) AS waka,
-                   (SELECT COUNT(*) FROM code_integrations WHERE owner_id = ?1) AS gh,
+      sql: `SELECT (SELECT COUNT(*) FROM code_integrations WHERE owner_id = ?1) AS gh,
                    (SELECT COUNT(*) FROM aoc_accounts WHERE owner_id = ?1) AS aoc`,
       args: [ownerId],
     }),
-    db.execute({ sql: "SELECT day_key, total_seconds FROM wakatime_days WHERE owner_id = ? AND day_key BETWEEN ? AND ?", args: [ownerId, from, date] }),
-    db.execute({ sql: "SELECT day_key FROM code_contrib_days WHERE owner_id = ? AND count > 0 AND day_key BETWEEN ? AND ?", args: [ownerId, from, date] }),
+    db.execute({ sql: "SELECT day_key, COUNT(*) AS n FROM code_events WHERE owner_id = ? AND kind = 'commit' AND day_key BETWEEN ? AND ? GROUP BY day_key", args: [ownerId, from, date] }),
+    db.execute({ sql: "SELECT day_key, count FROM code_contrib_days WHERE owner_id = ? AND count > 0 AND day_key BETWEEN ? AND ?", args: [ownerId, from, date] }),
     db.execute({ sql: "SELECT earned_at FROM aoc_stars WHERE owner_id = ? AND earned_at >= ?", args: [ownerId, isoDate(addDays(from, -1))] }),
   ]);
-  const c = conn.rows[0] as unknown as { waka: number; gh: number; aoc: number } | undefined;
-  const hasWaka = Number(c?.waka ?? 0) > 0;
-  if (!hasWaka && Number(c?.gh ?? 0) === 0 && Number(c?.aoc ?? 0) === 0) return { score: 0, hasData: false, minutes: 0, activeDays: 0 };
-  const days = new Set<string>();
-  let minutes = 0;
-  for (const r of waka.rows) {
-    const m = Number(r.total_seconds ?? 0) / 60;
-    minutes += m;
-    if (m >= CODE_ACTIVE_DAY_MIN) days.add(String(r.day_key));
-  }
-  for (const r of contrib.rows) days.add(String(r.day_key));
+  const c = conn.rows[0] as unknown as { gh: number; aoc: number } | undefined;
+  if (Number(c?.gh ?? 0) === 0 && Number(c?.aoc ?? 0) === 0) return { score: 0, hasData: false, commits: 0, activeDays: 0 };
+  const perDay = new Map<string, number>();
+  for (const r of events.rows) perDay.set(String(r.day_key), Math.max(perDay.get(String(r.day_key)) ?? 0, Number(r.n)));
+  for (const r of contrib.rows) perDay.set(String(r.day_key), Math.max(perDay.get(String(r.day_key)) ?? 0, Number(r.count)));
+  const commits = [...perDay.values()].reduce((a, b) => a + b, 0);
+  const days = new Set([...perDay.entries()].filter(([, n]) => n > 0).map(([d]) => d));
   for (const r of stars.rows) {
     const d = localDayOfStored(String(r.earned_at), tz);
     if (d >= from && d <= date) days.add(d);
   }
-  const daysPart = clamp((days.size / CODE_ACTIVE_DAYS_TARGET) * 100);
-  const score = hasWaka ? clamp(0.6 * clamp((minutes / CODE_WEEK_TARGET_MIN) * 100) + 0.4 * daysPart) : daysPart;
-  return { score, hasData: true, minutes: Math.round(minutes), activeDays: days.size };
+  const score = clamp(0.8 * clamp((commits / CODE_WEEK_TARGET_COMMITS) * 100) + 0.2 * clamp((days.size / CODE_ACTIVE_DAYS_TARGET) * 100));
+  return { score, hasData: true, commits, activeDays: days.size };
 }
 
 /**
@@ -275,7 +270,7 @@ export interface LifeScoreBreakdown {
     missionsPoints: number;
     missionsTotal: number;
     knowledgeMinutes: number;
-    codeMinutes: number;
+    codeCommits: number;
     codeActiveDays: number;
   };
 }
@@ -316,7 +311,7 @@ export async function computeLifeScore(ownerId: string, dateArg?: string): Promi
       missionsPoints: productivity.points,
       missionsTotal: productivity.total,
       knowledgeMinutes: knowledge.minutes,
-      codeMinutes: code.minutes,
+      codeCommits: code.commits,
       codeActiveDays: code.activeDays,
     },
   };

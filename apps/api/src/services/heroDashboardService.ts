@@ -4,7 +4,7 @@ import { ATTRIBUTE_GUIDES, BUILD_ATTRIBUTES } from "../config/build.js";
 import { getPlayerProfile, xpToReachLevel } from "./gamificationService.js";
 import { shiftDayKey, userDayContext } from "./localDayService.js";
 import { computeLifeScore, saveLifeScoreSnapshot } from "./metricsService.js";
-import { KNOWLEDGE_WEEK_TARGET_MIN, LIFE_DIMS, LIFE_DIM_LABEL, LIFE_DIM_SOURCE, type LifeDim } from "../config/lifeScore.js";
+import { CODE_WEEK_TARGET_COMMITS, KNOWLEDGE_WEEK_TARGET_MIN, LIFE_DIMS, LIFE_DIM_LABEL, LIFE_DIM_SOURCE, type LifeDim } from "../config/lifeScore.js";
 import { getBuildOverview } from "./characterBuildService.js";
 import { getCodex } from "./codexService.js";
 import { listAchievements } from "./achievementsService.js";
@@ -33,7 +33,7 @@ const DIM_SOURCE = LIFE_DIM_SOURCE;
 export function dimDetail(d: Dim, x: Awaited<ReturnType<typeof computeLifeScore>>["details"]): string | null {
   if (d === "productivity") return x.missionsTotal ? `${String(x.missionsPoints).replace(".", ",")} de ${x.missionsTotal} missões no prazo (7 dias)` : null;
   if (d === "knowledge") return `${x.knowledgeMinutes} de ${KNOWLEDGE_WEEK_TARGET_MIN} min na semana`;
-  if (d === "code") return `${x.codeMinutes} min de editor · ${x.codeActiveDays} dia(s) ativos`;
+  if (d === "code") return `${x.codeCommits} de ${CODE_WEEK_TARGET_COMMITS} commits na semana · ${x.codeActiveDays} dia(s) ativos`;
   return null;
 }
 

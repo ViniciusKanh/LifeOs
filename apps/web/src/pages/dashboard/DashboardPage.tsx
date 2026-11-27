@@ -49,7 +49,7 @@ const DIM_EXPLAIN = {
   habits: "% dos hábitos cumpridos hoje.",
   education: "Progresso médio das suas formações.",
   knowledge: "Minutos de livros, podcasts, aulas e papers na semana (meta: 300).",
-  code: "WakaTime, commits e Advent of Code na semana.",
+  code: "Commits na semana (meta 15) e dias com commit ou estrela do Advent of Code.",
 };
 
 /** Painel do Herói: no tema RPG, o centro de evolução; nos demais temas, o Dashboard clássico. */

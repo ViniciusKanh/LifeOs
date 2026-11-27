@@ -82,8 +82,11 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
     expect(score.body.missing).not.toContain("knowledge");
   });
 
-  it("Código combina minutos do WakaTime e dias com atividade; sem integração fica sem dado", async () => {
+  it("Código mede o volume de commits da semana (o WakaTime não conta) e fica sem dado sem GitHub/AoC", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
+    const db = getDb();
+    // Só WakaTime conectado: continua sem dado.
+    await db.execute({ sql: "INSERT INTO wakatime_connections (owner_id, api_key_enc) VALUES (?, 'x')", args: [userId] });
     const first = await agent.get("/api/analytics/life-score");
     expect(first.body.missing).toContain("code");
     const today = first.body.date as string;
@@ -92,16 +95,15 @@ describe("Life Score (GET /api/analytics/life-score)", () => {
       d.setUTCDate(d.getUTCDate() + n);
       return d.toISOString().slice(0, 10);
     };
-    const db = getDb();
+    await db.execute({ sql: "INSERT INTO wakatime_days (owner_id, day_key, total_seconds) VALUES (?, ?, 36000)", args: [userId, today] });
     await db.execute({ sql: "INSERT INTO code_integrations (owner_id, username) VALUES (?, 'vini')", args: [userId] });
-    await db.execute({ sql: "INSERT INTO code_contrib_days (owner_id, day_key, count) VALUES (?, ?, 3), (?, ?, 1)", args: [userId, day(-1), userId, day(-4)] });
-    // Só GitHub: 2 dias ativos de 5 = 40.
+    // Calendário de contribuições: 4 + 2 commits em dois dias.
+    await db.execute({ sql: "INSERT INTO code_contrib_days (owner_id, day_key, count) VALUES (?, ?, 4), (?, ?, 2)", args: [userId, day(-1), userId, day(-4)] });
+    // Mesmo dia coletado pelos repositórios (3 commits): vale o maior (4), sem somar duas vezes.
+    for (let i = 0; i < 3; i++)
+      await db.execute({ sql: "INSERT INTO code_events (id, owner_id, kind, external_id, repo_full_name, occurred_at, day_key) VALUES (?, ?, 'commit', ?, 'vini/lifeos', ?, ?)", args: [`ev-${userId}-${i}`, userId, `sha${i}`, `${day(-1)}T15:00:00Z`, day(-1)] });
+    // 6 de 15 commits (40 → 32) + 2 de 5 dias (40 → 8) = 40; as 10 h de WakaTime não somam nada.
     expect((await agent.get("/api/analytics/life-score")).body.code).toBe(40);
-
-    await db.execute({ sql: "INSERT INTO wakatime_connections (owner_id, api_key_enc) VALUES (?, 'x')", args: [userId] });
-    await db.execute({ sql: "INSERT INTO wakatime_days (owner_id, day_key, total_seconds) VALUES (?, ?, 9000), (?, ?, 9000)", args: [userId, today, userId, day(-1)] });
-    // 300 de 600 min (50 → 30) + 3 dias ativos de 5 (60 → 24) = 54.
-    expect((await agent.get("/api/analytics/life-score")).body.code).toBe(54);
   });
 
   it("o snapshot grava as dimensões novas e deixa NULL o que não tem dado", async () => {
