@@ -44,6 +44,13 @@ const METRIC_KEYS = [
   "bestiary_legendary",
   "podcast_episodes",
   "podcast_hours",
+  "city_read_days",
+  "city_territories",
+  "city_esic_days",
+  "city_comparisons",
+  "city_opportunities",
+  "city_sources",
+  "city_sof_days",
   "code_commits_total",
   "code_prs_merged",
   "code_releases_total",
@@ -241,6 +248,14 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("bestiary_legendary", "SELECT COUNT(*) FROM bestiary_species WHERE owner_id = ? AND rarity = 'lendaria'");
   addScalar("podcast_episodes", "SELECT COUNT(*) FROM podcast_listens WHERE owner_id = ?");
   addScalar("podcast_hours", "SELECT COALESCE(SUM(duration_seconds), 0) / 3600 FROM podcast_listens WHERE owner_id = ?");
+  // Cidade Inteligente: tudo vem de city_history/city_favorites (uma linha por dia+fonte+ação+ref — sem farm).
+  addScalar("city_read_days", "SELECT COUNT(DISTINCT day_key) FROM city_history WHERE owner_id = ? AND api = 'dom' AND action = 'read'");
+  addScalar("city_territories", "SELECT COUNT(DISTINCT ref) FROM city_history WHERE owner_id = ? AND action = 'territory'");
+  addScalar("city_esic_days", "SELECT COUNT(DISTINCT day_key) FROM city_history WHERE owner_id = ? AND api = 'esic' AND action = 'explore'");
+  addScalar("city_comparisons", "SELECT COUNT(*) FROM city_history WHERE owner_id = ? AND action = 'compare'");
+  addScalar("city_opportunities", "SELECT COUNT(*) FROM city_favorites WHERE owner_id = ? AND api IN ('dom', 'licitacoes')");
+  addScalar("city_sources", "SELECT COUNT(DISTINCT api) FROM city_api_status WHERE owner_id = ? AND last_ok_at IS NOT NULL");
+  addScalar("city_sof_days", "SELECT COUNT(DISTINCT day_key) FROM city_history WHERE owner_id = ? AND api = 'sof' AND action = 'explore'");
   addScalar("papers_saved", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ?");
   addScalar("papers_read", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status IN ('lido', 'fichado')");
   addScalar("papers_reviewed", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status = 'fichado'");

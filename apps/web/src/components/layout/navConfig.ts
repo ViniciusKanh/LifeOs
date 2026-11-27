@@ -42,6 +42,12 @@ import {
   type LucideIcon,
   Github,
   LibraryBig,
+  Building2,
+  Newspaper,
+  Stethoscope,
+  Vote,
+  MapPinned,
+  PiggyBank,
 } from "lucide-react";
 
 /**
@@ -165,6 +171,58 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/biblioteca-mestrado", label: "Biblioteca do Mestrado", icon: LibraryBig, quote: "Quem ficha, escreve." },
       { to: "/grimorio", label: "Memorização", rpgLabel: "Grimório", icon: BookOpenText, quote: "O que se revisa, não se esquece." },
       { to: "/administracao", label: "Administração", icon: FolderLock, quote: "O que é lembrado a tempo não vira problema." },
+    ],
+  },
+  {
+    // Cidade Inteligente — São Paulo: 12 APIs oficiais da Prefeitura (APILIB), em 5 grupos com abas.
+    id: "cidade",
+    label: "Cidade Inteligente",
+    items: [
+      { to: "/cidade", label: "Visão Geral da Cidade", icon: Building2, quote: "Conhecer a cidade é parte da jornada." },
+      {
+        to: "/cidade/diario-oficial",
+        label: "Notícias e Oportunidades",
+        icon: Newspaper,
+        quote: "Quem lê o Diário encontra a porta aberta.",
+        tabs: [
+          { to: "/cidade/diario-oficial", label: "Diário Oficial" },
+          { to: "/cidade/licitacoes", label: "Licitações" },
+        ],
+      },
+      {
+        to: "/cidade/de-olho-na-fila",
+        label: "Saúde e Educação",
+        icon: Stethoscope,
+        quote: "Serviço público bom é serviço público encontrado.",
+        tabs: [
+          { to: "/cidade/de-olho-na-fila", label: "De Olho na Fila" },
+          { to: "/cidade/escola-aberta", label: "Escola Aberta" },
+          { to: "/cidade/prato-aberto", label: "Prato Aberto" },
+        ],
+      },
+      {
+        to: "/cidade/procon",
+        label: "Cidadania e Consumo",
+        icon: Vote,
+        quote: "Informação pública é um direito seu.",
+        tabs: [
+          { to: "/cidade/procon", label: "PROCON" },
+          { to: "/cidade/sp156", label: "SP156" },
+          { to: "/cidade/e-sic", label: "e-SIC" },
+        ],
+      },
+      {
+        to: "/cidade/idhm",
+        label: "Inteligência Territorial",
+        icon: MapPinned,
+        quote: "Cada território conta uma história.",
+        tabs: [
+          { to: "/cidade/idhm", label: "IDHM" },
+          { to: "/cidade/censo", label: "Censo" },
+          { to: "/cidade/lentidao", label: "Lentidão" },
+        ],
+      },
+      { to: "/cidade/sof", label: "Finanças Públicas", icon: PiggyBank, quote: "O orçamento da cidade também é assunto seu." },
     ],
   },
   {

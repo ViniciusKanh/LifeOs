@@ -21,6 +21,11 @@ export class IntegrationError extends Error {
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 let fetchImpl: FetchLike = (url, init) => fetch(url, init);
 
+/** Fetch cru das integrações (status e cabeçalhos à vista) — o mesmo que os testes substituem. */
+export function integrationFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetchImpl(url, init);
+}
+
 /** Só para testes: substitui o fetch de todas as integrações. */
 export function setIntegrationFetchForTests(fn: FetchLike | null) {
   fetchImpl = fn ?? ((url, init) => fetch(url, init));

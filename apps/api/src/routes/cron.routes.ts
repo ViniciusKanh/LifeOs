@@ -1,4 +1,5 @@
 import { getDb } from "../db/client.js";
+import { runCityAlertsForAll } from "../services/cityService.js";
 import { runDueAutomationsForAll } from "../services/automationRunner.js";
 import { Router } from "express";
 import { steamDailySnapshots } from "../services/steamService.js";
@@ -56,6 +57,8 @@ cronRouter.get("/notification-triggers", async (req, res) => {
     radarWeeklyScans(getDb()).catch(() => 0),
     lichessDailySync(getDb()).catch(() => 0),
   ]);
-  return res.json({ automations, steamSnapshots, waka, clickup, radar, chess });
+  // Cidade Inteligente: alertas do Diário Oficial (uma vez por dia e por publicação).
+  const city = await runCityAlertsForAll(getDb()).catch(() => ({ users: 0, hits: 0 }));
+  return res.json({ automations, steamSnapshots, waka, clickup, radar, chess, city });
 });
 
