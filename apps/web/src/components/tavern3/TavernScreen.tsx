@@ -40,6 +40,7 @@ import { useUrlTab } from "@/components/hero/HeroShared";
 import { useTavern3, useTavern3Actions } from "@/hooks/useTavern3";
 import { STEP_LABEL, tavern3Service, type StepKey, type Tavern3 } from "@/services/tavern3Service";
 import { healthService } from "@/services/healthService";
+import { LoreScroll } from "@/components/tavern3/LoreScroll";
 import { tavernService } from "@/services/tavernService";
 import { ApiError } from "@/services/api";
 import { MOOD_EMOJI } from "@/utils/moodScale";
@@ -47,7 +48,7 @@ import { MOOD_EMOJI } from "@/utils/moodScale";
 const ART = "/assets/rpg/modules/tavern3";
 const R = { borderRadius: 4 };
 type Toast = (m: string, tone?: "success" | "error") => void;
-const TABS = ["visao", "balanco", "aprendizados", "amanha", "conquistas", "historico", "conselho", "automacoes"] as const;
+const TABS = ["visao", "balanco", "aprendizados", "pergaminho", "amanha", "conquistas", "historico", "conselho", "automacoes"] as const;
 type Tab = (typeof TABS)[number];
 const DIM_LABEL: Record<string, string> = { productivity: "Produtividade", health: "Saúde", habits: "Hábitos", goals: "Metas", reading: "Leitura", education: "Educação", professional: "Profissional" };
 const TIER: Record<string, { label: string; tone: "muted" | "blue" | "gold" | "purple" }> = { bronze: { label: "Comum", tone: "muted" }, silver: { label: "Raro", tone: "blue" }, gold: { label: "Épico", tone: "gold" }, platinum: { label: "Lendário", tone: "purple" } };
@@ -619,6 +620,7 @@ export function TavernScreen() {
     ["visao", "Visão Geral", <Sparkles key="i" size={14} />],
     ["balanco", "Balanço", <BarChart3 key="i" size={14} />],
     ["aprendizados", "Aprendizados", <Lightbulb key="i" size={14} />],
+    ["pergaminho", "Pergaminho do Dia", <ScrollText key="i" size={14} />],
     ["amanha", "Planejar Amanhã", <CalendarClock key="i" size={14} />],
     ["conquistas", "Conquistas", <Trophy key="i" size={14} />],
     ["historico", "Histórico", <History key="i" size={14} />],
@@ -663,6 +665,7 @@ export function TavernScreen() {
           )}
           {tab === "balanco" && <BalanceTab t={t} notify={notify} />}
           {tab === "aprendizados" && <LearningsTab t={t} notify={notify} />}
+          {tab === "pergaminho" && <LoreScroll notify={notify} />}
           {tab === "amanha" && <TomorrowTab t={t} notify={notify} />}
           {tab === "conquistas" && (
             <AchievementsPanel t={t} />

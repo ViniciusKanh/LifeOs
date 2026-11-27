@@ -1,4 +1,5 @@
 import { MySkillsCard } from "@/components/skilltree/SkillPanels";
+import { VideoCourses } from "@/components/education/VideoCourses";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { GraduationCap, LibraryBig, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -143,6 +144,11 @@ export function EducacaoPage() {
           onCta={() => setModalOpen(true)}
         />
       )}
+
+      {/* Cursos em Vídeo: playlists do YouTube como cursos (independe de ter formação cadastrada). */}
+      <div className="mb-4">
+        <VideoCourses />
+      </div>
 
       {sortedEducations.length > 1 && (
         <div className="flex items-center gap-2 mb-4 flex-wrap">

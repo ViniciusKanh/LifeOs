@@ -1,3 +1,4 @@
+import { SkyWindow } from "@/components/world/SkyWindow";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -366,6 +367,9 @@ export function MeuMundoPage() {
       </div>
 
       <TimelineStrip events={timeline} filter={filter} onFilter={setFilter} onHistory={() => setDrawer({ kind: "history" })} loading={!w} />
+
+      {/* Vitral do Céu: foto astronômica do dia (NASA APOD) e álbum de céus. */}
+      {!expanded && <SkyWindow />}
 
       {/* Painéis contextuais */}
       <Modal

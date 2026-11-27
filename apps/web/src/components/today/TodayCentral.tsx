@@ -1,3 +1,4 @@
+import { LeaveNow } from "@/components/today/LeaveNow";
 import { MySkillsCard } from "@/components/skilltree/SkillPanels";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -810,6 +811,8 @@ export function TodayCentral() {
     <div className="w-full space-y-3 px-4 py-6 md:px-6 lg:px-8">
       <TodayBanner hub={hub} />
       <TodayIndicators hub={hub} />
+      {/* Hora de Sair: ônibus de São Paulo (SPTrans) antes do próximo compromisso. */}
+      <LeaveNow />
       <MySkillsCard compact />
       <ModuleTabs label="Seções do dia" value={tab} onChange={setTab} tabs={tabs} />
       {tab === "visao" && (

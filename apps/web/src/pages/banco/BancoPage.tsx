@@ -44,6 +44,7 @@ import { RPGHowItWorks } from "@/components/rpg/RPGHowItWorks";
 import { useSearchParams } from "react-router-dom";
 import { useBankHub } from "@/hooks/useModuleHub";
 import { AdvisorPanel, KitSection, MODULE_ART, ModuleBanner, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { KingdomThermometer } from "@/components/bank/KingdomThermometer";
 import { AutomaticView, BankIndicators, BankRankPanel, FinancialJourney, GuildStats, PlanCatalog, RewardsView, VaultGrid } from "@/components/bank/BankGuild";
 import { Modal } from "@/components/ui/Modal";
 import { achievementIcon } from "@/components/achievements/achievementIcons";
@@ -75,7 +76,7 @@ import type { Goal } from "@/types";
  */
 
 const HIDE_BALANCE_KEY = "lifeos-banco-saldo-oculto";
-const BANK_VIEWS = ["investir", "credito", "automatico", "extrato", "cofres", "recompensas"] as const;
+const BANK_VIEWS = ["investir", "credito", "automatico", "extrato", "cofres", "recompensas", "mercado"] as const;
 type BankView = (typeof BANK_VIEWS)[number];
 
 function formatCoins(n: number) {
@@ -1416,6 +1417,7 @@ export function BancoPage() {
           { value: "extrato", label: "Extrato", icon: <Receipt size={15} /> },
           { value: "cofres", label: "Cofres", icon: <Vault size={15} />, badge: summary?.claimable.length ?? 0 },
           { value: "recompensas", label: "Recompensas", icon: <Sparkles size={15} /> },
+          { value: "mercado", label: "Termômetro", icon: <Percent size={15} /> },
         ]}
       />
 
@@ -1432,6 +1434,9 @@ export function BancoPage() {
       )}
 
       {view === "recompensas" && hub && <RewardsView hub={hub} />}
+
+      {/* Termômetro do Reino: taxas reais do Banco Central (SGS) para comparar com o Cofrinho. */}
+      {view === "mercado" && <KingdomThermometer />}
 
       {view === "automatico" && (
         <AutomaticView

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
-import { Briefcase, ChevronRight, Hammer, Library, PartyPopper, Radar, UtensilsCrossed } from "lucide-react";
+import { Briefcase, Bus, ChevronRight, Clapperboard, Flame, Hammer, Library, PartyPopper, Percent, PlayCircle, Radar, ScrollText, Sparkles, UtensilsCrossed, Wind } from "lucide-react";
 import { useClickUp, useHolidays, useNutrition, useRadar, useWakatime, useZotero } from "@/hooks/usePersonalIntegrations";
+import { usePublicKeys } from "@/hooks/usePublicApis";
+import type { KeyStatus } from "@/services/publicApisService";
 
 type State = "ok" | "off" | "warn" | "load";
 
@@ -38,7 +40,11 @@ export function PersonalIntegrationsCard() {
   const clickup = useClickUp();
   const meals = useNutrition();
   const holidays = useHolidays(new Date().getFullYear());
+  const keys = usePublicKeys();
   const sync = (s: string | null | undefined): State => (s === "erro" ? "warn" : "ok");
+  // Só a origem da chave (pessoal/servidor) — o valor nunca chega ao navegador.
+  const keyState = (k: KeyStatus | undefined): State => (keys.isLoading ? "load" : k?.source ? "ok" : "off");
+  const keyDetail = (k: KeyStatus | undefined, off: string) => (k?.source === "pessoal" ? `sua chave ${k.masked ?? ""}`.trim() : k?.source === "servidor" ? "chave do servidor" : off);
   return (
     <ul className="space-y-2">
       <Row icon={<Library size={18} />} name="Zotero" screen="Biblioteca do Mestrado" to="/biblioteca-mestrado" state={zotero.isLoading ? "load" : zotero.data?.connected ? sync(zotero.data.connection?.lastSyncStatus) : "off"} detail={zotero.data?.connected ? `${zotero.data.stats.linked} itens vinculados` : "chave pessoal (leitura)"} />
@@ -47,6 +53,14 @@ export function PersonalIntegrationsCard() {
       <Row icon={<Briefcase size={18} />} name="ClickUp" screen="Profissional" to="/profissional" state={clickup.isLoading ? "load" : clickup.data?.connected ? sync(clickup.data.connection?.lastSyncStatus) : "off"} detail={clickup.data?.connected ? `${clickup.data.counts.open} tarefa(s) abertas · ${clickup.data.connection?.team?.name ?? ""}` : "token pessoal pk_"} />
       <Row icon={<UtensilsCrossed size={18} />} name="Open Food Facts" screen="Saúde · Cozinha do Herói" to="/saude" state={meals.isLoading ? "load" : "ok"} detail={meals.data ? `${meals.data.streak} dia(s) seguidos com refeição · sem chave` : "sem chave"} />
       <Row icon={<PartyPopper size={18} />} name="BrasilAPI (feriados)" screen="Agenda, Conselho e Raid" to="/calendario?aba=calendario" state={holidays.isLoading ? "load" : holidays.data?.unavailableYears.length ? "warn" : "ok"} detail={holidays.data ? `${holidays.data.items.length} feriado(s) em ${holidays.data.year}` : "sem chave"} />
+      <Row icon={<PlayCircle size={18} />} name="YouTube Data API" screen="Educação · Cursos em Vídeo" to="/educacao" state={keyState(keys.data?.youtube)} detail={keyDetail(keys.data?.youtube, "chave de API (grátis)")} />
+      <Row icon={<Wind size={18} />} name="Open-Meteo (qualidade do ar)" screen="Saúde · Ar do Treino" to="/saude" state="ok" detail="sem chave · usa a cidade do Clima" />
+      <Row icon={<Flame size={18} />} name="Hugging Face (Daily Papers)" screen="Biblioteca do Mestrado" to="/biblioteca-mestrado" state="ok" detail="sem chave" />
+      <Row icon={<Bus size={18} />} name="SPTrans Olho Vivo" screen="Hoje · Hora de Sair" to="/hoje" state={keyState(keys.data?.sptrans)} detail={keyDetail(keys.data?.sptrans, "token de cadastro (grátis)")} />
+      <Row icon={<ScrollText size={18} />} name="Wikipédia (Neste dia)" screen="Taverna · Pergaminho do Dia" to="/taverna?aba=pergaminho" state="ok" detail="sem chave" />
+      <Row icon={<Sparkles size={18} />} name="NASA APOD" screen="Meu Mundo · Vitral do Céu" to="/meu-mundo" state={keys.isLoading ? "load" : "ok"} detail={keyDetail(keys.data?.nasa, "DEMO_KEY (limite baixo)")} />
+      <Row icon={<Clapperboard size={18} />} name="TMDB" screen="Sala de Cinema" to="/sala-de-cinema" state={keyState(keys.data?.tmdb)} detail={keyDetail(keys.data?.tmdb, "chave de API (grátis)")} />
+      <Row icon={<Percent size={18} />} name="Banco Central (SGS)" screen="Banco do Reino · Termômetro" to="/banco" state="ok" detail="sem chave" />
     </ul>
   );
 }

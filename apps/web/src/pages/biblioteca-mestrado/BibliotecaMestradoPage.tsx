@@ -14,6 +14,7 @@ import { researchService, type LibraryHub, type LibraryPaper, type PaperMeta, ty
 import { ApiError } from "@/services/api";
 import { ArticleRadar } from "@/components/research/ArticleRadar";
 import { ZoteroPortal } from "@/components/research/ZoteroPortal";
+import { HfTrends } from "@/components/research/HfTrends";
 
 const R = { borderRadius: 6 };
 const inputCls = "w-full border border-rpg-border bg-rpg-bg-2 p-2 text-sm text-rpg-text outline-none focus:border-rpg-gold";
@@ -578,6 +579,15 @@ export function BibliotecaMestradoPage() {
         }} />
         <ZoteroPortal notify={notify} />
       </div>
+
+      {/* Papers em Alta (Hugging Face): complementa o Radar com o que a comunidade está lendo hoje. */}
+      <HfTrends
+        notify={notify}
+        onOpenPaper={(id) => {
+          setSelected(id);
+          document.getElementById("artigo-selecionado")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
 
       <div id="artigo-selecionado" className="grid grid-cols-1 scroll-mt-4 gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         {selected ? (

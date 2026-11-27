@@ -1,4 +1,5 @@
 import {
+  Clapperboard,
   Castle,
   Boxes,
   Store,
@@ -155,6 +156,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/habitos", label: "Hábitos", icon: Repeat, quote: "Disciplina é a ponte entre seus objetivos e seus sonhos." },
       { to: "/saude", label: "Saúde", icon: HeartPulse, quote: "Corpo saudável, mente mais forte." },
       { to: "/biblioteca", label: "Biblioteca", icon: BookOpen, quote: "Livros constroem a melhor versão de nós." },
+      { to: "/sala-de-cinema", label: "Sala de Cinema", icon: Clapperboard, quote: "Toda boa história vista vira parte da sua." },
       { to: "/educacao", label: "Educação", icon: GraduationCap, quote: "Estudo hoje, liberdade amanhã." },
       { to: "/biblioteca-mestrado", label: "Biblioteca do Mestrado", icon: LibraryBig, quote: "Quem ficha, escreve." },
       { to: "/grimorio", label: "Memorização", rpgLabel: "Grimório", icon: BookOpenText, quote: "O que se revisa, não se esquece." },

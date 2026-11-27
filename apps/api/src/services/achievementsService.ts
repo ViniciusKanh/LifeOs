@@ -25,6 +25,15 @@ const METRIC_KEYS = [
   "clickup_tasks_done",
   "meals_logged",
   "protein_goal_days",
+  "video_lessons_done",
+  "video_courses_done",
+  "clean_air_workouts",
+  "hf_papers_triaged",
+  "transit_on_time",
+  "lore_scrolls_read",
+  "sky_album_count",
+  "cinema_rated",
+  "cinema_genres",
   "code_commits_total",
   "code_prs_merged",
   "code_releases_total",
@@ -200,6 +209,17 @@ async function computeMetrics(db: Db, ownerId: string, metricFilter?: Iterable<s
   addScalar("clickup_tasks_done", "SELECT COUNT(*) FROM clickup_task_links l JOIN tasks t ON t.id = l.task_id AND t.owner_id = l.owner_id WHERE l.owner_id = ? AND t.status = 'Concluído'");
   addScalar("meals_logged", "SELECT COUNT(*) FROM meals WHERE owner_id = ?");
   addScalar("protein_goal_days", "SELECT COUNT(*) FROM xp_events WHERE owner_id = ? AND source_type = 'nutrition' AND event_type = 'protein_goal'");
+  // APIs públicas por tela (Cursos em Vídeo, Ar do Treino, Papers em Alta, Hora de Sair,
+  // Pergaminho, Vitral do Céu, Sala de Cinema): sempre contadas dos registros reais.
+  addScalar("video_lessons_done", "SELECT COUNT(*) FROM video_lessons WHERE owner_id = ? AND done_at IS NOT NULL");
+  addScalar("video_courses_done", "SELECT COUNT(*) FROM video_courses WHERE owner_id = ? AND status = 'concluido'");
+  addScalar("clean_air_workouts", "SELECT COUNT(*) FROM xp_events WHERE owner_id = ? AND source_type = 'workout' AND event_type = 'clean_air'");
+  addScalar("hf_papers_triaged", "SELECT COUNT(*) FROM hf_paper_triage WHERE owner_id = ?");
+  addScalar("transit_on_time", "SELECT COUNT(*) FROM transit_departures WHERE owner_id = ? AND on_time = 1");
+  addScalar("lore_scrolls_read", "SELECT COUNT(*) FROM lore_scrolls WHERE owner_id = ?");
+  addScalar("sky_album_count", "SELECT COUNT(*) FROM sky_album WHERE owner_id = ?");
+  addScalar("cinema_rated", "SELECT COUNT(*) FROM cinema_items WHERE owner_id = ? AND status = 'visto' AND rating IS NOT NULL");
+  addScalar("cinema_genres", "SELECT COUNT(DISTINCT j.value) FROM cinema_items c, json_each(c.genres_json) j WHERE c.owner_id = ? AND c.status = 'visto'");
   addScalar("papers_saved", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ?");
   addScalar("papers_read", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status IN ('lido', 'fichado')");
   addScalar("papers_reviewed", "SELECT COUNT(*) FROM user_papers WHERE owner_id = ? AND status = 'fichado'");

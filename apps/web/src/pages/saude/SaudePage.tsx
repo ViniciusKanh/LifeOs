@@ -36,6 +36,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { RPGAvatarButton, RPGPageHeader } from "@/components/rpg";
 import { RpgHealthAttributes } from "@/components/health/RpgHealthSections";
 import { HeroKitchen } from "@/components/health/HeroKitchen";
+import { TrainingAir } from "@/components/health/TrainingAir";
 import type { MoodEntryInput, SleepEntryInput, WaterEntryInput, WorkoutInput } from "@/services/healthService";
 import { aggregateSleepNights } from "@/utils/sleepNights";
 import { useHealthHub } from "@/hooks/useModuleHub";
@@ -460,6 +461,9 @@ export function SaudePage() {
 
       {/* Cozinha do Herói: refeições por código de barras (Open Food Facts) ou manual. */}
       <HeroKitchen />
+
+      {/* Ar do Treino: qualidade do ar, UV e pólen (Open-Meteo) e bônus de treino em ar bom. */}
+      <TrainingAir />
 
       {/* Atributo Força (musculação: PRs, 1RM) e Treino técnico (lutas e danças: tempo, rounds, carga). */}
       <div className="mt-4">
