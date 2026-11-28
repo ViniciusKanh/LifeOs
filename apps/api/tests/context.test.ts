@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { mapWeatherCode, classifyUV, classifyAQI, classifyThermalComfort, isRainyDay, isSunnyDay, temperatureBand } from "../src/services/weatherCodeUtils.js";
 import { OpenMeteoWeatherProvider, __clearWeatherCacheForTests } from "../src/services/openMeteoProvider.js";
 
@@ -109,7 +109,7 @@ describe("Contexto do Dia — localização e integração com Signals", () => {
       timezone: "America/Sao_Paulo",
     });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spDay();
     const fakeForecast = {
       current: { temperature_2m: 24, apparent_temperature: 23, weather_code: 1, relative_humidity_2m: 60, wind_speed_10m: 10, time: `${today}T12:00` },
       hourly: {

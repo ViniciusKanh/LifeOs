@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { nanoid } from "nanoid";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { award, todayKeyFor } from "../src/services/gamificationService.js";
 
@@ -644,7 +644,7 @@ describe("Banco — extrato com filtro por categoria/período/texto e detalhe da
       sql: "UPDATE coin_ledger SET created_at = datetime('now', '-10 days') WHERE id = ?",
       args: [old.rows[0]!.id],
     });
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = spDay();
     const res = await agent.get(`/api/bank/ledger?from=${todayKey}&to=${todayKey}`);
     expect(res.body.entries.length).toBe(0); // a única movimentação foi empurrada pra 10 dias atrás
   });

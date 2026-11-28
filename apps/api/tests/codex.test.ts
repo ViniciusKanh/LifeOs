@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { nanoid } from "nanoid";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { allocateXp, calculateAttributeLevel, calculateAttributeSynergy, distributionFor, ruleMet, trendPct } from "../src/services/codexEngine.js";
 
@@ -9,7 +9,7 @@ const codex = async (agent: Agent) => (await agent.get("/api/codex")).body;
 
 async function insertXp(ownerId: string, sourceType: string, count: number, xp = 5) {
   const db = getDb();
-  const day = new Date().toISOString().slice(0, 10);
+  const day = spDay();
   await db.batch(
     Array.from({ length: count }, () => ({
       sql: "INSERT INTO xp_events (id, owner_id, source_type, source_id, event_type, xp, label, day_key) VALUES (?, ?, ?, ?, 'session', ?, 'teste', ?)",
@@ -104,7 +104,7 @@ describe("Códex (API)", () => {
     const { agent, userId } = await createAuthenticatedAgent();
     const user = { id: userId };
     const db = getDb();
-    const at = (h: number, i: number) => `${new Date(Date.now() - (i + 1) * 86_400_000).toISOString().slice(0, 10)}T${String(h).padStart(2, "0")}:00:00.000Z`;
+    const at = (h: number, i: number) => `${spDay(new Date(Date.now() - (i + 1) * 86_400_000))}T${String(h).padStart(2, "0")}:00:00.000Z`;
     const add = (h: number, i: number, min: number) => db.execute({ sql: "INSERT INTO time_entries (id, owner_id, started_at, ended_at, duration_minutes) VALUES (?, ?, ?, ?, ?)", args: [nanoid(), user.id, at(h, i), at(h, i), min] });
     for (let i = 0; i < 3; i++) await add(12, i, 50);
     expect((await codex(agent)).discoveries).toEqual([]);

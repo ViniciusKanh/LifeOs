@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 
 describe("Timeline — feed cronológico", () => {
   it("inclui água e humor no feed, e mostra o nome do projeto de uma tarefa concluída", async () => {
@@ -12,7 +12,7 @@ describe("Timeline — feed cronológico", () => {
     await agent.post("/api/health/water").send({ amountMl: 300 });
     await agent.post("/api/health/mood").send({ mood: 4, energy: 3 });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spDay();
     const res = await agent.get(`/api/analytics/timeline?from=${today}&to=${today}`);
     expect(res.status).toBe(200);
 

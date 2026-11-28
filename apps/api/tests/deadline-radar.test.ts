@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { classifyStatus } from "../src/services/deadlineRadarService.js";
 import { computeRiskScore, classifyRisk } from "../src/services/deadlineRiskService.js";
 
@@ -54,7 +54,7 @@ describe("Deadline Radar — risk score determinístico", () => {
 describe("Deadline Radar — API", () => {
   it("agrega prazos reais de tasks, goals e educação, sem inventar dados", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spDay();
     const overdue = addDays(today, -3);
     const soon = addDays(today, 3);
 
@@ -85,7 +85,7 @@ describe("Deadline Radar — API", () => {
 
   it("completed_at vs due_date determina taxa de prazos em dia (não usa status isolado)", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spDay();
     const past = addDays(today, -5);
     const createdOnTime = await agent.post("/api/tasks").send({ title: "No prazo", dueDate: today, priority: "Média" });
     await agent.patch(`/api/tasks/${createdOnTime.body.id}`).send({ status: "Concluído" });
@@ -98,7 +98,7 @@ describe("Deadline Radar — API", () => {
   it("isolamento multiusuário: usuário não vê prazos de outro", async () => {
     const { agent: agentA } = await createAuthenticatedAgent();
     const { agent: agentB } = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spDay();
     await agentA.post("/api/tasks").send({ title: "Só de A", dueDate: today, priority: "Alta" });
 
     const resB = await agentB.get(`/api/deadline-radar?period=all&today=${today}`);
@@ -108,7 +108,7 @@ describe("Deadline Radar — API", () => {
 
   it("área por projeto: tarefa em projeto profissional cai na área Profissional", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spDay();
     const project = await agent.post("/api/projects").send({ name: "Projeto Prof", kind: "professional" });
     await agent.post("/api/tasks").send({ title: "Entrega prof", dueDate: today, priority: "Alta", projectId: project.body.id });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { campaignGamificationConfig as CC } from "../src/config/campaignGamification.js";
 import { applyBonus, calculateCampaignProgress, habitAdherence, streakBonus, trailStates, weeklyStreak } from "../src/services/campaignEngine.js";
@@ -104,7 +104,7 @@ describe("Forja de Campanhas (API)", () => {
 
   it("conclusão antiga paga recompensa uma vez; pausar/retomar vão para a Timeline", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const start = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+    const start = spDay(new Date(Date.now() - 10 * 86_400_000));
     const c = await agent.post("/api/campaigns").send({ title: "Explorador do Mundo", startDate: start, completionXp: 300, completionCoins: 60, newTasks: [{ title: "Planejar viagem" }] });
     await agent.post(`/api/campaigns/${c.body.id}/status`).send({ status: "paused" });
     await agent.post(`/api/campaigns/${c.body.id}/status`).send({ status: "active" });
@@ -117,7 +117,7 @@ describe("Forja de Campanhas (API)", () => {
     expect([x.status, y.status]).toEqual([200, 200]);
     const after = await profile(agent);
     expect(after.totalXp - before.totalXp).toBe(done.body.reward.xp);
-    const tl = await agent.get(`/api/analytics/timeline?from=${start}&to=${new Date().toISOString().slice(0, 10)}`);
+    const tl = await agent.get(`/api/analytics/timeline?from=${start}&to=${spDay()}`);
     const kinds = (tl.body.events as Array<{ type: string; kind?: string }>).filter((e) => e.type === "campaign").map((e) => e.kind);
     expect(kinds).toEqual(expect.arrayContaining(["created", "paused", "resumed", "completed"]));
   });

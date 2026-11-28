@@ -35,3 +35,9 @@ export async function createAuthenticatedAgent(overrides?: { email?: string; pas
 
   return { agent, userId: id, email };
 }
+
+/**
+ * Dia (aaaa-mm-dd) no fuso de São Paulo — o mesmo que o app usa para "hoje" (todayKeyFor).
+ * Usar toISOString() (UTC) quebra os testes entre 21h e 24h de Brasília.
+ */
+export const spDay = (d: Date = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);

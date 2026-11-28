@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { nanoid } from "nanoid";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { classifyRegion, regionForHabit, regionLevel, xpForRegionLevel } from "../src/services/worldmapService.js";
 
@@ -26,8 +26,8 @@ const worldmap = async (agent: Agent) =>
   };
 const region = (body: { regions: RegionBody[] }, key: string) => body.regions.find((r) => r.key === key)!;
 
-const today = () => new Date().toISOString().slice(0, 10);
-const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
+const today = () => spDay();
+const daysAgo = (d: number) => spDay(new Date(Date.now() - d * 86_400_000));
 
 async function xp(ownerId: string, sourceType: string, sourceId: string, amount: number, opts: { projectId?: string; day?: string; label?: string } = {}) {
   await getDb().execute({

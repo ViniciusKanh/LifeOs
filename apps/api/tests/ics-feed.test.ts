@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 
 describe("Assinatura de calendário externo (.ics)", () => {
   it("gera a URL do feed, serve o .ics com os itens reais e isola por usuário", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const tomorrow = spDay(new Date(Date.now() + 86_400_000));
 
     await agent.post("/api/tasks").send({ title: "Tarefa com prazo pro feed", dueDate: tomorrow });
     await agent.post("/api/events").send({
@@ -50,7 +50,7 @@ describe("Assinatura de calendário externo (.ics)", () => {
     const userA = await createAuthenticatedAgent();
     const userB = await createAuthenticatedAgent();
 
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const tomorrow = spDay(new Date(Date.now() + 86_400_000));
     await userA.agent.post("/api/tasks").send({ title: "Só de A", dueDate: tomorrow });
     await userB.agent.post("/api/tasks").send({ title: "Só de B", dueDate: tomorrow });
 

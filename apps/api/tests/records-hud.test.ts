@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { nanoid } from "nanoid";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 import { buildRecords, weekStartOf, RECORD_METRICS, type RecordMetric } from "../src/services/recordsService.js";
 
@@ -59,7 +59,7 @@ describe("HUD: classe dinâmica e vitrine", () => {
   it("classe acompanha a rotina recente (últimos 30 dias)", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
     const db = getDb();
-    const day = new Date().toISOString().slice(0, 10);
+    const day = spDay();
     for (let i = 0; i < 5; i++) {
       await db.execute({
         sql: "INSERT INTO xp_events (id, owner_id, source_type, source_id, event_type, xp, label, day_key) VALUES (?, ?, 'journal', ?, 'entry', 40, 'Diário', ?)",

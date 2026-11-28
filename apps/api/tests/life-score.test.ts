@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { getDb } from "../src/db/client.js";
 
 
 describe("Life Score (GET /api/analytics/life-score)", () => {
   it("atinge 100 em saúde quando água, sono, movimento e humor estão registrados no dia", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const today = spDay();
+    const yesterday = spDay(new Date(Date.now() - 86_400_000));
 
     expect((await agent.post("/api/health/water").send({ amountMl: 2500, recordedAt: `${today}T12:00:00.000Z` })).status).toBe(201);
     expect((await agent.post("/api/health/sleep").send({ wentToBedAt: `${yesterday}T22:00:00.000Z`, wokeUpAt: `${today}T06:00:00.000Z`, quality: 3 })).status).toBe(201);

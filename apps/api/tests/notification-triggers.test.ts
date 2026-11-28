@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getDb } from "../src/db/client.js";
 import { matchingCustomTasks } from "../src/services/notificationTriggersService.js";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 
 describe("Gatilhos de notificação", () => {
   it("lista regras padrão e atualiza canais", async () => {
     const { agent } = await createAuthenticatedAgent();
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const yesterday = spDay(new Date(Date.now() - 86_400_000));
 
     const created = await agent.post("/api/tasks").send({
       title: "Enviar relatório atrasado",
@@ -30,7 +30,7 @@ describe("Gatilhos de notificação", () => {
 
   it("executa checagem manual de tarefas vencidas sem exigir SMTP/push configurado", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const yesterday = spDay(new Date(Date.now() - 86_400_000));
 
     await agent.post("/api/tasks").send({ title: "Contrato vencido", dueDate: yesterday });
 
@@ -56,8 +56,8 @@ describe("Gatilhos de notificação", () => {
   it("cria gatilho condicional por prazo e prioridade, isolado entre usuários", async () => {
     const { agent, userId } = await createAuthenticatedAgent();
     const other = await createAuthenticatedAgent();
-    const today = new Date().toISOString().slice(0, 10);
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const today = spDay();
+    const tomorrow = spDay(new Date(Date.now() + 86_400_000));
     await agent.post("/api/tasks").send({ title: "Entrega alta", dueDate: tomorrow, priority: "Alta" });
     await agent.post("/api/tasks").send({ title: "Entrega baixa", dueDate: tomorrow, priority: "Baixa" });
 

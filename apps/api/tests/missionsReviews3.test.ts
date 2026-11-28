@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { nanoid } from "nanoid";
 import { getDb } from "../src/db/client.js";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { difficultyFor, lexicalScores, parseDue, parseDuration, priorityFor, titleFrom } from "../src/services/missionAdvisorService.js";
 import { bucketsOf, compareIndicators, isValidKey, mondayOf, type WindowMetrics } from "../src/services/journeyReviewService.js";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => spDay();
 
 describe("Conselheiro de Missões — regras puras", () => {
   it("lê duração e prazo do pedido", () => {

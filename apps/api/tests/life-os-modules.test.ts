@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { createAuthenticatedAgent } from "./helpers.js";
+import { createAuthenticatedAgent, spDay } from "./helpers.js";
 import { addMonths, urgencyOf } from "../src/services/lifeAdminService.js";
 import { extractWikiTitles } from "../src/services/notesService.js";
 
-const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+const inDays = (n: number) => spDay(new Date(Date.now() + n * 86_400_000));
 
 describe("Administração da vida", () => {
   it("datas: soma de meses respeita fim de mês e a urgência vem das datas", () => {
