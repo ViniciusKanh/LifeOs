@@ -96,18 +96,14 @@ const ClimaPage = lazy(() => import("@/pages/meu-mundo/ClimaPage").then((m) => (
 const EstacaoPage = lazy(() => import("@/pages/estacao/EstacaoPage").then((m) => ({ default: m.EstacaoPage })));
 // Cidade Inteligente — São Paulo (APILIB).
 const CidadePage = lazy(() => import("@/pages/cidade/CidadePage").then((m) => ({ default: m.CidadePage })));
-const DiarioOficialPage = lazy(() => import("@/pages/cidade/DiarioOficialPage").then((m) => ({ default: m.DiarioOficialPage })));
 const LicitacoesPage = lazy(() => import("@/pages/cidade/LicitacoesPage").then((m) => ({ default: m.LicitacoesPage })));
-const DeOlhoNaFilaPage = lazy(() => import("@/pages/cidade/DeOlhoNaFilaPage").then((m) => ({ default: m.DeOlhoNaFilaPage })));
 const EscolaAbertaPage = lazy(() => import("@/pages/cidade/EscolaAbertaPage").then((m) => ({ default: m.EscolaAbertaPage })));
-const cityDataset = (name: "PratoAbertoPage" | "ProconPage" | "Sp156Page" | "EsicPage" | "IdhmPage" | "CensoPage" | "LentidaoPage" | "SofPage") =>
+const cityDataset = (name: "PratoAbertoPage" | "ProconPage" | "Sp156Page" | "EsicPage" | "LentidaoPage" | "SofPage") =>
   lazy(() => import("@/pages/cidade/DatasetPages").then((m) => ({ default: m[name] })));
 const PratoAbertoPage = cityDataset("PratoAbertoPage");
 const ProconPage = cityDataset("ProconPage");
 const Sp156Page = cityDataset("Sp156Page");
 const EsicPage = cityDataset("EsicPage");
-const IdhmPage = cityDataset("IdhmPage");
-const CensoPage = cityDataset("CensoPage");
 const LentidaoPage = cityDataset("LentidaoPage");
 const SofPage = cityDataset("SofPage");
 const SalaCinemaPage = lazy(() => import("@/pages/sala-de-cinema/SalaCinemaPage").then((m) => ({ default: m.SalaCinemaPage })));
@@ -236,16 +232,17 @@ export default function App() {
           <Route path="/sala-de-cinema" element={<SalaCinemaPage />} />
           <Route path="/estacao" element={<EstacaoPage />} />
           <Route path="/cidade" element={<CidadePage />} />
-          <Route path="/cidade/diario-oficial" element={<DiarioOficialPage />} />
+          {/* Fontes retiradas (fora do ar na Prefeitura): o endereço antigo volta para a Visão Geral. */}
+          <Route path="/cidade/diario-oficial" element={<Navigate to="/cidade" replace />} />
           <Route path="/cidade/licitacoes" element={<LicitacoesPage />} />
-          <Route path="/cidade/de-olho-na-fila" element={<DeOlhoNaFilaPage />} />
+          <Route path="/cidade/de-olho-na-fila" element={<Navigate to="/cidade" replace />} />
           <Route path="/cidade/escola-aberta" element={<EscolaAbertaPage />} />
           <Route path="/cidade/prato-aberto" element={<PratoAbertoPage />} />
           <Route path="/cidade/procon" element={<ProconPage />} />
           <Route path="/cidade/sp156" element={<Sp156Page />} />
           <Route path="/cidade/e-sic" element={<EsicPage />} />
-          <Route path="/cidade/idhm" element={<IdhmPage />} />
-          <Route path="/cidade/censo" element={<CensoPage />} />
+          <Route path="/cidade/idhm" element={<Navigate to="/cidade" replace />} />
+          <Route path="/cidade/censo" element={<Navigate to="/cidade" replace />} />
           <Route path="/cidade/lentidao" element={<LentidaoPage />} />
           <Route path="/cidade/sof" element={<SofPage />} />
           <Route path="/biblioteca-mestrado" element={<BibliotecaMestradoPage />} />

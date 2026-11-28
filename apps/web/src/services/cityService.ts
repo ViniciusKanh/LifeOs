@@ -1,12 +1,20 @@
 import { api } from "./api";
 
-/** Espelho de /api/city (Cidade Inteligente — apps/api/src/services/cityService.ts e apilibClient.ts). */
+/** Espelho de /api/city (Cidade Inteligente — apps/api/src/services/cityService.ts, cityValues.ts e apilibClient.ts). */
 
-export type CityApi = "dom" | "licitacoes" | "fila" | "escolas" | "prato" | "procon" | "sp156" | "esic" | "idhm" | "censo" | "lentidao" | "sof";
-export type CityDomain = "oportunidades" | "saude" | "educacao" | "consumo" | "cidadania" | "territorial" | "mobilidade" | "financas";
+export type CityApi = "licitacoes" | "escolas" | "prato" | "procon" | "sp156" | "esic" | "lentidao" | "sof";
+export type CityDomain = "oportunidades" | "educacao" | "consumo" | "cidadania" | "mobilidade" | "financas";
 export type CityApiState = "nao_configurada" | "configurada" | "conectada" | "credencial_invalida" | "sem_autorizacao" | "indisponivel" | "limite" | "desatualizada" | "desativada";
 export type Cell = string | number | boolean | null;
 export type Row = Record<string, Cell>;
+
+/** Tipo da coluna decidido pelo servidor: a tela só formata (R$, datas, %, tempos). */
+export type ColumnKind = "money" | "number" | "percent" | "date" | "datetime" | "duration" | "code" | "text";
+export interface ColumnMeta {
+  key: string;
+  label: string;
+  kind: ColumnKind;
+}
 
 export interface ParamDef {
   in: "path" | "query";
@@ -31,7 +39,7 @@ export interface CatalogEntry {
   methodology: string;
   limitations: string[];
   schemaDocumented: boolean;
-  resources: Record<string, { label: string; paging: "limit_offset" | "page" | null; ttlSeconds: number; params: Record<string, ParamDef> }>;
+  resources: Record<string, { label: string; paging: "limit_offset" | "page" | "numPagina" | null; ttlSeconds: number; insights: boolean; params: Record<string, ParamDef> }>;
 }
 
 export interface CredentialStatus {
@@ -57,7 +65,6 @@ export interface FetchMeta {
   resource: string;
   params: Record<string, string>;
   total: number | null;
-  count: number;
   truncated: boolean;
   redacted: string[];
   fetchedAt: string;
@@ -65,47 +72,20 @@ export interface FetchMeta {
   stale: boolean;
   staleReason: string | null;
 }
+export interface DataResponse extends FetchMeta {
+  columns: ColumnMeta[];
+  rows: Row[];
+}
 
-export interface Publication {
-  key: string;
-  title: string;
-  kind: string | null;
-  section: string | null;
-  advertiser: string | null;
-  status: "publicado" | "recebido" | "cancelado" | "teste" | "outro";
-  statusLabel: string | null;
-  date: string | null;
-  notebook: string | null;
-  files: string[];
-  matches: string[];
+export interface Insights {
+  sampleSize: number;
+  dims: Array<{ label: string; column: string; items: Array<{ label: string; count: number }>; distinct: number }>;
+  measures: Array<{ label: string; column: string; value: number; agg: "sum" | "avg" | "max"; filled: number; kind: ColumnKind }>;
+  series: { label: string; column: string; by: "day" | "month" | "hour" | "weekday"; kind: ColumnKind | "count"; points: Array<{ x: string; y: number }> } | null;
+  ranking: { label: string; dim: string; measure: string; kind: ColumnKind; items: Array<{ label: string; value: number }> } | null;
 }
-export type TenderPhase = "aberta" | "em_andamento" | "encerrada" | "sem_data";
-export interface TenderEvent {
-  key: string;
-  object: string;
-  modality: string | null;
-  event: string | null;
-  status: string | null;
-  process: string | null;
-  agency: string | null;
-  segment: string | null;
-  place: string | null;
-  phase: TenderPhase;
-  nextDeadline: { label: string; at: string } | null;
-  values: Array<{ kind: "estimado" | "homologado" | "contratado"; value: number }>;
-  contractor: string | null;
-  publishedAt: string | null;
-}
-export type QueueLevel = "sem_fila" | "pequena" | "media" | "grande" | "fechado" | "desconhecida";
-export interface QueuePost {
-  key: string;
-  unit: string;
-  address: string | null;
-  statusText: string | null;
-  level: QueueLevel;
-  updatedAt: string | null;
-  outdated: boolean;
-  vaccines: Array<{ name: string; available: boolean }>;
+export interface InsightsResponse extends FetchMeta {
+  insights: Insights | null;
 }
 
 export interface Favorite {
@@ -117,15 +97,6 @@ export interface Favorite {
   url: string | null;
   payload: Record<string, unknown>;
   createdAt: string;
-}
-export interface CityAlert {
-  id: string;
-  source: "publicacoes" | "licitacoes";
-  name: string;
-  keywords: string[];
-  active: boolean;
-  lastRunDay: string | null;
-  lastHits: number;
 }
 export type ProtocolStatus = "aberto" | "em_andamento" | "respondido" | "encerrado";
 export interface Protocol {
@@ -152,20 +123,21 @@ export interface CityPrefs {
 }
 
 export type Block<T> = { ok: true; data: T; fetchedAt: string; stale: boolean } | { ok: false; state: CityApiState | null; error: string } | null;
+export interface RadarData {
+  params: Record<string, string | number>;
+  total: number | null;
+  sample: number;
+  truncated: boolean;
+  insights: Insights | null;
+}
 export interface Overview {
   today: string;
-  referenceDay: string;
   credential: CredentialStatus;
   apis: ApiStatusView[];
   prefs: CityPrefs;
-  radar: {
-    publications: Block<{ day: string; total: number; matched: Publication[]; byKind: Array<{ label: string; count: number }> }>;
-    tenders: Block<{ day: string; total: number; open: TenderEvent[] }>;
-    queue: Block<{ total: number; byLevel: Array<{ label: string; count: number }>; outdated: number }>;
-  };
+  radar: { orcamento: Block<RadarData>; transparencia: Block<RadarData>; atendimento: Block<RadarData>; contratos: Block<RadarData> };
   favorites: Favorite[];
   favoritesTotal: number;
-  alerts: CityAlert[];
   protocols: Protocol[];
   history: HistoryEntry[];
 }
@@ -177,7 +149,8 @@ export interface OracleAnswer {
   sampleSize: number;
 }
 
-const qs = (p: Record<string, string | number | undefined | null>) => {
+export type Params = Record<string, string | number | undefined | null>;
+const qs = (p: Params) => {
   const u = new URLSearchParams();
   for (const [k, v] of Object.entries(p)) if (v != null && v !== "") u.set(k, String(v));
   const s = u.toString();
@@ -194,11 +167,8 @@ export const cityService = {
   setDisabled: (disabled: CityApi[]) => api.put<StatusResponse>("/city/apis/disabled", { disabled }),
   test: (apis?: CityApi[]) => api.post<{ apis: ApiStatusView[] }>("/city/test", apis ? { apis } : {}),
 
-  dom: (day: string, caderno: number, force = false) => api.get<FetchMeta & { publications: Publication[] }>(`/city/dom${qs({ day, caderno, force: force ? 1 : null })}`),
-  domTenders: (day: string, caderno: number, force = false) => api.get<FetchMeta & { tenders: TenderEvent[] }>(`/city/dom/licitacoes${qs({ day, caderno, force: force ? 1 : null })}`),
-  queue: (force = false) => api.get<FetchMeta & { posts: QueuePost[] }>(`/city/fila${qs({ force: force ? 1 : null })}`),
-  data: (apiId: CityApi, resource: string, params: Record<string, string | number | undefined | null>, force = false) =>
-    api.get<FetchMeta & { items: Row[] }>(`/city/data/${apiId}/${resource}${qs({ ...params, force: force ? 1 : null })}`),
+  data: (apiId: CityApi, resource: string, params: Params, force = false) => api.get<DataResponse>(`/city/data/${apiId}/${resource}${qs({ ...params, force: force ? 1 : null })}`),
+  insights: (apiId: CityApi, resource: string, params: Params) => api.get<InsightsResponse>(`/city/insights/${apiId}/${resource}${qs(params)}`),
 
   activity: (body: { api: CityApi; action: "read" | "explore" | "compare" | "territory"; ref: string; label?: string }) => api.post<{ recorded: boolean; xp: number }>("/city/activity", body),
   history: () => api.get<HistoryEntry[]>("/city/history"),
@@ -209,12 +179,6 @@ export const cityService = {
   removeFavorite: (id: string) => api.delete<{ ok: true }>(`/city/favorites/${id}`),
   favoriteToTask: (id: string, dueDate: string | null) => api.post<{ id: string }>(`/city/favorites/${id}/task`, { dueDate }),
   favoriteToEvent: (id: string, startsAt: string) => api.post<{ id: string }>(`/city/favorites/${id}/event`, { startsAt }),
-
-  alerts: () => api.get<CityAlert[]>("/city/alerts"),
-  createAlert: (a: Omit<CityAlert, "id" | "lastRunDay" | "lastHits">) => api.post<{ id: string }>("/city/alerts", a),
-  updateAlert: (id: string, a: Omit<CityAlert, "id" | "lastRunDay" | "lastHits">) => api.put<{ id: string }>(`/city/alerts/${id}`, a),
-  removeAlert: (id: string) => api.delete<{ ok: true }>(`/city/alerts/${id}`),
-  runAlerts: () => api.post<{ hits: number; alerts: CityAlert[] }>("/city/alerts/run", {}),
 
   protocols: () => api.get<Protocol[]>("/city/protocols"),
   createProtocol: (p: Omit<Protocol, "id" | "updatedAt">) => api.post<{ id: string }>("/city/protocols", p),

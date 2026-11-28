@@ -148,10 +148,25 @@ export function tokenUrl(): string {
   }
 }
 
+const tokenInflight = new Map<string, Promise<string>>();
+
 async function accessToken(cred: ResolvedCred, ownerId: string, fresh = false): Promise<string> {
   if (cred.mode === "token") return cred.token!;
   const cached = tokenCache.get(cred.fingerprint);
   if (!fresh && cached && cached.exp > Date.now() + 30_000) return cached.token;
+  // Vários testes de conexão em paralelo compartilham o mesmo pedido de token.
+  const running = tokenInflight.get(cred.fingerprint);
+  if (running) return running;
+  const job = requestToken(cred, ownerId);
+  tokenInflight.set(cred.fingerprint, job);
+  try {
+    return await job;
+  } finally {
+    tokenInflight.delete(cred.fingerprint);
+  }
+}
+
+async function requestToken(cred: ResolvedCred, ownerId: string): Promise<string> {
   let res: Response;
   try {
     res = await withTimeout((signal) =>
@@ -266,10 +281,11 @@ function flattenRow(obj: Record<string, unknown>, redacted: Set<string>): Row {
       redacted.add(k);
       return;
     }
-    if (/cpfcnpj|cpf_cnpj/i.test(k) && typeof v === "string") {
-      // CNPJ (14 dígitos) é público; CPF (11) de pessoa física é ocultado.
-      const d = v.replace(/\D/g, "");
-      if (d.length !== 14) {
+    if (/cnpj|documento/i.test(k) && (typeof v === "string" || typeof v === "number")) {
+      // CNPJ (12–14 dígitos; o portal às vezes perde o zero à esquerda) é público.
+      // Até 11 dígitos é CPF de pessoa física (ou ambíguo) — ocultado.
+      const d = String(v).replace(/\D/g, "");
+      if (d.length && d.length <= 11) {
         redacted.add(k);
         return;
       }
@@ -358,6 +374,7 @@ export function resetCityBreakersForTests() {
   breakers.clear();
   inflight.clear();
   tokenCache.clear();
+  tokenInflight.clear();
 }
 const breakerOpen = (api: CityApi) => (breakers.get(api)?.openUntil ?? 0) > Date.now();
 function breakerResult(api: CityApi, ok: boolean) {

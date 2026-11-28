@@ -4,41 +4,34 @@ import { getDb } from "../db/client.js";
 import { requireAuth } from "../middleware/auth.js";
 import { aiRateLimit, rateLimit } from "../middleware/rateLimit.js";
 import { CITY_APIS, CITY_API_DEFS, type CityApi } from "../config/apilib.js";
-import { CityError, cityFetch, cleanCredential, deleteCredential, listApiStatus, saveCredential, setDisabledApis, testConnections } from "../services/apilibClient.js";
+import { CityError, cleanCredential, deleteCredential, listApiStatus, saveCredential, setDisabledApis, testConnections } from "../services/apilibClient.js";
 import {
   CITY_ACTIONS,
   CITY_DOMAINS,
   CITY_WIDGETS,
-  DOM_MAIN_NOTEBOOK,
   PROTOCOL_STATUS,
   addFavorite,
   askOracle,
   catalog,
+  cityData,
+  cityInsights,
   favoriteToEvent,
   favoriteToTask,
   getOverview,
   getPrefs,
-  listAlerts,
   listFavorites,
   listHistory,
   listProtocols,
   recordActivity,
-  removeAlert,
   removeFavorite,
   removeProtocol,
-  runAlertsFor,
-  saveAlert,
   savePrefs,
   saveProtocol,
-  toPublication,
-  toQueuePost,
-  toTender,
 } from "../services/cityService.js";
-import { todayKeyFor } from "../services/gamificationService.js";
 
 /**
  * /api/city — Cidade Inteligente (São Paulo, APILIB).
- * Tudo exige login. Dados pessoais (credencial, favoritos, alertas, protocolos, histórico,
+ * Tudo exige login. Dados pessoais (credencial, favoritos, protocolos, histórico,
  * preferências) são filtrados pelo usuário autenticado. A credencial nunca volta ao frontend.
  */
 export const cityRouter = Router();
@@ -138,55 +131,31 @@ cityRouter.get("/overview", readLimit, async (req, res) => {
 
 /* ───────────── telas de domínio ───────────── */
 
-cityRouter.get("/dom", readLimit, async (req, res) => {
-  try {
-    const q = z.object({ day: DAY, caderno: z.coerce.number().int().min(1).max(999).default(DOM_MAIN_NOTEBOOK), force: z.enum(["1"]).optional() }).parse(req.query);
-    const db = getDb();
-    const keywords = (await listAlerts(db, req.user!.id)).filter((a) => a.active && a.source === "publicacoes").flatMap((a) => a.keywords);
-    const r = await cityFetch(db, req.user!.id, "dom", "publicacoes", { dataPublicacao: q.day, caderno: q.caderno }, { force: !!q.force });
-    return res.json({ ...meta(r), publications: r.items.map((row) => toPublication(row, keywords)) });
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-
-cityRouter.get("/dom/licitacoes", readLimit, async (req, res) => {
-  try {
-    const q = z.object({ day: DAY, caderno: z.coerce.number().int().min(1).max(999).default(DOM_MAIN_NOTEBOOK), force: z.enum(["1"]).optional() }).parse(req.query);
-    const r = await cityFetch(getDb(), req.user!.id, "dom", "licitacoes", { dataPublicacao: q.day, caderno: q.caderno }, { force: !!q.force });
-    return res.json({ ...meta(r), tenders: r.items.map((row) => toTender(row)) });
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-
-cityRouter.get("/fila", readLimit, async (req, res) => {
-  try {
-    const q = z.object({ force: z.enum(["1"]).optional() }).parse(req.query);
-    const r = await cityFetch(getDb(), req.user!.id, "fila", "postos", {}, { force: !!q.force });
-    return res.json({ ...meta(r), posts: r.items.map((row) => toQueuePost(row)) });
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-
 /** Explorador genérico: qualquer recurso do catálogo, com parâmetros validados contra ele. */
 cityRouter.get("/data/:api/:resource", readLimit, async (req, res) => {
   try {
     const api = API.parse(req.params.api) as CityApi;
     const resource = z.string().max(30).parse(req.params.resource);
     if (!CITY_API_DEFS[api].resources[resource]) return res.status(404).json({ error: "Recurso desconhecido para esta API." });
-    const force = req.query.force === "1";
-    const r = await cityFetch(getDb(), req.user!.id, api, resource, queryParams(req.query as Record<string, unknown>, ["force"]), { force });
-    return res.json({ ...meta(r), items: r.items });
+    const r = await cityData(getDb(), req.user!.id, api, resource, queryParams(req.query as Record<string, unknown>, ["force"]), { force: req.query.force === "1" });
+    return res.json({ ...r.meta, columns: r.columns, rows: r.rows });
   } catch (e) {
     return fail(res, e);
   }
 });
 
-function meta(r: Awaited<ReturnType<typeof cityFetch>>) {
-  return { api: r.api, resource: r.resource, params: r.params, total: r.total, count: r.items.length, truncated: r.truncated, redacted: r.redacted, fetchedAt: r.fetchedAt, fromCache: r.fromCache, stale: r.stale, staleReason: r.staleReason };
-}
+/** Leituras (rankings, somas, série) calculadas pelo LifeOS sobre uma amostra maior do recurso. */
+cityRouter.get("/insights/:api/:resource", readLimit, async (req, res) => {
+  try {
+    const api = API.parse(req.params.api) as CityApi;
+    const resource = z.string().max(30).parse(req.params.resource);
+    if (!CITY_API_DEFS[api].resources[resource]) return res.status(404).json({ error: "Recurso desconhecido para esta API." });
+    const r = await cityInsights(getDb(), req.user!.id, api, resource, queryParams(req.query as Record<string, unknown>, ["limite", "offset"]));
+    return res.json({ ...r.meta, insights: r.insights });
+  } catch (e) {
+    return fail(res, e);
+  }
+});
 
 /* ───────────── atividade (histórico + XP diário) ───────────── */
 
@@ -262,59 +231,6 @@ cityRouter.post("/favorites/:id/event", writeLimit, async (req, res) => {
   try {
     const { startsAt } = z.object({ startsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, "Data e hora inválidas.") }).strict().parse(req.body);
     return res.status(201).json(await favoriteToEvent(getDb(), req.user!.id, ID.parse(req.params.id), startsAt));
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-
-/* ───────────── alertas ───────────── */
-
-const ALERT = z
-  .object({
-    source: z.enum(["publicacoes", "licitacoes"]),
-    name: z.string().trim().min(2, "Dê um nome ao alerta.").max(60),
-    keywords: z.array(z.string().trim().max(40)).min(1).max(8),
-    active: z.boolean().default(true),
-  })
-  .strict();
-
-cityRouter.get("/alerts", async (req, res) => {
-  try {
-    return res.json(await listAlerts(getDb(), req.user!.id));
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-cityRouter.post("/alerts", writeLimit, async (req, res) => {
-  try {
-    return res.status(201).json({ id: await saveAlert(getDb(), req.user!.id, ALERT.parse(req.body)) });
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-cityRouter.put("/alerts/:id", writeLimit, async (req, res) => {
-  try {
-    return res.json({ id: await saveAlert(getDb(), req.user!.id, { ...ALERT.parse(req.body), id: ID.parse(req.params.id) }) });
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-cityRouter.delete("/alerts/:id", writeLimit, async (req, res) => {
-  try {
-    const ok = await removeAlert(getDb(), req.user!.id, ID.parse(req.params.id));
-    return ok ? res.json({ ok }) : res.status(404).json({ error: "Alerta não encontrado." });
-  } catch (e) {
-    return fail(res, e);
-  }
-});
-/** Roda os alertas agora (sem notificação push; idempotente — itens já vistos não repetem). */
-cityRouter.post("/alerts/run", testLimit, async (req, res) => {
-  try {
-    const db = getDb();
-    const day = await todayKeyFor(db, req.user!.id);
-    // Libera a execução de hoje só deste usuário, para o botão "verificar agora".
-    await db.execute({ sql: "UPDATE city_alerts SET last_run_day = NULL WHERE owner_id = ? AND last_run_day = ?", args: [req.user!.id, day] });
-    return res.json({ hits: await runAlertsFor(db, req.user!.id, day, { notify: false }), alerts: await listAlerts(db, req.user!.id) });
   } catch (e) {
     return fail(res, e);
   }

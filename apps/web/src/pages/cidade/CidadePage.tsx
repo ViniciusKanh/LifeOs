@@ -1,25 +1,34 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Activity, Building2, CalendarClock, Gavel, Newspaper, Radar, Settings2, Sparkles, Syringe } from "lucide-react";
+import { Building2, FileSearch, Gavel, Landmark, PhoneCall, PowerOff, Radar, Settings2, Sparkles } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
-import { IndicatorCard, KitSection, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
+import { KitSection, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
 import { useLocalToast } from "@/components/integrations/PublicApiKit";
 import { useCityActions, useCityCatalog, useCityOverview } from "@/hooks/useCity";
-import type { Block, CityDomain, Overview } from "@/services/cityService";
-import { CityBanner, DOMAIN, EmptyBox, LoadingBlock, R, STATE_META, StateBadge, dateTimeBR, dayBR } from "@/components/city/CityKit";
+import type { Block, CityDomain, Overview, RadarData } from "@/services/cityService";
+import { CityBanner, DOMAIN, EmptyBox, LoadingBlock, R, STATE_META, StateBadge, formatValue } from "@/components/city/CityKit";
+import { BarList, Kpi } from "@/components/city/InsightsPanel";
 import { CityConfigPanel } from "@/components/city/CityConfigPanel";
-import { AlertsPanel, FavoritesPanel, HistoryPanel } from "@/components/city/PersonalPanels";
+import { FavoritesPanel, HistoryPanel } from "@/components/city/PersonalPanels";
 
 /** Grupos da categoria "Cidade Inteligente" — os mesmos do menu lateral. */
 const GROUPS: Array<{ label: string; apis: string[] }> = [
-  { label: "Notícias e Oportunidades", apis: ["dom", "licitacoes"] },
-  { label: "Saúde e Educação", apis: ["fila", "escolas", "prato"] },
+  { label: "Oportunidades", apis: ["licitacoes"] },
+  { label: "Educação", apis: ["escolas", "prato"] },
   { label: "Cidadania e Consumo", apis: ["procon", "sp156", "esic"] },
-  { label: "Inteligência Territorial", apis: ["idhm", "censo", "lentidao"] },
+  { label: "Território", apis: ["lentidao"] },
   { label: "Finanças Públicas", apis: ["sof"] },
 ];
 
-const LEVEL_LABEL: Record<string, string> = { sem_fila: "Sem fila", pequena: "Fila pequena", media: "Fila média", grande: "Fila grande", fechado: "Fechado", desconhecida: "Sem informação" };
+/** Fontes retiradas por estarem fora do ar ou bloqueadas pela Prefeitura (27/11/2026). */
+const OFFLINE = [
+  { name: "Diário Oficial", why: "sistema suspenso no APILIB (303001)" },
+  { name: "De Olho na Fila", why: "sistema suspenso no APILIB (303001)" },
+  { name: "IDHM", why: "conjunto bloqueado no Portal de Dados Abertos" },
+  { name: "Censo Demográfico", why: "conjunto bloqueado no Portal de Dados Abertos" },
+];
+
+const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 type Tab = "radar" | "pessoal" | "config";
 
@@ -30,16 +39,16 @@ export function CidadePage() {
   const catalog = useCityCatalog();
   const tab: Tab = params.get("config") ? "config" : ((params.get("aba") as Tab | null) ?? "radar");
   const setTab = (t: Tab) => setParams(t === "radar" ? {} : t === "config" ? { config: "1" } : { aba: t }, { replace: true });
-
   const connected = o.data?.apis.filter((a) => a.state === "conectada").length ?? 0;
-  const configured = !!o.data?.credential.source;
+  const total = o.data?.apis.length ?? 8;
 
   return (
     <div className="space-y-4">
       {toast}
-      <CityBanner domain="oportunidades" eyebrow="São Paulo" title="Visão Geral da Cidade" subtitle="O Radar da Cidade junta o que a Prefeitura publicou hoje com os seus interesses: Diário Oficial, licitações abertas e a fila dos postos de vacinação.">
-        <RPGBadge tone={connected ? "green" : "muted"}>{connected}/12 APIs conectadas</RPGBadge>
-        {o.data && <RPGBadge tone="gold">Referência {dayBR(o.data.referenceDay)}</RPGBadge>}
+      <CityBanner domain="oportunidades" eyebrow="São Paulo" title="Visão Geral da Cidade" subtitle="Um retrato da Prefeitura com dados oficiais: orçamento do mês, pedidos de informação, atendimento do SP156 e contratos — e os seus registros.">
+        <RPGBadge tone={connected ? "green" : "muted"}>
+          {connected}/{total} fontes conectadas
+        </RPGBadge>
       </CityBanner>
 
       <ModuleTabs<Tab>
@@ -66,33 +75,24 @@ export function CidadePage() {
       ) : tab === "pessoal" ? (
         <div className="grid gap-3 lg:grid-cols-2">
           <FavoritesPanel notify={notify} />
-          <div className="space-y-3">
-            <AlertsPanel notify={notify} />
-            <HistoryPanel />
-          </div>
+          <HistoryPanel />
         </div>
       ) : (
         <>
-          {!configured && (
+          {!o.data.credential.source && (
             <section className="flex flex-col gap-3 border-2 border-rpg-gold/60 bg-rpg-gold/10 p-4 sm:flex-row sm:items-center" style={R}>
               <Settings2 size={28} className="text-rpg-gold" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="font-rpg font-bold text-rpg-text">Conecte o APILIB da Prefeitura</p>
-                <p className="text-sm text-rpg-text/85">As 12 APIs exigem uma credencial gratuita do Store do APILIB. Sem ela, nenhuma tela mostra dados — o LifeOS não inventa números.</p>
+                <p className="text-sm text-rpg-text/85">As fontes exigem uma credencial gratuita do Store do APILIB. Sem ela, nenhuma tela mostra dados — o LifeOS não inventa números.</p>
               </div>
               <RPGButton variant="gold" onClick={() => setTab("config")}>
                 Configurar agora
               </RPGButton>
             </section>
           )}
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <IndicatorCard icon={<Activity size={22} />} label="APIs conectadas" value={`${connected}/12`} tone="green" hint="após consulta real" />
-            <IndicatorCard icon={<Newspaper size={22} />} label="Publicações no dia" value={o.data.radar.publications?.ok ? o.data.radar.publications.data.total : "—"} tone="gold" hint={dayBR(o.data.referenceDay)} />
-            <IndicatorCard icon={<Gavel size={22} />} label="Licitações abertas" value={o.data.radar.tenders?.ok ? o.data.radar.tenders.data.open.length : "—"} tone="orange" hint="nos eventos do dia" />
-            <IndicatorCard icon={<Syringe size={22} />} label="Postos na lista" value={o.data.radar.queue?.ok ? o.data.radar.queue.data.total : "—"} tone="green" hint="De Olho na Fila" />
-          </div>
           <CityRadar o={o.data} />
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid gap-3 lg:grid-cols-2">
             <FavoritesPanel notify={notify} compact />
             <Interests o={o.data} notify={notify} />
           </div>
@@ -111,7 +111,7 @@ export function CidadePage() {
                           <Link to={c.route} className="flex min-h-[40px] min-w-0 items-center gap-2 border-2 border-rpg-border bg-rpg-bg-2/60 px-2 hover:border-rpg-gold" style={R}>
                             <span className="h-6 w-1.5 shrink-0" style={{ background: DOMAIN[c.domain].to }} aria-hidden />
                             <span className="min-w-0 flex-1 truncate text-sm text-rpg-text">{c.name}</span>
-                            {st && <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${st.state === "conectada" ? "bg-rpg-green" : st.state === "nao_configurada" || st.state === "configurada" || st.state === "desativada" ? "bg-rpg-muted" : "bg-rpg-orange"}`} title={STATE_META[st.state].label} aria-label={STATE_META[st.state].label} />}
+                            {st && <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${st.state === "conectada" ? "bg-rpg-green" : ["nao_configurada", "configurada", "desativada"].includes(st.state) ? "bg-rpg-muted" : "bg-rpg-orange"}`} title={STATE_META[st.state].label} aria-label={STATE_META[st.state].label} />}
                           </Link>
                         </li>
                       );
@@ -120,6 +120,14 @@ export function CidadePage() {
                 </div>
               ))}
             </div>
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-rpg-border pt-2 text-xs text-rpg-muted">
+              <PowerOff size={13} aria-hidden /> Fora do ar na Prefeitura (voltam quando forem reativadas):
+              {OFFLINE.map((x) => (
+                <span key={x.name} title={x.why} className="border border-rpg-border px-1.5 py-0.5" style={R}>
+                  {x.name}
+                </span>
+              ))}
+            </p>
           </KitSection>
         </>
       )}
@@ -127,89 +135,95 @@ export function CidadePage() {
   );
 }
 
-function BlockState<T>({ b, children, off }: { b: Block<T>; children: (d: T) => ReactNode; off: string }) {
-  if (b === null) return <p className="text-sm text-rpg-muted">{off}</p>;
-  if (!b.ok)
-    return (
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        {b.state && <StateBadge state={b.state} />}
-        <span className="text-rpg-muted">{b.error}</span>
-      </div>
-    );
+function RadarCard({ title, icon, to, b, off, children }: { title: string; icon: ReactNode; to: string; b: Block<RadarData>; off: string; children: (d: RadarData) => ReactNode }) {
   return (
-    <>
-      {b.stale && <p className="mb-1 text-xs text-amber-300">Dados desatualizados — última cópia salva.</p>}
-      {children(b.data)}
-    </>
+    <KitSection
+      title={title}
+      icon={icon}
+      action={
+        <Link to={to} className="text-xs text-rpg-blue">
+          abrir
+        </Link>
+      }
+    >
+      {b === null ? (
+        <p className="text-sm text-rpg-muted">{off}</p>
+      ) : !b.ok ? (
+        <div className="space-y-1 text-sm">
+          {b.state && <StateBadge state={b.state} />}
+          <p className="text-rpg-muted">{b.error}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {b.stale && <p className="text-xs text-amber-300">Dados desatualizados — última cópia salva.</p>}
+          {children(b.data)}
+          <p className="text-[11px] text-rpg-muted">Leituras sobre {b.data.sample.toLocaleString("pt-BR")} registro(s){b.data.truncated ? " (amostra parcial)" : ""}.</p>
+        </div>
+      )}
+    </KitSection>
   );
 }
 
+const measure = (d: RadarData, label: string) => d.insights?.measures.find((m) => m.label === label);
+
 function CityRadar({ o }: { o: Overview }) {
+  const r = o.radar;
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      <KitSection title="Diário Oficial" icon={<Newspaper size={16} aria-hidden />} action={<Link to="/cidade/diario-oficial" className="text-xs text-rpg-blue">abrir</Link>}>
-        <BlockState b={o.radar.publications} off="Ative o interesse “Oportunidades” para ver o Diário no radar.">
-          {(d) =>
-            d.matched.length ? (
-              <ul className="space-y-1.5">
-                {d.matched.map((p) => (
-                  <li key={p.key} className="border-l-4 border-rpg-gold bg-rpg-bg-2/60 px-2 py-1">
-                    <p className="line-clamp-2 text-sm text-rpg-text">{p.title}</p>
-                    <p className="text-[11px] text-rpg-muted">
-                      {p.kind ?? "—"} · casou: {p.matches.join(", ")}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="space-y-1 text-sm">
-                <p className="text-rpg-muted">{d.total ? "Nada casou com seus alertas neste dia." : "Sem publicações no caderno principal neste dia."}</p>
-                {d.byKind.map((k) => (
-                  <p key={k.label} className="flex justify-between text-xs">
-                    <span className="truncate text-rpg-text/90">{k.label}</span>
-                    <span className="tabular-nums text-rpg-muted">{k.count}</span>
-                  </p>
-                ))}
+    <div className="grid gap-3 lg:grid-cols-2">
+      <RadarCard title="Orçamento da cidade" icon={<Landmark size={16} aria-hidden />} to="/cidade/sof" b={r.orcamento} off="Ative o tema “Finanças públicas” para ver o orçamento no radar.">
+        {(d) => {
+          const orc = measure(d, "Orçado atualizado");
+          const pago = measure(d, "Pago no exercício");
+          const emp = measure(d, "Empenhado líquido");
+          return (
+            <>
+              <p className="text-xs text-rpg-muted">
+                Acumulado até {MONTHS[Number(d.params.mesDotacao) - 1]} de {d.params.anoDotacao}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <Kpi label="Orçado atualizado" value={orc ? formatValue("money", orc.value, { short: true }) : "—"} tone="gold" />
+                <Kpi label="Empenhado" value={emp ? formatValue("money", emp.value, { short: true }) : "—"} tone="gold" />
+                <Kpi label="Pago" value={pago ? formatValue("money", pago.value, { short: true }) : "—"} hint={orc && pago && orc.value > 0 ? `${((pago.value / orc.value) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do orçado` : undefined} tone="green" />
               </div>
-            )
-          }
-        </BlockState>
-      </KitSection>
-      <KitSection title="Licitações abertas" icon={<Gavel size={16} aria-hidden />} action={<Link to="/cidade/licitacoes" className="text-xs text-rpg-blue">abrir</Link>}>
-        <BlockState b={o.radar.tenders} off="Ative o interesse “Oportunidades” para ver licitações no radar.">
-          {(d) =>
-            d.open.length ? (
-              <ul className="space-y-1.5">
-                {d.open.map((t) => (
-                  <li key={t.key} className="border-l-4 border-rpg-green bg-rpg-bg-2/60 px-2 py-1">
-                    <p className="line-clamp-2 text-sm text-rpg-text">{t.object}</p>
-                    <p className="flex items-center gap-1 text-[11px] text-rpg-muted">
-                      <CalendarClock size={11} aria-hidden /> {t.nextDeadline ? `${t.nextDeadline.label}: ${dateTimeBR(t.nextDeadline.at)}` : "sem data"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-rpg-muted">Nenhum evento com prazo futuro publicado em {dayBR(d.day)}.</p>
-            )
-          }
-        </BlockState>
-      </KitSection>
-      <KitSection title="Fila da vacinação" icon={<Syringe size={16} aria-hidden />} action={<Link to="/cidade/de-olho-na-fila" className="text-xs text-rpg-blue">abrir</Link>}>
-        <BlockState b={o.radar.queue} off="Ative o interesse “Saúde” para ver a fila no radar.">
-          {(d) => (
-            <div className="space-y-1">
-              {d.byLevel.map((l) => (
-                <p key={l.label} className="flex justify-between text-sm">
-                  <span className="text-rpg-text/90">{LEVEL_LABEL[l.label] ?? l.label}</span>
-                  <span className="tabular-nums text-rpg-muted">{l.count} posto(s)</span>
-                </p>
-              ))}
-              {d.outdated > 0 && <p className="text-xs text-amber-300">{d.outdated} posto(s) sem atualização nas últimas 3 h.</p>}
-            </div>
-          )}
-        </BlockState>
-      </KitSection>
+              {d.insights?.ranking && <BarList title={d.insights.ranking.label} items={d.insights.ranking.items.slice(0, 5)} format={(v) => formatValue("money", v, { short: true })} tone="gold" />}
+            </>
+          );
+        }}
+      </RadarCard>
+      <RadarCard title="Transparência (e-SIC)" icon={<FileSearch size={16} aria-hidden />} to="/cidade/e-sic" b={r.transparencia} off="Ative o tema “Cidadania” para ver o e-SIC no radar.">
+        {(d) => (
+          <>
+            <Kpi label={`Pedidos de informação em ${d.params.ano}`} value={d.total?.toLocaleString("pt-BR") ?? "—"} hint="total oficial da base" tone="cyan" />
+            {d.insights?.dims.map((dim) => (
+              <BarList key={dim.label} title={dim.label} items={dim.items.slice(0, 5).map((i) => ({ label: i.label, value: i.count }))} format={(v) => v.toLocaleString("pt-BR")} tone="cyan" />
+            ))}
+          </>
+        )}
+      </RadarCard>
+      <RadarCard title="Atendimento SP156" icon={<PhoneCall size={16} aria-hidden />} to="/cidade/sp156" b={r.atendimento} off="Ative o tema “Cidadania” para ver o SP156 no radar.">
+        {(d) => (
+          <>
+            <Kpi label={`Solicitações no ${d.params.semestre}º semestre de ${d.params.ano}`} value={d.total?.toLocaleString("pt-BR") ?? "—"} hint="total oficial da base" tone="cyan" />
+            {d.insights?.dims.slice(0, 2).map((dim) => (
+              <BarList key={dim.label} title={dim.label} items={dim.items.slice(0, 5).map((i) => ({ label: i.label, value: i.count }))} format={(v) => v.toLocaleString("pt-BR")} tone="cyan" />
+            ))}
+          </>
+        )}
+      </RadarCard>
+      <RadarCard title="Contratos públicos" icon={<Gavel size={16} aria-hidden />} to="/cidade/licitacoes" b={r.contratos} off="Ative o tema “Oportunidades” para ver os contratos no radar.">
+        {(d) => {
+          const soma = measure(d, "Valor contratado (soma)");
+          return (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Kpi label={`Extratos em ${d.params.ano}`} value={d.total?.toLocaleString("pt-BR") ?? "—"} hint="total oficial da base" tone="green" />
+                <Kpi label="Valor contratado" value={soma ? formatValue("money", soma.value, { short: true }) : "—"} hint="soma da amostra" tone="gold" />
+              </div>
+              {d.insights?.ranking && <BarList title={d.insights.ranking.label} items={d.insights.ranking.items.slice(0, 5)} format={(v) => formatValue("money", v, { short: true })} tone="green" />}
+            </>
+          );
+        }}
+      </RadarCard>
     </div>
   );
 }
@@ -220,7 +234,7 @@ function Interests({ o, notify }: { o: Overview; notify: (m: string, t?: "succes
   const all = Object.keys(DOMAIN) as CityDomain[];
   return (
     <KitSection title="Personalizar o radar" icon={<Sparkles size={16} aria-hidden />}>
-      <p className="mb-2 text-xs text-rpg-muted">Escolha os temas que entram no Radar. Os alertas por palavra-chave ficam em “Meus registros”.</p>
+      <p className="mb-2 text-xs text-rpg-muted">Escolha os temas que entram no Radar. Menos temas, radar mais rápido.</p>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Interesses">
         {all.map((d) => {
           const on = sel.includes(d);

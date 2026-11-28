@@ -44,7 +44,7 @@ import {
   LibraryBig,
   Building2,
   Newspaper,
-  Stethoscope,
+  School,
   Vote,
   MapPinned,
   PiggyBank,
@@ -174,28 +174,18 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Cidade Inteligente — São Paulo: 12 APIs oficiais da Prefeitura (APILIB), em 5 grupos com abas.
+    // Cidade Inteligente — São Paulo: fontes oficiais ativas da Prefeitura (APILIB), em grupos com abas.
     id: "cidade",
     label: "Cidade Inteligente",
     items: [
       { to: "/cidade", label: "Visão Geral da Cidade", icon: Building2, quote: "Conhecer a cidade é parte da jornada." },
+      { to: "/cidade/licitacoes", label: "Licitações e contratos", icon: Newspaper, quote: "Quem acompanha os contratos conhece a cidade." },
       {
-        to: "/cidade/diario-oficial",
-        label: "Notícias e Oportunidades",
-        icon: Newspaper,
-        quote: "Quem lê o Diário encontra a porta aberta.",
-        tabs: [
-          { to: "/cidade/diario-oficial", label: "Diário Oficial" },
-          { to: "/cidade/licitacoes", label: "Licitações" },
-        ],
-      },
-      {
-        to: "/cidade/de-olho-na-fila",
-        label: "Saúde e Educação",
-        icon: Stethoscope,
+        to: "/cidade/escola-aberta",
+        label: "Educação",
+        icon: School,
         quote: "Serviço público bom é serviço público encontrado.",
         tabs: [
-          { to: "/cidade/de-olho-na-fila", label: "De Olho na Fila" },
           { to: "/cidade/escola-aberta", label: "Escola Aberta" },
           { to: "/cidade/prato-aberto", label: "Prato Aberto" },
         ],
@@ -211,17 +201,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { to: "/cidade/e-sic", label: "e-SIC" },
         ],
       },
-      {
-        to: "/cidade/idhm",
-        label: "Inteligência Territorial",
-        icon: MapPinned,
-        quote: "Cada território conta uma história.",
-        tabs: [
-          { to: "/cidade/idhm", label: "IDHM" },
-          { to: "/cidade/censo", label: "Censo" },
-          { to: "/cidade/lentidao", label: "Lentidão" },
-        ],
-      },
+      { to: "/cidade/lentidao", label: "Trânsito (histórico)", icon: MapPinned, quote: "Cada território conta uma história." },
       { to: "/cidade/sof", label: "Finanças Públicas", icon: PiggyBank, quote: "O orçamento da cidade também é assunto seu." },
     ],
   },

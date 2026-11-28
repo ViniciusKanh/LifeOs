@@ -1,24 +1,23 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, BarChart3, Landmark, Scale } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { RPGBadge } from "@/components/rpg";
-import { IndicatorCard } from "@/components/rpg-modules/ModuleKit";
 import { useLocalToast } from "@/components/integrations/PublicApiKit";
-import { useCityActions } from "@/hooks/useCity";
-import type { Row } from "@/services/cityService";
-import { CityBanner, R, cellText, money, useCityActivity } from "@/components/city/CityKit";
+import { useCityActions, useCityData } from "@/hooks/useCity";
+import { CityBanner, R, Select, cellText } from "@/components/city/CityKit";
 import { DatasetExplorer } from "@/components/city/DatasetExplorer";
 import { ProtocolsPanel } from "@/components/city/PersonalPanels";
 
 /**
- * Telas dos datasets anuais do APILIB (sem schema de resposta publicado): cada uma é o
- * Explorador com o recorte, os avisos e as leituras próprias do seu domínio.
+ * Telas dos conjuntos anuais/semestrais do APILIB: cada uma é o Explorador com o recorte, os
+ * avisos e as colunas próprias do seu domínio. Panorama (rankings, somas, séries) vem do servidor.
  */
 
 const YEAR = new Date().getFullYear();
 const LAST_MONTH = new Date().getMonth() || 12;
 const LAST_MONTH_YEAR = new Date().getMonth() === 0 ? YEAR - 1 : YEAR;
+const LAST_SEM = new Date().getMonth() >= 6 ? { ano: YEAR, semestre: 1 } : { ano: YEAR - 1, semestre: 2 };
 
-function Notice({ children, tone = "amber" }: { children: ReactNode; tone?: "amber" | "cyan" }) {
+export function Notice({ children, tone = "amber" }: { children: ReactNode; tone?: "amber" | "cyan" }) {
   return (
     <p className={`flex items-start gap-2 border-2 p-2.5 text-sm ${tone === "amber" ? "border-amber-400/50 bg-amber-400/10 text-amber-200" : "border-cyan-400/50 bg-cyan-400/10 text-cyan-100"}`} style={R}>
       <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> <span>{children}</span>
@@ -26,31 +25,37 @@ function Notice({ children, tone = "amber" }: { children: ReactNode; tone?: "amb
   );
 }
 
-/** Soma colunas monetárias da amostra (rótulo deixa claro que é cálculo do LifeOS sobre o que foi carregado). */
-function sumColumn(rows: Row[], pattern: RegExp): { column: string; sum: number; n: number } | null {
-  const col = Object.keys(rows[0] ?? {}).find((k) => pattern.test(k) && rows.some((r) => typeof r[k] === "number" || /^-?\d+([.,]\d+)?$/.test(String(r[k] ?? ""))));
-  if (!col) return null;
-  let sum = 0;
-  let n = 0;
-  for (const r of rows) {
-    const v = typeof r[col] === "number" ? (r[col] as number) : Number(String(r[col] ?? "").replace(",", "."));
-    if (Number.isFinite(v)) {
-      sum += v;
-      n += 1;
-    }
-  }
-  return { column: col, sum, n };
+/** Clique numa subprefeitura/corredor do panorama = território explorado (conquista Explorador Paulistano). */
+function useTerritoryPick(apiId: "sp156" | "lentidao", dims: RegExp) {
+  const a = useCityActions();
+  const [notify, toast] = useLocalToast();
+  const pick = (dim: string, value: string) => {
+    if (!dims.test(dim.toLowerCase())) return;
+    a.activity.mutate({ api: apiId, action: "territory", ref: value.slice(0, 120), label: value.slice(0, 150) }, { onSuccess: (r) => r.recorded && notify(`Território explorado: ${value}`) });
+  };
+  return { pick, toast };
 }
 
 /* ───────────── Prato Aberto ───────────── */
 export function PratoAbertoPage() {
   return (
     <div className="space-y-3">
-      <CityBanner domain="educacao" eyebrow="Saúde e Educação" title="Prato Aberto" subtitle="Cardápios da alimentação escolar publicados pela Secretaria de Educação.">
-        <RPGBadge tone="purple">Sem estimativa nutricional</RPGBadge>
+      <CityBanner domain="educacao" eyebrow="Educação" title="Prato Aberto" subtitle="Cardápios da alimentação escolar da rede municipal: o que é servido em cada refeição, por faixa etária e tipo de atendimento.">
+        <RPGBadge tone="purple">Cardápios oficiais</RPGBadge>
       </CityBanner>
-      <Notice>O LifeOS mostra só o que o cardápio informa. Não estimamos calorias nem nutrientes sem dados oficiais suficientes.</Notice>
-      <DatasetExplorer apiId="prato" domain="educacao" resources={[{ id: "cardapios", label: "Cardápios" }]} initial={{ ano: String(YEAR) }} prefer={["data", "tipo_escola", "tipo_atendimento", "idade", "refeicao", "cardapio"]} csvName="prato-aberto" oracleSuggestions={["Quais refeições aparecem nesta amostra?"]} />
+      <Notice>O LifeOS mostra só o que o cardápio informa. Não estimamos calorias nem nutrientes.</Notice>
+      <DatasetExplorer
+        apiId="prato"
+        domain="educacao"
+        resources={[{ id: "cardapios", label: "Cardápios" }]}
+        initial={{ ano: String(YEAR) }}
+        prefer={[/^data$/, /^refeicao$/, /^cardapio$/, /^idade$/, /^unidade$/, /^atendimento$/]}
+        wrap={[/^cardapio$/]}
+        titleField={/^cardapio$/}
+        csvName="prato-aberto"
+        totalLabel="Cardápios no ano"
+        oracleSuggestions={["Quais alimentos aparecem com mais frequência?", "Como varia o lanche entre as faixas etárias?"]}
+      />
     </div>
   );
 }
@@ -59,11 +64,21 @@ export function PratoAbertoPage() {
 export function ProconPage() {
   return (
     <div className="space-y-3">
-      <CityBanner domain="consumo" eyebrow="Cidadania e Consumo" title="PROCON Paulistano" subtitle="Atendimentos registrados pelo PROCON municipal (2016–2019). Útil para pesquisar um fornecedor antes de comprar.">
-        <RPGBadge tone="purple">Série histórica</RPGBadge>
+      <CityBanner domain="consumo" eyebrow="Cidadania e Consumo" title="PROCON Paulistano" subtitle="Reclamações registradas no PROCON municipal (2016–2019): áreas, regiões, empresas citadas e como cada caso terminou. Útil para pesquisar um fornecedor antes de comprar.">
+        <RPGBadge tone="purple">2016–2019</RPGBadge>
       </CityBanner>
-      <Notice>Quantidade absoluta de reclamações não prova que uma empresa é ruim: empresas maiores atendem mais pessoas. Compare sempre com o porte e com o desfecho dos atendimentos.</Notice>
-      <DatasetExplorer apiId="procon" domain="consumo" resources={[{ id: "atendimentos", label: "Atendimentos" }]} initial={{ ano: "2019" }} prefer={["empresa", "fornecedor", "razao_social", "assunto", "problema", "area", "desfecho"]} csvName="procon" oracleSuggestions={["Quais assuntos aparecem mais?", "Como se distribuem os desfechos?"]} />
+      <Notice>Quantidade de reclamações não prova sozinha que uma empresa é ruim: empresas maiores atendem mais pessoas. Olhe também o desfecho (resolvido, desistência, sem acordo).</Notice>
+      <DatasetExplorer
+        apiId="procon"
+        domain="consumo"
+        resources={[{ id: "reclamacoes", label: "Reclamações" }]}
+        initial={{ ano: "2019" }}
+        prefer={[/razao social/, /^(area|area de atuacao)$/, /motivo de baixa|status da reclamacao/, /^regiao$/, /entrada/]}
+        titleField={/razao social/}
+        csvName="procon"
+        totalLabel="Reclamações no ano"
+        oracleSuggestions={["Quais áreas concentram mais reclamações?", "Qual a proporção de casos com resolução total nesta amostra?"]}
+      />
     </div>
   );
 }
@@ -71,10 +86,12 @@ export function ProconPage() {
 /* ───────────── SP156 ───────────── */
 export function Sp156Page() {
   const [notify, toast] = useLocalToast();
+  const t = useTerritoryPick("sp156", /subprefeitura|distrito/);
   return (
     <div className="space-y-3">
       {toast}
-      <CityBanner domain="cidadania" eyebrow="Cidadania e Consumo" title="SP156" subtitle="Solicitações, ligações e avaliação do atendimento da Central 156 — e os seus protocolos, acompanhados aqui.">
+      {t.toast}
+      <CityBanner domain="cidadania" eyebrow="Cidadania e Consumo" title="SP156" subtitle="O que os paulistanos pedem à Prefeitura: temas, serviços e subprefeituras das solicitações, o desempenho da central telefônica e as avaliações — e os seus protocolos.">
         <RPGBadge tone="cyan">Somente leitura</RPGBadge>
       </CityBanner>
       <DatasetExplorer
@@ -82,14 +99,18 @@ export function Sp156Page() {
         domain="cidadania"
         resources={[
           { id: "solicitacoes", label: "Solicitações" },
-          { id: "ligacoes", label: "Ligações" },
+          { id: "ligacoes", label: "Ligações (central 156)" },
           { id: "avaliacao", label: "Avaliação do atendimento" },
         ]}
-        initial={{ ano: "2019", semestre: "1" }}
-        prefer={["assunto", "servico", "tema", "subprefeitura", "status", "canal"]}
+        initial={{ ano: String(LAST_SEM.ano), semestre: String(LAST_SEM.semestre) }}
+        prefer={[/^servico$/, /^tema$/, /^assunto$/, /^subprefeitura$/, /status/, /data de abertura/, /^data$/, /entrantes/, /ligacoes atendidas$/, /nivel de servico/, /tempo medio/]}
+        titleField={/^servico$|^data$/}
+        onDimPick={t.pick}
         csvName="sp156"
-        oracleSuggestions={["Quais serviços são mais pedidos nesta amostra?"]}
+        totalLabel="Registros no semestre"
+        oracleSuggestions={["Quais serviços são mais pedidos?", "Em quais subprefeituras há mais solicitações?"]}
       />
+      <p className="text-xs text-rpg-muted">Dica: clique numa subprefeitura do panorama para marcá-la como território explorado.</p>
       <ProtocolsPanel kind="sp156" notify={notify} officialUrl="https://sp156.prefeitura.sp.gov.br/" />
     </div>
   );
@@ -101,133 +122,70 @@ export function EsicPage() {
   return (
     <div className="space-y-3">
       {toast}
-      <CityBanner domain="cidadania" eyebrow="Cidadania e Consumo" title="e-SIC — Acesso à Informação" subtitle="Pedidos de informação feitos à Prefeitura desde 2012. Veja o que já foi perguntado antes de abrir um pedido novo.">
+      <CityBanner domain="cidadania" eyebrow="Cidadania e Consumo" title="e-SIC — Acesso à Informação" subtitle="Tudo o que já foi perguntado à Prefeitura pela Lei de Acesso à Informação, com as respostas. Pesquise antes de abrir um pedido novo.">
         <RPGBadge tone="cyan">Lei de Acesso à Informação</RPGBadge>
       </CityBanner>
-      <DatasetExplorer apiId="esic" domain="cidadania" resources={[{ id: "pedidos", label: "Pedidos" }]} initial={{ ano: String(YEAR - 1) }} prefer={["orgao", "assunto", "situacao", "tipo_resposta", "data_pedido"]} csvName="esic" oracleSuggestions={["Quais órgãos recebem mais pedidos?", "Quais assuntos são mais frequentes?"]} />
-      <ProtocolsPanel kind="esic" notify={notify} officialUrl="https://esic.prefeitura.sp.gov.br/" />
-    </div>
-  );
-}
-
-/* ───────────── IDHM ───────────── */
-function Compare({ rows }: { rows: Row[] }) {
-  const label = (r: Row) => cellText(Object.values(r).find((v) => typeof v === "string") ?? "Registro");
-  const ref = rows.map(label).sort().join(" × ").slice(0, 120);
-  useCityActivity("idhm", "compare", ref, "Comparação de territórios");
-  const numeric = Object.keys(rows[0] ?? {}).filter((k) => rows.every((r) => typeof r[k] === "number" || /^-?\d+([.,]\d+)?$/.test(String(r[k] ?? "")))).slice(0, 12);
-  return (
-    <div>
-      <p className="mb-2 flex items-center gap-1.5 font-pixel text-[10px] uppercase text-rpg-gold">
-        <Scale size={13} aria-hidden /> Comparação lado a lado
-      </p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr>
-              <th className="px-1 py-1 text-left text-rpg-muted">Indicador</th>
-              {rows.map((r, i) => (
-                <th key={i} className="max-w-[120px] truncate px-1 py-1 text-right text-rpg-text" title={label(r)}>
-                  {label(r)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {numeric.map((k) => (
-              <tr key={k} className="border-t border-rpg-border/60">
-                <td className="truncate px-1 py-1 text-rpg-muted">{k}</td>
-                {rows.map((r, i) => (
-                  <td key={i} className="px-1 py-1 text-right tabular-nums text-rpg-text">
-                    {cellText(r[k])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-1 text-[11px] text-rpg-muted">Valores exatamente como publicados. Diferenças não indicam causa.</p>
-    </div>
-  );
-}
-
-function useTerritory(apiId: "idhm" | "censo") {
-  const a = useCityActions();
-  return (r: Row) => {
-    const name = Object.entries(r).find(([k, v]) => /udh|nome|regiao|distrito|bairro|territ/i.test(k) && typeof v === "string")?.[1];
-    if (name) a.activity.mutate({ api: apiId, action: "territory", ref: String(name).slice(0, 120), label: String(name).slice(0, 150) });
-  };
-}
-
-export function IdhmPage() {
-  const onOpen = useTerritory("idhm");
-  return (
-    <div className="space-y-3">
-      <CityBanner domain="territorial" eyebrow="Inteligência Territorial" title="IDHM por território" subtitle="Índice de Desenvolvimento Humano por Unidade de Desenvolvimento Humano (UDH) nos censos de 2000 e 2010. Marque até 4 territórios para comparar.">
-        <RPGBadge tone="blue">2000 · 2010</RPGBadge>
-      </CityBanner>
-      <Notice tone="cyan">Retratos de 2000 e 2010 — a cidade mudou desde então. Use para entender trajetórias, não a situação de hoje.</Notice>
       <DatasetExplorer
-        apiId="idhm"
-        domain="territorial"
-        resources={[{ id: "udh", label: "IDHM por UDH" }]}
-        initial={{ ano: "2010" }}
-        prefer={["udh", "nome_udh", "idhm", "idhm_e", "idhm_l", "idhm_r"]}
-        csvName="idhm"
-        compare={{ label: "Comparar", render: (rows) => <Compare rows={rows} />, refOf: (r) => cellText(Object.values(r)[0] ?? null) }}
-        onRowOpened={onOpen}
-        oracleSuggestions={["Qual a faixa de IDHM nesta amostra?"]}
+        apiId="esic"
+        domain="cidadania"
+        resources={[{ id: "pedidos", label: "Pedidos e respostas" }]}
+        initial={{ ano: String(YEAR - 1) }}
+        prefer={[/^dc_pedido$/, /^(nm_orgao|orgao_nome)$/, /status/, /^dt_resposta/, /^dc_resposta$/]}
+        wrap={[/^dc_pedido$/, /^dc_resposta$/]}
+        titleField={/^dc_pedido$/}
+        readOnOpen
+        csvName="esic"
+        totalLabel="Pedidos no ano"
+        oracleSuggestions={["Quais temas são mais perguntados?", "Que órgãos recebem mais pedidos?"]}
       />
-    </div>
-  );
-}
-
-/* ───────────── Censo ───────────── */
-export function CensoPage() {
-  const onOpen = useTerritory("censo");
-  return (
-    <div className="space-y-3">
-      <CityBanner domain="territorial" eyebrow="Inteligência Territorial" title="Censo Demográfico" subtitle="Arquivos do resultado do Censo do IBGE (2000 e 2010) para o município. As colunas seguem o dicionário de variáveis do IBGE (V001, V002…).">
-        <RPGBadge tone="blue">IBGE</RPGBadge>
-      </CityBanner>
-      <DatasetExplorer apiId="censo" domain="territorial" resources={[{ id: "arquivo", label: "Arquivo do Censo" }]} initial={{ arquivo: "basico", ano: "2010" }} prefer={["Cod_setor", "Nome_do_distrito", "Nome_do_subdistrito", "Nome_do_bairro"]} csvName="censo" onRowOpened={onOpen} oracleSuggestions={["Quais distritos aparecem nesta amostra?"]} />
+      <ProtocolsPanel kind="esic" notify={notify} officialUrl="https://esic.prefeitura.sp.gov.br/" />
     </div>
   );
 }
 
 /* ───────────── Lentidão ───────────── */
 export function LentidaoPage() {
+  const t = useTerritoryPick("lentidao", /corredor|regiao/);
   return (
     <div className="space-y-3">
-      <CityBanner domain="mobilidade" eyebrow="Inteligência Territorial" title="Lentidão no trânsito" subtitle="Série histórica de lentidão da CET (2001–2018), para estudar padrões por via, horário e dia.">
+      {t.toast}
+      <CityBanner domain="mobilidade" eyebrow="Território" title="Lentidão no trânsito" subtitle="Onde e quando São Paulo travava: trechos lentos medidos pela CET a cada 30 minutos (2001–2018), por corredor, sentido, região e horário.">
         <RPGBadge tone="orange">Dados históricos</RPGBadge>
       </CityBanner>
-      <Notice>Estes registros são históricos (até 2018): não mostram o trânsito de agora e não alimentam a Hora de Sair nem a Estação das Carruagens.</Notice>
-      <DatasetExplorer apiId="lentidao" domain="mobilidade" resources={[{ id: "registros", label: "Registros de lentidão" }]} initial={{ ano: "2018" }} prefer={["data", "hora", "via", "corredor", "sentido", "regiao", "tamanho"]} csvName="lentidao" oracleSuggestions={["Quais vias aparecem mais nesta amostra?", "Em quais horários há mais registros?"]} />
+      <Notice>Registros históricos (até 2018): não mostram o trânsito de agora e não alimentam a Hora de Sair nem a Estação das Carruagens.</Notice>
+      <DatasetExplorer
+        apiId="lentidao"
+        domain="mobilidade"
+        resources={[{ id: "registros", label: "Trechos lentos" }]}
+        initial={{ ano: "2018" }}
+        prefer={[/^corredor$/, /^trechos$/, /^sentido$/, /^tamanho$/, /regiao/, /data\/hora|^data/]}
+        titleField={/^corredor$/}
+        onDimPick={t.pick}
+        csvName="lentidao"
+        totalLabel="Registros no ano"
+        oracleSuggestions={["Quais corredores aparecem mais lentos?", "Em que horário a lentidão é maior nesta amostra?"]}
+      />
     </div>
   );
 }
 
 /* ───────────── SOF ───────────── */
-function SofInsights({ rows }: { rows: Row[] }) {
-  const s = sumColumn(rows, /val|empenh|liquid|pago|dota/i);
-  return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-      <IndicatorCard icon={<BarChart3 size={22} />} label="Registros carregados" value={rows.length} tone="gold" />
-      <IndicatorCard icon={<Landmark size={22} />} label={s ? `Soma de ${s.column}` : "Soma"} value={s ? money(s.sum) : "—"} tone="gold" hint={s ? `${s.n} registro(s) · só a amostra` : "sem coluna de valor"} />
-      <IndicatorCard icon={<Scale size={22} />} label="Natureza" value="Finanças públicas" tone="orange" hint="separadas das suas finanças" />
-    </div>
-  );
+function OrgaoSelect({ year, value, onChange }: { year: string; value: string; onChange: (v: string) => void }) {
+  const q = useCityData("sof", "orgaos", { anoExercicio: year }, !!year);
+  const rows = q.data?.rows ?? [];
+  const code = q.data?.columns.find((c) => /^codorgao$/i.test(c.key))?.key;
+  const name = q.data?.columns.find((c) => /descricaoorgao/i.test(c.key))?.key;
+  const options = code && name ? rows.map((r) => ({ value: cellText(r[code]), label: cellText(r[name]) })).sort((a, b) => a.label.localeCompare(b.label)) : [];
+  return <Select label="Órgão" value={value} onChange={onChange} options={[{ value: "", label: q.isLoading ? "Carregando…" : "Todos" }, ...options]} />;
 }
 
 export function SofPage() {
   return (
     <div className="space-y-3">
-      <CityBanner domain="financas" eyebrow="Finanças Públicas" title="Orçamento e Finanças (SOF)" subtitle="Órgãos, funções, despesas, empenhos e contratos do orçamento municipal, direto do Sistema de Orçamento e Finanças.">
+      <CityBanner domain="financas" eyebrow="Finanças Públicas" title="Orçamento e Finanças (SOF)" subtitle="Quanto a Prefeitura planejou e quanto gastou: dotações por órgão, função e programa, empenhos, contratos e fornecedores, direto do Sistema de Orçamento e Finanças.">
         <RPGBadge tone="gold">Dinheiro público</RPGBadge>
       </CityBanner>
-      <Notice tone="cyan">Estes números são do orçamento da Prefeitura. Eles não se misturam com o Banco do Reino nem com as suas finanças pessoais no LifeOS.</Notice>
+      <Notice tone="cyan">Números do orçamento da Prefeitura, acumulados até o mês consultado. Eles não se misturam com o Banco do Reino nem com as suas finanças pessoais no LifeOS.</Notice>
       <DatasetExplorer
         apiId="sof"
         domain="financas"
@@ -237,12 +195,17 @@ export function SofPage() {
           { id: "contratos", label: "Contratos" },
           { id: "orgaos", label: "Órgãos" },
           { id: "funcoes", label: "Funções" },
+          { id: "programas", label: "Programas" },
         ]}
         initial={{ anoExercicio: String(YEAR), anoDotacao: String(LAST_MONTH_YEAR), mesDotacao: String(LAST_MONTH), anoEmpenho: String(LAST_MONTH_YEAR), mesEmpenho: String(LAST_MONTH), anoContrato: String(YEAR) }}
-        prefer={["txDescricaoOrgao", "txDescricaoFuncao", "txDescricaoPrograma", "valOrcadoInicial", "valOrcadoAtualizado", "valEmpenhadoLiquido", "valLiquidado", "valPagoExercicio"]}
+        prefer={[/descricaoorgao/, /descricaofuncao/, /descricaoprograma/, /descricaoprojetoatividade/, /razaosocial/, /objetocontrato/, /orcadoatualizado/, /empenhadoliquido/, /^valliquidado$/, /pagoexercicio|^valpago$/, /^valprincipal$/]}
+        wrap={[/objetocontrato/]}
+        titleField={/descricaoprojetoatividade|objetocontrato|razaosocial|descricaoprograma|descricaoorgao|descricaofuncao/}
+        compareBy={/descricaoorgao|descricaoprojetoatividade|razaosocial/}
+        extraControls={(p, set) => <OrgaoSelect key="orgao" year={p.anoDotacao ?? p.anoEmpenho ?? p.anoContrato ?? p.anoExercicio ?? String(YEAR)} value={p.codOrgao ?? ""} onChange={(v) => set("codOrgao", v)} />}
         csvName="sof"
-        insights={(rows) => <SofInsights rows={rows} />}
-        oracleSuggestions={["Quais órgãos concentram os maiores valores nesta amostra?"]}
+        totalLabel="Registros"
+        oracleSuggestions={["Quais órgãos têm maior orçamento atualizado?", "Qual a execução (pago × orçado) nesta amostra?"]}
       />
     </div>
   );

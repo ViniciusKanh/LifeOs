@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { AlertTriangle, Bot, Clock3, Database, Download, Info, KeyRound, Lightbulb, Loader2, RefreshCw, ScrollText, ShieldAlert, Sparkles, Star } from "lucide-react";
 import { RPGBadge, RPGButton, type RpgTone } from "@/components/rpg";
 import { ApiError } from "@/services/api";
-import type { CatalogEntry, Cell, CityApi, CityApiState, CityDomain, FetchMeta, OracleAnswer, Row } from "@/services/cityService";
+import type { CatalogEntry, Cell, CityApi, CityApiState, CityDomain, ColumnKind, ColumnMeta, FetchMeta, OracleAnswer, Row } from "@/services/cityService";
 import { useCityActions, useCityCatalog } from "@/hooks/useCity";
 
 export const R = { borderRadius: 4 } as const;
@@ -14,13 +14,11 @@ export const FIELD = "min-h-[40px] w-full min-w-0 border border-rpg-border bg-rp
 
 /** Cores por domínio (pedido do produto): o mesmo RPG, com o "brasão" de cada área. */
 export const DOMAIN: Record<CityDomain, { label: string; from: string; to: string; text: string; border: string; tone: RpgTone }> = {
-  saude: { label: "Saúde", from: "#064e3b", to: "#10b981", text: "text-emerald-300", border: "border-emerald-400/60", tone: "green" },
   educacao: { label: "Educação", from: "#1e3a8a", to: "#7c3aed", text: "text-violet-300", border: "border-violet-400/60", tone: "purple" },
   financas: { label: "Finanças públicas", from: "#713f12", to: "#eab308", text: "text-amber-300", border: "border-amber-400/60", tone: "gold" },
   mobilidade: { label: "Mobilidade", from: "#1e40af", to: "#f97316", text: "text-orange-300", border: "border-orange-400/60", tone: "orange" },
   cidadania: { label: "Cidadania", from: "#164e63", to: "#06b6d4", text: "text-cyan-300", border: "border-cyan-400/60", tone: "cyan" },
   consumo: { label: "Consumo", from: "#3b0764", to: "#a855f7", text: "text-purple-300", border: "border-purple-400/60", tone: "purple" },
-  territorial: { label: "Território", from: "#1e3a8a", to: "#16a34a", text: "text-sky-300", border: "border-sky-400/60", tone: "blue" },
   oportunidades: { label: "Oportunidades", from: "#854d0e", to: "#16a34a", text: "text-lime-300", border: "border-lime-400/60", tone: "gold" },
 };
 
@@ -219,34 +217,65 @@ export function CityError({ error, onRetry }: { error: unknown; onRetry?: () => 
 /* ═══════════════════════ tabela automática (sem schema publicado) ═══════════════════════ */
 
 export const cellText = (v: Cell | undefined) => (v == null ? "—" : typeof v === "boolean" ? (v ? "Sim" : "Não") : String(v));
-/** Exibição: números de colunas de valor/quantidade ganham separador pt-BR (códigos ficam como vieram). */
-const MEASURE = /val|valor|total|qtd|quant|soma|pop|area|idh/i;
-export const displayCell = (col: string, v: Cell | undefined) => (typeof v === "number" && MEASURE.test(col) ? v.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) : cellText(v));
-const isNumericCol = (rows: Row[], c: string) => rows.slice(0, 30).every((r) => r[c] == null || typeof r[c] === "number" || /^-?\d+([.,]\d+)?$/.test(String(r[c])));
 
-/** Colunas com mais preenchimento primeiro (as APIs sem schema trazem dezenas de campos vazios). */
-export function autoColumns(rows: Row[], max = 8, prefer: string[] = []): string[] {
-  const fill = new Map<string, number>();
-  for (const r of rows.slice(0, 200)) for (const [k, v] of Object.entries(r)) if (v != null && v !== "") fill.set(k, (fill.get(k) ?? 0) + 1);
-  const ordered = [...fill.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
-  const pref = prefer.filter((p) => fill.has(p));
-  return [...pref, ...ordered.filter((k) => !pref.includes(k))].slice(0, max);
+const NUM = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+export const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
+/** R$ compacto para cards (R$ 4,6 mi / R$ 1,2 bi). */
+export const moneyShort = (n: number) => {
+  const a = Math.abs(n);
+  if (a >= 1e9) return `R$ ${NUM.format(n / 1e9)} bi`;
+  if (a >= 1e6) return `R$ ${NUM.format(n / 1e6)} mi`;
+  if (a >= 1e4) return `R$ ${NUM.format(n / 1e3)} mil`;
+  return money(n);
+};
+export const duration = (sec: number) => {
+  const s = Math.round(sec);
+  const m = Math.floor(s / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : m ? `${m} min ${String(s % 60).padStart(2, "0")} s` : `${s} s`;
+};
+export const dayBR = (d: string | null) => (d ? d.slice(0, 10).split("-").reverse().join("/") : "—");
+export const dateTimeBR = (d: string | null) => (d ? `${dayBR(d)}${d.length > 10 ? ` ${d.slice(11, 16)}` : ""}` : "—");
+
+/** Formata um valor pelo tipo que o servidor deu à coluna. */
+export function formatValue(kind: ColumnKind, v: Cell | undefined, opts: { short?: boolean } = {}): string {
+  if (v == null || v === "") return "—";
+  if (typeof v === "number") {
+    if (kind === "money") return opts.short ? moneyShort(v) : money(v);
+    if (kind === "percent") return `${NUM.format(v)}%`;
+    if (kind === "duration") return duration(v);
+    if (kind === "code") return String(v);
+    return NUM.format(v);
+  }
+  if (typeof v === "string" && (kind === "date" || kind === "datetime")) return dateTimeBR(v);
+  return cellText(v);
+}
+const RIGHT: ColumnKind[] = ["money", "number", "percent", "duration"];
+
+/** Colunas preferidas primeiro (quando existem), depois as demais, até `max`. */
+export function pickColumns(columns: ColumnMeta[], prefer: RegExp[] = [], max = 8): ColumnMeta[] {
+  const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const chosen: ColumnMeta[] = [];
+  for (const re of prefer) {
+    const c = columns.find((x) => !chosen.includes(x) && (re.test(norm(x.key)) || re.test(norm(x.label))));
+    if (c) chosen.push(c);
+  }
+  for (const c of columns) if (!chosen.includes(c)) chosen.push(c);
+  return chosen.slice(0, max);
 }
 
-export function DataTable({ rows, columns, caption, actions, onRowOpen }: { rows: Row[]; columns: string[]; caption: string; actions?: (r: Row, i: number) => ReactNode; onRowOpen?: (r: Row) => void }) {
+export function DataTable({ rows, columns, caption, actions, onRowOpen, wrap = [] }: { rows: Row[]; columns: ColumnMeta[]; caption: string; actions?: (r: Row, i: number) => ReactNode; onRowOpen?: (r: Row) => void; wrap?: string[] }) {
   if (!rows.length) return <EmptyBox title="Nenhum registro para este filtro." />;
-  const numeric = new Set(columns.filter((c) => isNumericCol(rows, c)));
   return (
     <>
       {/* desktop/tablet: tabela com rolagem própria (nunca estoura a página) */}
       <div className="hidden max-h-[560px] overflow-auto border-2 border-rpg-border md:block" style={R}>
         <table className="w-full min-w-[640px] border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
-          <thead className="sticky top-0 bg-rpg-panel-light">
+          <thead className="sticky top-0 z-[1] bg-rpg-panel-light">
             <tr>
               {columns.map((c) => (
-                <th key={c} scope="col" className={clsx("whitespace-nowrap px-2 py-2 text-left font-pixel text-[10px] uppercase text-rpg-gold", numeric.has(c) && "text-right")}>
-                  {c}
+                <th key={c.key} scope="col" className={clsx("whitespace-nowrap px-2 py-2 text-left font-pixel text-[10px] uppercase text-rpg-gold", RIGHT.includes(c.kind) && "text-right")} title={c.key}>
+                  {c.label}
                 </th>
               ))}
               {actions && <th className="sr-only">Ações</th>}
@@ -256,8 +285,12 @@ export function DataTable({ rows, columns, caption, actions, onRowOpen }: { rows
             {rows.map((r, i) => (
               <tr key={i} className={clsx("border-t border-rpg-border/60 odd:bg-rpg-bg-2/40", onRowOpen && "cursor-pointer hover:bg-rpg-panel-hover")} onClick={onRowOpen ? () => onRowOpen(r) : undefined}>
                 {columns.map((c) => (
-                  <td key={c} className={clsx("max-w-[280px] truncate px-2 py-1.5 text-rpg-text/90", numeric.has(c) && "text-right tabular-nums")} title={cellText(r[c])}>
-                    {displayCell(c, r[c])}
+                  <td
+                    key={c.key}
+                    className={clsx("px-2 py-1.5 text-rpg-text/90", RIGHT.includes(c.kind) && "whitespace-nowrap text-right tabular-nums", wrap.includes(c.key) ? "min-w-[260px] max-w-[420px] whitespace-normal" : "max-w-[260px] truncate", c.kind === "money" && "text-rpg-gold-light")}
+                    title={formatValue(c.kind, r[c.key])}
+                  >
+                    {wrap.includes(c.key) ? <span className="line-clamp-2">{formatValue(c.kind, r[c.key])}</span> : formatValue(c.kind, r[c.key])}
                   </td>
                 ))}
                 {actions && (
@@ -275,12 +308,12 @@ export function DataTable({ rows, columns, caption, actions, onRowOpen }: { rows
         {rows.slice(0, 120).map((r, i) => (
           <li key={i} className="min-w-0 border-2 border-rpg-border bg-rpg-panel p-2.5" style={R}>
             <button type="button" className="w-full text-left" onClick={onRowOpen ? () => onRowOpen(r) : undefined} disabled={!onRowOpen}>
-              <p className="truncate font-semibold text-rpg-text">{cellText(r[columns[0]!])}</p>
+              <p className="line-clamp-2 font-semibold text-rpg-text">{formatValue(columns[0]!.kind, r[columns[0]!.key])}</p>
               <dl className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
                 {columns.slice(1, 7).map((c) => (
-                  <div key={c} className="min-w-0">
-                    <dt className="truncate text-rpg-muted">{c}</dt>
-                    <dd className="truncate text-rpg-text/90">{displayCell(c, r[c])}</dd>
+                  <div key={c.key} className="min-w-0">
+                    <dt className="truncate text-rpg-muted">{c.label}</dt>
+                    <dd className={clsx("truncate", c.kind === "money" ? "text-rpg-gold-light" : "text-rpg-text/90")}>{formatValue(c.kind, r[c.key])}</dd>
                   </div>
                 ))}
               </dl>
@@ -293,53 +326,32 @@ export function DataTable({ rows, columns, caption, actions, onRowOpen }: { rows
   );
 }
 
-/** Contagem por valor de uma coluna — sempre rotulada como cálculo do LifeOS sobre a amostra carregada. */
-export function FacetBars({ rows, column, title, top = 8, tone = "gold" }: { rows: Row[]; column: string; title: string; top?: number; tone?: RpgTone }) {
-  const counts = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of rows) {
-      const v = cellText(r[column]);
-      if (v !== "—") m.set(v, (m.get(v) ?? 0) + 1);
-    }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, top);
-  }, [rows, column, top]);
-  if (!counts.length) return null;
-  const max = counts[0]![1];
-  const bar = { gold: "bg-rpg-gold", green: "bg-rpg-green", blue: "bg-rpg-blue", purple: "bg-rpg-purple", cyan: "bg-rpg-cyan", orange: "bg-rpg-orange", red: "bg-rpg-red", pink: "bg-rpg-pink", muted: "bg-rpg-muted" }[tone];
+/** Ficha completa de um registro (todas as colunas, já formatadas). */
+export function RecordSheet({ row, columns }: { row: Row; columns: ColumnMeta[] }) {
   return (
-    <figure className="min-w-0">
-      <figcaption className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1">
-        <span className="font-pixel text-[10px] uppercase text-rpg-gold">{title}</span>
-        <span className="text-[11px] text-rpg-muted">calculado pelo LifeOS na amostra de {rows.length} registro(s)</span>
-      </figcaption>
-      <ul className="space-y-1">
-        {counts.map(([label, n]) => (
-          <li key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-xs">
-            <div className="min-w-0">
-              <p className="truncate text-rpg-text/90" title={label}>
-                {label}
-              </p>
-              <div className="mt-0.5 h-2 bg-rpg-bg-2" style={R}>
-                <div className={clsx("h-2", bar)} style={{ ...R, width: `${Math.max(4, (n / max) * 100)}%` }} />
-              </div>
-            </div>
-            <span className="tabular-nums text-rpg-muted">{n}</span>
-          </li>
-        ))}
-      </ul>
-    </figure>
+    <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+      {columns.map((c) => {
+        const long = typeof row[c.key] === "string" && String(row[c.key]).length > 80;
+        return (
+          <div key={c.key} className={clsx("min-w-0 border-b border-rpg-border/50 pb-1", long && "sm:col-span-2")}>
+            <dt className="truncate font-pixel text-[10px] uppercase text-rpg-muted">{c.label}</dt>
+            <dd className={clsx("whitespace-pre-line break-words", c.kind === "money" ? "text-rpg-gold-light" : "text-rpg-text")}>{formatValue(c.kind, row[c.key])}</dd>
+          </div>
+        );
+      })}
+    </dl>
   );
 }
 
 /* ═══════════════════════ ações pessoais ═══════════════════════ */
 
-export function exportCsv(rows: Row[], columns: string[], filename: string) {
+export function exportCsv(rows: Row[], columns: ColumnMeta[], filename: string) {
   const esc = (v: Cell | undefined) => {
-    const s = v == null ? "" : String(v);
+    const s = v == null ? "" : typeof v === "number" ? String(v).replace(".", ",") : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  // ";" + BOM: abre certo no Excel em português.
-  const csv = "﻿" + [columns.join(";"), ...rows.map((r) => columns.map((c) => esc(r[c])).join(";"))].join("\n");
+  // ";" + vírgula decimal + BOM: abre certo no Excel em português.
+  const csv = "\ufeff" + [columns.map((c) => c.label).join(";"), ...rows.map((r) => columns.map((c) => esc(r[c.key])).join(";"))].join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
@@ -348,9 +360,9 @@ export function exportCsv(rows: Row[], columns: string[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function CsvButton({ rows, columns, filename }: { rows: Row[]; columns: string[]; filename: string }) {
+export function CsvButton({ rows, columns, filename }: { rows: Row[]; columns: ColumnMeta[]; filename: string }) {
   return (
-    <RPGButton variant="ghost" disabled={!rows.length} onClick={() => exportCsv(rows, columns, filename)} aria-label="Exportar a amostra carregada em CSV">
+    <RPGButton variant="ghost" disabled={!rows.length} onClick={() => exportCsv(rows, columns, filename)} aria-label="Exportar os registros carregados em CSV">
       <Download size={14} aria-hidden /> CSV
     </RPGButton>
   );
@@ -444,26 +456,6 @@ export function TextInput({ label, value, onChange, placeholder, type = "text", 
 
 export const yearOptions = (min: number, max: number) => Array.from({ length: max - min + 1 }, (_, i) => String(max - i)).map((y) => ({ value: y, label: y }));
 
-export function Pager({ offset, limit, count, total, onChange }: { offset: number; limit: number; count: number; total: number | null; onChange: (offset: number) => void }) {
-  const end = offset + count;
-  return (
-    <nav className="flex flex-wrap items-center justify-between gap-2 text-xs text-rpg-muted" aria-label="Paginação">
-      <span>
-        Registros {count ? offset + 1 : 0}–{end}
-        {total != null && ` de ${total.toLocaleString("pt-BR")}`}
-      </span>
-      <div className="flex gap-2">
-        <RPGButton variant="secondary" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - limit))}>
-          Anterior
-        </RPGButton>
-        <RPGButton variant="secondary" disabled={count < limit || (total != null && end >= total)} onClick={() => onChange(offset + limit)}>
-          Próxima
-        </RPGButton>
-      </div>
-    </nav>
-  );
-}
-
 /* ═══════════════════════ Oráculo da Cidade ═══════════════════════ */
 
 const KIND = {
@@ -526,6 +518,4 @@ export function OracleBox({ apiId, resource, params, disabled, suggestions = [] 
 }
 
 export const catalogOf = (list: CatalogEntry[] | undefined, id: CityApi) => list?.find((c) => c.id === id);
-export const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
-export const dayBR = (d: string | null) => (d ? d.slice(0, 10).split("-").reverse().join("/") : "—");
-export const dateTimeBR = (d: string | null) => (d ? `${dayBR(d)}${d.length > 10 && !d.endsWith("00:00:00") ? ` ${d.slice(11, 16)}` : ""}` : "—");
+

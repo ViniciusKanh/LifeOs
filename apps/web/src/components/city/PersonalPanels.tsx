@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, CalendarPlus, ClipboardList, ExternalLink, History, ListPlus, Plus, Star, Trash2 } from "lucide-react";
+import { CalendarPlus, ClipboardList, ExternalLink, History, ListPlus, Plus, Star, Trash2 } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
 import { KitSection } from "@/components/rpg-modules/ModuleKit";
 import type { Notify } from "@/components/integrations/PublicApiKit";
-import { useCityActions, useCityAlerts, useCityCatalog, useCityFavorites, useCityHistory, useCityProtocols } from "@/hooks/useCity";
-import type { CityAlert, CityApi, Favorite, Protocol, ProtocolStatus } from "@/services/cityService";
-import { EmptyBox, FIELD, LoadingBlock, R, Select, TextInput, dayBR } from "./CityKit";
+import { useCityActions, useCityCatalog, useCityFavorites, useCityHistory, useCityProtocols } from "@/hooks/useCity";
+import type { CityApi, Favorite, Protocol, ProtocolStatus } from "@/services/cityService";
+import { EmptyBox, FIELD, LoadingBlock, R, TextInput, dayBR } from "./CityKit";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Não foi possível concluir.");
 
@@ -24,7 +24,7 @@ export function FavoritesPanel({ notify, apiId, compact }: { notify: Notify; api
       {favs.isLoading ? (
         <LoadingBlock rows={2} label="Carregando favoritos…" />
       ) : !list.length ? (
-        <EmptyBox title="Nada guardado ainda.">Use a estrela nas publicações, licitações e registros para guardar aqui.</EmptyBox>
+        <EmptyBox title="Nada guardado ainda.">Use a estrela nos contratos e registros para guardar aqui.</EmptyBox>
       ) : (
         <ul className="space-y-1.5">
           {list.map((f) => (
@@ -78,70 +78,6 @@ export function FavoritesPanel({ notify, apiId, compact }: { notify: Notify; api
         </ul>
       )}
       {compact && (favs.data?.length ?? 0) > list.length && <p className="mt-2 text-xs text-rpg-muted">+{(favs.data?.length ?? 0) - list.length} na lista completa.</p>}
-    </KitSection>
-  );
-}
-
-/* ═══════════════════════ Alertas do Diário Oficial ═══════════════════════ */
-
-export function AlertsPanel({ notify }: { notify: Notify }) {
-  const alerts = useCityAlerts();
-  const a = useCityActions();
-  const [name, setName] = useState("");
-  const [kw, setKw] = useState("");
-  const [source, setSource] = useState<CityAlert["source"]>("publicacoes");
-  const create = () => {
-    const keywords = kw
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
-    a.createAlert.mutate({ source, name: name.trim(), keywords, active: true }, { onSuccess: () => (setName(""), setKw(""), notify("Alerta criado.")), onError: (e) => notify(errMsg(e), "error") });
-  };
-  return (
-    <KitSection
-      title="Alertas do Diário"
-      icon={<Bell size={16} aria-hidden />}
-      action={
-        <RPGButton variant="ghost" disabled={!alerts.data?.some((x) => x.active) || a.runAlerts.isPending} onClick={() => a.runAlerts.mutate(undefined, { onSuccess: (r) => notify(r.hits ? `${r.hits} novidade(s) encontrada(s).` : "Nada novo hoje para seus alertas."), onError: (e) => notify(errMsg(e), "error") })}>
-          Verificar agora
-        </RPGButton>
-      }
-    >
-      <p className="mb-2 text-xs text-rpg-muted">Uma verificação por dia (e o botão acima). Cada publicação avisa uma única vez. A busca usa só os metadados — a API não traz o texto integral.</p>
-      <form
-        className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          create();
-        }}
-      >
-        {/* Empilhado de propósito: o painel vive tanto na coluna lateral quanto em meia tela. */}
-        <TextInput label="Nome" value={name} onChange={setName} placeholder="Ex.: Editais de cultura" className="col-span-2" />
-        <TextInput label="Palavras-chave (separe por vírgula)" value={kw} onChange={setKw} placeholder="chamamento, cultura" className="col-span-2" />
-        <Select label="Onde" value={source} onChange={(v) => setSource(v as CityAlert["source"])} options={[{ value: "publicacoes", label: "Publicações" }, { value: "licitacoes", label: "Licitações abertas" }]} />
-        <RPGButton type="submit" variant="primary" disabled={name.trim().length < 2 || !kw.trim() || a.createAlert.isPending}>
-          <Plus size={14} aria-hidden /> Criar
-        </RPGButton>
-      </form>
-      <ul className="mt-2 space-y-1.5">
-        {(alerts.data ?? []).map((al) => (
-          <li key={al.id} className="flex min-w-0 flex-wrap items-center gap-2 border-2 border-rpg-border bg-rpg-bg-2/60 p-2" style={R}>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-rpg-text">{al.name}</p>
-              <p className="truncate text-[11px] text-rpg-muted">
-                {al.source === "publicacoes" ? "Publicações" : "Licitações"} · {al.keywords.join(", ")}
-                {al.lastRunDay ? ` · ${dayBR(al.lastRunDay)}: ${al.lastHits} nova(s)` : ""}
-              </p>
-            </div>
-            <RPGButton variant="ghost" onClick={() => a.updateAlert.mutate({ id: al.id, source: al.source, name: al.name, keywords: al.keywords, active: !al.active }, { onError: (e) => notify(errMsg(e), "error") })}>
-              {al.active ? "Pausar" : "Ativar"}
-            </RPGButton>
-            <RPGButton variant="ghost" aria-label={`Excluir alerta ${al.name}`} onClick={() => a.removeAlert.mutate(al.id, { onError: (e) => notify(errMsg(e), "error") })}>
-              <Trash2 size={13} aria-hidden />
-            </RPGButton>
-          </li>
-        ))}
-      </ul>
     </KitSection>
   );
 }
