@@ -5,7 +5,6 @@ import { useLocalToast } from "@/components/integrations/PublicApiKit";
 import { useCityActions, useCityData } from "@/hooks/useCity";
 import { CityBanner, R, Select, cellText } from "@/components/city/CityKit";
 import { DatasetExplorer } from "@/components/city/DatasetExplorer";
-import { ProtocolsPanel } from "@/components/city/PersonalPanels";
 
 /**
  * Telas dos conjuntos anuais/semestrais do APILIB: cada uma é o Explorador com o recorte, os
@@ -15,7 +14,6 @@ import { ProtocolsPanel } from "@/components/city/PersonalPanels";
 const YEAR = new Date().getFullYear();
 const LAST_MONTH = new Date().getMonth() || 12;
 const LAST_MONTH_YEAR = new Date().getMonth() === 0 ? YEAR - 1 : YEAR;
-const LAST_SEM = new Date().getMonth() >= 6 ? { ano: YEAR, semestre: 1 } : { ano: YEAR - 1, semestre: 2 };
 
 export function Notice({ children, tone = "amber" }: { children: ReactNode; tone?: "amber" | "cyan" }) {
   return (
@@ -26,7 +24,7 @@ export function Notice({ children, tone = "amber" }: { children: ReactNode; tone
 }
 
 /** Clique numa subprefeitura/corredor do panorama = território explorado (conquista Explorador Paulistano). */
-function useTerritoryPick(apiId: "sp156" | "lentidao", dims: RegExp) {
+function useTerritoryPick(apiId: "lentidao", dims: RegExp) {
   const a = useCityActions();
   const [notify, toast] = useLocalToast();
   const pick = (dim: string, value: string) => {
@@ -56,89 +54,6 @@ export function PratoAbertoPage() {
         totalLabel="Cardápios no ano"
         oracleSuggestions={["Quais alimentos aparecem com mais frequência?", "Como varia o lanche entre as faixas etárias?"]}
       />
-    </div>
-  );
-}
-
-/* ───────────── PROCON ───────────── */
-export function ProconPage() {
-  return (
-    <div className="space-y-3">
-      <CityBanner domain="consumo" eyebrow="Cidadania e Consumo" title="PROCON Paulistano" subtitle="Reclamações registradas no PROCON municipal (2016–2019): áreas, regiões, empresas citadas e como cada caso terminou. Útil para pesquisar um fornecedor antes de comprar.">
-        <RPGBadge tone="purple">2016–2019</RPGBadge>
-      </CityBanner>
-      <Notice>Quantidade de reclamações não prova sozinha que uma empresa é ruim: empresas maiores atendem mais pessoas. Olhe também o desfecho (resolvido, desistência, sem acordo).</Notice>
-      <DatasetExplorer
-        apiId="procon"
-        domain="consumo"
-        resources={[{ id: "reclamacoes", label: "Reclamações" }]}
-        initial={{ ano: "2019" }}
-        prefer={[/razao social/, /^(area|area de atuacao)$/, /motivo de baixa|status da reclamacao/, /^regiao$/, /entrada/]}
-        titleField={/razao social/}
-        csvName="procon"
-        totalLabel="Reclamações no ano"
-        oracleSuggestions={["Quais áreas concentram mais reclamações?", "Qual a proporção de casos com resolução total nesta amostra?"]}
-      />
-    </div>
-  );
-}
-
-/* ───────────── SP156 ───────────── */
-export function Sp156Page() {
-  const [notify, toast] = useLocalToast();
-  const t = useTerritoryPick("sp156", /subprefeitura|distrito/);
-  return (
-    <div className="space-y-3">
-      {toast}
-      {t.toast}
-      <CityBanner domain="cidadania" eyebrow="Cidadania e Consumo" title="SP156" subtitle="O que os paulistanos pedem à Prefeitura: temas, serviços e subprefeituras das solicitações, o desempenho da central telefônica e as avaliações — e os seus protocolos.">
-        <RPGBadge tone="cyan">Somente leitura</RPGBadge>
-      </CityBanner>
-      <DatasetExplorer
-        apiId="sp156"
-        domain="cidadania"
-        resources={[
-          { id: "solicitacoes", label: "Solicitações" },
-          { id: "ligacoes", label: "Ligações (central 156)" },
-          { id: "avaliacao", label: "Avaliação do atendimento" },
-        ]}
-        initial={{ ano: String(LAST_SEM.ano), semestre: String(LAST_SEM.semestre) }}
-        prefer={[/^servico$/, /^tema$/, /^assunto$/, /^subprefeitura$/, /status/, /data de abertura/, /^data$/, /entrantes/, /ligacoes atendidas$/, /nivel de servico/, /tempo medio/]}
-        titleField={/^servico$|^data$/}
-        onDimPick={t.pick}
-        csvName="sp156"
-        totalLabel="Registros no semestre"
-        oracleSuggestions={["Quais serviços são mais pedidos?", "Em quais subprefeituras há mais solicitações?"]}
-      />
-      <p className="text-xs text-rpg-muted">Dica: clique numa subprefeitura do panorama para marcá-la como território explorado.</p>
-      <ProtocolsPanel kind="sp156" notify={notify} officialUrl="https://sp156.prefeitura.sp.gov.br/" />
-    </div>
-  );
-}
-
-/* ───────────── e-SIC ───────────── */
-export function EsicPage() {
-  const [notify, toast] = useLocalToast();
-  return (
-    <div className="space-y-3">
-      {toast}
-      <CityBanner domain="cidadania" eyebrow="Cidadania e Consumo" title="e-SIC — Acesso à Informação" subtitle="Tudo o que já foi perguntado à Prefeitura pela Lei de Acesso à Informação, com as respostas. Pesquise antes de abrir um pedido novo.">
-        <RPGBadge tone="cyan">Lei de Acesso à Informação</RPGBadge>
-      </CityBanner>
-      <DatasetExplorer
-        apiId="esic"
-        domain="cidadania"
-        resources={[{ id: "pedidos", label: "Pedidos e respostas" }]}
-        initial={{ ano: String(YEAR - 1) }}
-        prefer={[/^dc_pedido$/, /^(nm_orgao|orgao_nome)$/, /status/, /^dt_resposta/, /^dc_resposta$/]}
-        wrap={[/^dc_pedido$/, /^dc_resposta$/]}
-        titleField={/^dc_pedido$/}
-        readOnOpen
-        csvName="esic"
-        totalLabel="Pedidos no ano"
-        oracleSuggestions={["Quais temas são mais perguntados?", "Que órgãos recebem mais pedidos?"]}
-      />
-      <ProtocolsPanel kind="esic" notify={notify} officialUrl="https://esic.prefeitura.sp.gov.br/" />
     </div>
   );
 }

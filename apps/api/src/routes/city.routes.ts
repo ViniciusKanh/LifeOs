@@ -28,6 +28,7 @@ import {
   savePrefs,
   saveProtocol,
 } from "../services/cityService.js";
+import { esicPanorama, proconCompany, proconPanorama, sp156Panorama } from "../services/civicService.js";
 
 /**
  * /api/city — Cidade Inteligente (São Paulo, APILIB).
@@ -152,6 +153,46 @@ cityRouter.get("/insights/:api/:resource", readLimit, async (req, res) => {
     if (!CITY_API_DEFS[api].resources[resource]) return res.status(404).json({ error: "Recurso desconhecido para esta API." });
     const r = await cityInsights(getDb(), req.user!.id, api, resource, queryParams(req.query as Record<string, unknown>, ["limite", "offset"]));
     return res.json({ ...r.meta, insights: r.insights });
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+/* ───────────── Cidadania e Consumo (leituras próprias) ───────────── */
+
+const YEAR = z.coerce.number().int().min(2001).max(new Date().getUTCFullYear());
+
+cityRouter.get("/civic/procon", readLimit, async (req, res) => {
+  try {
+    const { ano } = z.object({ ano: YEAR }).parse(req.query);
+    return res.json(await proconPanorama(getDb(), req.user!.id, ano));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/civic/procon/empresa", readLimit, async (req, res) => {
+  try {
+    const { q } = z.object({ q: z.string().trim().min(3, "Digite ao menos 3 letras.").max(80).regex(/^[\p{L}\p{N} .,&'()/-]+$/u, "Nome com caracteres inválidos.") }).parse(req.query);
+    return res.json(await proconCompany(getDb(), req.user!.id, q));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/civic/sp156", readLimit, async (req, res) => {
+  try {
+    const { ano, semestre } = z.object({ ano: YEAR, semestre: z.coerce.number().int().min(1).max(2) }).parse(req.query);
+    return res.json(await sp156Panorama(getDb(), req.user!.id, ano, semestre));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/civic/esic", readLimit, async (req, res) => {
+  try {
+    const { ano, q } = z.object({ ano: YEAR, q: z.string().trim().max(80).optional() }).parse(req.query);
+    return res.json(await esicPanorama(getDb(), req.user!.id, ano, q || null));
   } catch (e) {
     return fail(res, e);
   }

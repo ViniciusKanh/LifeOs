@@ -15,6 +15,12 @@ export const useCityData = (apiId: CityApi, resource: string, params: Params, en
 export const useCityInsights = (apiId: CityApi, resource: string, params: Params, enabled = true) =>
   useQuery({ queryKey: [...CITY_KEY, "insights", apiId, resource, params], queryFn: () => svc.insights(apiId, resource, params), enabled, ...noRetry });
 
+/* Cidadania e Consumo: o servidor lê o ano/semestre inteiro (ou uma amostra declarada). */
+export const useProcon = (ano: number) => useQuery({ queryKey: [...CITY_KEY, "civic", "procon", ano], queryFn: () => svc.procon(ano), ...noRetry });
+export const useProconCompany = (q: string) => useQuery({ queryKey: [...CITY_KEY, "civic", "empresa", q], queryFn: () => svc.proconCompany(q), enabled: q.trim().length >= 3, ...noRetry });
+export const useSp156 = (ano: number, semestre: number) => useQuery({ queryKey: [...CITY_KEY, "civic", "sp156", ano, semestre], queryFn: () => svc.sp156(ano, semestre), ...noRetry });
+export const useEsic = (ano: number, q: string | null) => useQuery({ queryKey: [...CITY_KEY, "civic", "esic", ano, q ?? ""], queryFn: () => svc.esic(ano, q), ...noRetry });
+
 export const useCityFavorites = (apiId?: CityApi) => useQuery({ queryKey: [...CITY_KEY, "favorites", apiId ?? "all"], queryFn: () => svc.favorites(apiId) });
 export const useCityProtocols = () => useQuery({ queryKey: [...CITY_KEY, "protocols"], queryFn: svc.protocols });
 export const useCityHistory = () => useQuery({ queryKey: [...CITY_KEY, "history"], queryFn: svc.history });

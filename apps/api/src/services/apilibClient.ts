@@ -317,8 +317,11 @@ export function normalizePayload(payload: unknown): Normalized {
   let total: number | null = null;
   if (Array.isArray(payload)) arr = payload;
   else if (payload && typeof payload === "object") {
-    const o = payload as Record<string, unknown>;
-    const direct = [o.data, o.results, o.items, o.registros, o.content].find((v) => Array.isArray(v)) as unknown[] | undefined;
+    let o = payload as Record<string, unknown>;
+    // Envelope do CKAN (Portal de Dados Abertos), repassado como veio por várias APIs do APILIB:
+    // { help, success, result: { fields, records, total, limit, offset } }.
+    if (o.result && typeof o.result === "object" && !Array.isArray(o.result)) o = o.result as Record<string, unknown>;
+    const direct = [o.records, o.data, o.results, o.items, o.registros, o.content].find((v) => Array.isArray(v)) as unknown[] | undefined;
     arr = direct ?? largestObjectArray(o) ?? [o];
     for (const k of ["total", "count", "totalRegistros", "totalElements", "quantidade"]) {
       const n = Number(o[k]);

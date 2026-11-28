@@ -149,6 +149,107 @@ export interface OracleAnswer {
   sampleSize: number;
 }
 
+/* ───────────── Cidadania e Consumo (leituras próprias do servidor) ───────────── */
+
+export type Outcome = "resolvido" | "parcial" | "nao_resolvido" | "desistencia" | "orientacao" | "encaminhado" | "arquivado" | "sem_desfecho";
+export interface Count {
+  label: string;
+  count: number;
+}
+export interface Rate {
+  rate: number | null;
+  base: number;
+}
+export interface ProconPanorama {
+  ano: number;
+  total: number | null;
+  loaded: number;
+  complete: boolean;
+  fetchedAt: string;
+  stale: boolean;
+  outcomes: Array<{ key: Outcome; label: string; count: number }>;
+  resolution: Rate;
+  areas: Array<{ label: string; count: number } & Rate>;
+  regions: Count[];
+  months: Array<{ x: string; y: number }>;
+  companies: Array<{ key: string; name: string; count: number } & Rate>;
+  companiesDistinct: number;
+  detailedOutcomes: Count[];
+}
+export interface ProconCompany {
+  query: string;
+  yearsRead: number[];
+  yearsFailed: number[];
+  matches: Array<{ key: string; name: string; count: number } & Rate>;
+  count: number;
+  shareOfAll: number | null;
+  byYear: Array<{ ano: number; count: number }>;
+  outcomes: Array<{ key: Outcome; label: string; count: number }>;
+  resolution: Rate;
+  cityResolution: Rate;
+  areas: Count[];
+  regions: Count[];
+  recent: Array<{ date: string | null; company: string | null; area: string | null; region: string | null; outcome: Outcome; outcomeLabel: string; outcomeRaw: string | null }>;
+}
+export interface Sp156Panorama {
+  ano: number;
+  semestre: number;
+  solicitacoesError: string | null;
+  solicitacoes: {
+    total: number | null;
+    loaded: number;
+    fetchedAt: string;
+    stale: boolean;
+    temas: Count[];
+    servicos: Count[];
+    subprefeituras: Count[];
+    distritos: Count[];
+    status: Count[];
+    canais: Count[];
+    orgaos: Count[];
+    months: Array<{ x: string; y: number }>;
+    medianDays: number | null;
+    daysBase: number;
+    slowestThemes: Array<{ label: string; medianDays: number; count: number }>;
+  } | null;
+  ligacoes: {
+    days: number;
+    entrantes: number | null;
+    atendidas: number | null;
+    abandonadas: number | null;
+    taxaAtendimento: number | null;
+    nivelServico: number | null;
+    esperaMediaSeg: number | null;
+    atendimentoMedioSeg: number | null;
+    series: Array<{ x: string; entrantes: number; atendidas: number }>;
+  } | null;
+}
+export type EsicStatus = "atendido" | "parcial" | "negado" | "tramitando" | "outro";
+export interface EsicItem {
+  id: string;
+  orgao: string | null;
+  status: EsicStatus;
+  statusRaw: string | null;
+  data: string | null;
+  pedido: string;
+  resposta: string;
+}
+export interface EsicPanorama {
+  ano: number;
+  total: number | null;
+  loaded: number;
+  fetchedAt: string;
+  stale: boolean;
+  status: Record<EsicStatus, number>;
+  atendidoPct: number | null;
+  decided: number;
+  orgaos: Array<{ label: string; count: number; atendidoPct: number | null }>;
+  months: Array<{ x: string; y: number }>;
+  query: string | null;
+  results: EsicItem[];
+  recent: EsicItem[];
+}
+
 export type Params = Record<string, string | number | undefined | null>;
 const qs = (p: Params) => {
   const u = new URLSearchParams();
@@ -187,6 +288,11 @@ export const cityService = {
 
   prefs: () => api.get<CityPrefs>("/city/prefs"),
   savePrefs: (p: CityPrefs) => api.put<CityPrefs>("/city/prefs", p),
+
+  procon: (ano: number) => api.get<ProconPanorama>(`/city/civic/procon?ano=${ano}`),
+  proconCompany: (q: string) => api.get<ProconCompany>(`/city/civic/procon/empresa${qs({ q })}`),
+  sp156: (ano: number, semestre: number) => api.get<Sp156Panorama>(`/city/civic/sp156?ano=${ano}&semestre=${semestre}`),
+  esic: (ano: number, q: string | null) => api.get<EsicPanorama>(`/city/civic/esic${qs({ ano, q })}`),
 
   oracle: (body: { api: CityApi; resource: string; params: Record<string, string | number>; question: string | null }) => api.post<OracleAnswer>("/city/oracle", body),
 };

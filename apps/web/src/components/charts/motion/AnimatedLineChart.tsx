@@ -22,6 +22,7 @@ export function AnimatedLineChart({
   yMax,
   formatValue = (v) => String(Math.round(v)),
   ariaLabel,
+  padLeft = 30,
 }: {
   labels: string[];
   series: LineSeries[];
@@ -29,11 +30,13 @@ export function AnimatedLineChart({
   yMax?: number;
   formatValue?: (v: number) => string;
   ariaLabel: string;
+  /** Espaço do eixo Y (rótulos longos como "4,5 mi" pedem mais). */
+  padLeft?: number;
 }) {
   const gradientId = useId();
   const { ref, width } = useElementSize<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const padL = 30;
+  const padL = padLeft;
   const padR = 10;
   const padT = 10;
   const padB = 24;

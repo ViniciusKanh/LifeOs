@@ -385,3 +385,90 @@ describe("/api/city — dados pessoais e XP", () => {
     expect(r.body.radar.atendimento.ok).toBe(false);
   });
 });
+
+/* ───────────── Cidadania e Consumo (envelope CKAN real do PROCON) ───────────── */
+import { classifyEsic, classifyOutcome, companyKey, normCategory, resolutionRate } from "../src/services/civicService.js";
+
+const PROCON_2019 = [
+  { _id: 1, "Data de entrada": "02/01/2019", "Região": "OESTE", "Razão Social": "Notre Dame Intermedica", "Área": "Serviços Privados", "Motivo de baixa no Backoffice": "Baixa de CIP -  Com resolução total", "OBSERVAÇÃO": "" },
+  { _id: 2, "Data de entrada": "02/01/2019", "Região": "SUL", "Razão Social": "Credz Administradora de Cartões LTDA", "Área": "Assuntos Financeiros", "Motivo de baixa no Backoffice": "Encerrado - Desistência do Consumidor", "OBSERVAÇÃO": "" },
+  { _id: 3, "Data de entrada": "03/01/2019", "Região": "OESTE", "Razão Social": "Sptrans", "Área": "Serviços Essenciais", "Motivo de baixa no Backoffice": "Decisão - Reclamação Fundamentada Não Atendida", "OBSERVAÇÃO": "" },
+  { _id: 4, "Data de entrada": "04/02/2019", "Região": "leste", "Razão Social": "SPTRANS LTDA.", "Área": "SERVIÇOS ESSENCIAIS", "Motivo de baixa no Backoffice": "Decisão - Reclamação Fundamentada Atendida", "OBSERVAÇÃO": "" },
+  { _id: 5, "Data de entrada": "05/02/2019", "Região": "SUL", "Razão Social": "Sptrans", "Área": "Serviços Essenciais", "Motivo de baixa no Backoffice": "", "OBSERVAÇÃO": "" },
+];
+const ckan = (records: unknown[], total: number) => json({ help: "https://dados.prefeitura.sp.gov.br/api/3/action/help_show?name=datastore_search", success: true, result: { include_total: true, resource_id: "x", fields: [], records_format: "objects", records, limit: 500, offset: 0, total } });
+
+describe("Cidadania e Consumo", () => {
+  it("desembrulha o envelope do CKAN", () => {
+    const n = normalizePayload({ help: "h", success: true, result: { records: PROCON_2019, total: 1526, fields: [{ id: "_id" }] } });
+    expect(n.total).toBe(1526);
+    expect(n.items).toHaveLength(5);
+    expect(n.items[0]!["Razão Social"]).toBe("Notre Dame Intermedica");
+  });
+
+  it("classifica desfechos, normaliza categorias e agrupa empresas", () => {
+    expect(classifyOutcome("Decisão - Reclamação Fundamentada Não Atendida")).toBe("nao_resolvido");
+    expect(classifyOutcome("Decisão - reclamação fundamentada atendida")).toBe("resolvido");
+    expect(classifyOutcome("Baixa de CIP - Com resolução parcial")).toBe("parcial");
+    expect(classifyOutcome("Baixa de CIP - sem resolução")).toBe("nao_resolvido");
+    expect(classifyOutcome("Concluído – Extra-Procon")).toBe("encaminhado");
+    expect(classifyOutcome("Concluído - Simples Consulta")).toBe("orientacao");
+    expect(classifyOutcome("Encerrado - Duplicidade")).toBe("arquivado");
+    expect(classifyOutcome("")).toBe("sem_desfecho");
+    expect(resolutionRate({ resolvido: 2, parcial: 2, nao_resolvido: 4 })).toEqual({ rate: 37.5, base: 8 });
+    expect(normCategory("SERVIÇOS ESSENCIAIS")).toBe("Serviços Essenciais");
+    expect(normCategory("leste")).toBe("Leste");
+    expect(companyKey("SPTRANS LTDA.")).toBe(companyKey("Sptrans"));
+    expect(classifyEsic("Atendido parcialmente")).toBe("parcial");
+    expect(classifyEsic("Indeferido")).toBe("negado");
+    expect(classifyEsic("Em tramitação")).toBe("tramitando");
+  });
+
+  it("panorama do PROCON lê o ano inteiro em páginas e calcula a taxa de resolução", async () => {
+    const agent = await configured();
+    handler = (url) => (url.includes("/smj/proconsp/") ? ckan(PROCON_2019, url.includes("offset=0") ? 1200 : 1200) : defaultHandler(url));
+    const r = await agent.get("/api/city/civic/procon?ano=2019");
+    expect(r.status).toBe(200);
+    expect(calls.filter((c) => c.url.includes("/proconsp/v1/2019")).length).toBe(3); // 1200 registros = 3 páginas de 500
+    expect(r.body.total).toBe(1200);
+    expect(r.body.companies[0]).toMatchObject({ name: "Sptrans", count: 9 }); // 3 por página × 3 páginas
+    expect(r.body.resolution).toEqual({ rate: 66.7, base: 9 });
+    expect(r.body.regions.map((x: { label: string }) => x.label)).toContain("Leste");
+    expect((await agent.get("/api/city/civic/procon?ano=2021")).status).toBe(400);
+  });
+
+  it("ficha da empresa junta as grafias e compara com a cidade", async () => {
+    const agent = await configured();
+    await getDb().execute("DELETE FROM city_cache WHERE api = 'procon'"); // o cache é global entre usuários
+    handler = (url) => (url.includes("/smj/proconsp/") ? ckan(PROCON_2019, 5) : defaultHandler(url));
+    const r = await agent.get("/api/city/civic/procon/empresa?q=sptrans");
+    expect(r.status).toBe(200);
+    expect(r.body.yearsRead).toEqual([2016, 2017, 2018, 2019]);
+    expect(r.body.count).toBe(12);
+    expect(r.body.matches[0].name).toBe("Sptrans");
+    expect(r.body.resolution.rate).toBe(50);
+    expect(r.body.recent[0].outcomeLabel).toBeTruthy();
+    expect((await agent.get("/api/city/civic/procon/empresa?q=ab")).status).toBe(400);
+  });
+
+  it("e-SIC: busca nas perguntas e respostas e taxa de atendimento", async () => {
+    const agent = await configured();
+    const r = await agent.get("/api/city/civic/esic?ano=2022&q=vagas");
+    expect(r.status).toBe(200);
+    expect(r.body.loaded).toBe(8); // 12.750 na base → 4 páginas (teto de 2.000), o mock repete as 2 linhas
+    expect(r.body.results.every((x: { pedido: string }) => x.pedido === "Quero saber vagas")).toBe(true);
+    expect(r.body.atendidoPct).toBe(100);
+    expect(r.body.status.tramitando).toBe(4);
+  });
+
+  it("SP156: central de ligações com taxa de atendimento", async () => {
+    const agent = await configured();
+    handler = (url) => (url.includes("/solicitacoes/") ? ckan([{ "Data de abertura": "2024-07-01T10:00:00", "Data de finalização": "2024-07-05T10:00:00", Tema: "Lixo e limpeza", "Serviço": "Coleta", Subprefeitura: "SE", "Status da solicitação": "FINALIZADA" }], 1) : defaultHandler(url));
+    const r = await agent.get("/api/city/civic/sp156?ano=2024&semestre=2");
+    expect(r.status).toBe(200);
+    expect(r.body.ligacoes.entrantes).toBe(52998);
+    expect(r.body.ligacoes.taxaAtendimento).toBeCloseTo(88.2, 1);
+    expect(r.body.solicitacoes.medianDays).toBe(4);
+    expect(r.body.solicitacoes.temas[0]).toEqual({ label: "Lixo e Limpeza", count: 1 });
+  });
+});

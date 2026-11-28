@@ -8,3 +8,7 @@ UPDATE achievements SET description = 'Comparou órgãos do orçamento municipal
 UPDATE achievements SET description = 'Guardou dez contratos públicos como referência.' WHERE code = 'city_strategist';
 UPDATE achievements SET description = 'Consultou com sucesso seis fontes diferentes da Prefeitura.' WHERE code = 'city_diplomat';
 UPDATE city_alerts SET active = 0 WHERE active = 1;
+
+-- O cache guardava o envelope do CKAN (help, success, result) como se fosse um registro.
+-- Cópias públicas de respostas da Prefeitura, nada pessoal: são buscadas de novo na próxima consulta.
+DELETE FROM city_cache;

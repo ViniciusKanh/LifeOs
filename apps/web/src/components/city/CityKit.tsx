@@ -102,7 +102,7 @@ const fmtStamp = (s: string | null | undefined) => {
 };
 
 /** Faixa obrigatória em toda tela: fonte oficial, sincronização, referência, cobertura, limitações e método. */
-export function SourceStrip({ apiId, meta, reference }: { apiId: CityApi; meta?: FetchMeta | null; reference?: string | null }) {
+export function SourceStrip({ apiId, meta, reference }: { apiId: CityApi; meta?: (Partial<FetchMeta> & { fetchedAt: string }) | null; reference?: string | null }) {
   const cat = useCityCatalog();
   const entry = cat.data?.find((c) => c.id === apiId);
   const [open, setOpen] = useState(false);
@@ -134,7 +134,7 @@ export function SourceStrip({ apiId, meta, reference }: { apiId: CityApi; meta?:
           <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden /> Dados desatualizados: {meta.staleReason} Mostrando a última cópia salva.
         </p>
       )}
-      {!!meta?.redacted.length && <p className="mt-2 text-rpg-muted">Por privacidade, campos pessoais foram ocultados: {meta.redacted.join(", ")}.</p>}
+      {!!meta?.redacted?.length && <p className="mt-2 text-rpg-muted">Por privacidade, campos pessoais foram ocultados: {meta.redacted!.join(", ")}.</p>}
       {open && (
         <div className="mt-2 grid gap-2 border-t border-rpg-border pt-2 sm:grid-cols-2">
           <div>
