@@ -20,6 +20,7 @@ export const OUTCOME_STYLE: Record<Outcome, { bg: string; text: string; dot: str
   orientacao: { bg: "bg-sky-500", text: "text-sky-300", dot: "bg-sky-400" },
   encaminhado: { bg: "bg-amber-500", text: "text-amber-300", dot: "bg-amber-400" },
   arquivado: { bg: "bg-zinc-600", text: "text-zinc-300", dot: "bg-zinc-500" },
+  concluido: { bg: "bg-teal-700", text: "text-teal-300", dot: "bg-teal-600" },
   sem_desfecho: { bg: "bg-indigo-900", text: "text-indigo-300", dot: "bg-indigo-700" },
 };
 
@@ -27,6 +28,7 @@ export const ESIC_STYLE: Record<EsicStatus, { label: string; bg: string; text: s
   atendido: { label: "Atendido", bg: "bg-emerald-500", text: "text-emerald-300", border: "border-emerald-400/50" },
   parcial: { label: "Atendido em parte", bg: "bg-lime-500", text: "text-lime-300", border: "border-lime-400/50" },
   negado: { label: "Negado", bg: "bg-rose-500", text: "text-rose-300", border: "border-rose-400/50" },
+  finalizado: { label: "Finalizado (sem detalhe)", bg: "bg-teal-600", text: "text-teal-300", border: "border-teal-400/50" },
   tramitando: { label: "Em tramitação", bg: "bg-sky-500", text: "text-sky-300", border: "border-sky-400/50" },
   outro: { label: "Outra situação", bg: "bg-zinc-500", text: "text-zinc-300", border: "border-zinc-400/50" },
 };

@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Building2, FileSearch, Gavel, Landmark, PhoneCall, PowerOff, Radar, Settings2, Sparkles } from "lucide-react";
+import { Building2, FileSearch, Gavel, GraduationCap, Landmark, PhoneCall, PowerOff, Radar, Settings2, Sparkles } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
 import { KitSection, ModuleTabs } from "@/components/rpg-modules/ModuleKit";
 import { useLocalToast } from "@/components/integrations/PublicApiKit";
 import { useCityActions, useCityCatalog, useCityOverview } from "@/hooks/useCity";
-import type { Block, CityDomain, Overview, RadarData } from "@/services/cityService";
+import type { Block, CityDomain, Overview } from "@/services/cityService";
 import { CityBanner, DOMAIN, EmptyBox, LoadingBlock, R, STATE_META, StateBadge, formatValue } from "@/components/city/CityKit";
 import { BarList, Kpi } from "@/components/city/InsightsPanel";
 import { CityConfigPanel } from "@/components/city/CityConfigPanel";
@@ -84,7 +84,7 @@ export function CidadePage() {
               <Settings2 size={28} className="text-rpg-gold" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="font-rpg font-bold text-rpg-text">Conecte o APILIB da Prefeitura</p>
-                <p className="text-sm text-rpg-text/85">As fontes exigem uma credencial gratuita do Store do APILIB. Sem ela, nenhuma tela mostra dados — o LifeOS não inventa números.</p>
+                <p className="text-sm text-rpg-text/85">Orçamento, contratos, cardápios e trânsito usam uma credencial gratuita do Store do APILIB. Educação, SP156, e-SIC e PROCON já funcionam sem ela (fontes públicas da Prefeitura).</p>
               </div>
               <RPGButton variant="gold" onClick={() => setTab("config")}>
                 Configurar agora
@@ -135,7 +135,7 @@ export function CidadePage() {
   );
 }
 
-function RadarCard({ title, icon, to, b, off, children }: { title: string; icon: ReactNode; to: string; b: Block<RadarData>; off: string; children: (d: RadarData) => ReactNode }) {
+function RadarCard<T>({ title, icon, to, b, off, note, children }: { title: string; icon: ReactNode; to: string; b: Block<T>; off: string; note?: (d: T) => string; children: (d: T) => ReactNode }) {
   return (
     <KitSection
       title={title}
@@ -155,74 +155,83 @@ function RadarCard({ title, icon, to, b, off, children }: { title: string; icon:
         </div>
       ) : (
         <div className="space-y-3">
-          {b.stale && <p className="text-xs text-amber-300">Dados desatualizados — última cópia salva.</p>}
+          {b.stale && <p className="text-xs text-amber-300">A fonte não respondeu agora — última cópia salva.</p>}
           {children(b.data)}
-          <p className="text-[11px] text-rpg-muted">Leituras sobre {b.data.sample.toLocaleString("pt-BR")} registro(s){b.data.truncated ? " (amostra parcial)" : ""}.</p>
+          {note && <p className="text-[11px] text-rpg-muted">{note(b.data)}</p>}
         </div>
       )}
     </KitSection>
   );
 }
 
-const measure = (d: RadarData, label: string) => d.insights?.measures.find((m) => m.label === label);
+const pctBR = (n: number | null | undefined) => (n == null ? "—" : `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
+const intBR = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("pt-BR"));
 
 function CityRadar({ o }: { o: Overview }) {
   const r = o.radar;
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <RadarCard title="Orçamento da cidade" icon={<Landmark size={16} aria-hidden />} to="/cidade/sof" b={r.orcamento} off="Ative o tema “Finanças públicas” para ver o orçamento no radar.">
-        {(d) => {
-          const orc = measure(d, "Orçado atualizado");
-          const pago = measure(d, "Pago no exercício");
-          const emp = measure(d, "Empenhado líquido");
-          return (
-            <>
+      <RadarCard title="Orçamento da cidade" icon={<Landmark size={16} aria-hidden />} to="/cidade/sof" b={r.orcamento} off="Conecte o APILIB e ative o tema “Finanças públicas” para ver o orçamento no radar." note={(d) => `Acumulado de janeiro a ${MONTHS[d.mes - 1]} de ${d.ano} · SOF`}>
+        {(d) => (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Kpi label="Orçado atualizado" value={formatValue("money", d.latest.orcado, { short: true })} tone="gold" />
+              <Kpi label="Empenhado" value={formatValue("money", d.latest.empenhado, { short: true })} hint={`${pctBR(d.latest.execEmpenhado)} do orçado`} tone="gold" />
+              <Kpi label="Pago" value={formatValue("money", d.latest.pago, { short: true })} hint={`${pctBR(d.latest.execPago)} do orçado`} tone="green" />
+            </div>
+            {d.previousYear && (
               <p className="text-xs text-rpg-muted">
-                Acumulado até {MONTHS[Number(d.params.mesDotacao) - 1]} de {d.params.anoDotacao}
+                No mesmo ponto de {d.previousYear.ano}: {formatValue("money", d.previousYear.pago, { short: true })} pagos ({pctBR(d.previousYear.execPago)} do orçado).
               </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <Kpi label="Orçado atualizado" value={orc ? formatValue("money", orc.value, { short: true }) : "—"} tone="gold" />
-                <Kpi label="Empenhado" value={emp ? formatValue("money", emp.value, { short: true }) : "—"} tone="gold" />
-                <Kpi label="Pago" value={pago ? formatValue("money", pago.value, { short: true }) : "—"} hint={orc && pago && orc.value > 0 ? `${((pago.value / orc.value) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do orçado` : undefined} tone="green" />
-              </div>
-              {d.insights?.ranking && <BarList title={d.insights.ranking.label} items={d.insights.ranking.items.slice(0, 5)} format={(v) => formatValue("money", v, { short: true })} tone="gold" />}
-            </>
-          );
-        }}
-      </RadarCard>
-      <RadarCard title="Transparência (e-SIC)" icon={<FileSearch size={16} aria-hidden />} to="/cidade/e-sic" b={r.transparencia} off="Ative o tema “Cidadania” para ver o e-SIC no radar.">
-        {(d) => (
-          <>
-            <Kpi label={`Pedidos de informação em ${d.params.ano}`} value={d.total?.toLocaleString("pt-BR") ?? "—"} hint="total oficial da base" tone="cyan" />
-            {d.insights?.dims.map((dim) => (
-              <BarList key={dim.label} title={dim.label} items={dim.items.slice(0, 5).map((i) => ({ label: i.label, value: i.count }))} format={(v) => v.toLocaleString("pt-BR")} tone="cyan" />
-            ))}
+            )}
           </>
         )}
       </RadarCard>
-      <RadarCard title="Atendimento SP156" icon={<PhoneCall size={16} aria-hidden />} to="/cidade/sp156" b={r.atendimento} off="Ative o tema “Cidadania” para ver o SP156 no radar.">
+      <RadarCard title="Educação municipal" icon={<GraduationCap size={16} aria-hidden />} to="/cidade/escola-aberta" b={r.educacao} off="Ative o tema “Educação” para ver a rede municipal no radar." note={(d) => (d.atualizadoEm ? `Escola Aberta · atualizado em ${d.atualizadoEm.split("-").reverse().join("/")}` : "Escola Aberta")}>
         {(d) => (
           <>
-            <Kpi label={`Solicitações no ${d.params.semestre}º semestre de ${d.params.ano}`} value={d.total?.toLocaleString("pt-BR") ?? "—"} hint="total oficial da base" tone="cyan" />
-            {d.insights?.dims.slice(0, 2).map((dim) => (
-              <BarList key={dim.label} title={dim.label} items={dim.items.slice(0, 5).map((i) => ({ label: i.label, value: i.count }))} format={(v) => v.toLocaleString("pt-BR")} tone="cyan" />
-            ))}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Kpi label="Escolas" value={intBR(d.kpis.escolas)} tone="purple" />
+              <Kpi label="Estudantes atendidos" value={formatValue("number", d.kpis.atendimentos, { short: true })} hint={`${pctBR(d.kpis.ocupacao)} das vagas`} tone="purple" />
+              <Kpi label="Vagas livres" value={formatValue("number", d.kpis.remanescentes, { short: true })} tone="green" />
+            </div>
+            {!!d.sobras.length && <BarList title="Onde mais sobram vagas" items={d.sobras.map((s) => ({ label: `${s.label} · ${s.modalidade}`, value: s.remanescentes }))} format={(v) => v.toLocaleString("pt-BR")} tone="green" />}
           </>
         )}
       </RadarCard>
-      <RadarCard title="Contratos públicos" icon={<Gavel size={16} aria-hidden />} to="/cidade/licitacoes" b={r.contratos} off="Ative o tema “Oportunidades” para ver os contratos no radar.">
-        {(d) => {
-          const soma = measure(d, "Valor contratado (soma)");
-          return (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <Kpi label={`Extratos em ${d.params.ano}`} value={d.total?.toLocaleString("pt-BR") ?? "—"} hint="total oficial da base" tone="green" />
-                <Kpi label="Valor contratado" value={soma ? formatValue("money", soma.value, { short: true }) : "—"} hint="soma da amostra" tone="gold" />
-              </div>
-              {d.insights?.ranking && <BarList title={d.insights.ranking.label} items={d.insights.ranking.items.slice(0, 5)} format={(v) => formatValue("money", v, { short: true })} tone="green" />}
-            </>
-          );
-        }}
+      <RadarCard title="Atendimento SP156" icon={<PhoneCall size={16} aria-hidden />} to="/cidade/sp156" b={r.atendimento} off="Ative o tema “Cidadania” para ver o SP156 no radar." note={() => "Portal de Dados Abertos · base inteira do período"}>
+        {(d) => (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Kpi label={`Solicitações · ${d.periodLabel}`} value={intBR(d.total)} tone="cyan" />
+              <Kpi label="Avaliações boas" value={pctBR(d.satisfacaoBoaPct)} tone="green" />
+              <Kpi label="Mediana até finalizar" value={d.medianDays == null ? "—" : `${d.medianDays.toLocaleString("pt-BR")} d`} tone="gold" />
+            </div>
+            <BarList title="Temas mais pedidos" items={d.temas.map((t) => ({ label: t.label, value: t.count }))} format={(v) => v.toLocaleString("pt-BR")} tone="cyan" />
+          </>
+        )}
+      </RadarCard>
+      <RadarCard title="Transparência (e-SIC)" icon={<FileSearch size={16} aria-hidden />} to="/cidade/e-sic" b={r.transparencia} off="Ative o tema “Cidadania” para ver o e-SIC no radar." note={(d) => `Portal de Dados Abertos · pedidos de ${d.ano}`}>
+        {(d) => (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Kpi label={`Pedidos em ${d.ano}`} value={intBR(d.total)} tone="cyan" />
+              <Kpi label="Atendidos (decididos)" value={pctBR(d.atendidoPct)} tone="green" />
+            </div>
+            <BarList title="Órgãos mais acionados" items={d.orgaos.map((x) => ({ label: x.label, value: x.count }))} format={(v) => v.toLocaleString("pt-BR")} tone="cyan" />
+          </>
+        )}
+      </RadarCard>
+      <RadarCard title="Contratos do ano" icon={<Gavel size={16} aria-hidden />} to="/cidade/sof" b={r.contratos} off="Conecte o APILIB e ative o tema “Oportunidades” para ver os contratos no radar." note={(d) => `Amostra de ${d.sample} contratos de ${d.ano} lidos no SOF`}>
+        {(d) => (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Kpi label="Valor contratado (amostra)" value={formatValue("money", d.valor, { short: true })} tone="gold" />
+              <Kpi label="Assinado por último" value={d.recente?.assinatura ? d.recente.assinatura.split("-").reverse().join("/") : "—"} hint={d.recente?.orgao ?? undefined} tone="green" />
+            </div>
+            <BarList title="Modalidades (valor)" items={d.modalidades.map((m) => ({ label: m.label, value: m.valor }))} format={(v) => formatValue("money", v, { short: true })} tone="gold" />
+          </>
+        )}
       </RadarCard>
     </div>
   );

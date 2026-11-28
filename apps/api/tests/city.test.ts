@@ -373,102 +373,344 @@ describe("/api/city — dados pessoais e XP", () => {
     expect((await agent.get("/api/city/protocols")).body[0].status).toBe("aberto");
   });
 
-  it("visão geral: cada bloco do radar falha sozinho", async () => {
+  it("visão geral: dados mais recentes e cada bloco do radar falha sozinho", async () => {
     const agent = await configured();
-    handler = (url) => (url.includes("/smit/sp156/") ? new Response("", { status: 500 }) : defaultHandler(url));
+    await getDb().execute("DELETE FROM city_cache WHERE api IN ('publico', 'sof')");
+    handler = (url) => {
+      if (url.includes("/sf/sof/v4/despesas")) return json({ lstDespesas: [{ valOrcadoAtualizado: 1000, valEmpenhadoLiquido: 500, valLiquidado: 400, valPagoExercicio: 300 }] });
+      if (url.includes("/sf/sof/v4/contratos")) return json({ lstContratos: [{ codContrato: "1", codEmpresa: "81", numOriginalContrato: "7/2026", txtDescricaoModalidade: "Pregão Eletrônico", datAssinaturaContrato: "2026-06-19", valPrincipal: 1000 }] });
+      if (url.startsWith("https://dados.prefeitura.sp.gov.br/") || url.startsWith("https://escolaaberta.")) return new Response("", { status: 500 });
+      return defaultHandler(url);
+    };
     const r = await agent.get("/api/city/overview");
     expect(r.status).toBe(200);
     expect(r.body.apis).toHaveLength(8);
+    expect(r.body.radar.orcamento.ok).toBe(true);
+    expect(r.body.radar.orcamento.data.ano).toBe(new Date().getFullYear());
+    expect(r.body.radar.orcamento.data.latest.execPago).toBe(30);
     expect(r.body.radar.contratos.ok).toBe(true);
-    expect(r.body.radar.contratos.data.insights.ranking.items[0].label).toBe("EDUCAÇÃO");
-    expect(r.body.radar.transparencia.ok).toBe(true);
+    expect(r.body.radar.contratos.data.modalidades[0].label).toBe("Pregão Eletrônico");
+    expect(r.body.radar.transparencia.ok).toBe(false);
     expect(r.body.radar.atendimento.ok).toBe(false);
   });
 });
 
-/* ───────────── Cidadania e Consumo (envelope CKAN real do PROCON) ───────────── */
-import { classifyEsic, classifyOutcome, companyKey, normCategory, resolutionRate } from "../src/services/civicService.js";
+/* ───────────── Cidadania e Consumo (Portal de Dados Abertos/CKAN) ───────────── */
+import { classifyEsic, classifyOutcome, companyKey, monthKey, normCategory, resolutionRate } from "../src/services/civicService.js";
+import { maskPII, parsePeriod, safeTerms } from "../src/services/publicDataClient.js";
+import { modalitiesOf } from "../src/services/educationService.js";
 
 const PROCON_2019 = [
   { _id: 1, "Data de entrada": "02/01/2019", "Região": "OESTE", "Razão Social": "Notre Dame Intermedica", "Área": "Serviços Privados", "Motivo de baixa no Backoffice": "Baixa de CIP -  Com resolução total", "OBSERVAÇÃO": "" },
   { _id: 2, "Data de entrada": "02/01/2019", "Região": "SUL", "Razão Social": "Credz Administradora de Cartões LTDA", "Área": "Assuntos Financeiros", "Motivo de baixa no Backoffice": "Encerrado - Desistência do Consumidor", "OBSERVAÇÃO": "" },
-  { _id: 3, "Data de entrada": "03/01/2019", "Região": "OESTE", "Razão Social": "Sptrans", "Área": "Serviços Essenciais", "Motivo de baixa no Backoffice": "Decisão - Reclamação Fundamentada Não Atendida", "OBSERVAÇÃO": "" },
-  { _id: 4, "Data de entrada": "04/02/2019", "Região": "leste", "Razão Social": "SPTRANS LTDA.", "Área": "SERVIÇOS ESSENCIAIS", "Motivo de baixa no Backoffice": "Decisão - Reclamação Fundamentada Atendida", "OBSERVAÇÃO": "" },
-  { _id: 5, "Data de entrada": "05/02/2019", "Região": "SUL", "Razão Social": "Sptrans", "Área": "Serviços Essenciais", "Motivo de baixa no Backoffice": "", "OBSERVAÇÃO": "" },
 ];
-const ckan = (records: unknown[], total: number) => json({ help: "https://dados.prefeitura.sp.gov.br/api/3/action/help_show?name=datastore_search", success: true, result: { include_total: true, resource_id: "x", fields: [], records_format: "objects", records, limit: 500, offset: 0, total } });
+
+/** UUIDs fictícios no formato do portal. */
+const RID = {
+  p2025: "11111111-0000-4000-8000-000000002025",
+  p2024top: "11111111-0000-4000-8000-00000000a024",
+  p2019: "11111111-0000-4000-8000-000000002019",
+  pDen: "11111111-0000-4000-8000-00000000d025",
+  s25a: "22222222-0000-4000-8000-000000025001",
+  s25b: "22222222-0000-4000-8000-000000025002",
+  s24: "22222222-0000-4000-8000-000000024003",
+  lig: "33333333-0000-4000-8000-000000024002",
+  e23: "44444444-0000-4000-8000-000000002023",
+};
+const PACKAGES: Record<string, Array<{ id: string; name: string }>> = {
+  "dados-de-reclamacoes-procon-paulistano": [
+    { id: RID.p2025, name: "Reclamação (2025)" },
+    { id: RID.pDen, name: "Denúncia (2025)" },
+    { id: RID.p2024top, name: "Reclamação (2024) - Planilha Geral" },
+    { id: RID.p2019, name: "Base de Reclamações - 2019" },
+  ],
+  "dados-do-sp156": [
+    { id: RID.s25a, name: "Dados do SP156 - 1º TRI 2025" },
+    { id: RID.s25b, name: "Dados do SP156 - 1º TRI 2025" },
+    { id: RID.s24, name: "Dados do SP156 - 3º TRI 2024" },
+  ],
+  "dados-do-sp156-ligacoes": [{ id: RID.lig, name: "Dados Gerais - Ligações SP156 (1° SEM de 2025)" }],
+  "pedidos-de-informacao-protocolados-a-prefeitura-via-e-sic1": [{ id: RID.e23, name: "Base de Pedidos de Informação (2023)" }],
+};
+const F = (ids: string[], types: Record<string, string> = {}) => ids.map((id) => ({ id, type: types[id] ?? "text" }));
+const FIELDS: Record<string, { fields: Array<{ id: string; type: string }>; total: number }> = {
+  [RID.p2025]: { fields: F(["DATA DE ENTRADA", "REGIÃO", "RAZÃO SOCIAL DA EMPRESA", "ÁREA DE ATUAÇÃO", "STATUS DA RECLAMAÇÃO"], { "DATA DE ENTRADA": "timestamp" }), total: 36169 },
+  [RID.p2024top]: { fields: F(["FORNECEDORES MAIS RECLAMADOS 2024 - JANEIRO A OUTUBRO"]), total: 24 },
+  [RID.p2019]: { fields: F(["Data de entrada", "Região", "Razão Social", "Área", "Motivo de baixa no Backoffice"]), total: 1526 },
+  [RID.pDen]: { fields: F(["REGIÃO", "RAZÃO SOCIAL DA EMPRESA"]), total: 10 },
+  [RID.s25a]: { fields: F(["Data de abertura", "Data de finalização", "Tema", "Serviço", "Status da solicitação", "Subprefeitura", "Nível Satisfação"], { "Data de abertura": "timestamp", "Data de finalização": "timestamp" }), total: 95500 },
+  [RID.s25b]: { fields: F(["Data de abertura", "Tema"], { "Data de abertura": "timestamp" }), total: 11750 },
+  [RID.s24]: { fields: F(["Data de abertura", "Tema"], { "Data de abertura": "timestamp" }), total: 114250 },
+  [RID.lig]: { fields: F(["Data", "Quantidade de ligações entrantes"]), total: 2 },
+  [RID.e23]: { fields: F(["cd_atendimento_pedido", "dc_status_pedido", "nm_orgao", "cd_pedido", "dc_pedido", "dc_resposta", "dt_resposta_atendimento"], { cd_pedido: "numeric", dt_resposta_atendimento: "timestamp" }), total: 9750 },
+};
+const ok = (result: unknown) => json({ help: "h", success: true, result });
+const records = (rs: unknown[]) => ok({ records: rs, fields: [] });
+let sqls: string[] = [];
+
+/** Responde como o CKAN: package_show, datastore_search (campos/linhas) e datastore_search_sql. */
+function portal(sqlAnswer: (s: string) => unknown[] | "BLOCK"): Handler {
+  return (url) => {
+    if (!url.startsWith("https://dados.prefeitura.sp.gov.br/")) return defaultHandler(url);
+    const u = new URL(url);
+    const action = u.pathname.split("/").pop();
+    if (action === "package_show") return ok({ resources: (PACKAGES[u.searchParams.get("id")!] ?? []).map((r) => ({ ...r, datastore_active: true })) });
+    if (action === "datastore_search") {
+      const id = u.searchParams.get("resource_id")!;
+      if (u.searchParams.get("limit") === "0") return ok({ ...FIELDS[id], records: [] });
+      return records(LIGACOES);
+    }
+    const s = u.searchParams.get("sql")!;
+    sqls.push(s);
+    const a = sqlAnswer(s);
+    if (a === "BLOCK") return new Response("<html><head><title>Requisicao Bloqueada</title></head></html>", { status: 200, headers: { "Content-Type": "text/html" } });
+    return records(a);
+  };
+}
 
 describe("Cidadania e Consumo", () => {
-  it("desembrulha o envelope do CKAN", () => {
-    const n = normalizePayload({ help: "h", success: true, result: { records: PROCON_2019, total: 1526, fields: [{ id: "_id" }] } });
-    expect(n.total).toBe(1526);
-    expect(n.items).toHaveLength(5);
-    expect(n.items[0]!["Razão Social"]).toBe("Notre Dame Intermedica");
+  beforeEach(async () => {
+    sqls = [];
+    await getDb().execute("DELETE FROM city_cache WHERE api = 'publico'");
   });
 
-  it("classifica desfechos, normaliza categorias e agrupa empresas", () => {
+  it("desembrulha o envelope do CKAN no APILIB", () => {
+    const n = normalizePayload({ help: "h", success: true, result: { records: PROCON_2019, total: 1526, fields: [{ id: "_id" }] } });
+    expect(n.total).toBe(1526);
+    expect(n.items).toHaveLength(2);
+  });
+
+  it("classifica desfechos e status (inclusive os de 2023–2025), períodos e termos seguros", () => {
     expect(classifyOutcome("Decisão - Reclamação Fundamentada Não Atendida")).toBe("nao_resolvido");
     expect(classifyOutcome("Decisão - reclamação fundamentada atendida")).toBe("resolvido");
     expect(classifyOutcome("Baixa de CIP - Com resolução parcial")).toBe("parcial");
-    expect(classifyOutcome("Baixa de CIP - sem resolução")).toBe("nao_resolvido");
     expect(classifyOutcome("Concluído – Extra-Procon")).toBe("encaminhado");
     expect(classifyOutcome("Concluído - Simples Consulta")).toBe("orientacao");
+    expect(classifyOutcome("SIMPLES CONSULTA")).toBe("orientacao");
+    expect(classifyOutcome("DESISTENCIA")).toBe("desistencia");
+    expect(classifyOutcome("RECLAMAÇÃO")).toBe("sem_desfecho");
+    expect(classifyOutcome("CONCLUÍDO")).toBe("concluido");
     expect(classifyOutcome("Encerrado - Duplicidade")).toBe("arquivado");
     expect(classifyOutcome("")).toBe("sem_desfecho");
     expect(resolutionRate({ resolvido: 2, parcial: 2, nao_resolvido: 4 })).toEqual({ rate: 37.5, base: 8 });
     expect(normCategory("SERVIÇOS ESSENCIAIS")).toBe("Serviços Essenciais");
-    expect(normCategory("leste")).toBe("Leste");
+    expect(normCategory("Não informado")).toBeNull();
     expect(companyKey("SPTRANS LTDA.")).toBe(companyKey("Sptrans"));
     expect(classifyEsic("Atendido parcialmente")).toBe("parcial");
-    expect(classifyEsic("Indeferido")).toBe("negado");
-    expect(classifyEsic("Em tramitação")).toBe("tramitando");
+    expect(classifyEsic("Pedido indeferido")).toBe("negado");
+    expect(classifyEsic("Finalizado")).toBe("finalizado");
+    expect(classifyEsic("Prazo prorrogado")).toBe("tramitando");
+    expect(parsePeriod("Dados do SP156 - 1º TRI 2025")).toMatchObject({ key: "2025-T1", kind: "tri" });
+    expect(parsePeriod("Dados Gerais - Ligações SP156 (2° SEM de 2024)")).toMatchObject({ key: "2024-S2" });
+    expect(parsePeriod("Base de Pedidos de Informação (2023)")).toMatchObject({ key: "2023", kind: "ano" });
+    expect(monthKey(20115)).toBe("2025-01");
+    expect(monthKey("01/02/2023")).toBe("2023-02");
+    expect(safeTerms("sp'trans; DROP%_ x")).toEqual(["trans", "drop"]);
+    expect(maskPII("Fale comigo: ana@x.com, CPF 123.456.789-00, tel (11) 98765-4321")).toBe("Fale comigo: [e-mail], CPF [CPF], tel [telefone]");
   });
 
-  it("panorama do PROCON lê o ano inteiro em páginas e calcula a taxa de resolução", async () => {
+  it("PROCON: ano mais recente por padrão, descarta planilhas-resumo e soma na base inteira", async () => {
     const agent = await configured();
-    handler = (url) => (url.includes("/smj/proconsp/") ? ckan(PROCON_2019, url.includes("offset=0") ? 1200 : 1200) : defaultHandler(url));
-    const r = await agent.get("/api/city/civic/procon?ano=2019");
+    handler = portal((s) => {
+      if (s.includes("count(DISTINCT")) return [{ n: "330", d: "136" }];
+      if (s.includes(" c, ") && s.includes("GROUP BY c, s")) return [
+        { c: "SPTRANS LTDA.", s: "DESISTENCIA", n: "3" },
+        { c: "Sptrans", s: "RECLAMAÇÃO", n: "5" },
+        { c: "N/A", s: "SIMPLES CONSULTA", n: "40" },
+      ];
+      if (s.includes("GROUP BY a, s")) return [{ a: "SERVIÇOS ESSENCIAIS", s: "RECLAMAÇÃO", n: "5" }, { a: "Serviços Essenciais", s: "DESISTENCIA", n: "3" }];
+      if (s.includes("floor(extract(epoch")) return [{ k: 20115, n: "24" }, { k: 20110, n: "6" }, { k: null, n: "35839" }];
+      if (s.includes('"REGIÃO" k')) return [{ k: "ZONA NORTE", n: "10" }];
+      return [];
+    });
+    const r = await agent.get("/api/city/civic/procon");
     expect(r.status).toBe(200);
-    expect(calls.filter((c) => c.url.includes("/proconsp/v1/2019")).length).toBe(3); // 1200 registros = 3 páginas de 500
-    expect(r.body.total).toBe(1200);
-    expect(r.body.companies[0]).toMatchObject({ name: "Sptrans", count: 9 }); // 3 por página × 3 páginas
-    expect(r.body.resolution).toEqual({ rate: 66.7, base: 9 });
-    expect(r.body.regions.map((x: { label: string }) => x.label)).toContain("Leste");
+    expect(r.body.ano).toBe(2025);
+    expect(r.body.periods.map((p: { key: string }) => p.key)).toEqual(["2025", "2019"]); // "Planilha Geral" e Denúncia ficam fora
+    expect(r.body.total).toBe(330);
+    expect(r.body.companies[0]).toMatchObject({ name: "Sptrans", count: 8 });
+    expect(r.body.areas[0]).toMatchObject({ label: "Serviços Essenciais", count: 8 });
+    expect(r.body.months).toEqual([{ x: "2025-01", y: 30 }]);
+    expect(r.body.outcomes.find((o: { key: string }) => o.key === "sem_desfecho").count).toBe(5);
+    expect(sqls.every((s) => !/to_char|date_trunc|IS NOT NULL|ORDER BY 1/i.test(s))).toBe(true);
     expect((await agent.get("/api/city/civic/procon?ano=2021")).status).toBe(400);
   });
 
-  it("ficha da empresa junta as grafias e compara com a cidade", async () => {
+  it("PROCON: consulta recusada pelo firewall vira aviso e o resto do painel aparece", async () => {
     const agent = await configured();
-    await getDb().execute("DELETE FROM city_cache WHERE api = 'procon'"); // o cache é global entre usuários
-    handler = (url) => (url.includes("/smj/proconsp/") ? ckan(PROCON_2019, 5) : defaultHandler(url));
+    handler = portal((s) => (s.includes('"Data de entrada" k') ? "BLOCK" : s.includes("count(DISTINCT") ? [{ n: "2", d: "2" }] : []));
+    const r = await agent.get("/api/city/civic/procon?ano=2019");
+    expect(r.status).toBe(200);
+    expect(r.body.total).toBe(2);
+    expect(r.body.months).toEqual([]);
+    expect(r.body.warnings.join(" ")).toMatch(/Meses: .*recusou/);
+  });
+
+  it("ficha da empresa: busca segura em todos os anos e compara com a cidade", async () => {
+    const agent = await configured();
+    handler = portal((s) => {
+      if (s.includes("ILIKE")) return [
+        { c: "Sptrans", s: "Decisão - Reclamação Fundamentada Atendida", a: "Serviços Essenciais", g: "OESTE", d: "03/01/2019" },
+        { c: "SPTRANS LTDA.", s: "Decisão - Reclamação Fundamentada Não Atendida", a: "Serviços Essenciais", g: "LESTE", d: "2025-02-01T00:00:00" },
+        { c: "Transportes Urbanos", s: "", a: "", g: "", d: "" },
+      ];
+      if (s.includes("GROUP BY s")) return [{ s: "Decisão - Reclamação Fundamentada Atendida", n: "10" }, { s: "Decisão - Reclamação Fundamentada Não Atendida", n: "10" }];
+      return [];
+    });
     const r = await agent.get("/api/city/civic/procon/empresa?q=sptrans");
     expect(r.status).toBe(200);
-    expect(r.body.yearsRead).toEqual([2016, 2017, 2018, 2019]);
-    expect(r.body.count).toBe(12);
-    expect(r.body.matches[0].name).toBe("Sptrans");
+    expect(r.body.yearsRead).toEqual([2019, 2025]);
+    expect(r.body.count).toBe(4); // 2 por ano; o terceiro nome não casa com a chave da empresa
+    expect(r.body.matches[0].name).toMatch(/sptrans/i);
     expect(r.body.resolution.rate).toBe(50);
-    expect(r.body.recent[0].outcomeLabel).toBeTruthy();
+    expect(r.body.recent[0].date).toBe("2025-02-01");
+    expect(sqls.some((s) => s.includes(`ILIKE '%sptrans%'`))).toBe(true);
     expect((await agent.get("/api/city/civic/procon/empresa?q=ab")).status).toBe(400);
   });
 
-  it("e-SIC: busca nas perguntas e respostas e taxa de atendimento", async () => {
+  it("e-SIC: último atendimento de cada pedido, status separados e texto sem dados pessoais", async () => {
     const agent = await configured();
-    const r = await agent.get("/api/city/civic/esic?ano=2022&q=vagas");
+    handler = portal((s) => {
+      if (s.includes("count(DISTINCT")) return [{ n: "9750", d: "2340" }];
+      if (s.includes("GROUP BY o, s")) return [
+        { o: "SME - Secretaria Municipal de Educação", s: "Atendido", n: "30" },
+        { o: "SME - Secretaria Municipal de Educação", s: "Pedido indeferido", n: "10" },
+        { o: "SMS - Secretaria Municipal da Saúde", s: "Finalizado", n: "50" },
+        { o: "SMS - Secretaria Municipal da Saúde", s: "Em tramitação", n: "5" },
+      ];
+      if (s.includes("ILIKE")) return [
+        { p: 1, o: "SME", s: "Atendido", d: "2023-05-01T00:00:00", q: "Quero vagas, meu e-mail é joao@ex.com", a: "Segue planilha" },
+        { p: 1, o: "SME", s: "Em tramitação", d: "2023-04-01T00:00:00", q: "Quero vagas, meu e-mail é joao@ex.com", a: "Pedido Registrado" },
+      ];
+      return [];
+    });
+    const r = await agent.get("/api/city/civic/esic?q=vagas");
     expect(r.status).toBe(200);
-    expect(r.body.loaded).toBe(8); // 12.750 na base → 4 páginas (teto de 2.000), o mock repete as 2 linhas
-    expect(r.body.results.every((x: { pedido: string }) => x.pedido === "Quero saber vagas")).toBe(true);
-    expect(r.body.atendidoPct).toBe(100);
-    expect(r.body.status.tramitando).toBe(4);
+    expect(r.body.ano).toBe(2023);
+    expect(r.body.total).toBe(2340);
+    expect(r.body.status).toMatchObject({ atendido: 30, negado: 10, finalizado: 50, tramitando: 5 });
+    expect(r.body.atendidoPct).toBe(75);
+    expect(r.body.results).toHaveLength(1);
+    expect(r.body.results[0].pedido).toBe("Quero vagas, meu e-mail é [e-mail]");
+    expect(sqls.some((s) => s.includes("DISTINCT ON"))).toBe(true);
   });
 
-  it("SP156: central de ligações com taxa de atendimento", async () => {
+  it("SP156: trimestre mais recente (maior base do período), satisfação e central de ligações", async () => {
     const agent = await configured();
-    handler = (url) => (url.includes("/solicitacoes/") ? ckan([{ "Data de abertura": "2024-07-01T10:00:00", "Data de finalização": "2024-07-05T10:00:00", Tema: "Lixo e limpeza", "Serviço": "Coleta", Subprefeitura: "SE", "Status da solicitação": "FINALIZADA" }], 1) : defaultHandler(url));
-    const r = await agent.get("/api/city/civic/sp156?ano=2024&semestre=2");
+    handler = portal((s) => {
+      if (s.includes(RID.s25b)) throw new Error("usou o recurso menor");
+      if (/^SELECT count\(\*\) n FROM/.test(s)) return [{ n: "95500" }];
+      if (s.includes('"Tema" k') && s.includes("percentile_cont")) return [{ k: "Lixo e limpeza", m: 6.2, n: "40" }];
+      if (s.includes("percentile_cont")) return [{ m: 5.81, n: "16856" }];
+      if (s.includes('"Tema" k')) return [{ k: "Lixo e limpeza", n: "100" }, { k: "LIXO E LIMPEZA", n: "20" }];
+      if (s.includes('"Nível Satisfação" k')) return [{ k: "péssimo", n: "30" }, { k: "excelente", n: "60" }, { k: "", n: "10" }];
+      return [];
+    });
+    const r = await agent.get("/api/city/civic/sp156");
     expect(r.status).toBe(200);
+    expect(r.body.periodo).toBe("2025-T1");
+    expect(r.body.periods.map((p: { key: string }) => p.key)).toEqual(["2025-T1", "2024-T3"]);
+    expect(r.body.solicitacoes.temas[0]).toEqual({ label: "Lixo e Limpeza", count: 120 });
+    expect(r.body.solicitacoes.medianDays).toBe(5.8);
+    expect(r.body.solicitacoes.satisfacaoBoaPct).toBe(66.7);
     expect(r.body.ligacoes.entrantes).toBe(52998);
     expect(r.body.ligacoes.taxaAtendimento).toBeCloseTo(88.2, 1);
-    expect(r.body.solicitacoes.medianDays).toBe(4);
-    expect(r.body.solicitacoes.temas[0]).toEqual({ label: "Lixo e Limpeza", count: 1 });
+    const old = await agent.get("/api/city/civic/sp156?periodo=2024-T3");
+    expect(old.body.ligacoes).toBeNull();
+    expect(old.body.ligacoesNote).toMatch(/ainda não publicou/);
+    expect((await agent.get("/api/city/civic/sp156?periodo=2099")).status).toBe(400);
+  });
+});
+
+/* ───────────── Educação (Escola Aberta pública) ───────────── */
+
+describe("Educação — Escola Aberta", () => {
+  const VAGAS = [
+    { decserie: "", modalidade: "ENSINO FUNDAMENTAL DE 9 ANOS", total_turmas: 3, vagas_oferecidas: 100, atendimentos: 90, vagas_remanecentes: 10, media_atendimento: 30 },
+    { decserie: "1. ANO", modalidade: "ENSINO FUNDAMENTAL DE 9 ANOS", total_turmas: 2, vagas_oferecidas: 60, atendimentos: 58, vagas_remanecentes: 2, media_atendimento: 29 },
+    { decserie: "2. ANO", modalidade: "ENSINO FUNDAMENTAL DE 9 ANOS", total_turmas: 1, vagas_oferecidas: 40, atendimentos: 32, vagas_remanecentes: 8, media_atendimento: 32 },
+    { decserie: "M I", modalidade: "EJA CIEJA", total_turmas: 1, vagas_oferecidas: 50, atendimentos: 20, vagas_remanecentes: 30, media_atendimento: 20 },
+  ];
+  beforeEach(async () => {
+    await getDb().execute("DELETE FROM city_cache WHERE api = 'publico'");
+  });
+
+  it("subtotal da modalidade vem da linha sem série; sem ela, soma as séries", () => {
+    const m = modalitiesOf(VAGAS);
+    expect(m[0]).toMatchObject({ label: "Ensino Fundamental de 9 Anos", vagas: 100, atendimentos: 90, ocupacao: 90 });
+    expect(m[0]!.series.map((s) => s.label)).toEqual(["1. Ano", "2. Ano"]);
+    expect(m[1]).toMatchObject({ label: "EJA CIEJA", vagas: 50, remanescentes: 30, ocupacao: 40 });
+  });
+
+  it("panorama da cidade e da DRE, sem credencial do APILIB e sem notas", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    handler = (url) => {
+      if (!url.startsWith("https://escolaaberta.sme.prefeitura.sp.gov.br/api/")) return defaultHandler(url);
+      if (url.includes("/smevagasmat/")) return json({ results: VAGAS });
+      if (url.includes("/smeescolas/")) return json({ results: [{ tipoesc: "EMEF        ", faixa: "251 a 500 estudantes", count: 3 }, { tipoesc: "EMEF", faixa: "1 a 250 estudantes", count: 2 }, { tipoesc: "CEI INDIR", faixa: "1 a 250 estudantes", count: 5 }] });
+      if (url.includes("/smeprofissionais/")) return json({ results: [{ titulo: "COORDENADOR PEDAGOGICO", formacao: "LICENCIATURA", total: 4 }] });
+      if (url.includes("/smeambientes/")) return json({ results: [{ ambiente: "BIBLIOTECA", total: 7 }] });
+      if (url.includes("/dtatualizacao/")) return json({ results: [{ dt_atualizacao: "2026-11-01" }] });
+      if (url.includes("/diretorias/")) return json({ results: [{ dre: "BT", diretoria: "DIRETORIA REGIONAL DE EDUCACAO BUTANTA" }] });
+      return json({}, 404);
+    };
+    const r = await agent.get("/api/city/edu/panorama");
+    expect(r.status).toBe(200);
+    expect(r.body.kpis).toMatchObject({ escolas: 10, vagas: 150, atendimentos: 110, remanescentes: 40, profissionais: 4 });
+    expect(r.body.escolasPorTipo[0]).toEqual({ label: "EMEF", count: 5 });
+    expect(r.body.escolasPorFaixa.map((x: { label: string }) => x.label)).toEqual(["1 a 250 estudantes", "251 a 500 estudantes"]);
+    expect(r.body.sobras[0]).toMatchObject({ label: "M I", remanescentes: 30 });
+    expect(r.body.atualizadoEm).toBe("2026-11-01");
+    expect(r.body.dres).toEqual([{ value: "BT", label: "Butanta" }]);
+    expect(JSON.stringify(r.body)).not.toMatch(/nota|ranking/i);
+    const d = await agent.get("/api/city/edu/panorama?dre=BT");
+    expect(calls.some((c) => c.url.endsWith("/smevagasmat/BT"))).toBe(true);
+    expect(d.body.dreLabel).toBe("Butanta");
+    expect((await agent.get("/api/city/edu/panorama?dre=../x")).status).toBe(400);
+  });
+
+  it("busca separa o tipo do nome e a ficha valida o código", async () => {
+    const { agent } = await createAuthenticatedAgent();
+    handler = (url) => {
+      if (url.includes("/api/escolas/?")) return json({ count: 1, results: [{ codesc: "000191", nomesc: "ALIPIO CORREA NETO, PROF.", tipoesc: "EMEF", dre: "BT", latitude: -23.61, longitude: -46.74, tel1: "58450121", cep: 5742100 }] });
+      return defaultHandler(url);
+    };
+    const r = await agent.get("/api/city/edu/escolas?search=EMEF%20Alipio");
+    expect(r.status).toBe(200);
+    const u = new URL(calls.find((c) => c.url.includes("/api/escolas/?"))!.url);
+    expect(u.searchParams.get("search")).toBe("Alipio");
+    expect(u.searchParams.get("tipoesc")).toBe("EMEF");
+    expect(r.body.rows[0]).toMatchObject({ codesc: "000191", telefone: "(11) 5845-0121", cep: "05742-100", lat: -23.61 });
+    expect((await agent.get("/api/city/edu/escola/12ab")).status).toBe(400);
+  });
+});
+
+/* ───────────── Finanças Públicas (SOF) ───────────── */
+
+describe("Finanças Públicas — SOF", () => {
+  it("série mês a mês a partir do acumulado, ano anterior e funções", async () => {
+    const agent = await configured();
+    await getDb().execute("DELETE FROM city_cache WHERE api = 'sof'");
+    const desp = (mes: number, ano: number, fn: string | null) => ({
+      valOrcadoInicial: 1000, valOrcadoAtualizado: fn ? 100 * Number(fn) : 1200, valEmpenhadoLiquido: (fn ? 10 : 100) * mes, valLiquidado: 80 * mes, valPagoExercicio: (ano === 2025 ? 50 : 70) * mes, valDisponivel: 1, valCongelado: 0,
+    });
+    handler = (url) => {
+      if (!url.includes("/sf/sof/v4/")) return defaultHandler(url);
+      const u = new URL(url);
+      if (u.pathname.endsWith("/funcoes")) return json({ lstFuncoes: [{ codFuncao: "10", textDescricaoFuncao: "Saúde" }, { codFuncao: "12", textDescricaoFuncao: "Educação" }] });
+      if (u.pathname.endsWith("/despesas")) return json({ lstDespesas: [desp(Number(u.searchParams.get("mesDotacao")), Number(u.searchParams.get("anoDotacao")), u.searchParams.get("codFuncao"))] });
+      return json({});
+    };
+    const r = await agent.get("/api/city/sof/resumo?ano=2025");
+    expect(r.status).toBe(200);
+    expect(r.body.mes).toBe(12);
+    expect(r.body.cumulative).toHaveLength(12);
+    expect(r.body.monthly[2]).toEqual({ mes: 3, empenhado: 100, liquidado: 80, pago: 50 });
+    expect(r.body.latest).toMatchObject({ orcado: 1200, pago: 600, execPago: 50 });
+    expect(r.body.previousYear).toMatchObject({ ano: 2024, pago: 840 });
+    const f = await agent.get("/api/city/sof/funcoes?ano=2025&mes=12");
+    expect(f.body.items.map((x: { label: string }) => x.label)).toEqual(["Educação", "Saúde"]);
+    expect(f.body.items[0]).toMatchObject({ orcado: 1200, share: 54.5 });
+    expect((await agent.get("/api/city/sof/resumo?ano=2025&orgao=x1")).status).toBe(400);
   });
 });

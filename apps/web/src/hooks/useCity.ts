@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cityService as svc, type CityApi, type Params } from "@/services/cityService";
+import { cityService as svc, type CityApi, type Params, type SchoolQuery } from "@/services/cityService";
 
 /** Cidade Inteligente — consultas ao APILIB passam sempre pelo servidor (cache + credencial do usuário). */
 export const CITY_KEY = ["city"] as const;
@@ -15,11 +15,21 @@ export const useCityData = (apiId: CityApi, resource: string, params: Params, en
 export const useCityInsights = (apiId: CityApi, resource: string, params: Params, enabled = true) =>
   useQuery({ queryKey: [...CITY_KEY, "insights", apiId, resource, params], queryFn: () => svc.insights(apiId, resource, params), enabled, ...noRetry });
 
-/* Cidadania e Consumo: o servidor lê o ano/semestre inteiro (ou uma amostra declarada). */
-export const useProcon = (ano: number) => useQuery({ queryKey: [...CITY_KEY, "civic", "procon", ano], queryFn: () => svc.procon(ano), ...noRetry });
+/* Cidadania e Consumo: agregações do servidor sobre a base inteira do período (null = mais recente). */
+export const useProcon = (ano: number | null) => useQuery({ queryKey: [...CITY_KEY, "civic", "procon", ano], queryFn: () => svc.procon(ano), ...noRetry });
 export const useProconCompany = (q: string) => useQuery({ queryKey: [...CITY_KEY, "civic", "empresa", q], queryFn: () => svc.proconCompany(q), enabled: q.trim().length >= 3, ...noRetry });
-export const useSp156 = (ano: number, semestre: number) => useQuery({ queryKey: [...CITY_KEY, "civic", "sp156", ano, semestre], queryFn: () => svc.sp156(ano, semestre), ...noRetry });
-export const useEsic = (ano: number, q: string | null) => useQuery({ queryKey: [...CITY_KEY, "civic", "esic", ano, q ?? ""], queryFn: () => svc.esic(ano, q), ...noRetry });
+export const useSp156 = (periodo: string | null) => useQuery({ queryKey: [...CITY_KEY, "civic", "sp156", periodo], queryFn: () => svc.sp156(periodo), ...noRetry });
+export const useEsic = (ano: number | null, q: string | null) => useQuery({ queryKey: [...CITY_KEY, "civic", "esic", ano, q ?? ""], queryFn: () => svc.esic(ano, q), ...noRetry });
+
+/* Educação (Escola Aberta, pública e mensal) e Finanças Públicas (SOF). */
+const long = { retry: false, staleTime: 30 * 60_000 } as const;
+export const useEduPanorama = (dre: string | null) => useQuery({ queryKey: [...CITY_KEY, "edu", "panorama", dre], queryFn: () => svc.eduPanorama(dre), ...long });
+export const useEduSchools = (q: SchoolQuery, enabled: boolean) => useQuery({ queryKey: [...CITY_KEY, "edu", "escolas", q], queryFn: () => svc.eduSchools(q), enabled, ...long, placeholderData: (prev) => prev });
+export const useEduSchool = (codesc: string | null) => useQuery({ queryKey: [...CITY_KEY, "edu", "escola", codesc], queryFn: () => svc.eduSchool(codesc!), enabled: !!codesc, ...long });
+export const useSofResumo = (ano: number, orgao: string | null) => useQuery({ queryKey: [...CITY_KEY, "sof", "resumo", ano, orgao], queryFn: () => svc.sofResumo(ano, orgao), ...long });
+export const useSofFuncoes = (ano: number, mes: number | null, orgao: string | null) => useQuery({ queryKey: [...CITY_KEY, "sof", "funcoes", ano, mes, orgao], queryFn: () => svc.sofFuncoes(ano, mes!, orgao), enabled: mes != null, ...long });
+export const useSofOrgaos = (ano: number) => useQuery({ queryKey: [...CITY_KEY, "sof", "orgaos", ano], queryFn: () => svc.sofOrgaos(ano), staleTime: 6 * 60 * 60_000, retry: false });
+export const useSofContratos = (ano: number, orgao: string | null) => useQuery({ queryKey: [...CITY_KEY, "sof", "contratos", ano, orgao], queryFn: () => svc.sofContratos(ano, orgao), ...long });
 
 export const useCityFavorites = (apiId?: CityApi) => useQuery({ queryKey: [...CITY_KEY, "favorites", apiId ?? "all"], queryFn: () => svc.favorites(apiId) });
 export const useCityProtocols = () => useQuery({ queryKey: [...CITY_KEY, "protocols"], queryFn: svc.protocols });

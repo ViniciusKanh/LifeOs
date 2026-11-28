@@ -98,14 +98,14 @@ const EstacaoPage = lazy(() => import("@/pages/estacao/EstacaoPage").then((m) =>
 const CidadePage = lazy(() => import("@/pages/cidade/CidadePage").then((m) => ({ default: m.CidadePage })));
 const LicitacoesPage = lazy(() => import("@/pages/cidade/LicitacoesPage").then((m) => ({ default: m.LicitacoesPage })));
 const EscolaAbertaPage = lazy(() => import("@/pages/cidade/EscolaAbertaPage").then((m) => ({ default: m.EscolaAbertaPage })));
-const cityDataset = (name: "PratoAbertoPage" | "LentidaoPage" | "SofPage") =>
+const cityDataset = (name: "PratoAbertoPage" | "LentidaoPage") =>
   lazy(() => import("@/pages/cidade/DatasetPages").then((m) => ({ default: m[name] })));
 const PratoAbertoPage = cityDataset("PratoAbertoPage");
 const ProconPage = lazy(() => import("@/pages/cidade/ProconPage").then((m) => ({ default: m.ProconPage })));
 const Sp156Page = lazy(() => import("@/pages/cidade/Sp156Page").then((m) => ({ default: m.Sp156Page })));
 const EsicPage = lazy(() => import("@/pages/cidade/EsicPage").then((m) => ({ default: m.EsicPage })));
 const LentidaoPage = cityDataset("LentidaoPage");
-const SofPage = cityDataset("SofPage");
+const SofPage = lazy(() => import("@/pages/cidade/SofPage").then((m) => ({ default: m.SofPage })));
 const SalaCinemaPage = lazy(() => import("@/pages/sala-de-cinema/SalaCinemaPage").then((m) => ({ default: m.SalaCinemaPage })));
 const ForjaCodigoPage = lazy(() => import("@/pages/forja-codigo/ForjaCodigoPage").then((m) => ({ default: m.ForjaCodigoPage })));
 const RaidPage = lazy(() => import("@/pages/aventuras/RaidPage").then((m) => ({ default: m.RaidPage })));

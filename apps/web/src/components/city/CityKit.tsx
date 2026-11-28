@@ -158,6 +158,86 @@ export function SourceStrip({ apiId, meta, reference }: { apiId: CityApi; meta?:
   );
 }
 
+/**
+ * Faixa de transparência das fontes públicas (Portal de Dados Abertos, Escola Aberta): fonte com
+ * link, base exata usada, sincronização, método e o que ficou de fora (avisos por consulta).
+ */
+export function PublicSourceStrip({
+  source,
+  fetchedAt,
+  stale,
+  reference,
+  method,
+  limitations = [],
+  warnings = [],
+}: {
+  source: { name: string; url: string; resource?: string };
+  fetchedAt?: string | null;
+  stale?: boolean;
+  reference?: string | null;
+  method: string;
+  limitations?: string[];
+  warnings?: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="border-2 border-rpg-border bg-rpg-bg-2/70 p-3 text-xs" style={R} aria-label="Transparência dos dados">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <span className="inline-flex min-w-0 items-center gap-1 text-rpg-gold-light">
+          <Database size={13} aria-hidden /> <strong>Fonte oficial:</strong>{" "}
+          <a href={source.url} target="_blank" rel="noreferrer noopener" className="truncate text-rpg-text underline-offset-2 hover:underline">
+            {source.name}
+          </a>
+        </span>
+        {source.resource && (
+          <span className="text-rpg-muted">
+            Base: <span className="text-rpg-text">{source.resource}</span>
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 text-rpg-muted">
+          <Clock3 size={13} aria-hidden /> Sincronizado: <span className="text-rpg-text">{fmtStamp(fetchedAt ?? undefined)}</span>
+        </span>
+        {reference && (
+          <span className="text-rpg-muted">
+            Referência: <span className="text-rpg-text">{reference}</span>
+          </span>
+        )}
+        <button type="button" onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex min-h-[32px] items-center gap-1 text-rpg-blue underline-offset-2 hover:underline" aria-expanded={open}>
+          <Info size={13} aria-hidden /> {open ? "Ocultar método" : "Método e limitações"}
+        </button>
+      </div>
+      {stale && (
+        <p className="mt-2 flex items-start gap-1.5 text-amber-300">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden /> A fonte não respondeu agora: mostrando a última cópia salva.
+        </p>
+      )}
+      {!!warnings.length && (
+        <p className="mt-2 flex items-start gap-1.5 text-amber-300">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden /> Partes indisponíveis nesta leitura: {warnings.join(" · ")}
+        </p>
+      )}
+      {open && (
+        <div className="mt-2 grid gap-2 border-t border-rpg-border pt-2 sm:grid-cols-2">
+          <div>
+            <p className="font-pixel text-[10px] uppercase text-rpg-gold">Metodologia</p>
+            <p className="text-rpg-text/90">{method}</p>
+          </div>
+          {!!limitations.length && (
+            <div>
+              <p className="font-pixel text-[10px] uppercase text-rpg-gold">Limitações</p>
+              <ul className="list-disc space-y-0.5 pl-4 text-rpg-text/90">
+                {limitations.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ═══════════════════════ estados: carregando, vazio, erro ═══════════════════════ */
 
 export function LoadingBlock({ label = "Consultando a Prefeitura…", rows = 4 }: { label?: string; rows?: number }) {

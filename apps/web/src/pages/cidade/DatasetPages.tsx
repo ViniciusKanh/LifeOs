@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { RPGBadge } from "@/components/rpg";
 import { useLocalToast } from "@/components/integrations/PublicApiKit";
-import { useCityActions, useCityData } from "@/hooks/useCity";
-import { CityBanner, R, Select, cellText } from "@/components/city/CityKit";
+import { useCityActions } from "@/hooks/useCity";
+import { CityBanner, R } from "@/components/city/CityKit";
 import { DatasetExplorer } from "@/components/city/DatasetExplorer";
 
 /**
@@ -12,8 +12,6 @@ import { DatasetExplorer } from "@/components/city/DatasetExplorer";
  */
 
 const YEAR = new Date().getFullYear();
-const LAST_MONTH = new Date().getMonth() || 12;
-const LAST_MONTH_YEAR = new Date().getMonth() === 0 ? YEAR - 1 : YEAR;
 
 export function Notice({ children, tone = "amber" }: { children: ReactNode; tone?: "amber" | "cyan" }) {
   return (
@@ -79,48 +77,6 @@ export function LentidaoPage() {
         csvName="lentidao"
         totalLabel="Registros no ano"
         oracleSuggestions={["Quais corredores aparecem mais lentos?", "Em que horário a lentidão é maior nesta amostra?"]}
-      />
-    </div>
-  );
-}
-
-/* ───────────── SOF ───────────── */
-function OrgaoSelect({ year, value, onChange }: { year: string; value: string; onChange: (v: string) => void }) {
-  const q = useCityData("sof", "orgaos", { anoExercicio: year }, !!year);
-  const rows = q.data?.rows ?? [];
-  const code = q.data?.columns.find((c) => /^codorgao$/i.test(c.key))?.key;
-  const name = q.data?.columns.find((c) => /descricaoorgao/i.test(c.key))?.key;
-  const options = code && name ? rows.map((r) => ({ value: cellText(r[code]), label: cellText(r[name]) })).sort((a, b) => a.label.localeCompare(b.label)) : [];
-  return <Select label="Órgão" value={value} onChange={onChange} options={[{ value: "", label: q.isLoading ? "Carregando…" : "Todos" }, ...options]} />;
-}
-
-export function SofPage() {
-  return (
-    <div className="space-y-3">
-      <CityBanner domain="financas" eyebrow="Finanças Públicas" title="Orçamento e Finanças (SOF)" subtitle="Quanto a Prefeitura planejou e quanto gastou: dotações por órgão, função e programa, empenhos, contratos e fornecedores, direto do Sistema de Orçamento e Finanças.">
-        <RPGBadge tone="gold">Dinheiro público</RPGBadge>
-      </CityBanner>
-      <Notice tone="cyan">Números do orçamento da Prefeitura, acumulados até o mês consultado. Eles não se misturam com o Banco do Reino nem com as suas finanças pessoais no LifeOS.</Notice>
-      <DatasetExplorer
-        apiId="sof"
-        domain="financas"
-        resources={[
-          { id: "despesas", label: "Despesas (dotação)" },
-          { id: "empenhos", label: "Empenhos" },
-          { id: "contratos", label: "Contratos" },
-          { id: "orgaos", label: "Órgãos" },
-          { id: "funcoes", label: "Funções" },
-          { id: "programas", label: "Programas" },
-        ]}
-        initial={{ anoExercicio: String(YEAR), anoDotacao: String(LAST_MONTH_YEAR), mesDotacao: String(LAST_MONTH), anoEmpenho: String(LAST_MONTH_YEAR), mesEmpenho: String(LAST_MONTH), anoContrato: String(YEAR) }}
-        prefer={[/descricaoorgao/, /descricaofuncao/, /descricaoprograma/, /descricaoprojetoatividade/, /razaosocial/, /objetocontrato/, /orcadoatualizado/, /empenhadoliquido/, /^valliquidado$/, /pagoexercicio|^valpago$/, /^valprincipal$/]}
-        wrap={[/objetocontrato/]}
-        titleField={/descricaoprojetoatividade|objetocontrato|razaosocial|descricaoprograma|descricaoorgao|descricaofuncao/}
-        compareBy={/descricaoorgao|descricaoprojetoatividade|razaosocial/}
-        extraControls={(p, set) => <OrgaoSelect key="orgao" year={p.anoDotacao ?? p.anoEmpenho ?? p.anoContrato ?? p.anoExercicio ?? String(YEAR)} value={p.codOrgao ?? ""} onChange={(v) => set("codOrgao", v)} />}
-        csvName="sof"
-        totalLabel="Registros"
-        oracleSuggestions={["Quais órgãos têm maior orçamento atualizado?", "Qual a execução (pago × orçado) nesta amostra?"]}
       />
     </div>
   );

@@ -9,6 +9,9 @@ import { insertManualEvent } from "./eventWriteService.js";
 import { insertTask } from "./taskWriteService.js";
 import { getGeminiConfig, generateText } from "./geminiService.js";
 import { extractJson, str } from "./aiJson.js";
+import { esicPanorama, sp156Panorama } from "./civicService.js";
+import { educationPanorama } from "./educationService.js";
+import { sofContratos, sofResumo } from "./sofService.js";
 
 /**
  * Regras de negócio da Cidade Inteligente — São Paulo.
@@ -263,32 +266,55 @@ export function previousMonth(today: string): { ano: number; mes: number } {
 }
 
 /**
- * Radar da Cidade: um retrato com dados reais de cada área disponível. Cada bloco falha sozinho
- * (o resto continua) e só roda se o usuário tem credencial, a API está ativa e o tema interessa.
+ * Radar da Cidade: retrato com os dados MAIS RECENTES de cada área. Cada bloco falha sozinho.
+ * Orçamento e contratos vêm do SOF (APILIB, exige credencial); e-SIC, SP156 e educação vêm das
+ * fontes públicas (Portal de Dados Abertos e Escola Aberta), que estão mais atualizadas.
  */
 export async function getOverview(db: Db, ownerId: string) {
   const today = await todayKeyFor(db, ownerId);
   const [status, prefs, favorites, protocols, history] = await Promise.all([listApiStatus(db, ownerId), getPrefs(db, ownerId), listFavorites(db, ownerId), listProtocols(db, ownerId), listHistory(db, ownerId, 12)]);
-  const usable = (api: CityApi) => !!status.credential.source && !status.credential.disabled.includes(api) && prefs.interests.includes(CITY_API_DEFS[api].domain);
-  const pm = previousMonth(today);
-  const sem = lastClosedSemester(today);
-  const esicYear = Number(today.slice(0, 4)) - 1;
-  const ins = (api: CityApi, resource: string, params: Record<string, string | number>) => async () => {
-    const r = await cityInsights(db, ownerId, api, resource, params);
-    return { meta: r.meta, data: { params, total: r.meta.total, sample: r.insights?.sampleSize ?? 0, truncated: r.meta.truncated, insights: r.insights } };
-  };
-  const [orcamento, transparencia, atendimento, contratos] = await Promise.all([
-    usable("sof") ? block(ins("sof", "despesas", { anoDotacao: pm.ano, mesDotacao: pm.mes })) : null,
-    usable("esic") ? block(ins("esic", "pedidos", { ano: esicYear })) : null,
-    usable("sp156") ? block(ins("sp156", "solicitacoes", { ano: sem.ano, semestre: sem.semestre })) : null,
-    usable("licitacoes") ? block(ins("licitacoes", "contratos", { ano: 2019 })) : null,
+  const wants = (api: CityApi) => !status.credential.disabled.includes(api) && prefs.interests.includes(CITY_API_DEFS[api].domain);
+  const withCred = (api: CityApi) => !!status.credential.source && wants(api);
+  const ano = Number(today.slice(0, 4));
+  const [orcamento, transparencia, atendimento, contratos, educacao] = await Promise.all([
+    withCred("sof")
+      ? block(async () => {
+          const r = await sofResumo(db, ownerId, ano, null);
+          return { meta: { fetchedAt: r.fetchedAt, stale: r.stale }, data: { ano: r.ano, mes: r.mes, latest: r.latest, previousYear: r.previousYear } };
+        })
+      : null,
+    wants("esic")
+      ? block(async () => {
+          const r = await esicPanorama(db, null, null);
+          return { meta: r, data: { ano: r.ano, total: r.total, atendidoPct: r.atendidoPct, status: r.status, orgaos: r.orgaos.slice(0, 4).map((o) => ({ label: o.label, count: o.count })) } };
+        })
+      : null,
+    wants("sp156")
+      ? block(async () => {
+          const r = await sp156Panorama(db, null);
+          const s = r.solicitacoes;
+          return { meta: s, data: { periodLabel: r.periodLabel, total: s.total, temas: s.temas.slice(0, 5), satisfacaoBoaPct: s.satisfacaoBoaPct, medianDays: s.medianDays } };
+        })
+      : null,
+    withCred("sof") && prefs.interests.includes("oportunidades")
+      ? block(async () => {
+          const r = await sofContratos(db, ownerId, ano, null);
+          return { meta: r, data: { ano: r.ano, sample: r.sample, valor: r.valor, modalidades: r.modalidades.slice(0, 4), recente: r.recentes[0] ?? null } };
+        })
+      : null,
+    wants("escolas")
+      ? block(async () => {
+          const r = await educationPanorama(db, null);
+          return { meta: { fetchedAt: r.fetchedAt ?? today, stale: r.stale }, data: { atualizadoEm: r.atualizadoEm, kpis: r.kpis, sobras: r.sobras.slice(0, 3) } };
+        })
+      : null,
   ]);
   return {
     today,
     credential: status.credential,
     apis: status.apis,
     prefs,
-    radar: { orcamento, transparencia, atendimento, contratos },
+    radar: { orcamento, transparencia, atendimento, contratos, educacao },
     favorites: favorites.slice(0, 6),
     favoritesTotal: favorites.length,
     protocols: protocols.filter((p) => p.status !== "encerrado").slice(0, 6),

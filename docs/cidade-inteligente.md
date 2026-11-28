@@ -1,6 +1,66 @@
-# Cidade Inteligente — São Paulo (LifeOS 0.5.41)
+# Cidade Inteligente — São Paulo (LifeOS 0.5.43)
 
 Categoria nova no menu lateral, com 12 APIs oficiais da Prefeitura de São Paulo publicadas no **APILIB** (WSO2 API Manager). A API Olho Vivo da SPTrans ficou fora deste escopo. A integração Hora de Sair / Estação das Carruagens continua como estava.
+
+## 0. Atualização 0.5.43 — dados mais atuais, Educação e Finanças Públicas refeitas
+
+As bases de PROCON, e-SIC e SP156 no APILIB pararam em 2016–2020. As mesmas bases continuam sendo publicadas no **Portal de Dados Abertos** (CKAN, público, sem credencial) até 2023–2025. A Escola Aberta pública é o mesmo backend que o APILIB repassa, atualizado todo mês.
+
+| Tela | Fonte agora | Período mais recente (27/11/2026) | Credencial |
+|---|---|---|---|
+| Rede Municipal de Ensino (`/cidade/escola-aberta`) | Escola Aberta pública (`escolaaberta.sme.prefeitura.sp.gov.br/api`) | base de 01/11/2026 | não |
+| PROCON (`/cidade/procon`) | Portal de Dados Abertos | 2025 (também 2023, 2016–2019) | não |
+| SP156 (`/cidade/sp156`) | Portal de Dados Abertos | 1º tri 2025; ligações 2º sem 2024 | não |
+| e-SIC (`/cidade/e-sic`) | Portal de Dados Abertos | 2023 (2012–2023) | não |
+| Orçamento da Cidade (`/cidade/sof`) | SOF v4 via APILIB | mês corrente do exercício | sim |
+| Radar (`/cidade`) | os de cima + contratos do ano no SOF | — | só orçamento/contratos |
+
+### Como funciona
+
+- `config/publicData.ts` lista os hosts permitidos, os conjuntos do portal e os caminhos fixos da Escola Aberta. Nenhuma URL vem do usuário.
+- `services/publicDataClient.ts`:
+  - descobre os recursos de cada conjunto (`package_show`);
+  - descarta resumos ("mais reclamados", planilhas gerais) conferindo as colunas;
+  - escolhe o maior recurso quando um período aparece duas vezes;
+  - faz agregações com `datastore_search_sql` sobre a base inteira (sem amostra);
+  - guarda em cache em `city_cache` (api `publico`) e usa o cache vencido como reserva.
+- O firewall do portal recusa algumas formas de SQL. O cliente evita essas formas e trata cada recusa como aviso do painel, sem derrubar a tela:
+  - `to_char`, `date_trunc`, `month`/`year`, `substr`, `IS NOT NULL`, `ORDER BY 1`;
+  - meses saem de `floor(extract(epoch)/86400)` (dias), somados em mês no servidor.
+- Identificadores entre aspas, literais escapados, buscas só com letras/números (`safeTerms`) e UUID de recurso validado.
+- e-SIC:
+  - vale a movimentação mais recente de cada pedido (`DISTINCT ON`);
+  - "Finalizado" fica separado de "Atendido";
+  - textos passam por `maskPII` (e-mail, CPF, telefone, números longos).
+- PROCON: novos status 2023–2025:
+  - "RECLAMAÇÃO" conta como sem desfecho;
+  - "CONCLUÍDO" vira concluído (sem detalhe);
+  - "SIMPLES CONSULTA" conta como orientação.
+- SOF (`services/sofService.ts`): a consulta de despesas devolve um agregado por filtro. O LifeOS monta:
+  - a série 1..M (acumulado);
+  - o valor mensal (diferença entre meses);
+  - o mesmo mês do ano anterior;
+  - uma consulta por função de governo;
+  - o recorte por órgão;
+  - uma amostra declarada de contratos do ano (4 páginas).
+  - Concorrência máxima: 6 chamadas.
+- Educação (`services/educationService.ts`):
+  - subtotal da modalidade = linha sem série, conferido com a soma das séries;
+  - "onde sobram vagas" e séries mais cheias;
+  - unidades por tipo e porte, profissionais e ambientes;
+  - localizador separa o tipo do nome ("EMEF Alípio") e remove acentos;
+  - mapa Leaflet e ficha da escola;
+  - sem nota nem ranking.
+
+### Rotas novas
+
+`GET /api/city/edu/panorama?dre=` · `/edu/escolas?search=&dre=&tipoesc=&distrito=&page=` · `/edu/escola/:codesc` · `/sof/resumo?ano=&orgao=` · `/sof/funcoes?ano=&mes=&orgao=` · `/sof/orgaos?ano=` · `/sof/contratos?ano=&orgao=`.
+
+Mudanças nas rotas de Cidadania:
+
+- `/civic/sp156` recebe `periodo=2025-T1`;
+- PROCON e e-SIC aceitam `ano` opcional (sem `ano`, usam o mais recente);
+- as respostas trazem `periods`, `source` e `warnings`.
 
 ## 1. Telas e rotas
 

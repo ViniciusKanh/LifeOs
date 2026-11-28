@@ -1,28 +1,28 @@
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, Building, Gavel, Layers, LineChart, MapPinned, Scale, Search, ShieldCheck, Store, Table2 } from "lucide-react";
+import { BarChart3, Building, Gavel, Layers, LineChart, MapPinned, Scale, Search, ShieldCheck, Store } from "lucide-react";
 import { RPGBadge, RPGButton } from "@/components/rpg";
 import { AnimatedLineChart } from "@/components/charts/motion/AnimatedLineChart";
-import { useCityActivity, CityBanner, CityError, EmptyBox, FIELD, LoadingBlock, R, SourceStrip, dayBR } from "@/components/city/CityKit";
-import { DatasetExplorer } from "@/components/city/DatasetExplorer";
+import { useCityActivity, CityBanner, CityError, EmptyBox, FIELD, LoadingBlock, R, PublicSourceStrip, dayBR } from "@/components/city/CityKit";
 import { BarList } from "@/components/city/InsightsPanel";
-import { BigStat, Collapsible, OUTCOME_STYLE, Panel, Pills, RankList, RatePill, RegionMap, StackedBar, fmtInt, fmtPct } from "@/components/city/civic/CivicKit";
+import { BigStat, OUTCOME_STYLE, Panel, Pills, RankList, RatePill, RegionMap, StackedBar, fmtInt, fmtPct } from "@/components/city/civic/CivicKit";
 import { useProcon, useProconCompany } from "@/hooks/useCity";
 import type { ProconCompany } from "@/services/cityService";
 import { Notice } from "./DatasetPages";
 
 /**
  * Balcão do Consumidor (PROCON Paulistano): o ano inteiro de reclamações lido pelo servidor,
- * com desfechos, taxa de resolução, áreas, regiões e a ficha de qualquer empresa (2016–2019).
+ * com desfechos, taxa de resolução, áreas, regiões e a ficha de qualquer empresa em todos os anos publicados no Portal de Dados Abertos.
  */
 
-const YEARS = [2019, 2018, 2017, 2016];
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 export function ProconPage() {
-  const [ano, setAno] = useState(2019);
+  // null = ano mais recente publicado no Portal de Dados Abertos.
+  const [sel, setSel] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [company, setCompany] = useState("");
-  const p = useProcon(ano);
+  const p = useProcon(sel);
+  const ano = p.data?.ano ?? sel;
   const ficha = useProconCompany(company);
   const fichaRef = useRef<HTMLDivElement>(null);
   useCityActivity("procon", "explore", p.isSuccess ? `panorama:${ano}` : null, "PROCON");
@@ -38,7 +38,7 @@ export function ProconPage() {
   return (
     <div className="space-y-4">
       <CityBanner domain="consumo" eyebrow="Cidadania e Consumo" title="Balcão do Consumidor" subtitle="Antes de comprar, consulte a empresa. O LifeOS lê todas as reclamações do PROCON Paulistano no ano e mostra como os casos terminaram — por área, região e empresa.">
-        <RPGBadge tone="purple">PROCON 2016–2019</RPGBadge>
+        <RPGBadge tone="purple">{d?.periods.length ? `PROCON ${d.periods.map((x) => x.key).sort()[0]}–${d.periods[0]!.key}` : "PROCON Paulistano"}</RPGBadge>
       </CityBanner>
 
       {/* Consulta de empresa: a ferramenta principal da tela */}
@@ -48,7 +48,7 @@ export function ProconPage() {
             <p className="flex items-center gap-2 font-rpg text-lg font-bold text-rpg-text">
               <Store size={20} className="text-purple-300" aria-hidden /> Consultar empresa
             </p>
-            <p className="text-sm text-rpg-text/80">Procura nas quatro bases (2016–2019) e junta as várias grafias do mesmo nome.</p>
+            <p className="text-sm text-rpg-text/80">Procura em todas as bases publicadas (do ano mais antigo ao mais recente) e junta as várias grafias do mesmo nome.</p>
           </div>
           <form
             className="flex w-full gap-2 lg:max-w-xl"
@@ -83,16 +83,12 @@ export function ProconPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Pills items={YEARS} value={ano} onChange={setAno} label="Ano da base" />
-        {d && (
-          <RPGBadge tone={d.complete ? "green" : "orange"}>
-            {d.complete ? `Ano completo: ${fmtInt(d.loaded)} reclamações` : `Lidas ${fmtInt(d.loaded)} de ${fmtInt(d.total)}`}
-          </RPGBadge>
-        )}
+        {d?.periods.length ? <Pills items={d.periods.map((x) => Number(x.key))} value={d.ano} onChange={setSel} label="Ano da base" /> : <span />}
+        {d && <RPGBadge tone="green">Base inteira de {d.ano}: {fmtInt(d.total ?? d.loaded)} reclamações</RPGBadge>}
       </div>
 
       {p.isLoading ? (
-        <LoadingBlock label={`Lendo todas as reclamações de ${ano}…`} rows={5} />
+        <LoadingBlock label={`Somando as reclamações${ano ? ` de ${ano}` : " mais recentes"}…`} rows={5} />
       ) : p.isError ? (
         <CityError error={p.error} onRetry={() => void p.refetch()} />
       ) : !d || !d.loaded ? (
@@ -145,21 +141,18 @@ export function ProconPage() {
         </>
       )}
 
-      <SourceStrip apiId="procon" meta={d ?? null} reference={`Ano ${ano}`} />
-
-      <Collapsible title="Todos os registros e Oráculo" icon={<Table2 size={16} className="text-purple-300" aria-hidden />}>
-        <DatasetExplorer
-          apiId="procon"
-          domain="consumo"
-          resources={[{ id: "reclamacoes", label: "Reclamações" }]}
-          initial={{ ano: String(ano) }}
-          prefer={[/razao social/, /^(area|area de atuacao)$/, /motivo de baixa|status da reclamacao/, /^regiao$/, /entrada/]}
-          titleField={/razao social/}
-          csvName="procon"
-          totalLabel="Reclamações no ano"
-          oracleSuggestions={["Quais áreas concentram mais reclamações?", "Qual a proporção de casos com resolução total?"]}
+      {d && (
+        <PublicSourceStrip
+          source={d.source}
+          fetchedAt={d.fetchedAt}
+          stale={d.stale}
+          reference={`Ano ${d.ano}`}
+          warnings={d.warnings}
+          method="O LifeOS soma no próprio Portal de Dados Abertos todas as reclamações publicadas do ano (sem amostra) e classifica o desfecho a partir do motivo de baixa (2016–2019) ou do status da reclamação (2023 em diante). Taxa de resolução = resolvidos (inteiros + metade dos parciais) ÷ casos com decisão sobre a empresa."
+          limitations={["Número absoluto de reclamações não prova que uma empresa é ruim: empresas maiores atendem mais pessoas.", "Nos anos recentes o PROCON publica poucos desfechos — por isso a taxa de resolução pode não aparecer.", "Anos sem base registro a registro no portal (2020–2022, 2024) não aparecem."]}
         />
-      </Collapsible>
+      )}
+
     </div>
   );
 }
@@ -167,7 +160,7 @@ export function ProconPage() {
 function CompanySheet({ f }: { f: ProconCompany }) {
   if (!f.count)
     return (
-      <EmptyBox title={`Nenhuma reclamação encontrada para “${f.query}” em 2016–2019.`}>
+      <EmptyBox title={`Nenhuma reclamação encontrada para “${f.query}” em ${f.yearsRead.join(", ")}.`}>
         Isso não garante nada sobre a empresa: o PROCON municipal é só um dos canais (há também o PROCON-SP estadual e o consumidor.gov.br).
       </EmptyBox>
     );
@@ -177,7 +170,7 @@ function CompanySheet({ f }: { f: ProconCompany }) {
     <section className="space-y-3 border-2 border-purple-400/60 bg-rpg-panel p-4" style={R} aria-label="Ficha da empresa">
       <header className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-pixel text-[10px] uppercase text-purple-300">Ficha da empresa · 2016–2019</p>
+          <p className="font-pixel text-[10px] uppercase text-purple-300">Ficha da empresa · {f.yearsRead.join(", ")}</p>
           <h2 className="font-rpg text-2xl font-bold text-rpg-text">{main?.name ?? f.query}</h2>
           {f.matches.length > 1 && <p className="text-xs text-rpg-muted">Inclui também: {f.matches.slice(1).map((m) => `${m.name} (${m.count})`).join(", ")}</p>}
         </div>

@@ -29,6 +29,8 @@ import {
   saveProtocol,
 } from "../services/cityService.js";
 import { esicPanorama, proconCompany, proconPanorama, sp156Panorama } from "../services/civicService.js";
+import { educationPanorama, schoolDetail, searchSchools } from "../services/educationService.js";
+import { sofContratos, sofFuncoes, sofOrgaos, sofResumo } from "../services/sofService.js";
 
 /**
  * /api/city — Cidade Inteligente (São Paulo, APILIB).
@@ -158,14 +160,15 @@ cityRouter.get("/insights/:api/:resource", readLimit, async (req, res) => {
   }
 });
 
-/* ───────────── Cidadania e Consumo (leituras próprias) ───────────── */
+/* ───────────── Cidadania e Consumo (Portal de Dados Abertos) ───────────── */
 
 const YEAR = z.coerce.number().int().min(2001).max(new Date().getUTCFullYear());
+const OPT_YEAR = YEAR.optional();
 
 cityRouter.get("/civic/procon", readLimit, async (req, res) => {
   try {
-    const { ano } = z.object({ ano: YEAR }).parse(req.query);
-    return res.json(await proconPanorama(getDb(), req.user!.id, ano));
+    const { ano } = z.object({ ano: OPT_YEAR }).parse(req.query);
+    return res.json(await proconPanorama(getDb(), ano ?? null));
   } catch (e) {
     return fail(res, e);
   }
@@ -174,7 +177,7 @@ cityRouter.get("/civic/procon", readLimit, async (req, res) => {
 cityRouter.get("/civic/procon/empresa", readLimit, async (req, res) => {
   try {
     const { q } = z.object({ q: z.string().trim().min(3, "Digite ao menos 3 letras.").max(80).regex(/^[\p{L}\p{N} .,&'()/-]+$/u, "Nome com caracteres inválidos.") }).parse(req.query);
-    return res.json(await proconCompany(getDb(), req.user!.id, q));
+    return res.json(await proconCompany(getDb(), q));
   } catch (e) {
     return fail(res, e);
   }
@@ -182,8 +185,8 @@ cityRouter.get("/civic/procon/empresa", readLimit, async (req, res) => {
 
 cityRouter.get("/civic/sp156", readLimit, async (req, res) => {
   try {
-    const { ano, semestre } = z.object({ ano: YEAR, semestre: z.coerce.number().int().min(1).max(2) }).parse(req.query);
-    return res.json(await sp156Panorama(getDb(), req.user!.id, ano, semestre));
+    const { periodo } = z.object({ periodo: z.string().regex(/^20\d{2}(-[TS][1-4])?$/, "Período inválido.").optional() }).parse(req.query);
+    return res.json(await sp156Panorama(getDb(), periodo ?? null));
   } catch (e) {
     return fail(res, e);
   }
@@ -191,8 +194,98 @@ cityRouter.get("/civic/sp156", readLimit, async (req, res) => {
 
 cityRouter.get("/civic/esic", readLimit, async (req, res) => {
   try {
-    const { ano, q } = z.object({ ano: YEAR, q: z.string().trim().max(80).optional() }).parse(req.query);
-    return res.json(await esicPanorama(getDb(), req.user!.id, ano, q || null));
+    const { ano, q } = z.object({ ano: OPT_YEAR, q: z.string().trim().max(80).optional() }).parse(req.query);
+    return res.json(await esicPanorama(getDb(), ano ?? null, q || null));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+/* ───────────── Educação (Escola Aberta, sem credencial) ───────────── */
+
+const DRE = z.string().regex(/^[A-Z]{1,3}$/, "Diretoria inválida.");
+/** Tipos de escola que as pessoas digitam junto do nome ("EMEF Alípio…"): a busca da SME não os aceita. */
+const TYPE_PREFIX = /^(cieja|emefm|emef|emei|cemei|cei|ceu|cca|emebs|mova|cmct)\b\s*/i;
+
+cityRouter.get("/edu/panorama", readLimit, async (req, res) => {
+  try {
+    const { dre } = z.object({ dre: DRE.optional() }).parse(req.query);
+    return res.json(await educationPanorama(getDb(), dre ?? null));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/edu/escolas", readLimit, async (req, res) => {
+  try {
+    const q = z
+      .object({
+        search: z.string().trim().max(80).regex(/^[\p{L}\p{N} .,'-]*$/u, "Nome com caracteres inválidos.").optional(),
+        dre: DRE.optional(),
+        tipoesc: z.string().trim().max(20).regex(/^[A-Z./ ]*$/i).optional(),
+        distrito: z.string().trim().max(60).regex(/^[\p{L} '-]*$/u).optional(),
+        page: z.coerce.number().int().min(1).max(500).default(1),
+      })
+      .parse(req.query);
+    // A base da SME guarda nomes e distritos sem acento ("ALIPIO", "VILA SONIA").
+    const plain = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    let search = plain(q.search ?? "");
+    let tipoesc = q.tipoesc ?? "";
+    const prefix = search.match(TYPE_PREFIX);
+    if (prefix) {
+      search = search.replace(TYPE_PREFIX, "").trim();
+      if (!tipoesc) tipoesc = prefix[1]!.toUpperCase();
+    }
+    return res.json(await searchSchools(getDb(), { search, dre: q.dre, tipoesc, distrito: q.distrito ? plain(q.distrito).toUpperCase() : undefined, page: q.page }));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/edu/escola/:codesc", readLimit, async (req, res) => {
+  try {
+    const codesc = z.string().regex(/^\d{6}$/, "Código de escola inválido.").parse(req.params.codesc);
+    return res.json(await schoolDetail(getDb(), codesc));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+/* ───────────── Finanças Públicas (SOF via APILIB) ───────────── */
+
+const ORGAO = z.string().regex(/^\d{1,6}$/, "Órgão inválido.").optional();
+
+cityRouter.get("/sof/resumo", readLimit, async (req, res) => {
+  try {
+    const { ano, orgao } = z.object({ ano: z.coerce.number().int().min(2010).max(new Date().getUTCFullYear()), orgao: ORGAO }).parse(req.query);
+    return res.json(await sofResumo(getDb(), req.user!.id, ano, orgao ?? null));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/sof/funcoes", readLimit, async (req, res) => {
+  try {
+    const { ano, mes, orgao } = z.object({ ano: z.coerce.number().int().min(2010).max(new Date().getUTCFullYear()), mes: z.coerce.number().int().min(1).max(12), orgao: ORGAO }).parse(req.query);
+    return res.json(await sofFuncoes(getDb(), req.user!.id, ano, mes, orgao ?? null));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/sof/orgaos", readLimit, async (req, res) => {
+  try {
+    const { ano } = z.object({ ano: z.coerce.number().int().min(2010).max(new Date().getUTCFullYear()) }).parse(req.query);
+    return res.json(await sofOrgaos(getDb(), req.user!.id, ano));
+  } catch (e) {
+    return fail(res, e);
+  }
+});
+
+cityRouter.get("/sof/contratos", readLimit, async (req, res) => {
+  try {
+    const { ano, orgao } = z.object({ ano: z.coerce.number().int().min(2010).max(new Date().getUTCFullYear()), orgao: ORGAO }).parse(req.query);
+    return res.json(await sofContratos(getDb(), req.user!.id, ano, orgao ?? null));
   } catch (e) {
     return fail(res, e);
   }
